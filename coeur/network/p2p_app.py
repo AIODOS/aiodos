@@ -10,7 +10,7 @@ import time
 from fastapi import FastAPI, HTTPException, Request
 
 from coeur import __version__
-from coeur.network import envelope, peers
+from coeur.network import envelope, peers, work
 from coeur.network.client import PeerError
 from coeur.network.crypto import SealError
 from coeur.node import identity
@@ -40,6 +40,7 @@ HANDLERS = {
     "profile": _profile,
     "unpair": _unpair,
     "pair/confirm": _pair_confirm,
+    **work.HANDLERS,              # travail confié : work/lease, work/blob, work/result…
 }
 
 

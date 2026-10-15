@@ -1,5 +1,5 @@
 """Chef d'orchestre du réseau local : serveur entre nœuds, découverte, appairage,
-surveillance des machines appairées.
+surveillance des machines appairées, partage de puissance (cf. worker.py).
 
 Tout tourne dans la boucle asyncio du nœud. Le serveur réseau écoute sur toutes
 les interfaces (0.0.0.0) — séparé de l'API de l'interface, qui reste sur 127.0.0.1.
@@ -11,11 +11,13 @@ import time
 import uvicorn
 
 from coeur import settings
+from coeur.jobs import queue
 from coeur.network import client, peers
 from coeur.network.client import PeerError
 from coeur.network.discovery import Discovery
 from coeur.network.envelope import PROTOCOL, ReplayGuard
 from coeur.network.pairing import Pairing
+from coeur.network.worker import Worker
 
 log = logging.getLogger("coeur.network")
 
@@ -25,10 +27,12 @@ PROFILE_EVERY = 60
 
 
 class NetworkManager:
-    def __init__(self, node_id: str, bus, options: dict | None = None):
+    def __init__(self, node_id: str, bus, options: dict | None = None, executor=None):
         options = options or {}
         self.node_id = node_id
         self.bus = bus
+        self.executor = executor          # file locale : unités confiées, ressources prêtées
+        self.worker = Worker(self) if executor else None
         self.force = bool(options.get("force"))           # --network
         self.host = options.get("host") or "0.0.0.0"       # --p2p-host
         self.port_override = options.get("port")          # --p2p-port
@@ -96,9 +100,13 @@ class NetworkManager:
                 self._discovery = None
                 self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="coeur-peers")
+        if self.worker:
+            self.worker.start()
         log.info("Réseau local actif sur %s:%s", self.host, self.p2p_port)
 
     async def _stop(self):
+        if self.worker:
+            await self.worker.stop()
         if self._refresh_task:
             self._refresh_task.cancel()
         if self._discovery:
@@ -217,6 +225,12 @@ class NetworkManager:
                 del self.visible[node_id]
         paired = peers.list_peers()
         paired_ids = {p["node_id"] for p in paired}
+        helping = {}                      # machine -> unités qu'elle calcule pour moi
+        for counts in queue.remote_counts().values():
+            for node_id, n in counts.items():
+                helping[node_id] = helping.get(node_id, 0) + n
+        for peer in paired:
+            peer["working_for_me"] = helping.get(peer["node_id"], 0)
         return {
             "enabled": self.enabled, "running": self.running, "error": self.error,
             "node_id": self.node_id, "name": self.name(), "port": self.p2p_port,
@@ -224,6 +238,8 @@ class NetworkManager:
             "peers": paired,
             "visible": [v for v in self.visible.values() if v["node_id"] not in paired_ids],
             "pairing": self.pairing.snapshot(),
+            "offload": bool(settings.get("offload_enabled")),
+            "sharing": self.worker.snapshot() if self.worker and self.running else None,
         }
 
     def publish(self, event: dict):
