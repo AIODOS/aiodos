@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# Réglages locaux de Claude Code (autorisations propres à cette machine)
+.claude/settings.local.json
