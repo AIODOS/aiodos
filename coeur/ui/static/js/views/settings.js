@@ -17,10 +17,13 @@ const SECTIONS = [
     { key: 'conversations_enabled', label: 'Mémoire entre les conversations', type: 'switch',
       help: 'L\'IA peut s\'appuyer sur tes autres conversations. Désactive-la pour des échanges isolés.' },
     { key: 'embed_model', label: 'Modèle d\'embedding', type: 'text',
-      help: 'Changer de modèle impose de réindexer les bibliothèques.' },
+      help: 'embeddinggemma conseillé (à installer : ollama pull embeddinggemma). Changer de modèle relance '
+        + 'automatiquement la réindexation des bibliothèques et de la mémoire (voir Tâches).' },
     { key: 'rag_min_score', label: 'Seuil de pertinence des extraits (0 à 1)', type: 'number',
       min: 0, max: 1, step: 0.01,
-      help: 'Plus haut : moins d\'extraits mais mieux ciblés. 0,70 convient à nomic-embed-text.' },
+      help: 'Plus haut : moins d\'extraits mais mieux ciblés. Chaque modèle a son échelle : 0,40 pour '
+        + 'embeddinggemma, 0,45 pour bge-m3, 0,70 pour nomic-embed-text. Revient à la valeur conseillée '
+        + 'quand tu changes de modèle.' },
   ] },
   { title: 'Recherche web', icon: 'globe', fields: [
     { key: 'web_search_enabled', label: 'Recherche web activée par défaut', type: 'switch',

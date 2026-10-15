@@ -10,6 +10,17 @@ from coeur import db
 
 SECRET_KEYS = {"mistral_key", "qwen_key"}
 
+# Seuil de pertinence mesuré pour chaque modèle d'embedding sur un jeu de test en
+# français (docs/embeddings.md) : chaque modèle a sa propre échelle de scores.
+# Tant que l'utilisateur ne fixe pas rag_min_score, le seuil suit le modèle choisi.
+RAG_THRESHOLDS = {
+    "embeddinggemma": 0.40,
+    "bge-m3": 0.45,
+    "snowflake-arctic-embed2": 0.29,
+    "qwen3-embedding:0.6b": 0.42,
+    "nomic-embed-text": 0.70,         # aucun seuil ne lui convient en français
+}
+
 DEFAULTS = {
     # --- Conversation ---
     "default_model": "",
@@ -21,8 +32,8 @@ DEFAULTS = {
     ),
     "ollama_url": "http://127.0.0.1:11434",
     # --- Connaissances ---
-    "embed_model": "nomic-embed-text",
-    "rag_min_score": 0.70,            # pertinence minimale d'un extrait (calibré sur nomic)
+    "embed_model": "embeddinggemma",  # choix mesuré : docs/embeddings.md
+    "rag_min_score": 0.40,            # pertinence minimale d'un extrait (suit le modèle)
     "knowledge_enabled": True,
     "conversations_enabled": False,   # mémoire inter-conversations
     # --- Web & cloud ---
@@ -61,11 +72,23 @@ def _decode(raw):
         return None
 
 
+def rag_threshold(model) -> float:
+    """Seuil de pertinence mesuré pour ce modèle (« bge-m3:latest » → « bge-m3 ») ;
+    pour un modèle non mesuré, celui du modèle par défaut."""
+    name = str(model or "").strip()
+    for candidate in (name, name.split(":")[0]):
+        if candidate in RAG_THRESHOLDS:
+            return RAG_THRESHOLDS[candidate]
+    return DEFAULTS["rag_min_score"]
+
+
 def get(key):
     row = db.query_one("SELECT value FROM settings WHERE key=?", (key,))
     if row is None:
         if key == "node_name":
             return socket.gethostname()
+        if key == "rag_min_score":
+            return rag_threshold(get("embed_model"))
         return DEFAULTS.get(key)
     return _decode(row["value"])
 
@@ -73,9 +96,13 @@ def get(key):
 def get_all() -> dict:
     values = dict(DEFAULTS)
     values["node_name"] = socket.gethostname()
+    stored = set()
     for row in db.query("SELECT key, value FROM settings"):
         if row["key"] in DEFAULTS:
             values[row["key"]] = _decode(row["value"])
+            stored.add(row["key"])
+    if "rag_min_score" not in stored:
+        values["rag_min_score"] = rag_threshold(values["embed_model"])
     return values
 
 
@@ -85,8 +112,17 @@ def set_value(key, value):
 
 def set_many(values: dict):
     """Enregistre les réglages connus. Pour une clé API : None l'efface,
-    une chaîne vide la laisse inchangée (l'interface ne la connaît pas)."""
+    une chaîne vide la laisse inchangée (l'interface ne la connaît pas).
+
+    Un nouveau modèle d'embedding ramène le seuil de pertinence à la valeur
+    mesurée pour lui, sauf si le seuil est fixé dans le même envoi ; laissé
+    vide, le modèle revient à celui par défaut."""
     with db.transaction() as conn:
+        if "embed_model" in values:
+            model = str(values["embed_model"] or "").strip() or DEFAULTS["embed_model"]
+            if model != get("embed_model") and "rag_min_score" not in values:
+                conn.execute("DELETE FROM settings WHERE key='rag_min_score'")
+            values = dict(values, embed_model=model)
         for key, value in values.items():
             if key not in DEFAULTS:
                 continue

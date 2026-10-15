@@ -88,23 +88,20 @@ def _web_context(question, max_results, sources):
     return blocks
 
 
-RELEVANCE_MARGIN = 0.25      # garde-fou : écart maximal avec le meilleur extrait
-
-
-def select_relevant(hits, min_score, margin=RELEVANCE_MARGIN, limit=4) -> list:
+def select_relevant(hits, min_score, limit=4) -> list:
     """Ne garde que les extraits vraiment liés à la question.
 
-    Les modèles d'embedding donnent un « bruit de fond » élevé (≈ 0,55-0,68
-    avec nomic-embed-text en français) : sans seuil, la recherche renvoie
-    toujours quelque chose, et l'IA cite des sources sans rapport. Le seuil
-    absolu fait l'essentiel ; l'écart relatif reste large, car la mémoire peut
-    contenir la même question mot pour mot (≈ 0,95) sans que les vraies
-    sources (≈ 0,82) cessent d'être pertinentes.
+    Sans seuil, la recherche renvoie toujours quelque chose et l'IA cite des
+    sources sans rapport. Le seuil dépend du modèle d'embedding, chacun ayant
+    son échelle de scores (settings.RAG_THRESHOLDS, docs/embeddings.md) : en
+    français, avec embeddinggemma, les bons passages dépassent 0,45 et le bruit
+    de fond reste sous 0,32 dans 99 % des cas (nomic-embed-text : 0,55 à 0,75).
+
+    Pas d'écart maximal avec le meilleur extrait : la mémoire peut contenir la
+    même question mot pour mot (0,89), et un tel écart écarterait alors les
+    vraies sources (0,52) au profit de ce doublon.
     """
-    if not hits:
-        return []
-    floor = max(min_score, hits[0]["score"] - margin)
-    return [h for h in hits if h["score"] >= floor][:limit]
+    return [h for h in hits if h["score"] >= min_score][:limit]
 
 
 def _knowledge_context(question, libraries, conversations, sources, conversation_id=None):

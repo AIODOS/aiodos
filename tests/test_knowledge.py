@@ -97,18 +97,22 @@ def test_current_conversation_is_excluded_from_memory(fake_embed):
 
 
 def test_relevance_filter_drops_background_noise():
+    from coeur import settings
     from coeur.chat.pipeline import select_relevant
     hit = lambda score, name: {"score": score, "source": name}
-    # Scores réellement mesurés avec nomic-embed-text sur des questions en français
-    budget = [hit(0.824, "budget.txt"), hit(0.654, "lisez-moi.md"), hit(0.577, "conv")]
-    assert [h["source"] for h in select_relevant(budget, 0.70)] == ["budget.txt"]
-    unrelated = [hit(0.678, "conv python"), hit(0.667, "conv nano"), hit(0.635, "lisez-moi.md")]
-    assert select_relevant(unrelated, 0.70) == []
-    # La même question déjà posée (mémoire, 0,955) n'éclipse pas la vraie source
-    duplicate = [hit(0.955, "mémoire : question"), hit(0.824, "budget.txt"),
-                 hit(0.823, "mémoire : réponse"), hit(0.654, "lisez-moi.md")]
-    assert [h["source"] for h in select_relevant(duplicate, 0.70)] == [
-        "mémoire : question", "budget.txt", "mémoire : réponse"]
+    threshold = settings.get("rag_min_score")
+    assert threshold == settings.RAG_THRESHOLDS["embeddinggemma"] == 0.40
+    # Scores réellement mesurés avec embeddinggemma (docs/embeddings.md)
+    budget = [hit(0.524, "budget.txt"), hit(0.298, "impots.pdf"), hit(0.294, "devis.eml")]
+    assert [h["source"] for h in select_relevant(budget, threshold)] == ["budget.txt"]
+    # « Écris une fonction JavaScript… » : rien de pertinent dans la base
+    unrelated = [hit(0.360, "conv python"), hit(0.292, "excel.md"), hit(0.267, "conv nano")]
+    assert select_relevant(unrelated, threshold) == []
+    # La même question déjà posée (mémoire, 0,888) n'éclipse pas la vraie source
+    duplicate = [hit(0.888, "mémoire : question"), hit(0.564, "mémoire : réponse"),
+                 hit(0.524, "budget.txt"), hit(0.298, "impots.pdf")]
+    assert [h["source"] for h in select_relevant(duplicate, threshold)] == [
+        "mémoire : question", "mémoire : réponse", "budget.txt"]
 
 
 def test_chunking_prefers_natural_breaks():
