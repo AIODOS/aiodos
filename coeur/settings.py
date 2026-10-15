@@ -39,7 +39,12 @@ DEFAULTS = {
     "vision_model": "qwen2.5vl:7b",
     "media_transcribe": True,
     "whisper_model": "small",
-    # --- Nœud & partage de puissance (appliqués en phase 1, réseau local) ---
+    # --- Réseau local (phase 1) : désactivé tant que l'utilisateur ne l'active pas ---
+    "network_enabled": False,
+    "p2p_port": 47701,                # échanges chiffrés entre nœuds
+    "discovery_port": 47700,          # annonces UDP sur le réseau local
+    "manual_peers": [],               # adresses ajoutées à la main (« ip:port »)
+    # --- Nœud & partage de puissance ---
     "node_name": "",
     "share_enabled": False,
     "share_when_idle": True,          # comme l'économiseur d'écran de SETI@home

@@ -59,6 +59,16 @@ def main():
     parser = argparse.ArgumentParser(prog="coeur", description="Cœur IA — nœud local")
     parser.add_argument("--headless", action="store_true", help="nœud seul, sans fenêtre")
     parser.add_argument("--port", type=int, default=0, help="port local (défaut : libre)")
+    network = parser.add_argument_group("réseau local (tests, machines de calcul)")
+    network.add_argument("--network", action="store_true",
+                         help="active le réseau quel que soit le réglage")
+    network.add_argument("--p2p-host", default=None,
+                         help="interface d'écoute entre nœuds (défaut : 0.0.0.0)")
+    network.add_argument("--p2p-port", type=int, default=None, help="port entre nœuds")
+    network.add_argument("--no-discovery", action="store_true",
+                         help="pas d'annonces UDP (ajout par adresse uniquement)")
+    parser.add_argument("--no-migrate", action="store_true",
+                        help="ne pas importer les données de la v1 (tests)")
     args = parser.parse_args()
 
     _setup_logging()
@@ -71,12 +81,14 @@ def main():
     try:
         db.connect()
         store.ensure_defaults()
-        migrated = migrate_legacy.run_if_needed()
+        migrated = None if args.no_migrate else migrate_legacy.run_if_needed()
         if migrated:
             log.info("Import v1 : %s", migrated)
 
         token = secrets.token_urlsafe(24)
-        app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"})
+        app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
+            "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
+            "discovery": not args.no_discovery})
         # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
         # de la sienne, qui suppose une console
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,

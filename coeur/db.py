@@ -12,7 +12,35 @@ from contextlib import contextmanager
 
 from coeur import paths
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
+MIGRATIONS = {
+    # Phase 1 : machines appairées, compte des échanges de calcul (réciprocité),
+    # unités réservables par d'autres nœuds, bibliothèques « gardées sur cette machine ».
+    2: """
+    CREATE TABLE IF NOT EXISTS peers (
+        node_id   TEXT PRIMARY KEY,
+        name      TEXT NOT NULL,
+        key       BLOB NOT NULL,
+        address   TEXT,
+        port      INTEGER,
+        profile   TEXT,
+        paired_at REAL NOT NULL,
+        last_seen REAL
+    );
+    CREATE TABLE IF NOT EXISTS ledger (
+        node_id        TEXT PRIMARY KEY,
+        given_s        REAL NOT NULL DEFAULT 0,
+        received_s     REAL NOT NULL DEFAULT 0,
+        given_units    INTEGER NOT NULL DEFAULT 0,
+        received_units INTEGER NOT NULL DEFAULT 0
+    );
+    ALTER TABLE units ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE units ADD COLUMN lease_until REAL;
+    ALTER TABLE collections ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;
+    """,
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -145,9 +173,14 @@ def _ensure_schema(conn, path):
         if path in _initialized:
             return
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < SCHEMA_VERSION:
+        if version < 1:
             conn.executescript(SCHEMA)
-            conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+            version = 1
+        for target in sorted(MIGRATIONS):
+            if version < target:
+                conn.executescript(MIGRATIONS[target])
+                version = target
+        conn.execute(f"PRAGMA user_version={version}")
         _initialized.add(path)
 
 
