@@ -26,6 +26,22 @@ def test_search_finds_the_relevant_passage(fake_embed):
     assert hits[0]["source"] == "budget.txt"
 
 
+def test_search_during_reindexing(fake_embed):
+    """Vecteurs d'un ancien modèle (majoritaires), passages déjà recalculés et
+    passages sans vecteur se côtoient : seuls les recalculés sont trouvables."""
+    store.ensure_defaults()
+    general = store.list_collections()[0]["id"]
+    old_model = lambda texts: [v + [1.0] * 16 for v in fake_embed(texts)]     # 80 dimensions
+    for i in range(3):
+        _add(general, f"ancien{i}.txt", f"fusée lunaire numéro {i}", old_model)
+    _add(general, "recalculé.txt", "fusée lunaire recalculée", fake_embed)
+    query = fake_embed(["fusée lunaire"])[0]
+    assert [h["source"] for h in search.search(query, k=5)] == ["recalculé.txt"]
+    store.retire_vectors()                                   # nouveau changement de modèle
+    assert search.search(query, k=5) == []
+    assert [len(store.chunk_texts(e["id"])) for e in store.list_entries(general)] == [1] * 4
+
+
 def test_disabled_library_and_memory_flags(fake_embed):
     store.ensure_defaults()
     general = store.list_collections()[0]["id"]
