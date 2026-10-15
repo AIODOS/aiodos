@@ -166,6 +166,14 @@ def evaluate(data, P, Q, O, D):
         "counts": {"rel": len(rel), "far": len(far), "near": len(near + off_near)},
         "hard": {"weakest_relevant": [[q, p, s] for s, q, p in sorted(rel_cases)[:5]],
                  "strongest_noise": [[q, p, s] for s, q, p in sorted(far_cases)[-5:][::-1]]},
+        # Ce que donnerait chaque seuil : bons passages perdus, questions restées
+        # sans réponse, passages sans rapport (et pièges proches) retenus.
+        "sweep": [{"t": round(float(t), 2),
+                   "rel_lost": int(sum(s < t for s in rel)),
+                   "missed_questions": int(sum(b < t for b in best_rel)),
+                   "noise_above": int(sum(s >= t for s in far)),
+                   "near_above": int(sum(s >= t for s in near + off_near))}
+                  for t in np.arange(0.30, 0.755, 0.01)],
     }
 
 
