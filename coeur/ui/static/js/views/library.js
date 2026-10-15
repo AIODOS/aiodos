@@ -23,7 +23,8 @@ export function mountLibrary(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head">
         <div><h1>Bibliothèques</h1>
-          <div class="sub">Tes documents, dossiers et pages web, indexés pour que l'IA s'en serve. Tout reste sur ta machine.</div></div>
+          <div class="sub">Tes documents, dossiers et pages web, indexés pour que l'IA s'en serve. Tout est enregistré
+          sur ce PC ; seul le calcul peut être confié à tes machines appairées.</div></div>
         <div class="grow"></div>
         <button class="btn" id="lib-new">${icon('plus')}Nouvelle bibliothèque</button>
       </div>
@@ -74,6 +75,7 @@ function renderCollections() {
       <div class="coll ${c.id === selected ? 'active' : ''} ${c.enabled ? '' : 'disabled'}">
         ${icon('library')}
         <div class="name"><b>${esc(c.name)}</b><small>${c.entries} élément(s) · ${c.chunks} passages</small></div>
+        ${c.local_only ? `<span class="local-only" title="Gardée sur ce PC : jamais confiée à une autre machine">${icon('lock')}</span>` : ''}
         <label class="switch" title="${c.enabled ? 'Utilisée dans les réponses' : 'Ignorée dans les réponses'}">
           <input type="checkbox" ${c.enabled ? 'checked' : ''}><span></span></label>
         <button class="icon-btn" title="Options">${icon('more')}</button>
@@ -92,6 +94,9 @@ function renderCollections() {
       e.stopPropagation();
       menu(e.currentTarget, [
         { label: 'Renommer', icon: 'edit', action: () => renameCollection(c) },
+        c.local_only
+          ? { label: 'Autoriser le calcul sur mes machines', icon: 'network', action: () => setLocalOnly(c, false) }
+          : { label: 'Garder sur ce PC uniquement', icon: 'lock', action: () => setLocalOnly(c, true) },
         { label: 'Supprimer', icon: 'trash', danger: true, action: () => deleteCollection(c) },
       ]);
     };
@@ -108,6 +113,15 @@ async function createCollection() {
     selected = id;
     prefs.set('library.selected', id);
     load();
+  } catch (e) { errorToast(e); }
+}
+
+async function setLocalOnly(c, localOnly) {
+  try {
+    await patch(`/collections/${c.id}`, { local_only: localOnly });
+    toast(localOnly
+      ? `« ${c.name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine.`
+      : `Le calcul de « ${c.name} » peut désormais être confié à tes machines appairées.`, 'ok', 6000);
   } catch (e) { errorToast(e); }
 }
 

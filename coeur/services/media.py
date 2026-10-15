@@ -27,9 +27,12 @@ _whisper = {}
 _whisper_lock = threading.Lock()
 
 
-def transcribe(path, model_name: str = "small") -> str:
+def transcribe(path, model_name: str = "small", stop=None) -> str:
     """Transcrit la parole d'un fichier audio ou vidéo (une à la fois : le
-    modèle Whisper occupe déjà tous les cœurs du processeur)."""
+    modèle Whisper occupe déjà tous les cœurs du processeur).
+
+    stop : threading.Event ; s'il est levé, la transcription s'arrête au segment
+    suivant (le texte partiel renvoyé doit alors être ignoré par l'appelant)."""
     with _whisper_lock:
         model = _whisper.get(model_name)
         if model is None:
@@ -37,6 +40,12 @@ def transcribe(path, model_name: str = "small") -> str:
             model = WhisperModel(model_name, device="cpu", compute_type="int8")
             _whisper[model_name] = model
         segments, info = model.transcribe(str(path), vad_filter=True)
-        text = "\n".join(s.text.strip() for s in segments if s.text.strip())
+        lines = []
+        for segment in segments:          # générateur : le calcul avance segment par segment
+            if stop is not None and stop.is_set():
+                break
+            if segment.text.strip():
+                lines.append(segment.text.strip())
+        text = "\n".join(lines)
     language = getattr(info, "language", "?")
     return f"[Transcription de {path.name} · langue : {language}]\n{text}" if text else ""

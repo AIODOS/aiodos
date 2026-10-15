@@ -38,7 +38,7 @@ def _forbidden(*args, **kwargs):
 def _run_queue():
     """Vide la file comme le ferait l'exécuteur, sans threads."""
     while (unit := queue.claim_next({"gpu", "embed", "cpu", "net"}, "local")) is not None:
-        result = registry.TASKS[unit["task"]](unit["payload"])
+        result = registry.run_local(unit["task"], unit["payload"])
         job_id, finished = queue.finish_unit(unit["id"], result or {}, 0.0)
         if finished:
             queue.finalize_job(job_id)

@@ -3,7 +3,10 @@
 Tourne dans la boucle asyncio du nœud ; chaque unité s'exécute dans un thread
 (les tâches sont bloquantes : réseau, fichiers, modèles). Pendant une
 conversation, aucune nouvelle unité GPU ne démarre : l'interactif d'abord.
-En phase 1, un « exécuteur distant » réservera des unités pour d'autres nœuds.
+
+Les ressources sont partagées avec le calcul fait ici pour d'autres machines
+(begin_remote / end_remote, cf. network.worker) ; l'exécuteur surveille aussi
+les baux des unités que ce nœud a confiées ailleurs (cf. jobs.leases).
 """
 import asyncio
 import logging
@@ -11,13 +14,14 @@ import time
 
 import requests
 
-from coeur.jobs import queue, registry
+from coeur.jobs import leases, queue, registry
 from coeur.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from coeur.services import ollama
 
 log = logging.getLogger("coeur.executor")
 
 ENGINE_RETRY_DELAY = 20      # secondes de pause d'une ressource quand Ollama ne répond pas
+LEASE_CHECK_EVERY = 10       # vérification des baux échus (unités confiées ailleurs)
 
 
 def engine_down(exc) -> bool:
@@ -31,11 +35,13 @@ def engine_down(exc) -> bool:
 
 
 class Executor:
-    def __init__(self, node_id: str, publish):
+    def __init__(self, node_id: str, publish, slots: dict | None = None):
         self.node_id = node_id
         self.publish = publish            # publish(event: dict), sûr depuis tout thread
-        self.slots = dict(DEFAULT_SLOTS)
+        self.slots = {name: max(0, int(n)) for name, n in {**DEFAULT_SLOTS, **(slots or {})}.items()
+                      if name in DEFAULT_SLOTS}
         self.busy = {name: 0 for name in self.slots}
+        self.remote = {}                  # unités calculées ici pour d'autres machines
         self.interactive = 0
         self._loop = None
         self._wake = None
@@ -78,9 +84,14 @@ class Executor:
                 and not (self.interactive and name in GPU_BOUND)}
 
     async def _run(self):
+        last_lease_check = 0.0
         while True:
             try:
                 await self._fill()
+                if time.monotonic() - last_lease_check > LEASE_CHECK_EVERY:
+                    last_lease_check = time.monotonic()
+                    for job_id, finished in await asyncio.to_thread(leases.expire):
+                        await asyncio.to_thread(self.settle, job_id, finished)
             except Exception:
                 log.exception("Erreur dans la boucle de l'exécuteur")
             try:
@@ -104,8 +115,7 @@ class Executor:
     async def _execute(self, unit):
         started = time.perf_counter()
         try:
-            handler = registry.TASKS[unit["task"]]
-            result = await asyncio.to_thread(handler, unit["payload"])
+            result = await asyncio.to_thread(registry.run_local, unit["task"], unit["payload"])
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {}, time.perf_counter() - started)
         except Exception as exc:
@@ -130,6 +140,31 @@ class Executor:
         self._publish_status()
         self._wake.set()
 
+    # ------------------------------------------- calcul pour d'autres machines
+    def begin_remote(self, key, info: dict):
+        """Une unité d'une autre machine occupe une ressource d'ici (boucle asyncio)."""
+        self.busy[info["resource"]] += 1
+        self.remote[key] = info
+        self._publish_status()
+
+    def end_remote(self, key):
+        info = self.remote.pop(key, None)
+        if info:
+            self.busy[info["resource"]] -= 1
+        self._publish_status()
+        self.wake()
+
+    def settle(self, job_id, finished):
+        """Après une unité réglée hors de la boucle (résultat reçu d'une autre
+        machine, bail échu…) : finalisation et nouvelles pour l'interface."""
+        if finished:
+            try:
+                queue.finalize_job(job_id)
+            except Exception:
+                log.exception("Finalisation du travail %s impossible", job_id)
+        self.publish_job(job_id, force=True)
+        self.wake()
+
     # ---------------------------------------------------------------- événements
     def publish_job(self, job_id, force=False):
         """Progression d'un travail, limitée à ~4 messages/s par travail."""
@@ -146,7 +181,8 @@ class Executor:
         waiting = {name: round(until - now) for name, until in self.cooldown.items()
                    if until > now}
         return {"slots": self.slots, "busy": dict(self.busy),
-                "interactive": self.interactive, "waiting": waiting}
+                "interactive": self.interactive, "waiting": waiting,
+                "remote": list(self.remote.values())}
 
     def _publish_status(self):
         self.publish({"type": "executor", **self.status()})

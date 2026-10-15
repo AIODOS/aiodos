@@ -335,6 +335,7 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .slot { display: inline-flex; align-items: center; gap: 6px; }
 .slot i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); display: inline-block; }
 .slot i.busy { background: var(--cyan); box-shadow: 0 0 8px rgba(79, 216, 235, .7); }
+.remote-where { display: inline-flex; align-items: center; gap: 4px; color: var(--cyan); }
 .jobs { display: flex; flex-direction: column; gap: 12px; }
 .job { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .job .top { display: flex; align-items: center; gap: 10px; }
@@ -373,6 +374,11 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .peer { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .peer-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .peer-facts { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.peer-work { font-size: 12.5px; color: var(--cyan); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.share-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 2px 0 6px; font-size: 13px; }
+.remote-item { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 4px 0 0 2px; }
+.remote-item .mono { color: var(--text); }
+.coll .local-only { color: var(--warn); display: inline-flex; }
 .peer-ledger { font-size: 12px; margin-top: 4px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.on { background: var(--ok); box-shadow: 0 0 8px rgba(63, 214, 154, .6); }

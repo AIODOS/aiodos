@@ -18,6 +18,7 @@ class CollectionIn(BaseModel):
 class CollectionPatch(BaseModel):
     name: str | None = None
     enabled: bool | None = None
+    local_only: bool | None = None
 
 
 class IndexPathsIn(BaseModel):
@@ -68,6 +69,8 @@ def update_collection(collection_id: int, body: CollectionPatch, request: Reques
         _guard(store.rename_collection, collection_id, body.name)
     if body.enabled is not None:
         store.set_enabled(collection_id, body.enabled)
+    if body.local_only is not None:
+        _guard(store.set_local_only, collection_id, body.local_only)
     _notify(request)
     return {"ok": True}
 

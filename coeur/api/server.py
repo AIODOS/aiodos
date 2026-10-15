@@ -17,16 +17,17 @@ from coeur.network.manager import NetworkManager
 from coeur.node import identity
 
 
-def create_app(token: str, hosts: set, network_options: dict | None = None) -> FastAPI:
+def create_app(token: str, hosts: set, network_options: dict | None = None,
+               slots: dict | None = None) -> FastAPI:
     bus = EventBus()
 
     @asynccontextmanager
     async def lifespan(app):
         bus.bind(asyncio.get_running_loop())
         node_id = await asyncio.to_thread(identity.node_id)
-        executor = Executor(node_id, bus.publish)
+        executor = Executor(node_id, bus.publish, slots)
         app.state.executor = executor
-        app.state.network = NetworkManager(node_id, bus, network_options)
+        app.state.network = NetworkManager(node_id, bus, network_options, executor)
         await executor.start()
         # Modèle d'embedding changé (réglage, mise à jour) ou réindexation à reprendre
         if await asyncio.to_thread(reindex.schedule, resume=True):

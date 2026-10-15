@@ -22,6 +22,13 @@ def db_path() -> Path:
     return data_dir() / "coeur.db"
 
 
+def work_dir() -> Path:
+    """Fichiers reçus d'autres machines le temps de calculer pour elles."""
+    d = data_dir() / "tmp" / "work"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def log_path() -> Path:
     d = data_dir() / "logs"
     d.mkdir(exist_ok=True)

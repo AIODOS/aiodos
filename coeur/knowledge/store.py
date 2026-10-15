@@ -27,12 +27,13 @@ def ensure_defaults():
 # ----------------------------------------------------------------- collections
 def list_collections(include_system=False) -> list:
     rows = db.query("""
-        SELECT c.id, c.name, c.enabled, c.system,
+        SELECT c.id, c.name, c.enabled, c.system, c.local_only,
                (SELECT COUNT(*) FROM entries e WHERE e.collection_id = c.id) AS entries,
                (SELECT COUNT(*) FROM chunks k JOIN entries e ON e.id = k.entry_id
                  WHERE e.collection_id = c.id) AS chunks
         FROM collections c ORDER BY c.system, c.name COLLATE NOCASE""")
-    return [dict(r, enabled=bool(r["enabled"]), system=bool(r["system"]))
+    return [dict(r, enabled=bool(r["enabled"]), system=bool(r["system"]),
+                 local_only=bool(r["local_only"]))
             for r in rows if include_system or not r["system"]]
 
 
@@ -92,6 +93,27 @@ def delete_collection(collection_id):
 def set_enabled(collection_id, enabled: bool):
     db.execute("UPDATE collections SET enabled=? WHERE id=?",
                (1 if enabled else 0, collection_id))
+
+
+def set_local_only(collection_id, local_only: bool):
+    """Bibliothèque « sur cette machine seulement » : ses fichiers ne sont jamais
+    confiés à une autre machine pour le calcul."""
+    _ensure_editable(collection_id)
+    db.execute("UPDATE collections SET local_only=? WHERE id=?",
+               (1 if local_only else 0, collection_id))
+
+
+def local_only_ids() -> set:
+    return {r["id"] for r in db.query("SELECT id FROM collections WHERE local_only=1")}
+
+
+def embedding_dim(collection_id) -> int | None:
+    """Dimension des vecteurs déjà stockés dans cette bibliothèque (None si vide).
+    Les passages sans vecteur (en attente de réindexation) ne comptent pas."""
+    row = db.query_one("SELECT length(k.embedding) AS n FROM chunks k "
+                       "JOIN entries e ON e.id = k.entry_id WHERE e.collection_id=? "
+                       "AND length(k.embedding) > 0 LIMIT 1", (collection_id,))
+    return row["n"] // 4 if row and row["n"] else None
 
 
 # --------------------------------------------------------------------- entrées

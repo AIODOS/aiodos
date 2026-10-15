@@ -57,7 +57,8 @@ DEFAULTS = {
     "manual_peers": [],               # adresses ajoutées à la main (« ip:port »)
     # --- Nœud & partage de puissance ---
     "node_name": "",
-    "share_enabled": False,
+    "offload_enabled": True,          # confier des unités à mes machines appairées
+    "share_enabled": False,           # calculer pour mes machines appairées
     "share_when_idle": True,          # comme l'économiseur d'écran de SETI@home
     "idle_minutes": 10,
     "share_on_ac_only": True,

@@ -25,7 +25,7 @@ export function mountJobs(container) {
       <div class="page-head">
         <div><h1>Tâches</h1>
           <div class="sub">Les gros travaux sont découpés en unités indépendantes traitées en arrière-plan,
-          comme SETI@home. En phase 1, ces unités pourront partir sur tes autres machines.</div></div>
+          comme SETI@home : ici, ou sur tes machines appairées qui prêtent leur puissance.</div></div>
         <div class="grow"></div>
         <button class="btn" id="jobs-clear">${icon('trash')}Nettoyer les terminées</button>
       </div>
@@ -124,6 +124,26 @@ function renderStats() {
   ].map(([n, label]) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`).join('');
 }
 
+function peerName(id) {
+  return state.network?.peers?.find(p => p.node_id === id)?.name || 'une autre machine';
+}
+
+// Unités de ce travail calculées en ce moment sur d'autres machines
+function remoteText(j) {
+  const where = Object.entries(j.remote || {});
+  if (!where.length) return '';
+  return `<span class="remote-where">${icon('network')}${where.map(([id, n]) =>
+    `${n} sur « ${esc(peerName(id))} »`).join(', ')}</span>`;
+}
+
+// Unités d'autres machines calculées ici, regroupées par machine
+function lentPills(ex) {
+  const byPeer = new Map();
+  for (const w of ex.remote || []) byPeer.set(w.peer_name, (byPeer.get(w.peer_name) || 0) + 1);
+  return [...byPeer].map(([name, n]) =>
+    `<span class="pill run">${icon('network')}Calcule pour « ${esc(name)} » : ${n} unité(s)</span>`).join('');
+}
+
 function renderSlots() {
   const ex = state.executor;
   const box = $('#jobs-slots', root);
@@ -134,6 +154,7 @@ function renderSlots() {
     return `<span class="slot">${dots} ${RESOURCES[name] || name} ${busy}/${n}</span>`;
   }).join('') + (ex.interactive
     ? `<span class="pill warn">${icon('chat')}Conversation en cours : le GPU lui est réservé</span>` : '')
+    + lentPills(ex)
     + (Object.keys(ex.waiting || {}).length
       ? `<span class="pill warn">${icon('warn')}Ollama injoignable : nouvel essai automatique</span>` : '');
 }
@@ -188,6 +209,8 @@ function footText(j, processed) {
     if (processed > 0 && processed < j.total) {
       parts.push(`reste ~${duration(elapsed / processed * (j.total - processed))}`);
     }
+    const remote = remoteText(j);
+    if (remote) parts.push(remote);
   } else if (j.finished && j.started) {
     parts.push(`en ${duration(j.finished - j.started)}`);
   }
