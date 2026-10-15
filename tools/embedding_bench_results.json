@@ -1,118 +1,6 @@
 [
  {
   "rel": {
-   "min": 0.5478507876396179,
-   "p10": 0.645030391216278,
-   "median": 0.7428512573242188,
-   "max": 0.8545172214508057
-  },
-  "noise": {
-   "median": 0.5612159073352814,
-   "p90": 0.6162266433238983,
-   "p99": 0.6631526947021484,
-   "max": 0.749787449836731
-  },
-  "near": {
-   "median": 0.6001894474029541,
-   "max": 0.7725346088409424
-  },
-  "gap": -0.20193666219711304,
-  "auc": 0.9750421152860177,
-  "auc_all": 0.9738023547229685,
-  "threshold": 0.6370010375976562,
-  "at_threshold": {
-   "missed_questions": 3,
-   "noise_above": 59,
-   "near_above": 6,
-   "off_topic_with_hit": 6
-  },
-  "off_topic_max": {
-   "median": 0.6366415023803711,
-   "max": 0.7725346088409424
-  },
-  "top1": 0.8611111111111112,
-  "mrr": 0.91820987654321,
-  "recall4": 0.9722222222222222,
-  "dup": {
-   "median": 0.9438515901565552,
-   "min": 0.9042338132858276,
-   "gap_max": 0.3974384665489197,
-   "gap_median": 0.20897263288497925
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "hard": {
-   "weakest_relevant": [
-    [
-     "Combien l'association consacre-t-elle à la communication ?",
-     "budget_2024",
-     0.5478507876396179
-    ],
-    [
-     "Comment créer un venv sous Windows ?",
-     "python_venv",
-     0.6075127124786377
-    ],
-    [
-     "Comment mieux dormir ?",
-     "sante_sommeil",
-     0.6249312162399292
-    ],
-    [
-     "Jusqu'à quand puis-je déclarer mes revenus ?",
-     "impots_declaration",
-     0.6370010375976562
-    ],
-    [
-     "Que deviennent les tâches en cours si le PC s'éteint d'un coup ?",
-     "coeur_queue",
-     0.6503832936286926
-    ]
-   ],
-   "strongest_noise": [
-    [
-     "Comment l'API locale est-elle protégée contre les attaques ?",
-     "memoire_nano_banana",
-     0.749787449836731
-    ],
-    [
-     "Comment l'API locale est-elle protégée contre les attaques ?",
-     "memoire_phase1",
-     0.7125283479690552
-    ],
-    [
-     "C'est quoi await en Python ?",
-     "coeur_install",
-     0.6988642811775208
-    ],
-    [
-     "Peux-tu chercher sur le web la documentation de Seedance ?",
-     "email_devis",
-     0.6923412084579468
-    ],
-    [
-     "Quel délai le client a-t-il demandé pour son site ?",
-     "memoire_nano_banana",
-     0.6869454383850098
-    ]
-   ]
-  },
-  "model": "nomic-embed-text",
-  "prefixes": false,
-  "dim": 768,
-  "disk_mb": 261.59520149230957,
-  "vram_mb": 320.1899995803833,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 1.6371990000000096,
-  "ms_per_passage": 10.731103124999919,
-  "ms_per_question": 8.595988888888288
- },
- {
-  "rel": {
    "min": 0.5614786744117737,
    "p10": 0.6699126839637757,
    "median": 0.7477037906646729,
@@ -222,230 +110,6 @@
   "cold_s": 0.9603521000000228,
   "ms_per_passage": 10.94648124999864,
   "ms_per_question": 7.001897222222751
- },
- {
-  "rel": {
-   "min": 0.4900563359260559,
-   "p10": 0.5478003621101379,
-   "median": 0.6434395909309387,
-   "max": 0.7743004560470581
-  },
-  "noise": {
-   "median": 0.3113011419773102,
-   "p90": 0.39663025736808777,
-   "p99": 0.4660879820585251,
-   "max": 0.5560863614082336
-  },
-  "near": {
-   "median": 0.41208699345588684,
-   "max": 0.5969294309616089
-  },
-  "gap": -0.06603002548217773,
-  "auc": 0.9997253350911888,
-  "auc_all": 0.9994230387826119,
-  "threshold": 0.4900563359260559,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 7,
-   "near_above": 4,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.4268384575843811,
-   "max": 0.5412574410438538
-  },
-  "top1": 0.9722222222222222,
-  "mrr": 0.9861111111111112,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9571159780025482,
-   "min": 0.8536278009414673,
-   "gap_max": 0.43279021978378296,
-   "gap_median": 0.30402472615242004
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "hard": {
-   "weakest_relevant": [
-    [
-     "Quel est le budget 2024 ?",
-     "budget_2024",
-     0.4900563359260559
-    ],
-    [
-     "Combien l'association consacre-t-elle à la communication ?",
-     "budget_2024",
-     0.5041425824165344
-    ],
-    [
-     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
-     "reunion_octobre",
-     0.5264405012130737
-    ],
-    [
-     "Quels modèles faut-il télécharger dans Ollama pour démarrer ?",
-     "coeur_install",
-     0.5377896428108215
-    ],
-    [
-     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
-     "memoire_nano_banana",
-     0.5544741749763489
-    ]
-   ],
-   "strongest_noise": [
-    [
-     "Comment installer Cœur IA sur mon ordinateur ?",
-     "design_logo",
-     0.5560863614082336
-    ],
-    [
-     "Comment rendre un script exécutable sous Linux ?",
-     "python_venv",
-     0.5380682945251465
-    ],
-    [
-     "Comment me préparer pour courir un semi-marathon ?",
-     "sante_sommeil",
-     0.5198146104812622
-    ],
-    [
-     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
-     "sante_sommeil",
-     0.5019991397857666
-    ],
-    [
-     "Combien de temps laisser lever la pâte du pain au levain ?",
-     "sante_sommeil",
-     0.49810680747032166
-    ]
-   ]
-  },
-  "model": "bge-m3",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 1104.0426301956177,
-  "vram_mb": 657.2599992752075,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 2.155962499999987,
-  "ms_per_passage": 15.384915624998996,
-  "ms_per_question": 13.443463888888926
- },
- {
-  "rel": {
-   "min": 0.3363587260246277,
-   "p10": 0.42631685733795166,
-   "median": 0.5390102863311768,
-   "max": 0.8269205689430237
-  },
-  "noise": {
-   "median": 0.07184606418013573,
-   "p90": 0.1698298156261444,
-   "p99": 0.26581551879644394,
-   "max": 0.4364960193634033
-  },
-  "near": {
-   "median": 0.18342840671539307,
-   "max": 0.5112321376800537
-  },
-  "gap": -0.10013729333877563,
-  "auc": 0.9997985790668718,
-  "auc_all": 0.9993148585543515,
-  "threshold": 0.3363587260246277,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 4,
-   "near_above": 4,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.22215399146080017,
-   "max": 0.4620341956615448
-  },
-  "top1": 0.9722222222222222,
-  "mrr": 0.9861111111111112,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9158498644828796,
-   "min": 0.823697030544281,
-   "gap_max": 0.5382757782936096,
-   "gap_median": 0.3718407452106476
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "hard": {
-   "weakest_relevant": [
-    [
-     "Combien l'association consacre-t-elle à la communication ?",
-     "budget_2024",
-     0.3363587260246277
-    ],
-    [
-     "Quel est le budget 2024 ?",
-     "budget_2024",
-     0.3511175215244293
-    ],
-    [
-     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
-     "reunion_octobre",
-     0.39080381393432617
-    ],
-    [
-     "Quel acompte prévoir dans un contrat de freelance ?",
-     "contrat_freelance",
-     0.42541250586509705
-    ],
-    [
-     "Quel délai le client a-t-il demandé pour son site ?",
-     "email_devis",
-     0.42691975831985474
-    ]
-   ],
-   "strongest_noise": [
-    [
-     "Comment installer Cœur IA sur mon ordinateur ?",
-     "design_logo",
-     0.4364960193634033
-    ],
-    [
-     "Comment l'API locale est-elle protégée contre les attaques ?",
-     "memoire_nano_banana",
-     0.35429319739341736
-    ],
-    [
-     "Comment l'API locale est-elle protégée contre les attaques ?",
-     "memoire_phase1",
-     0.3503401577472687
-    ],
-    [
-     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
-     "coeur_security",
-     0.3417728543281555
-    ],
-    [
-     "Peux-tu chercher sur le web la documentation de Seedance ?",
-     "memoire_phase1",
-     0.32971274852752686
-    ]
-   ]
-  },
-  "model": "snowflake-arctic-embed2",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 1106.5451793670654,
-  "vram_mb": 657.2599992752075,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 2.53136070000005,
-  "ms_per_passage": 15.510803125000194,
-  "ms_per_question": 14.386866666667528
  },
  {
   "rel": {
@@ -561,118 +225,6 @@
  },
  {
   "rel": {
-   "min": 0.4490363597869873,
-   "p10": 0.47286880016326904,
-   "median": 0.5783098340034485,
-   "max": 0.8069268465042114
-  },
-  "noise": {
-   "median": 0.11855128034949303,
-   "p90": 0.19829686731100082,
-   "p99": 0.31360430270433426,
-   "max": 0.4438725411891937
-  },
-  "near": {
-   "median": 0.2623235285282135,
-   "max": 0.53980553150177
-  },
-  "gap": 0.005163818597793579,
-  "auc": 1.0,
-  "auc_all": 0.9996754593152192,
-  "threshold": 0.4464544504880905,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 0,
-   "near_above": 2,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.26300957798957825,
-   "max": 0.4831807613372803
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9283676147460938,
-   "min": 0.8650268912315369,
-   "gap_max": 0.49251124262809753,
-   "gap_median": 0.32154685258865356
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "hard": {
-   "weakest_relevant": [
-    [
-     "Dans quel ordre les travaux de la file sont-ils traités ?",
-     "coeur_queue",
-     0.4490363597869873
-    ],
-    [
-     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
-     "memoire_nano_banana",
-     0.4537382423877716
-    ],
-    [
-     "Quel délai le client a-t-il demandé pour son site ?",
-     "email_devis",
-     0.4660796523094177
-    ],
-    [
-     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
-     "reunion_octobre",
-     0.468524694442749
-    ],
-    [
-     "Combien l'association consacre-t-elle à la communication ?",
-     "budget_2024",
-     0.4757648706436157
-    ]
-   ],
-   "strongest_noise": [
-    [
-     "Comment installer Cœur IA sur mon ordinateur ?",
-     "design_logo",
-     0.4438725411891937
-    ],
-    [
-     "Comment rendre un script exécutable sous Linux ?",
-     "python_venv",
-     0.4124690592288971
-    ],
-    [
-     "Est-ce qu'Ollama peut garder deux modèles chargés en même temps ?",
-     "coeur_install",
-     0.39832228422164917
-    ],
-    [
-     "Comment l'API locale est-elle protégée contre les attaques ?",
-     "memoire_nano_banana",
-     0.39767953753471375
-    ],
-    [
-     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
-     "coeur_security",
-     0.3974676728248596
-    ]
-   ]
-  },
-  "model": "embeddinggemma",
-  "prefixes": false,
-  "dim": 768,
-  "disk_mb": 593.0670900344849,
-  "vram_mb": 653.8799991607666,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 2.436667899999975,
-  "ms_per_passage": 13.08366250000148,
-  "ms_per_question": 10.280611111113558
- },
- {
-  "rel": {
    "min": 0.4012625813484192,
    "p10": 0.4669270396232605,
    "median": 0.5907049775123596,
@@ -785,118 +337,6 @@
  },
  {
   "rel": {
-   "min": 0.46552106738090515,
-   "p10": 0.5216780185699463,
-   "median": 0.6356933116912842,
-   "max": 0.8775784969329834
-  },
-  "noise": {
-   "median": 0.23099248856306076,
-   "p90": 0.33148545026779175,
-   "p99": 0.43897781521081924,
-   "max": 0.581894040107727
-  },
-  "near": {
-   "median": 0.3365849256515503,
-   "max": 0.5768877267837524
-  },
-  "gap": -0.1163729727268219,
-  "auc": 0.9995056031641397,
-  "auc_all": 0.9990804680597876,
-  "threshold": 0.46552106738090515,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 5,
-   "near_above": 2,
-   "off_topic_with_hit": 2
-  },
-  "off_topic_max": {
-   "median": 0.3278639614582062,
-   "max": 0.5768877267837524
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9614705741405487,
-   "min": 0.8839035034179688,
-   "gap_max": 0.49023544788360596,
-   "gap_median": 0.3116847276687622
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "hard": {
-   "weakest_relevant": [
-    [
-     "Mon chat doit-il être vacciné tous les ans ?",
-     "chat_veterinaire",
-     0.46552106738090515
-    ],
-    [
-     "Combien l'association consacre-t-elle à la communication ?",
-     "budget_2024",
-     0.4780505299568176
-    ],
-    [
-     "Quelles couleurs utiliser pour le logo ?",
-     "design_logo",
-     0.4831613600254059
-    ],
-    [
-     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
-     "reunion_octobre",
-     0.5128164291381836
-    ],
-    [
-     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
-     "photo_exposition",
-     0.5275857448577881
-    ]
-   ],
-   "strongest_noise": [
-    [
-     "Comment installer Cœur IA sur mon ordinateur ?",
-     "design_logo",
-     0.581894040107727
-    ],
-    [
-     "Bonjour, comment ça va ?",
-     "memoire_nano_banana",
-     0.5376009941101074
-    ],
-    [
-     "C'est quoi await en Python ?",
-     "memoire_nano_banana",
-     0.5120903253555298
-    ],
-    [
-     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
-     "coeur_security",
-     0.5093550682067871
-    ],
-    [
-     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
-     "sante_sommeil",
-     0.5020860433578491
-    ]
-   ]
-  },
-  "model": "qwen3-embedding:0.6b",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 609.5417575836182,
-  "vram_mb": 1171.9299993515015,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 1.695713899999987,
-  "ms_per_passage": 15.821075000001628,
-  "ms_per_question": 11.349158333334545
- },
- {
-  "rel": {
    "min": 0.48732802271842957,
    "p10": 0.562761378288269,
    "median": 0.6987268924713135,
@@ -1006,5 +446,2185 @@
   "cold_s": 1.520201600000064,
   "ms_per_passage": 15.662218749998402,
   "ms_per_question": 12.853849999999056
+ },
+ {
+  "rel": {
+   "min": 0.5478507876396179,
+   "p10": 0.645030391216278,
+   "median": 0.7428512573242188,
+   "max": 0.8545172214508057
+  },
+  "noise": {
+   "median": 0.5612159073352814,
+   "p90": 0.6162266433238983,
+   "p99": 0.6631526947021484,
+   "max": 0.749787449836731
+  },
+  "near": {
+   "median": 0.6001894474029541,
+   "max": 0.7725346088409424
+  },
+  "gap": -0.20193666219711304,
+  "auc": 0.9750421152860177,
+  "auc_all": 0.9738023547229685,
+  "threshold": 0.6370010375976562,
+  "at_threshold": {
+   "missed_questions": 3,
+   "noise_above": 59,
+   "near_above": 6,
+   "off_topic_with_hit": 6
+  },
+  "off_topic_max": {
+   "median": 0.6366415023803711,
+   "max": 0.7725346088409424
+  },
+  "top1": 0.8611111111111112,
+  "mrr": 0.91820987654321,
+  "recall4": 0.9722222222222222,
+  "dup": {
+   "median": 0.9438515901565552,
+   "min": 0.9042338132858276,
+   "gap_max": 0.3974384665489197,
+   "gap_median": 0.20897263288497925
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.5478507876396179
+    ],
+    [
+     "Comment créer un venv sous Windows ?",
+     "python_venv",
+     0.6075127124786377
+    ],
+    [
+     "Comment mieux dormir ?",
+     "sante_sommeil",
+     0.6249312162399292
+    ],
+    [
+     "Jusqu'à quand puis-je déclarer mes revenus ?",
+     "impots_declaration",
+     0.6370010375976562
+    ],
+    [
+     "Que deviennent les tâches en cours si le PC s'éteint d'un coup ?",
+     "coeur_queue",
+     0.6503832936286926
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.749787449836731
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.7125283479690552
+    ],
+    [
+     "C'est quoi await en Python ?",
+     "coeur_install",
+     0.6988642811775208
+    ],
+    [
+     "Peux-tu chercher sur le web la documentation de Seedance ?",
+     "email_devis",
+     0.6923412084579468
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "memoire_nano_banana",
+     0.6869454383850098
+    ]
+   ]
+  },
+  "sweep": [
+   {
+    "t": 0.3,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.31,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.32,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.33,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.34,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.35,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.36,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.37,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.38,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.39,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1474,
+    "near_above": 23
+   },
+   {
+    "t": 0.4,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1474,
+    "near_above": 23
+   },
+   {
+    "t": 0.41,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1473,
+    "near_above": 23
+   },
+   {
+    "t": 0.42,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1472,
+    "near_above": 23
+   },
+   {
+    "t": 0.43,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1469,
+    "near_above": 23
+   },
+   {
+    "t": 0.44,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1466,
+    "near_above": 23
+   },
+   {
+    "t": 0.45,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1462,
+    "near_above": 23
+   },
+   {
+    "t": 0.46,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1455,
+    "near_above": 23
+   },
+   {
+    "t": 0.47,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1439,
+    "near_above": 23
+   },
+   {
+    "t": 0.48,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1418,
+    "near_above": 23
+   },
+   {
+    "t": 0.49,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1383,
+    "near_above": 23
+   },
+   {
+    "t": 0.5,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1326,
+    "near_above": 23
+   },
+   {
+    "t": 0.51,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1288,
+    "near_above": 23
+   },
+   {
+    "t": 0.52,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1205,
+    "near_above": 23
+   },
+   {
+    "t": 0.53,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1110,
+    "near_above": 22
+   },
+   {
+    "t": 0.54,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 985,
+    "near_above": 21
+   },
+   {
+    "t": 0.55,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 868,
+    "near_above": 20
+   },
+   {
+    "t": 0.56,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 753,
+    "near_above": 19
+   },
+   {
+    "t": 0.57,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 602,
+    "near_above": 18
+   },
+   {
+    "t": 0.58,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 488,
+    "near_above": 13
+   },
+   {
+    "t": 0.59,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 355,
+    "near_above": 12
+   },
+   {
+    "t": 0.6,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 246,
+    "near_above": 12
+   },
+   {
+    "t": 0.61,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 178,
+    "near_above": 9
+   },
+   {
+    "t": 0.62,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 124,
+    "near_above": 7
+   },
+   {
+    "t": 0.63,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 84,
+    "near_above": 7
+   },
+   {
+    "t": 0.64,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 51,
+    "near_above": 6
+   },
+   {
+    "t": 0.65,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 31,
+    "near_above": 5
+   },
+   {
+    "t": 0.66,
+    "rel_lost": 6,
+    "missed_questions": 6,
+    "noise_above": 19,
+    "near_above": 4
+   },
+   {
+    "t": 0.67,
+    "rel_lost": 6,
+    "missed_questions": 6,
+    "noise_above": 12,
+    "near_above": 3
+   },
+   {
+    "t": 0.68,
+    "rel_lost": 8,
+    "missed_questions": 8,
+    "noise_above": 9,
+    "near_above": 2
+   },
+   {
+    "t": 0.69,
+    "rel_lost": 10,
+    "missed_questions": 10,
+    "noise_above": 4,
+    "near_above": 2
+   },
+   {
+    "t": 0.7,
+    "rel_lost": 11,
+    "missed_questions": 11,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.71,
+    "rel_lost": 13,
+    "missed_questions": 13,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.72,
+    "rel_lost": 15,
+    "missed_questions": 15,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.73,
+    "rel_lost": 16,
+    "missed_questions": 16,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.74,
+    "rel_lost": 17,
+    "missed_questions": 16,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.75,
+    "rel_lost": 21,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 2
+   }
+  ],
+  "model": "nomic-embed-text",
+  "prefixes": false,
+  "dim": 768,
+  "disk_mb": 261.59520149230957,
+  "vram_mb": 320.1899995803833,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 2.7610233000000335,
+  "ms_per_passage": 21.394193750005286,
+  "ms_per_question": 16.79622222222103
+ },
+ {
+  "rel": {
+   "min": 0.4900563359260559,
+   "p10": 0.5478003621101379,
+   "median": 0.6434395909309387,
+   "max": 0.7743004560470581
+  },
+  "noise": {
+   "median": 0.3113011419773102,
+   "p90": 0.39663025736808777,
+   "p99": 0.4660879820585251,
+   "max": 0.5560863614082336
+  },
+  "near": {
+   "median": 0.41208699345588684,
+   "max": 0.5969294309616089
+  },
+  "gap": -0.06603002548217773,
+  "auc": 0.9997253350911888,
+  "auc_all": 0.9994230387826119,
+  "threshold": 0.4900563359260559,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 7,
+   "near_above": 4,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.4268384575843811,
+   "max": 0.5412574410438538
+  },
+  "top1": 0.9722222222222222,
+  "mrr": 0.9861111111111112,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9571159780025482,
+   "min": 0.8536278009414673,
+   "gap_max": 0.43279021978378296,
+   "gap_median": 0.30402472615242004
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Quel est le budget 2024 ?",
+     "budget_2024",
+     0.4900563359260559
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.5041425824165344
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.5264405012130737
+    ],
+    [
+     "Quels modèles faut-il télécharger dans Ollama pour démarrer ?",
+     "coeur_install",
+     0.5377896428108215
+    ],
+    [
+     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
+     "memoire_nano_banana",
+     0.5544741749763489
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.5560863614082336
+    ],
+    [
+     "Comment rendre un script exécutable sous Linux ?",
+     "python_venv",
+     0.5380682945251465
+    ],
+    [
+     "Comment me préparer pour courir un semi-marathon ?",
+     "sante_sommeil",
+     0.5198146104812622
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.5019991397857666
+    ],
+    [
+     "Combien de temps laisser lever la pâte du pain au levain ?",
+     "sante_sommeil",
+     0.49810680747032166
+    ]
+   ]
+  },
+  "sweep": [
+   {
+    "t": 0.3,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 835,
+    "near_above": 22
+   },
+   {
+    "t": 0.31,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 751,
+    "near_above": 21
+   },
+   {
+    "t": 0.32,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 659,
+    "near_above": 20
+   },
+   {
+    "t": 0.33,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 559,
+    "near_above": 20
+   },
+   {
+    "t": 0.34,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 485,
+    "near_above": 19
+   },
+   {
+    "t": 0.35,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 411,
+    "near_above": 16
+   },
+   {
+    "t": 0.36,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 336,
+    "near_above": 16
+   },
+   {
+    "t": 0.37,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 266,
+    "near_above": 15
+   },
+   {
+    "t": 0.38,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 219,
+    "near_above": 15
+   },
+   {
+    "t": 0.39,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 169,
+    "near_above": 15
+   },
+   {
+    "t": 0.4,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 132,
+    "near_above": 13
+   },
+   {
+    "t": 0.41,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 90,
+    "near_above": 12
+   },
+   {
+    "t": 0.42,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 63,
+    "near_above": 11
+   },
+   {
+    "t": 0.43,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 43,
+    "near_above": 11
+   },
+   {
+    "t": 0.44,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 32,
+    "near_above": 11
+   },
+   {
+    "t": 0.45,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 24,
+    "near_above": 8
+   },
+   {
+    "t": 0.46,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 21,
+    "near_above": 6
+   },
+   {
+    "t": 0.47,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 11,
+    "near_above": 6
+   },
+   {
+    "t": 0.48,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 9,
+    "near_above": 4
+   },
+   {
+    "t": 0.49,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 7,
+    "near_above": 4
+   },
+   {
+    "t": 0.5,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 4,
+    "near_above": 4
+   },
+   {
+    "t": 0.51,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 3,
+    "near_above": 3
+   },
+   {
+    "t": 0.52,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.53,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.54,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.55,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 1,
+    "near_above": 1
+   },
+   {
+    "t": 0.56,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.57,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.58,
+    "rel_lost": 6,
+    "missed_questions": 6,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.59,
+    "rel_lost": 8,
+    "missed_questions": 8,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.6,
+    "rel_lost": 9,
+    "missed_questions": 9,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.61,
+    "rel_lost": 11,
+    "missed_questions": 11,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.62,
+    "rel_lost": 12,
+    "missed_questions": 12,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.63,
+    "rel_lost": 15,
+    "missed_questions": 15,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.64,
+    "rel_lost": 18,
+    "missed_questions": 17,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.65,
+    "rel_lost": 20,
+    "missed_questions": 19,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.66,
+    "rel_lost": 20,
+    "missed_questions": 19,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.67,
+    "rel_lost": 20,
+    "missed_questions": 19,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.68,
+    "rel_lost": 21,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.69,
+    "rel_lost": 23,
+    "missed_questions": 22,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.7,
+    "rel_lost": 27,
+    "missed_questions": 26,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.71,
+    "rel_lost": 29,
+    "missed_questions": 28,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.72,
+    "rel_lost": 30,
+    "missed_questions": 29,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.73,
+    "rel_lost": 32,
+    "missed_questions": 31,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.74,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.75,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   }
+  ],
+  "model": "bge-m3",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 1104.0426301956177,
+  "vram_mb": 657.2599992752075,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 2.9575457000000824,
+  "ms_per_passage": 22.26797499999833,
+  "ms_per_question": 21.849386111107886
+ },
+ {
+  "rel": {
+   "min": 0.3363587260246277,
+   "p10": 0.42631685733795166,
+   "median": 0.5390102863311768,
+   "max": 0.8269205689430237
+  },
+  "noise": {
+   "median": 0.07184606418013573,
+   "p90": 0.1698298156261444,
+   "p99": 0.26581551879644394,
+   "max": 0.4364960193634033
+  },
+  "near": {
+   "median": 0.18342840671539307,
+   "max": 0.5112321376800537
+  },
+  "gap": -0.10013729333877563,
+  "auc": 0.9997985790668718,
+  "auc_all": 0.9993148585543515,
+  "threshold": 0.3363587260246277,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 4,
+   "near_above": 4,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.22215399146080017,
+   "max": 0.4620341956615448
+  },
+  "top1": 0.9722222222222222,
+  "mrr": 0.9861111111111112,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9158498644828796,
+   "min": 0.823697030544281,
+   "gap_max": 0.5382757782936096,
+   "gap_median": 0.3718407452106476
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.3363587260246277
+    ],
+    [
+     "Quel est le budget 2024 ?",
+     "budget_2024",
+     0.3511175215244293
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.39080381393432617
+    ],
+    [
+     "Quel acompte prévoir dans un contrat de freelance ?",
+     "contrat_freelance",
+     0.42541250586509705
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "email_devis",
+     0.42691975831985474
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.4364960193634033
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.35429319739341736
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.3503401577472687
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.3417728543281555
+    ],
+    [
+     "Peux-tu chercher sur le web la documentation de Seedance ?",
+     "memoire_phase1",
+     0.32971274852752686
+    ]
+   ]
+  },
+  "sweep": [
+   {
+    "t": 0.3,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 8,
+    "near_above": 4
+   },
+   {
+    "t": 0.31,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 5,
+    "near_above": 4
+   },
+   {
+    "t": 0.32,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 5,
+    "near_above": 4
+   },
+   {
+    "t": 0.33,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 4,
+    "near_above": 4
+   },
+   {
+    "t": 0.34,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 4,
+    "near_above": 4
+   },
+   {
+    "t": 0.35,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 3,
+    "near_above": 3
+   },
+   {
+    "t": 0.36,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 1,
+    "near_above": 3
+   },
+   {
+    "t": 0.37,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.38,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.39,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.4,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.41,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.42,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.43,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.44,
+    "rel_lost": 7,
+    "missed_questions": 7,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.45,
+    "rel_lost": 8,
+    "missed_questions": 8,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.46,
+    "rel_lost": 8,
+    "missed_questions": 8,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.47,
+    "rel_lost": 12,
+    "missed_questions": 12,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.48,
+    "rel_lost": 13,
+    "missed_questions": 13,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.49,
+    "rel_lost": 14,
+    "missed_questions": 14,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.5,
+    "rel_lost": 14,
+    "missed_questions": 14,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.51,
+    "rel_lost": 14,
+    "missed_questions": 14,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.52,
+    "rel_lost": 17,
+    "missed_questions": 17,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.53,
+    "rel_lost": 17,
+    "missed_questions": 17,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.54,
+    "rel_lost": 19,
+    "missed_questions": 19,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.55,
+    "rel_lost": 20,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.56,
+    "rel_lost": 20,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.57,
+    "rel_lost": 21,
+    "missed_questions": 21,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.58,
+    "rel_lost": 22,
+    "missed_questions": 22,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.59,
+    "rel_lost": 24,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.6,
+    "rel_lost": 25,
+    "missed_questions": 25,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.61,
+    "rel_lost": 26,
+    "missed_questions": 25,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.62,
+    "rel_lost": 26,
+    "missed_questions": 25,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.63,
+    "rel_lost": 27,
+    "missed_questions": 26,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.64,
+    "rel_lost": 28,
+    "missed_questions": 27,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.65,
+    "rel_lost": 30,
+    "missed_questions": 29,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.66,
+    "rel_lost": 30,
+    "missed_questions": 29,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.67,
+    "rel_lost": 32,
+    "missed_questions": 31,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.68,
+    "rel_lost": 32,
+    "missed_questions": 31,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.69,
+    "rel_lost": 32,
+    "missed_questions": 31,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.7,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.71,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.72,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.73,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.74,
+    "rel_lost": 35,
+    "missed_questions": 34,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.75,
+    "rel_lost": 35,
+    "missed_questions": 34,
+    "noise_above": 0,
+    "near_above": 0
+   }
+  ],
+  "model": "snowflake-arctic-embed2",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 1106.5451793670654,
+  "vram_mb": 657.2599992752075,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 3.2766397999998844,
+  "ms_per_passage": 22.814509375002956,
+  "ms_per_question": 26.435199999999288
+ },
+ {
+  "rel": {
+   "min": 0.4490363597869873,
+   "p10": 0.47286880016326904,
+   "median": 0.5783098340034485,
+   "max": 0.8069268465042114
+  },
+  "noise": {
+   "median": 0.11855128034949303,
+   "p90": 0.19829686731100082,
+   "p99": 0.31360430270433426,
+   "max": 0.4438725411891937
+  },
+  "near": {
+   "median": 0.2623235285282135,
+   "max": 0.53980553150177
+  },
+  "gap": 0.005163818597793579,
+  "auc": 1.0,
+  "auc_all": 0.9996754593152192,
+  "threshold": 0.4464544504880905,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 0,
+   "near_above": 2,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.26300957798957825,
+   "max": 0.4831807613372803
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9283676147460938,
+   "min": 0.8650268912315369,
+   "gap_max": 0.49251124262809753,
+   "gap_median": 0.32154685258865356
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Dans quel ordre les travaux de la file sont-ils traités ?",
+     "coeur_queue",
+     0.4490363597869873
+    ],
+    [
+     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
+     "memoire_nano_banana",
+     0.4537382423877716
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "email_devis",
+     0.4660796523094177
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.468524694442749
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.4757648706436157
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.4438725411891937
+    ],
+    [
+     "Comment rendre un script exécutable sous Linux ?",
+     "python_venv",
+     0.4124690592288971
+    ],
+    [
+     "Est-ce qu'Ollama peut garder deux modèles chargés en même temps ?",
+     "coeur_install",
+     0.39832228422164917
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.39767953753471375
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.3974676728248596
+    ]
+   ]
+  },
+  "sweep": [
+   {
+    "t": 0.3,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 20,
+    "near_above": 8
+   },
+   {
+    "t": 0.31,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 15,
+    "near_above": 6
+   },
+   {
+    "t": 0.32,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 15,
+    "near_above": 6
+   },
+   {
+    "t": 0.33,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 14,
+    "near_above": 6
+   },
+   {
+    "t": 0.34,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 11,
+    "near_above": 6
+   },
+   {
+    "t": 0.35,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 9,
+    "near_above": 5
+   },
+   {
+    "t": 0.36,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 7,
+    "near_above": 5
+   },
+   {
+    "t": 0.37,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 5,
+    "near_above": 4
+   },
+   {
+    "t": 0.38,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 5,
+    "near_above": 3
+   },
+   {
+    "t": 0.39,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 5,
+    "near_above": 3
+   },
+   {
+    "t": 0.4,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 2,
+    "near_above": 3
+   },
+   {
+    "t": 0.41,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 2,
+    "near_above": 3
+   },
+   {
+    "t": 0.42,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1,
+    "near_above": 3
+   },
+   {
+    "t": 0.43,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.44,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.45,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.46,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.47,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.48,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 0,
+    "near_above": 2
+   },
+   {
+    "t": 0.49,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.5,
+    "rel_lost": 7,
+    "missed_questions": 7,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.51,
+    "rel_lost": 9,
+    "missed_questions": 9,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.52,
+    "rel_lost": 11,
+    "missed_questions": 11,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.53,
+    "rel_lost": 13,
+    "missed_questions": 12,
+    "noise_above": 0,
+    "near_above": 1
+   },
+   {
+    "t": 0.54,
+    "rel_lost": 13,
+    "missed_questions": 12,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.55,
+    "rel_lost": 14,
+    "missed_questions": 13,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.56,
+    "rel_lost": 15,
+    "missed_questions": 14,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.57,
+    "rel_lost": 16,
+    "missed_questions": 15,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.58,
+    "rel_lost": 19,
+    "missed_questions": 18,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.59,
+    "rel_lost": 19,
+    "missed_questions": 18,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.6,
+    "rel_lost": 21,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.61,
+    "rel_lost": 22,
+    "missed_questions": 21,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.62,
+    "rel_lost": 24,
+    "missed_questions": 23,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.63,
+    "rel_lost": 25,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.64,
+    "rel_lost": 25,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.65,
+    "rel_lost": 27,
+    "missed_questions": 26,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.66,
+    "rel_lost": 27,
+    "missed_questions": 26,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.67,
+    "rel_lost": 30,
+    "missed_questions": 29,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.68,
+    "rel_lost": 32,
+    "missed_questions": 31,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.69,
+    "rel_lost": 33,
+    "missed_questions": 32,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.7,
+    "rel_lost": 34,
+    "missed_questions": 33,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.71,
+    "rel_lost": 34,
+    "missed_questions": 33,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.72,
+    "rel_lost": 35,
+    "missed_questions": 34,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.73,
+    "rel_lost": 35,
+    "missed_questions": 34,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.74,
+    "rel_lost": 36,
+    "missed_questions": 35,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.75,
+    "rel_lost": 36,
+    "missed_questions": 35,
+    "noise_above": 0,
+    "near_above": 0
+   }
+  ],
+  "model": "embeddinggemma",
+  "prefixes": false,
+  "dim": 768,
+  "disk_mb": 593.0670900344849,
+  "vram_mb": 653.8799991607666,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 2.5114203000000543,
+  "ms_per_passage": 19.564121874999785,
+  "ms_per_question": 17.874786111109287
+ },
+ {
+  "rel": {
+   "min": 0.46552106738090515,
+   "p10": 0.5216780185699463,
+   "median": 0.6356933116912842,
+   "max": 0.8775784969329834
+  },
+  "noise": {
+   "median": 0.23099248856306076,
+   "p90": 0.33148545026779175,
+   "p99": 0.43897781521081924,
+   "max": 0.581894040107727
+  },
+  "near": {
+   "median": 0.3365849256515503,
+   "max": 0.5768877267837524
+  },
+  "gap": -0.1163729727268219,
+  "auc": 0.9995056031641397,
+  "auc_all": 0.9990804680597876,
+  "threshold": 0.46552106738090515,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 5,
+   "near_above": 2,
+   "off_topic_with_hit": 2
+  },
+  "off_topic_max": {
+   "median": 0.3278639614582062,
+   "max": 0.5768877267837524
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9614705741405487,
+   "min": 0.8839035034179688,
+   "gap_max": 0.49023544788360596,
+   "gap_median": 0.3116847276687622
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Mon chat doit-il être vacciné tous les ans ?",
+     "chat_veterinaire",
+     0.46552106738090515
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.4780505299568176
+    ],
+    [
+     "Quelles couleurs utiliser pour le logo ?",
+     "design_logo",
+     0.4831613600254059
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.5128164291381836
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "photo_exposition",
+     0.5275857448577881
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.581894040107727
+    ],
+    [
+     "Bonjour, comment ça va ?",
+     "memoire_nano_banana",
+     0.5376009941101074
+    ],
+    [
+     "C'est quoi await en Python ?",
+     "memoire_nano_banana",
+     0.5120903253555298
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.5093550682067871
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.5020860433578491
+    ]
+   ]
+  },
+  "sweep": [
+   {
+    "t": 0.3,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 283,
+    "near_above": 17
+   },
+   {
+    "t": 0.31,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 243,
+    "near_above": 15
+   },
+   {
+    "t": 0.32,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 198,
+    "near_above": 14
+   },
+   {
+    "t": 0.33,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 157,
+    "near_above": 12
+   },
+   {
+    "t": 0.34,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 128,
+    "near_above": 11
+   },
+   {
+    "t": 0.35,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 107,
+    "near_above": 9
+   },
+   {
+    "t": 0.36,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 86,
+    "near_above": 7
+   },
+   {
+    "t": 0.37,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 78,
+    "near_above": 5
+   },
+   {
+    "t": 0.38,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 65,
+    "near_above": 5
+   },
+   {
+    "t": 0.39,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 47,
+    "near_above": 5
+   },
+   {
+    "t": 0.4,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 36,
+    "near_above": 5
+   },
+   {
+    "t": 0.41,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 28,
+    "near_above": 5
+   },
+   {
+    "t": 0.42,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 25,
+    "near_above": 5
+   },
+   {
+    "t": 0.43,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 21,
+    "near_above": 5
+   },
+   {
+    "t": 0.44,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 14,
+    "near_above": 3
+   },
+   {
+    "t": 0.45,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 12,
+    "near_above": 2
+   },
+   {
+    "t": 0.46,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 7,
+    "near_above": 2
+   },
+   {
+    "t": 0.47,
+    "rel_lost": 1,
+    "missed_questions": 1,
+    "noise_above": 5,
+    "near_above": 2
+   },
+   {
+    "t": 0.48,
+    "rel_lost": 2,
+    "missed_questions": 2,
+    "noise_above": 5,
+    "near_above": 2
+   },
+   {
+    "t": 0.49,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 5,
+    "near_above": 2
+   },
+   {
+    "t": 0.5,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 5,
+    "near_above": 2
+   },
+   {
+    "t": 0.51,
+    "rel_lost": 3,
+    "missed_questions": 3,
+    "noise_above": 3,
+    "near_above": 2
+   },
+   {
+    "t": 0.52,
+    "rel_lost": 4,
+    "missed_questions": 4,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.53,
+    "rel_lost": 5,
+    "missed_questions": 5,
+    "noise_above": 2,
+    "near_above": 2
+   },
+   {
+    "t": 0.54,
+    "rel_lost": 6,
+    "missed_questions": 6,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.55,
+    "rel_lost": 8,
+    "missed_questions": 8,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.56,
+    "rel_lost": 10,
+    "missed_questions": 10,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.57,
+    "rel_lost": 11,
+    "missed_questions": 11,
+    "noise_above": 1,
+    "near_above": 2
+   },
+   {
+    "t": 0.58,
+    "rel_lost": 12,
+    "missed_questions": 12,
+    "noise_above": 1,
+    "near_above": 0
+   },
+   {
+    "t": 0.59,
+    "rel_lost": 12,
+    "missed_questions": 12,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.6,
+    "rel_lost": 13,
+    "missed_questions": 13,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.61,
+    "rel_lost": 13,
+    "missed_questions": 13,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.62,
+    "rel_lost": 13,
+    "missed_questions": 13,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.63,
+    "rel_lost": 16,
+    "missed_questions": 16,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.64,
+    "rel_lost": 19,
+    "missed_questions": 19,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.65,
+    "rel_lost": 20,
+    "missed_questions": 20,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.66,
+    "rel_lost": 22,
+    "missed_questions": 22,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.67,
+    "rel_lost": 22,
+    "missed_questions": 22,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.68,
+    "rel_lost": 24,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.69,
+    "rel_lost": 24,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.7,
+    "rel_lost": 24,
+    "missed_questions": 24,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.71,
+    "rel_lost": 26,
+    "missed_questions": 26,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.72,
+    "rel_lost": 27,
+    "missed_questions": 27,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.73,
+    "rel_lost": 28,
+    "missed_questions": 28,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.74,
+    "rel_lost": 29,
+    "missed_questions": 29,
+    "noise_above": 0,
+    "near_above": 0
+   },
+   {
+    "t": 0.75,
+    "rel_lost": 31,
+    "missed_questions": 30,
+    "noise_above": 0,
+    "near_above": 0
+   }
+  ],
+  "model": "qwen3-embedding:0.6b",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 609.5417575836182,
+  "vram_mb": 1171.9299993515015,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 2.817806699999892,
+  "ms_per_passage": 25.623428125001624,
+  "ms_per_question": 23.129027777776574
  }
 ]
