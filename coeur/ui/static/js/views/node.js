@@ -4,8 +4,10 @@ import { $, h, esc, bytes, duration } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { ask, toast, errorToast } from '../ui.js';
+import { loadNetwork } from './network.js';
 
 const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedding: 'embeddings' };
+const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
 let root;
 
 export function mountNode(container) {
@@ -13,8 +15,8 @@ export function mountNode(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head">
         <div><h1>Cette machine</h1>
-          <div class="sub">Ce que ce nœud peut offrir. En phase 1, ce profil sera partagé avec tes autres machines
-          pour que chaque travail parte là où il tourne le mieux.</div></div>
+          <div class="sub">Ce que ce nœud peut offrir. Ce profil est envoyé à tes machines appairées
+          pour que chaque unité de travail parte là où elle peut tourner.</div></div>
       </div>
       <div class="grid-2">
         <div class="card" id="node-machine"></div>
@@ -26,8 +28,9 @@ export function mountNode(container) {
   container.append(root);
   on('view:shown', view => { if (view === 'node') loadNode(); });
   on('settings:loaded', renderShare);
-  on('network:loaded', renderNetworkSummary);
-  setInterval(() => { if (state.view === 'node') loadNode(); }, 5000);
+  on('network:loaded', () => { renderNetworkSummary(); renderShareStatus(); });
+  on('executor:changed', renderShareStatus);
+  setInterval(() => { if (state.view === 'node') { loadNode(); loadNetwork(); } }, 5000);
 }
 
 export async function loadNode() {
@@ -89,7 +92,9 @@ function render() {
       <tbody>${rows}</tbody></table>` : '<div class="empty">Aucun modèle (Ollama ne répond pas ?)</div>'}`;
 
   renderNetworkSummary();
-  renderShare();
+  // Les préférences ne sont reconstruites qu'à leur changement (settings:loaded) :
+  // les redessiner toutes les 5 s fermerait une liste ouverte et perdrait un clic
+  if (!$('#share-status', root)) renderShare();
 }
 
 function renderNetworkSummary() {
@@ -117,21 +122,43 @@ function shareRow(key, title, text) {
     <label class="switch"><input type="checkbox" data-key="${key}" ${on ? 'checked' : ''}><span></span></label></div>`;
 }
 
+// État du partage, en direct : prêt, en pause (pourquoi), unités calculées ici pour d'autres
+function renderShareStatus() {
+  const box = root && $('#share-status', root);
+  if (!box) return;
+  const net = state.network;
+  if (!net?.enabled) {
+    box.innerHTML = `<div class="phase-note">${icon('info')}<div>Le réseau local est désactivé : ce PC ne
+      prête rien et ne confie rien. <a href="#" id="share-go-network">Activer le réseau</a></div></div>`;
+    $('#share-go-network', box).onclick = e => { e.preventDefault(); emit('view:show', 'network'); };
+    return;
+  }
+  const sharing = net.sharing;
+  if (!sharing) { box.innerHTML = ''; return; }
+  const working = state.executor?.remote || sharing.working || [];
+  const [cls, label] = working.length ? ['run', 'Calcule pour tes machines']
+    : sharing.active ? ['ok', 'Prêt'] : sharing.state === 'off' ? ['idle', 'Désactivé'] : ['warn', 'En pause'];
+  box.innerHTML = `
+    <div class="share-status"><span class="pill ${cls}">${label}</span><span class="muted">${esc(sharing.detail)}</span></div>
+    ${working.map(w => `<div class="remote-item">${icon(RESOURCE_ICONS[w.resource] || 'cpu')}
+      <span>Pour « ${esc(w.peer_name)} » : <span class="mono">${esc(w.label)}</span></span></div>`).join('')}`;
+}
+
 function renderShare() {
   const box = root && $('#node-share', root);
   if (!box || !state.settings) return;
   const s = state.settings;
   box.innerHTML = `
     <h2>${icon('bolt')}Partage de puissance</h2>
-    <div class="phase-note">${icon('info')}<div>Tes choix sont enregistrés dès maintenant ; ils s'appliqueront
-      quand le réseau entre machines sera activé (phase 1).</div></div>
-    ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', 'Elles pourront envoyer des unités de travail à ce PC.')}
+    <div id="share-status"></div>
+    ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', 'Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ce PC. Les résultats sont enregistrés ici.')}
+    ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', 'Ce PC calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.')}
     ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens.")}
     <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Avant de commencer à prêter de la puissance.</small></div>
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>
     ${shareRow('share_on_ac_only', 'Seulement sur secteur', 'Jamais sur batterie.')}
-    <div class="setting-row"><div class="txt"><b>GPU prêté au maximum</b><small>Part de la carte graphique laissée aux autres.</small></div>
+    <div class="setting-row"><div class="txt"><b>GPU prêté au maximum</b><small>Part du temps de la carte graphique : en dessous de 100 %, ce PC fait des pauses entre deux unités.</small></div>
       <select class="select" data-num="share_max_gpu" style="width:140px">${[25, 50, 75, 100].map(p =>
         `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>`;
   box.querySelectorAll('input[data-key]').forEach(input => {
@@ -140,12 +167,14 @@ function renderShare() {
   box.querySelectorAll('select[data-num]').forEach(sel => {
     sel.onchange = () => save({ [sel.dataset.num]: Number(sel.value) });
   });
+  renderShareStatus();
 }
 
 async function save(values) {
   try {
     state.settings = await put('/settings', values);
     emit('settings:loaded');
+    loadNetwork();                 // l'état du partage en dépend
   } catch (e) { errorToast(e); }
 }
 

@@ -89,7 +89,8 @@ function renderPeers(net) {
   box.innerHTML = `
     <h2>${icon('network')}Mes machines</h2>
     <p class="hint">Appairées avec celle-ci. Les échanges sont chiffrés, et chaque machine applique ses
-      propres règles de partage (réglables dans « Cette machine »).</p>
+      propres règles de partage (réglables dans « Cette machine »).
+      ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}</p>
     <div class="peer-list"></div>`;
   const list = box.querySelector('.peer-list');
   if (!net.peers.length) {
@@ -109,6 +110,8 @@ function renderPeers(net) {
           <button class="icon-btn danger" data-act="unpair" title="Retirer l'appairage">${icon('x')}</button>
         </div>
         <div class="peer-facts">${peerFacts(peer)}</div>
+        ${peer.working_for_me ? `<div class="peer-work">${icon('bolt')}Calcule pour toi en ce moment :
+          ${peer.working_for_me} unité(s)</div>` : ''}
         <div class="peer-ledger faint">A calculé pour toi : ${duration(peer.received_s)} (${peer.received_units} unité(s))
           · Tu as calculé pour elle : ${duration(peer.given_s)} (${peer.given_units} unité(s))</div>
       </div>`);

@@ -101,13 +101,17 @@ class Worker:
         self.assignments = {}            # clé -> Assignment
         self.state = {"active": False, "state": "off", "detail": "Partage désactivé."}
         self._task = None
-        self._next_ask = {}              # machine -> instant (monotonic) où lui redemander
+        self._wake = None
+        # machine -> (instant où lui redemander, ressources déjà proposées) : une
+        # machine qui n'avait rien pour le GPU peut en avoir pour les embeddings
+        self._next_ask = {}
         self._gpu_rest_until = 0.0       # pause imposée par « GPU prêté au maximum »
         self._caps = (0.0, None)
 
     # ------------------------------------------------------------ cycle de vie
     def start(self):
         shutil.rmtree(paths.work_dir(), ignore_errors=True)    # restes d'un arrêt brutal
+        self._wake = asyncio.Event()
         self._task = asyncio.create_task(self._loop(), name="coeur-worker")
 
     async def stop(self):
@@ -127,7 +131,11 @@ class Worker:
                 delay = await self._tick()
             except Exception:
                 log.exception("Erreur du partage de puissance")
-            await asyncio.sleep(delay)
+            try:                       # réveil anticipé quand une unité se termine
+                await asyncio.wait_for(self._wake.wait(), timeout=delay)
+            except TimeoutError:
+                pass
+            self._wake.clear()
 
     async def _tick(self) -> float:
         state = await asyncio.to_thread(sharing_state)
@@ -143,15 +151,17 @@ class Worker:
         if not offered:
             return CHECK_EVERY
         for peer in await asyncio.to_thread(self._candidates):
-            if self._next_ask.get(peer["node_id"], 0) > time.monotonic():
-                continue
+            until, asked = self._next_ask.get(peer["node_id"], (0, set()))
+            if until > time.monotonic() and set(offered) <= asked:
+                continue                           # rien de nouveau à lui proposer
             reply = await asyncio.to_thread(self._ask, peer, offered)
             order = (reply or {}).get("unit")
             if order:
+                self._next_ask.pop(peer["node_id"], None)
                 self._launch(peer, order)
-                return 0.2                         # d'autres ressources sont peut-être libres
+                return 0.05                        # d'autres ressources sont peut-être libres
             delay = float((reply or {}).get("retry_after") or ASK_AGAIN)
-            self._next_ask[peer["node_id"]] = time.monotonic() + delay
+            self._next_ask[peer["node_id"]] = (time.monotonic() + delay, set(offered))
         return CHECK_EVERY
 
     def _interrupt(self, which):
@@ -210,6 +220,8 @@ class Worker:
             renewer.cancel()
             self.assignments.pop(a.key, None)
             self.executor.end_remote(a.key)
+            if self._wake:
+                self._wake.set()
 
     async def _renew(self, a: Assignment):
         every = max(5.0, float(a.order.get("lease_s") or leases.LEASE_S) / 3)
