@@ -101,6 +101,27 @@ def test_interrupted_units_are_recovered():
     assert queue.claim_next({"cpu"}, "local")["job_id"] == job_id
 
 
+def test_engine_outage_does_not_burn_attempts():
+    job_id = _job("pendant la mise à jour d'Ollama")
+    unit = queue.claim_next({"cpu"}, "local")
+    queue.release_unit(unit["id"])                 # Ollama injoignable : ce n'est pas l'unité
+    unit = queue.claim_next({"cpu"}, "local")
+    assert unit["job_id"] == job_id and unit["attempts"] == 1
+    assert queue.job_summary(job_id)["failed"] == 0
+
+
+def test_engine_down_classification():
+    import requests
+    from coeur.jobs.executor import engine_down
+    from coeur.services import ollama
+
+    def error(url):
+        return requests.ConnectionError("refusé", request=requests.Request("POST", url).prepare())
+    assert engine_down(error(ollama.base() + "/api/embed"))
+    assert not engine_down(error("https://site-introuvable.example/page"))   # vraie erreur
+    assert not engine_down(ValueError("autre chose"))
+
+
 def test_empty_job_is_done_immediately():
     job_id = _job("rien", count=0)
     assert queue.job_summary(job_id)["status"] == "done"

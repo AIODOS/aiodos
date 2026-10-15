@@ -57,6 +57,8 @@ export function mountChat(container) {
   on('chat:renamed', title => setTitle(title));
   on('settings:loaded', syncChips);
   on('models:loaded', fillModels);
+  on('node:loaded', () => { if (state.modelsLoaded) fillModels(); });   // libellés VRAM
+  el.model.innerHTML = '<option value="">Chargement des modèles…</option>';
   showWelcome();
 }
 
@@ -98,8 +100,10 @@ function fillModels() {
   const ids = state.models.map(m => m.id);
   el.model.value = ids.includes(wanted) ? wanted : (local[0]?.id || cloud[0]?.id || '');
   el.banner.innerHTML = local.length ? '' : `
-    <div class="banner warn">${icon('warn')}<div>Aucun modèle local : Ollama ne répond pas ou aucun modèle n'est
-    installé. Lance Ollama, puis rouvre cette vue.</div></div>`;
+    <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle local : Ollama ne répond pas ou
+    aucun modèle n'est installé. Cœur IA réessaie tout seul toutes les 8 secondes.</div>
+    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`;
+  el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
 }
 
 async function onModelChange() {
@@ -216,13 +220,29 @@ function appendAssistant(model) {
   let thinkTimer = null;
   let answered = false;
 
+  // Premier message : charger le modèle en VRAM peut prendre 20-30 s. On le dit.
+  const waitStart = Date.now();
+  const waitTimer = setInterval(() => {
+    const seconds = (Date.now() - waitStart) / 1000;
+    const dots = content.querySelector('.typing');
+    if (seconds < 3 || !dots) return;
+    let label = content.querySelector('.wait-label');
+    if (!label) { label = h('<span class="wait-label faint"></span>'); content.append(label); }
+    label.textContent = `Le modèle se prépare… ${duration(seconds)}`;
+  }, 1000);
+  const stopWaiting = () => {
+    clearInterval(waitTimer);
+    content.querySelector('.wait-label')?.remove();
+  };
   const stopThinking = () => {
+    stopWaiting();
     thinking.classList.remove('live');
     clearInterval(thinkTimer);
     thinkTimer = null;
   };
   return {
     think(text) {
+      stopWaiting();
       if (!thinkStart) {
         thinkStart = Date.now();
         thinking.hidden = false;
@@ -378,7 +398,11 @@ async function send() {
   const text = el.input.value.trim();
   if (!text) return;
   const model = el.model.value;
-  if (!model) { toast('Aucun modèle disponible : vérifie Ollama.', 'err'); return; }
+  if (!model) {
+    if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
+    else toast('Les modèles se chargent, un instant…');
+    return;
+  }
 
   let pre;
   try { pre = await post('/chat/preflight', { text, model }); } catch (e) { errorToast(e); return; }

@@ -9,10 +9,25 @@ import asyncio
 import logging
 import time
 
+import requests
+
 from coeur.jobs import queue, registry
 from coeur.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from coeur.services import ollama
 
 log = logging.getLogger("coeur.executor")
+
+ENGINE_RETRY_DELAY = 20      # secondes de pause d'une ressource quand Ollama ne répond pas
+
+
+def engine_down(exc) -> bool:
+    """Vrai si l'erreur vient d'Ollama injoignable (arrêté, en redémarrage, en
+    mise à jour…) : passager, l'unité n'y est pour rien. Une page web
+    introuvable, elle, reste une vraie erreur."""
+    if not isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return False
+    url = getattr(getattr(exc, "request", None), "url", "") or ""
+    return url.startswith(ollama.base())
 
 
 class Executor:
@@ -27,6 +42,7 @@ class Executor:
         self._task = None
         self._running = set()
         self._last_publish = {}
+        self.cooldown = {}                # ressource -> instant de reprise (monotonic)
 
     # ------------------------------------------------------------ cycle de vie
     async def start(self):
@@ -56,8 +72,10 @@ class Executor:
 
     # ------------------------------------------------------------------ boucle
     def free_resources(self) -> set:
+        now = time.monotonic()
         return {name for name, n in self.slots.items()
-                if self.busy[name] < n and not (self.interactive and name in GPU_BOUND)}
+                if self.busy[name] < n and self.cooldown.get(name, 0) <= now
+                and not (self.interactive and name in GPU_BOUND)}
 
     async def _run(self):
         while True:
@@ -91,9 +109,16 @@ class Executor:
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {}, time.perf_counter() - started)
         except Exception as exc:
-            log.warning("Unité %s (%s) en échec : %s", unit["id"], unit["task"], exc)
-            job_id, finished = await asyncio.to_thread(
-                queue.fail_unit, unit["id"], str(exc)[:500], time.perf_counter() - started)
+            if engine_down(exc):
+                log.info("Ollama injoignable : unité %s remise en file, nouvel essai dans %s s",
+                         unit["id"], ENGINE_RETRY_DELAY)
+                await asyncio.to_thread(queue.release_unit, unit["id"])
+                self.cooldown[unit["resource"]] = time.monotonic() + ENGINE_RETRY_DELAY
+                job_id, finished = unit["job_id"], False
+            else:
+                log.warning("Unité %s (%s) en échec : %s", unit["id"], unit["task"], exc)
+                job_id, finished = await asyncio.to_thread(
+                    queue.fail_unit, unit["id"], str(exc)[:500], time.perf_counter() - started)
         finally:
             self.busy[unit["resource"]] -= 1
         if finished:
@@ -117,8 +142,11 @@ class Executor:
             self.publish({"type": "job", "job": summary})
 
     def status(self) -> dict:
+        now = time.monotonic()
+        waiting = {name: round(until - now) for name, until in self.cooldown.items()
+                   if until > now}
         return {"slots": self.slots, "busy": dict(self.busy),
-                "interactive": self.interactive}
+                "interactive": self.interactive, "waiting": waiting}
 
     def _publish_status(self):
         self.publish({"type": "executor", **self.status()})

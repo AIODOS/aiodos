@@ -18,6 +18,9 @@ const SECTIONS = [
       help: 'L\'IA peut s\'appuyer sur tes autres conversations. Désactive-la pour des échanges isolés.' },
     { key: 'embed_model', label: 'Modèle d\'embedding', type: 'text',
       help: 'Changer de modèle impose de réindexer les bibliothèques.' },
+    { key: 'rag_min_score', label: 'Seuil de pertinence des extraits (0 à 1)', type: 'number',
+      min: 0, max: 1, step: 0.01,
+      help: 'Plus haut : moins d\'extraits mais mieux ciblés. 0,70 convient à nomic-embed-text.' },
   ] },
   { title: 'Recherche web', icon: 'globe', fields: [
     { key: 'web_search_enabled', label: 'Recherche web activée par défaut', type: 'switch',
@@ -58,8 +61,10 @@ export function mountSettings(container) {
       <div class="settings" id="settings-form"></div>
     </div></div>`);
   container.append(root);
-  on('settings:loaded', () => { if (state.view !== 'settings') render(); });
-  on('models:loaded', () => { if (state.view !== 'settings') render(); });
+  // On ne réaffiche pas le formulaire par-dessus des modifications non enregistrées
+  const refresh = () => { if (state.view !== 'settings' || !Object.keys(draft).length) render(); };
+  on('settings:loaded', refresh);
+  on('models:loaded', refresh);
   on('view:shown', view => { if (view === 'settings') render(); });
 }
 
@@ -87,7 +92,7 @@ function field(f) {
         ? `<button class="btn" data-clear="${f.key}" type="button">Effacer</button>` : ''}</div>`;
   } else {
     const type = f.type === 'number' ? 'number' : 'text';
-    const limits = f.type === 'number' ? `min="${f.min}" max="${f.max}"` : '';
+    const limits = f.type === 'number' ? `min="${f.min}" max="${f.max}" step="${f.step || 1}"` : '';
     control = `<input class="input" type="${type}" ${limits} id="${id}" data-key="${f.key}" value="${esc(s[f.key])}">`;
   }
   return `<div class="field"><label for="${id}">${esc(f.label)}</label>${control}${help}</div>`;

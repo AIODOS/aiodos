@@ -1,0 +1,22 @@
+# Nœud et interface
+fastapi
+uvicorn
+pywebview          # fenêtre native (WebView2 sous Windows, via pythonnet)
+requests
+numpy
+markdown-it-py     # rendu des réponses (HTML sûr)
+pygments           # coloration du code
+
+# Lecture de tous les formats dans les bibliothèques
+pypdf
+python-docx
+python-pptx
+openpyxl
+striprtf
+ebooklib
+faster-whisper     # transcription audio/vidéo (local)
+# OCR et description des images : modèle de vision Ollama (qwen2.5vl), pas de paquet pip
+
+# Tests
+pytest
+httpx

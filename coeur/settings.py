@@ -19,9 +19,10 @@ DEFAULTS = {
         "travailler. Réponds en français, de façon claire et structurée. "
         "Quand tu écris du code, utilise des blocs markdown avec le nom du langage."
     ),
-    "ollama_url": "http://localhost:11434",
+    "ollama_url": "http://127.0.0.1:11434",
     # --- Connaissances ---
     "embed_model": "nomic-embed-text",
+    "rag_min_score": 0.70,            # pertinence minimale d'un extrait (calibré sur nomic)
     "knowledge_enabled": True,
     "conversations_enabled": False,   # mémoire inter-conversations
     # --- Web & cloud ---

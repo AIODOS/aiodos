@@ -15,6 +15,7 @@ let memory = null;
 let entries = [];
 let selected = prefs.get('library.selected', null);
 let kindFilter = 'all';
+let shownCollection = null;          // bibliothèque dont le contenu est affiché
 const openDirs = new Set();
 
 export function mountLibrary(container) {
@@ -52,7 +53,15 @@ async function load() {
   } catch (e) { errorToast(e); return; }
   if (!collections.some(c => c.id === selected)) selected = collections[0]?.id ?? null;
   renderCollections();
-  renderContent();
+  // Même bibliothèque : on ne refait que l'arborescence (la barre d'outils reste,
+  // un clic pendant une indexation n'est donc pas perdu)
+  if (shownCollection === selected && $('#ktree', root)) {
+    $('#lib-title', root).textContent = collections.find(c => c.id === selected)?.name || '';
+    renderJobStrip();
+    renderTree();
+  } else {
+    renderContent();
+  }
   renderMemory();
 }
 
@@ -119,13 +128,14 @@ async function deleteCollection(c) {
 function renderContent() {
   const box = $('#lib-content', root);
   const c = collections.find(x => x.id === selected);
+  shownCollection = c ? c.id : null;
   if (!c) {
     box.innerHTML = `<div class="empty">${icon('library')}<div>Crée une bibliothèque pour commencer.</div></div>`;
     return;
   }
   box.innerHTML = `
     <div class="toolbar">
-      <h2 style="margin:0;flex:1">${esc(c.name)}</h2>
+      <h2 style="margin:0;flex:1" id="lib-title">${esc(c.name)}</h2>
       <button class="btn sm" data-add="files">${icon('file')}Fichiers</button>
       <button class="btn sm" data-add="folder">${icon('folder')}Dossier</button>
       <button class="btn sm" data-add="urls">${icon('globe')}Pages web</button>

@@ -5,6 +5,7 @@
 """
 import argparse
 import logging
+import os
 import secrets
 import socket
 import sys
@@ -27,6 +28,16 @@ def _free_port() -> int:
 
 
 def _setup_logging():
+    # Lancé par pythonw (double-clic, sans console) : sys.stdout/stderr valent None,
+    # et des bibliothèques y écrivent quand même (uvicorn, barres de progression…).
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(paths.log_path().with_name("erreurs.log"), "a", encoding="utf-8")
+    # Console Windows en cp1252 par défaut : « Cœur » y devient « C�ur »
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     handlers = [logging.FileHandler(paths.log_path(), encoding="utf-8")]
     if sys.stdout:
         handlers.append(logging.StreamHandler(sys.stdout))
@@ -66,8 +77,11 @@ def main():
 
         token = secrets.token_urlsafe(24)
         app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"})
+        # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
+        # de la sienne, qui suppose une console
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
-                                               log_level="warning", access_log=False))
+                                               log_level="warning", access_log=False,
+                                               log_config=None))
         thread = threading.Thread(target=server.run, daemon=True, name="coeur-node")
         thread.start()
         deadline = time.monotonic() + 20
@@ -97,4 +111,9 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as exc:          # lancé sans console (pythonw) : on montre l'erreur
+        log.exception("Arrêt inattendu")
+        instance.alert(f"Cœur IA s'est arrêté : {exc}\n\nDétails dans data/logs/coeur.log")
+        sys.exit(1)

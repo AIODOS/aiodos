@@ -54,8 +54,12 @@ def allowed_collections(libraries: bool, conversations: bool) -> list:
     return out
 
 
-def search(vector, k=4, libraries=True, conversations=False) -> list:
-    """Les k passages les plus proches du vecteur, dans les sources autorisées."""
+def search(vector, k=4, libraries=True, conversations=False, exclude_conversation=None) -> list:
+    """Les k passages les plus proches du vecteur, dans les sources autorisées.
+
+    exclude_conversation : id d'une conversation dont la mémoire est ignorée
+    (celle en cours : ses messages sont déjà dans l'historique envoyé au modèle).
+    """
     query = np.asarray(vector, dtype=np.float32)
     norm = float(np.linalg.norm(query))
     if not norm:
@@ -67,21 +71,28 @@ def search(vector, k=4, libraries=True, conversations=False) -> list:
         if not len(ids) or matrix.shape[1] != query.shape[0]:
             continue
         scores = matrix @ query
-        for i in np.argsort(-scores)[:k]:
+        for i in np.argsort(-scores)[:k * 3]:          # marge pour les exclusions
             candidates.append((float(scores[i]), int(ids[i])))
     candidates.sort(reverse=True)
-    best = candidates[:k]
-    if not best:
+    if not candidates:
         return []
-    placeholders = ",".join("?" * len(best))
+    placeholders = ",".join("?" * len(candidates))
     rows = {r["id"]: r for r in db.query(
-        f"""SELECT k.id, k.text, e.source, e.kind, c.name AS collection
+        f"""SELECT k.id, k.text, e.source, e.kind, e.origin, c.system, c.name AS collection
             FROM chunks k JOIN entries e ON e.id = k.entry_id
             JOIN collections c ON c.id = e.collection_id
-            WHERE k.id IN ({placeholders})""", tuple(cid for _, cid in best))}
-    return [{"score": score, "text": rows[cid]["text"], "source": rows[cid]["source"],
-             "kind": rows[cid]["kind"], "collection": rows[cid]["collection"]}
-            for score, cid in best if cid in rows]
+            WHERE k.id IN ({placeholders})""", tuple(cid for _, cid in candidates))}
+    excluded = str(exclude_conversation) if exclude_conversation is not None else None
+    hits = []
+    for score, cid in candidates:
+        row = rows.get(cid)
+        if row is None or (row["system"] and excluded and row["origin"] == excluded):
+            continue
+        hits.append({"score": score, "text": row["text"], "source": row["source"],
+                     "kind": row["kind"], "collection": row["collection"]})
+        if len(hits) == k:
+            break
+    return hits
 
 
 def manifest(libraries=True, conversations=False, per_collection=25) -> str:

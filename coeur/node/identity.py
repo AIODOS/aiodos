@@ -113,8 +113,9 @@ def _models(vram_total) -> list:
     except Exception:
         return []
     loaded = {m["name"]: m for m in ollama.loaded_models()}
+    all_caps = ollama.capabilities_many([m["name"] for m in models])
     for m in models:
-        m["caps"] = ollama.capabilities(m["name"])
+        m["caps"] = all_caps[m["name"]]
         m["fits_vram"] = bool(vram_total) and m["size"] <= vram_total * 0.92
         m["loaded"] = m["name"] in loaded
     return models

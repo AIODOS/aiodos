@@ -2,6 +2,8 @@
 de la boucle asyncio (thread de la file de tâches ou asyncio.to_thread)."""
 import json
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -9,10 +11,17 @@ from coeur import settings
 
 _caps_cache = {}
 _caps_lock = threading.Lock()
+# La liste des modèles change rarement : gardée quelques secondes plutôt que
+# redemandée par chaque vue qui s'ouvre en même temps.
+_models_cache = {"at": 0.0, "models": None}
+MODELS_TTL = 10
 
 
 def base() -> str:
-    return (settings.get("ollama_url") or "http://localhost:11434").rstrip("/")
+    url = (settings.get("ollama_url") or "http://127.0.0.1:11434").rstrip("/")
+    # Sous Windows, « localhost » se résout d'abord en IPv6 (::1) alors qu'Ollama
+    # n'écoute qu'en IPv4 : chaque requête perdait ~2 s à attendre l'échec IPv6.
+    return url.replace("://localhost", "://127.0.0.1")
 
 
 def version():
@@ -22,8 +31,13 @@ def version():
         return None
 
 
-def list_models() -> list:
-    r = requests.get(base() + "/api/tags", timeout=10)
+def list_models(max_age=MODELS_TTL) -> list:
+    """Modèles installés (copies : l'appelant peut les modifier sans toucher au cache)."""
+    with _caps_lock:
+        cached = _models_cache["models"]
+        if cached is not None and time.monotonic() - _models_cache["at"] < max_age:
+            return [dict(m) for m in cached]
+    r = requests.get(base() + "/api/tags", timeout=15)
     r.raise_for_status()
     out = []
     for m in r.json().get("models", []):
@@ -35,7 +49,9 @@ def list_models() -> list:
             "parameters": details.get("parameter_size", ""),
             "quantization": details.get("quantization_level", ""),
         })
-    return out
+    with _caps_lock:
+        _models_cache.update(at=time.monotonic(), models=out)
+    return [dict(m) for m in out]
 
 
 def loaded_models() -> list:
@@ -62,6 +78,17 @@ def capabilities(model: str) -> list:
     with _caps_lock:
         _caps_cache[model] = caps
     return caps
+
+
+def capabilities_many(models) -> dict:
+    """Capacités de plusieurs modèles, demandées en parallèle (/api/show peut
+    prendre 2 s sur un gros modèle la première fois)."""
+    with _caps_lock:
+        missing = [m for m in models if m not in _caps_cache]
+    if missing:
+        with ThreadPoolExecutor(max_workers=min(8, len(missing))) as pool:
+            list(pool.map(capabilities, missing))
+    return {m: capabilities(m) for m in models}
 
 
 def chat_stream(model, messages, think=None, stop=None):

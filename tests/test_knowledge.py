@@ -82,6 +82,35 @@ def test_collection_rules():
     assert "Archives 2024" not in [c["name"] for c in store.list_collections()]
 
 
+def test_current_conversation_is_excluded_from_memory(fake_embed):
+    store.ensure_defaults()
+    memory = store.conversation_collection_id()
+    for conv_id in (7, 8):
+        text = f"Utilisateur : parlons de la fusée lunaire numéro {conv_id}"
+        store.append_chunks(memory, f"Conv · #{conv_id}", "conversation", str(conv_id),
+                            [(conv_id * 1000, text, fake_embed([text])[0])])
+    query = fake_embed(["fusée lunaire"])[0]
+    every = search.search(query, k=5, conversations=True)
+    assert {h["source"] for h in every} == {"Conv · #7", "Conv · #8"}
+    others = search.search(query, k=5, conversations=True, exclude_conversation=7)
+    assert {h["source"] for h in others} == {"Conv · #8"}
+
+
+def test_relevance_filter_drops_background_noise():
+    from coeur.chat.pipeline import select_relevant
+    hit = lambda score, name: {"score": score, "source": name}
+    # Scores réellement mesurés avec nomic-embed-text sur des questions en français
+    budget = [hit(0.824, "budget.txt"), hit(0.654, "lisez-moi.md"), hit(0.577, "conv")]
+    assert [h["source"] for h in select_relevant(budget, 0.70)] == ["budget.txt"]
+    unrelated = [hit(0.678, "conv python"), hit(0.667, "conv nano"), hit(0.635, "lisez-moi.md")]
+    assert select_relevant(unrelated, 0.70) == []
+    # La même question déjà posée (mémoire, 0,955) n'éclipse pas la vraie source
+    duplicate = [hit(0.955, "mémoire : question"), hit(0.824, "budget.txt"),
+                 hit(0.823, "mémoire : réponse"), hit(0.654, "lisez-moi.md")]
+    assert [h["source"] for h in select_relevant(duplicate, 0.70)] == [
+        "mémoire : question", "budget.txt", "mémoire : réponse"]
+
+
 def test_chunking_prefers_natural_breaks():
     text = ("Premier paragraphe. " * 30).strip() + "\n\n" + ("Second paragraphe. " * 30)
     pieces = chunking.chunk_text(text, size=400, overlap=50)

@@ -84,7 +84,7 @@ function render() {
     <h2>${icon('layers')}Modèles installés</h2>
     <p class="hint">Un modèle qui dépasse la VRAM tourne en partie sur le processeur, beaucoup plus lentement.
       En phase 1, il pourra être servi par une autre machine de ton réseau qui a la mémoire nécessaire.</p>
-    ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Taille</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
+    ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
       <tbody>${rows}</tbody></table>` : '<div class="empty">Aucun modèle (Ollama ne répond pas ?)</div>'}`;
 
   $('#node-network', root).innerHTML = `

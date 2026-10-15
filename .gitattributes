@@ -1,0 +1,7 @@
+# Fins de ligne : LF partout, sauf les scripts Windows qui exigent CRLF
+* text=auto eol=lf
+*.bat text eol=crlf
+
+*.png binary
+*.ico binary
+*.psd binary

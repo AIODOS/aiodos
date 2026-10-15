@@ -92,7 +92,7 @@ async def chat(body: ChatIn, request: Request):
         try:
             messages, sources = pipeline.build_messages(
                 history, text, libraries=libraries, conversations=memory,
-                web_search=body.web)
+                web_search=body.web, conversation_id=conv_id)
             put(("sources", sources))
             for kind, piece in pipeline.generate(body.model, messages, think, stop):
                 put((kind, piece))

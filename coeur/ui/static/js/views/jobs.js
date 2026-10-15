@@ -15,6 +15,7 @@ const STATUS = {
 const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory' };
 
 let root;
+const cards = new Map();             // job id → { el, shape }
 const expanded = new Set();
 const failuresCache = new Map();     // job id → { count, list }
 
@@ -60,20 +61,56 @@ function sorted() {
 }
 
 function render() {
-  // Ne pas reconstruire la liste pendant qu'une liste de priorité est ouverte
+  // Ne pas toucher la liste pendant qu'une liste de priorité est ouverte
   const focused = document.activeElement;
   if (focused?.tagName === 'SELECT' && root.contains(focused)) return;
   renderStats();
   renderSlots();
   const list = $('#jobs-list', root);
   const jobs = sorted();
-  list.innerHTML = '';
+  for (const [id, c] of cards) {
+    if (!state.jobs.has(id)) { c.el.remove(); cards.delete(id); }
+  }
+  list.querySelector(':scope > .empty')?.remove();
   if (!jobs.length) {
     list.append(h(`<div class="card empty">${icon('jobs')}<div>Aucune tâche.<br>
       Ajoute un dossier dans une bibliothèque pour voir la file au travail.</div></div>`));
     return;
   }
-  jobs.forEach(j => list.append(card(j)));
+  // Mise à jour en place : une carte n'est reconstruite que si sa structure
+  // change (statut, priorité…). Sinon un clic tombant pendant une mise à jour
+  // serait perdu, et les survols clignoteraient.
+  jobs.forEach((j, index) => {
+    let c = cards.get(j.id);
+    const s = shape(j);
+    if (!c || c.shape !== s) {
+      const el = card(j);
+      if (c) c.el.replaceWith(el);
+      c = { el, shape: s };
+      cards.set(j.id, c);
+    } else {
+      update(c.el, j);
+    }
+    if (list.children[index] !== c.el) list.insertBefore(c.el, list.children[index] || null);
+  });
+}
+
+function hasDetails(j) {
+  return Object.keys(j.result?.skipped_types || {}).length || j.failed || j.result?.message || j.error;
+}
+
+function shape(j) {
+  return [j.status, j.priority, !!j.failed, !!hasDetails(j)].join('|');
+}
+
+function widths(j) {
+  const pct = n => (j.total ? (100 * n / j.total).toFixed(2) : 0);
+  return [pct(j.done), pct(j.skipped), pct(j.failed)];
+}
+
+function update(el, j) {
+  el.querySelectorAll('.bar i').forEach((bar, i) => { bar.style.width = `${widths(j)[i]}%`; });
+  el.querySelector('.foot').innerHTML = footText(j, j.done + j.skipped + j.failed);
 }
 
 function renderStats() {
@@ -96,13 +133,15 @@ function renderSlots() {
     const dots = Array.from({ length: n }, (_, i) => `<i class="${i < busy ? 'busy' : ''}"></i>`).join('');
     return `<span class="slot">${dots} ${RESOURCES[name] || name} ${busy}/${n}</span>`;
   }).join('') + (ex.interactive
-    ? `<span class="pill warn">${icon('chat')}Conversation en cours : le GPU lui est réservé</span>` : '');
+    ? `<span class="pill warn">${icon('chat')}Conversation en cours : le GPU lui est réservé</span>` : '')
+    + (Object.keys(ex.waiting || {}).length
+      ? `<span class="pill warn">${icon('warn')}Ollama injoignable : nouvel essai automatique</span>` : '');
 }
 
 function card(j) {
   const active = ACTIVE.includes(j.status);
   const processed = j.done + j.skipped + j.failed;
-  const pct = n => (j.total ? (100 * n / j.total).toFixed(2) : 0);
+  const [done, skipped, failed] = widths(j);
   let [cls, label] = STATUS[j.status] || ['idle', j.status];
   if (j.status === 'done' && j.failed) [cls, label] = ['warn', 'Terminé avec erreurs'];
   const el = h(`
@@ -116,7 +155,7 @@ function card(j) {
         <span class="actions"></span>
       </div>
       <div class="bar">
-        <i class="fill" style="width:${pct(j.done)}%"></i><i class="skip" style="width:${pct(j.skipped)}%"></i><i class="fail" style="width:${pct(j.failed)}%"></i>
+        <i class="fill" style="width:${done}%"></i><i class="skip" style="width:${skipped}%"></i><i class="fail" style="width:${failed}%"></i>
       </div>
       <div class="foot">${footText(j, processed)}</div>
     </div>`);
@@ -159,12 +198,13 @@ function footText(j, processed) {
   return parts.join(' · ');
 }
 
-function detailsBlock(j) {
-  const skippedTypes = Object.entries(j.result?.skipped_types || {});
-  if (!skippedTypes.length && !j.failed && !j.result?.message && !j.error) return null;
-  const d = h(`<details ${expanded.has(j.id) ? 'open' : ''}><summary>Détails</summary><div class="body"></div></details>`);
+function detailsBlock(job) {
+  if (!hasDetails(job)) return null;
+  const d = h(`<details ${expanded.has(job.id) ? 'open' : ''}><summary>Détails</summary><div class="body"></div></details>`);
   const body = d.querySelector('.body');
   const fill = async () => {
+    const j = state.jobs.get(job.id) || job;          // données à jour, pas celles de la création
+    const skippedTypes = Object.entries(j.result?.skipped_types || {});
     let html = '';
     if (j.error) html += `<p>${esc(j.error)}</p>`;
     if (j.result?.message) html += `<p>${esc(j.result.message)}</p>`;
@@ -185,7 +225,7 @@ function detailsBlock(j) {
     }
   };
   d.addEventListener('toggle', () => {
-    if (d.open) { expanded.add(j.id); fill(); } else expanded.delete(j.id);
+    if (d.open) { expanded.add(job.id); fill(); } else expanded.delete(job.id);
   });
   if (d.open) fill();
   return d;

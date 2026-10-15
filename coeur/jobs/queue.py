@@ -99,6 +99,13 @@ def fail_unit(unit_id, error: str, compute_s: float):
         return job_id, _complete_if_last(c, job_id)
 
 
+def release_unit(unit_id):
+    """Remet une unité en file sans compter d'essai : ce n'est pas elle qui a
+    échoué, c'est le moteur (Ollama) qui était injoignable."""
+    db.execute("UPDATE units SET status=?, node=NULL, attempts=MAX(attempts - 1, 0) "
+               "WHERE id=? AND status=?", (QUEUED, unit_id, RUNNING))
+
+
 def finalize_job(job_id):
     """Agrégation finale : le type de travail résume les résultats de ses unités."""
     job = db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))

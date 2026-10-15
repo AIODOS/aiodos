@@ -29,6 +29,7 @@ async function loadSettings() {
 
 async function loadModels() {
   try { state.models = await get('/models'); } catch { state.models = []; }
+  state.modelsLoaded = true;
   emit('models:loaded');
 }
 
@@ -76,17 +77,25 @@ async function boot() {
   on('view:show', show);
   on('models:reload', loadModels);
 
+  show(prefs.get('view', 'chat'));          // affichage immédiat, les données suivent
+
   let wasConnected = true;
   listen(onEvent, connected => {
     if (connected && !wasConnected) { loadJobs().then(updateBadge); emit('conversations:changed'); }
     wasConnected = connected;
   });
 
-  await Promise.all([loadSettings(), loadNode(), loadJobs().then(updateBadge)]);
-  await loadModels();                       // après le profil : libellés VRAM
-  show(prefs.get('view', 'chat'));
+  loadJobs().then(updateBadge);
+  loadNode();                               // en parallèle : les libellés VRAM suivront
+  await loadSettings();
+  await loadModels();
   const last = prefs.get('lastConversation', null);
   emit(last ? 'chat:open' : 'chat:new', last);
+
+  // Ollama arrêté (redémarrage, mise à jour…) : on le guette sans rien demander
+  setInterval(() => {
+    if (!state.models.some(m => m.group === 'local')) loadModels();
+  }, 8000);
 }
 
 boot().catch(err => {

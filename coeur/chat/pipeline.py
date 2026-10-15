@@ -56,8 +56,10 @@ def available_models() -> list:
     """Modèles de conversation : locaux (Ollama) puis cloud."""
     models = []
     try:
-        for m in ollama.list_models():
-            caps = ollama.capabilities(m["name"])
+        installed = ollama.list_models()
+        all_caps = ollama.capabilities_many([m["name"] for m in installed])
+        for m in installed:
+            caps = all_caps[m["name"]]
             if caps and "completion" not in caps:      # modèle d'embedding seul
                 continue
             models.append({"id": m["name"], "label": m["name"], "group": "local",
@@ -86,13 +88,34 @@ def _web_context(question, max_results, sources):
     return blocks
 
 
-def _knowledge_context(question, libraries, conversations, sources):
+RELEVANCE_MARGIN = 0.25      # garde-fou : écart maximal avec le meilleur extrait
+
+
+def select_relevant(hits, min_score, margin=RELEVANCE_MARGIN, limit=4) -> list:
+    """Ne garde que les extraits vraiment liés à la question.
+
+    Les modèles d'embedding donnent un « bruit de fond » élevé (≈ 0,55-0,68
+    avec nomic-embed-text en français) : sans seuil, la recherche renvoie
+    toujours quelque chose, et l'IA cite des sources sans rapport. Le seuil
+    absolu fait l'essentiel ; l'écart relatif reste large, car la mémoire peut
+    contenir la même question mot pour mot (≈ 0,95) sans que les vraies
+    sources (≈ 0,82) cessent d'être pertinentes.
+    """
+    if not hits:
+        return []
+    floor = max(min_score, hits[0]["score"] - margin)
+    return [h for h in hits if h["score"] >= floor][:limit]
+
+
+def _knowledge_context(question, libraries, conversations, sources, conversation_id=None):
     try:
         vector = ollama.embed([question])[0]
-        hits = search.search(vector, k=4, libraries=libraries, conversations=conversations)
+        hits = search.search(vector, k=8, libraries=libraries, conversations=conversations,
+                             exclude_conversation=conversation_id)
     except Exception as exc:
         log.warning("Recherche dans les connaissances impossible : %s", exc)
         return []
+    hits = select_relevant(hits, float(settings.get("rag_min_score") or 0))
     seen = set()
     for h in hits:
         if (h["collection"], h["source"]) in seen:
@@ -104,7 +127,8 @@ def _knowledge_context(question, libraries, conversations, sources):
     return [f"[Source : {h['source']}]\n{h['text']}" for h in hits]
 
 
-def build_messages(history, question, *, libraries, conversations, web_search):
+def build_messages(history, question, *, libraries, conversations, web_search,
+                   conversation_id=None):
     """Construit les messages pour le modèle. → (messages, sources citées)"""
     messages = [{"role": "system", "content": settings.get("system_prompt")}]
     sources = []
@@ -121,7 +145,8 @@ def build_messages(history, question, *, libraries, conversations, web_search):
         messages.append({"role": "system", "content": _WEB_RESULTS.format(
             "\n\n".join(blocks)) if web_ok else _WEB_EMPTY})
     if libraries or conversations:
-        extracts = _knowledge_context(question, libraries, conversations, sources)
+        extracts = _knowledge_context(question, libraries, conversations, sources,
+                                      conversation_id)
         if extracts:
             messages.append({"role": "system", "content": _RAG.format("\n\n".join(extracts))})
     messages.append({"role": "system", "content": _RULE_WEB if web_ok else _RULE_LOCAL})

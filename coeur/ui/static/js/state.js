@@ -2,6 +2,7 @@
 export const state = {
   settings: null,
   models: [],
+  modelsLoaded: false,
   node: null,
   tree: { folders: [], conversations: [] },
   currentConversation: null,
