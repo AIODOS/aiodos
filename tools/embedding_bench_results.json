@@ -1,342 +1,6 @@
 [
  {
   "rel": {
-   "min": 0.3363587260246277,
-   "p10": 0.42631685733795166,
-   "median": 0.5390102863311768,
-   "max": 0.8269205689430237
-  },
-  "noise": {
-   "median": 0.07184606418013573,
-   "p90": 0.1698298156261444,
-   "p99": 0.26581551879644394,
-   "max": 0.4364960193634033
-  },
-  "near": {
-   "median": 0.18342840671539307,
-   "max": 0.5112321376800537
-  },
-  "gap": -0.10013729333877563,
-  "auc": 0.9997985790668718,
-  "auc_all": 0.9993148585543515,
-  "threshold": 0.3363587260246277,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 4,
-   "near_above": 4,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.22215399146080017,
-   "max": 0.4620341956615448
-  },
-  "top1": 0.9722222222222222,
-  "mrr": 0.9861111111111112,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9158498644828796,
-   "min": 0.823697030544281,
-   "gap_max": 0.5382757782936096,
-   "gap_median": 0.3718407452106476
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "snowflake-arctic-embed2",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 1106.5451793670654,
-  "vram_mb": 657.2599992752075,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 3.4148470999999745,
-  "ms_per_passage": 21.310415624999024,
-  "ms_per_question": 38.03196944444506
- },
- {
-  "rel": {
-   "min": 0.38614845275878906,
-   "p10": 0.42738727331161497,
-   "median": 0.5716426372528076,
-   "max": 0.805443525314331
-  },
-  "noise": {
-   "median": 0.04651426710188389,
-   "p90": 0.13617058098316193,
-   "p99": 0.23025842756032944,
-   "max": 0.44017699360847473
-  },
-  "near": {
-   "median": 0.18711908161640167,
-   "max": 0.5193319320678711
-  },
-  "gap": -0.05402854084968567,
-  "auc": 0.9999084450303962,
-  "auc_all": 0.9995492490489155,
-  "threshold": 0.38614845275878906,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 1,
-   "near_above": 2,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.1816624104976654,
-   "max": 0.4213685691356659
-  },
-  "top1": 0.9722222222222222,
-  "mrr": 0.9861111111111112,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.7354165315628052,
-   "min": 0.5904791355133057,
-   "gap_max": 0.3916010558605194,
-   "gap_median": 0.19236911833286285
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "snowflake-arctic-embed2",
-  "prefixes": true,
-  "dim": 1024,
-  "disk_mb": 1106.5451793670654,
-  "vram_mb": 657.2599992752075,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 2.00298650000002,
-  "ms_per_passage": 24.23346562500228,
-  "ms_per_question": 19.859252777776092
- },
- {
-  "rel": {
-   "min": 0.4490363597869873,
-   "p10": 0.47286880016326904,
-   "median": 0.5783098340034485,
-   "max": 0.8069268465042114
-  },
-  "noise": {
-   "median": 0.11855128034949303,
-   "p90": 0.19829686731100082,
-   "p99": 0.31360430270433426,
-   "max": 0.4438725411891937
-  },
-  "near": {
-   "median": 0.2623235285282135,
-   "max": 0.53980553150177
-  },
-  "gap": 0.005163818597793579,
-  "auc": 1.0,
-  "auc_all": 0.9996754593152192,
-  "threshold": 0.4464544504880905,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 0,
-   "near_above": 2,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.26300957798957825,
-   "max": 0.4831807613372803
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9283676147460938,
-   "min": 0.8650268912315369,
-   "gap_max": 0.49251124262809753,
-   "gap_median": 0.32154685258865356
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "embeddinggemma",
-  "prefixes": false,
-  "dim": 768,
-  "disk_mb": 593.0670900344849,
-  "vram_mb": 653.8799991607666,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 3.1709667999999738,
-  "ms_per_passage": 18.52243749999971,
-  "ms_per_question": 15.364675000000716
- },
- {
-  "rel": {
-   "min": 0.4012625813484192,
-   "p10": 0.4669270396232605,
-   "median": 0.5907049775123596,
-   "max": 0.7793158292770386
-  },
-  "noise": {
-   "median": 0.07532251626253128,
-   "p90": 0.1532326266169548,
-   "p99": 0.26284221559762955,
-   "max": 0.4690241515636444
-  },
-  "near": {
-   "median": 0.23726733028888702,
-   "max": 0.5281115770339966
-  },
-  "gap": -0.06776157021522522,
-  "auc": 0.999926756024317,
-  "auc_all": 0.9996934893532625,
-  "threshold": 0.4012625813484192,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 1,
-   "near_above": 1,
-   "off_topic_with_hit": 0
-  },
-  "off_topic_max": {
-   "median": 0.1827404499053955,
-   "max": 0.36450624465942383
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.6607021689414978,
-   "min": 0.5098694562911987,
-   "gap_max": 0.33519017696380615,
-   "gap_median": 0.038658320903778076
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "embeddinggemma",
-  "prefixes": true,
-  "dim": 768,
-  "disk_mb": 593.0670900344849,
-  "vram_mb": 653.8799991607666,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 1.823281800000018,
-  "ms_per_passage": 18.324671874999865,
-  "ms_per_question": 14.81121944444731
- },
- {
-  "rel": {
-   "min": 0.48732802271842957,
-   "p10": 0.562761378288269,
-   "median": 0.6987268924713135,
-   "max": 0.8566108345985413
-  },
-  "noise": {
-   "median": 0.23411457240581512,
-   "p90": 0.3263104110956192,
-   "p99": 0.415568970143795,
-   "max": 0.6050457954406738
-  },
-  "near": {
-   "median": 0.31824249029159546,
-   "max": 0.662590742111206
-  },
-  "gap": -0.11771777272224426,
-  "auc": 0.9997985790668718,
-  "auc_all": 0.9995312190108722,
-  "threshold": 0.48732802271842957,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 3,
-   "near_above": 2,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.38252726197242737,
-   "max": 0.5340942740440369
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.8825806379318237,
-   "min": 0.7867076396942139,
-   "gap_max": 0.3782103955745697,
-   "gap_median": 0.1781957745552063
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "qwen3-embedding:0.6b",
-  "prefixes": true,
-  "dim": 1024,
-  "disk_mb": 609.5417575836182,
-  "vram_mb": 1171.9299993515015,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 1.8228441999999632,
-  "ms_per_passage": 24.554712499998743,
-  "ms_per_question": 18.821616666665857
- },
- {
-  "rel": {
-   "min": 0.46552106738090515,
-   "p10": 0.5216780185699463,
-   "median": 0.6356933116912842,
-   "max": 0.8775784969329834
-  },
-  "noise": {
-   "median": 0.23099248856306076,
-   "p90": 0.33148545026779175,
-   "p99": 0.43897781521081924,
-   "max": 0.581894040107727
-  },
-  "near": {
-   "median": 0.3365849256515503,
-   "max": 0.5768877267837524
-  },
-  "gap": -0.1163729727268219,
-  "auc": 0.9995056031641397,
-  "auc_all": 0.9990804680597876,
-  "threshold": 0.46552106738090515,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 5,
-   "near_above": 2,
-   "off_topic_with_hit": 2
-  },
-  "off_topic_max": {
-   "median": 0.3278639614582062,
-   "max": 0.5768877267837524
-  },
-  "top1": 1.0,
-  "mrr": 1.0,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9614705741405487,
-   "min": 0.8839035034179688,
-   "gap_max": 0.49023544788360596,
-   "gap_median": 0.3116847276687622
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "qwen3-embedding:0.6b",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 609.5417575836182,
-  "vram_mb": 1171.9299993515015,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 2.1784159000000045,
-  "ms_per_passage": 21.31515312499843,
-  "ms_per_question": 16.973083333334042
- },
- {
-  "rel": {
    "min": 0.5478507876396179,
    "p10": 0.645030391216278,
    "median": 0.7428512573242188,
@@ -670,5 +334,677 @@
   "cold_s": 2.155962499999987,
   "ms_per_passage": 15.384915624998996,
   "ms_per_question": 13.443463888888926
+ },
+ {
+  "rel": {
+   "min": 0.3363587260246277,
+   "p10": 0.42631685733795166,
+   "median": 0.5390102863311768,
+   "max": 0.8269205689430237
+  },
+  "noise": {
+   "median": 0.07184606418013573,
+   "p90": 0.1698298156261444,
+   "p99": 0.26581551879644394,
+   "max": 0.4364960193634033
+  },
+  "near": {
+   "median": 0.18342840671539307,
+   "max": 0.5112321376800537
+  },
+  "gap": -0.10013729333877563,
+  "auc": 0.9997985790668718,
+  "auc_all": 0.9993148585543515,
+  "threshold": 0.3363587260246277,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 4,
+   "near_above": 4,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.22215399146080017,
+   "max": 0.4620341956615448
+  },
+  "top1": 0.9722222222222222,
+  "mrr": 0.9861111111111112,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9158498644828796,
+   "min": 0.823697030544281,
+   "gap_max": 0.5382757782936096,
+   "gap_median": 0.3718407452106476
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.3363587260246277
+    ],
+    [
+     "Quel est le budget 2024 ?",
+     "budget_2024",
+     0.3511175215244293
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.39080381393432617
+    ],
+    [
+     "Quel acompte prévoir dans un contrat de freelance ?",
+     "contrat_freelance",
+     0.42541250586509705
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "email_devis",
+     0.42691975831985474
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.4364960193634033
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.35429319739341736
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.3503401577472687
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.3417728543281555
+    ],
+    [
+     "Peux-tu chercher sur le web la documentation de Seedance ?",
+     "memoire_phase1",
+     0.32971274852752686
+    ]
+   ]
+  },
+  "model": "snowflake-arctic-embed2",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 1106.5451793670654,
+  "vram_mb": 657.2599992752075,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 2.53136070000005,
+  "ms_per_passage": 15.510803125000194,
+  "ms_per_question": 14.386866666667528
+ },
+ {
+  "rel": {
+   "min": 0.38614845275878906,
+   "p10": 0.42738727331161497,
+   "median": 0.5716426372528076,
+   "max": 0.805443525314331
+  },
+  "noise": {
+   "median": 0.04651426710188389,
+   "p90": 0.13617058098316193,
+   "p99": 0.23025842756032944,
+   "max": 0.44017699360847473
+  },
+  "near": {
+   "median": 0.18711908161640167,
+   "max": 0.5193319320678711
+  },
+  "gap": -0.05402854084968567,
+  "auc": 0.9999084450303962,
+  "auc_all": 0.9995492490489155,
+  "threshold": 0.38614845275878906,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 1,
+   "near_above": 2,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.1816624104976654,
+   "max": 0.4213685691356659
+  },
+  "top1": 0.9722222222222222,
+  "mrr": 0.9861111111111112,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.7354165315628052,
+   "min": 0.5904791355133057,
+   "gap_max": 0.3916010558605194,
+   "gap_median": 0.19236911833286285
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.38614845275878906
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "email_devis",
+     0.3997915983200073
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.4001990556716919
+    ],
+    [
+     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
+     "memoire_nano_banana",
+     0.417389839887619
+    ],
+    [
+     "Combien de mémoire vidéo prend un modèle 7B ?",
+     "ollama_vram",
+     0.4340522289276123
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.44017699360847473
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.31526434421539307
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.3016025125980377
+    ],
+    [
+     "C'est quoi await en Python ?",
+     "coeur_queue",
+     0.28684481978416443
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.2821670174598694
+    ]
+   ]
+  },
+  "model": "snowflake-arctic-embed2",
+  "prefixes": true,
+  "dim": 1024,
+  "disk_mb": 1106.5451793670654,
+  "vram_mb": 657.2599992752075,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 2.081433299999958,
+  "ms_per_passage": 15.553840624999538,
+  "ms_per_question": 13.696530555557096
+ },
+ {
+  "rel": {
+   "min": 0.4490363597869873,
+   "p10": 0.47286880016326904,
+   "median": 0.5783098340034485,
+   "max": 0.8069268465042114
+  },
+  "noise": {
+   "median": 0.11855128034949303,
+   "p90": 0.19829686731100082,
+   "p99": 0.31360430270433426,
+   "max": 0.4438725411891937
+  },
+  "near": {
+   "median": 0.2623235285282135,
+   "max": 0.53980553150177
+  },
+  "gap": 0.005163818597793579,
+  "auc": 1.0,
+  "auc_all": 0.9996754593152192,
+  "threshold": 0.4464544504880905,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 0,
+   "near_above": 2,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.26300957798957825,
+   "max": 0.4831807613372803
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9283676147460938,
+   "min": 0.8650268912315369,
+   "gap_max": 0.49251124262809753,
+   "gap_median": 0.32154685258865356
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Dans quel ordre les travaux de la file sont-ils traités ?",
+     "coeur_queue",
+     0.4490363597869873
+    ],
+    [
+     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
+     "memoire_nano_banana",
+     0.4537382423877716
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "email_devis",
+     0.4660796523094177
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.468524694442749
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.4757648706436157
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.4438725411891937
+    ],
+    [
+     "Comment rendre un script exécutable sous Linux ?",
+     "python_venv",
+     0.4124690592288971
+    ],
+    [
+     "Est-ce qu'Ollama peut garder deux modèles chargés en même temps ?",
+     "coeur_install",
+     0.39832228422164917
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.39767953753471375
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.3974676728248596
+    ]
+   ]
+  },
+  "model": "embeddinggemma",
+  "prefixes": false,
+  "dim": 768,
+  "disk_mb": 593.0670900344849,
+  "vram_mb": 653.8799991607666,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 2.436667899999975,
+  "ms_per_passage": 13.08366250000148,
+  "ms_per_question": 10.280611111113558
+ },
+ {
+  "rel": {
+   "min": 0.4012625813484192,
+   "p10": 0.4669270396232605,
+   "median": 0.5907049775123596,
+   "max": 0.7793158292770386
+  },
+  "noise": {
+   "median": 0.07532251626253128,
+   "p90": 0.1532326266169548,
+   "p99": 0.26284221559762955,
+   "max": 0.4690241515636444
+  },
+  "near": {
+   "median": 0.23726733028888702,
+   "max": 0.5281115770339966
+  },
+  "gap": -0.06776157021522522,
+  "auc": 0.999926756024317,
+  "auc_all": 0.9996934893532625,
+  "threshold": 0.4012625813484192,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 1,
+   "near_above": 1,
+   "off_topic_with_hit": 0
+  },
+  "off_topic_max": {
+   "median": 0.1827404499053955,
+   "max": 0.36450624465942383
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.6607021689414978,
+   "min": 0.5098694562911987,
+   "gap_max": 0.33519017696380615,
+   "gap_median": 0.038658320903778076
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.4012625813484192
+    ],
+    [
+     "Dans quel ordre les travaux de la file sont-ils traités ?",
+     "coeur_queue",
+     0.44833841919898987
+    ],
+    [
+     "Combien de mémoire vidéo prend un modèle 7B ?",
+     "ollama_vram",
+     0.4511067271232605
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.46166568994522095
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "photo_exposition",
+     0.47043460607528687
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.4690241515636444
+    ],
+    [
+     "Comment rendre un script exécutable sous Linux ?",
+     "python_venv",
+     0.3910432457923889
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.3760824501514435
+    ],
+    [
+     "Est-ce qu'Ollama peut garder deux modèles chargés en même temps ?",
+     "coeur_install",
+     0.3728294372558594
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.3231019377708435
+    ]
+   ]
+  },
+  "model": "embeddinggemma",
+  "prefixes": true,
+  "dim": 768,
+  "disk_mb": 593.0670900344849,
+  "vram_mb": 653.8799991607666,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 1.793509800000038,
+  "ms_per_passage": 11.887143750001883,
+  "ms_per_question": 9.48988333333192
+ },
+ {
+  "rel": {
+   "min": 0.46552106738090515,
+   "p10": 0.5216780185699463,
+   "median": 0.6356933116912842,
+   "max": 0.8775784969329834
+  },
+  "noise": {
+   "median": 0.23099248856306076,
+   "p90": 0.33148545026779175,
+   "p99": 0.43897781521081924,
+   "max": 0.581894040107727
+  },
+  "near": {
+   "median": 0.3365849256515503,
+   "max": 0.5768877267837524
+  },
+  "gap": -0.1163729727268219,
+  "auc": 0.9995056031641397,
+  "auc_all": 0.9990804680597876,
+  "threshold": 0.46552106738090515,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 5,
+   "near_above": 2,
+   "off_topic_with_hit": 2
+  },
+  "off_topic_max": {
+   "median": 0.3278639614582062,
+   "max": 0.5768877267837524
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9614705741405487,
+   "min": 0.8839035034179688,
+   "gap_max": 0.49023544788360596,
+   "gap_median": 0.3116847276687622
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Mon chat doit-il être vacciné tous les ans ?",
+     "chat_veterinaire",
+     0.46552106738090515
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.4780505299568176
+    ],
+    [
+     "Quelles couleurs utiliser pour le logo ?",
+     "design_logo",
+     0.4831613600254059
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.5128164291381836
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "photo_exposition",
+     0.5275857448577881
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.581894040107727
+    ],
+    [
+     "Bonjour, comment ça va ?",
+     "memoire_nano_banana",
+     0.5376009941101074
+    ],
+    [
+     "C'est quoi await en Python ?",
+     "memoire_nano_banana",
+     0.5120903253555298
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.5093550682067871
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.5020860433578491
+    ]
+   ]
+  },
+  "model": "qwen3-embedding:0.6b",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 609.5417575836182,
+  "vram_mb": 1171.9299993515015,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 1.695713899999987,
+  "ms_per_passage": 15.821075000001628,
+  "ms_per_question": 11.349158333334545
+ },
+ {
+  "rel": {
+   "min": 0.48732802271842957,
+   "p10": 0.562761378288269,
+   "median": 0.6987268924713135,
+   "max": 0.8566108345985413
+  },
+  "noise": {
+   "median": 0.23411457240581512,
+   "p90": 0.3263104110956192,
+   "p99": 0.415568970143795,
+   "max": 0.6050457954406738
+  },
+  "near": {
+   "median": 0.31824249029159546,
+   "max": 0.662590742111206
+  },
+  "gap": -0.11771777272224426,
+  "auc": 0.9997985790668718,
+  "auc_all": 0.9995312190108722,
+  "threshold": 0.48732802271842957,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 3,
+   "near_above": 2,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.38252726197242737,
+   "max": 0.5340942740440369
+  },
+  "top1": 1.0,
+  "mrr": 1.0,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.8825806379318237,
+   "min": 0.7867076396942139,
+   "gap_max": 0.3782103955745697,
+   "gap_median": 0.1781957745552063
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.48732802271842957
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "photo_exposition",
+     0.5293918251991272
+    ],
+    [
+     "Que deviennent les tâches en cours si le PC s'éteint d'un coup ?",
+     "coeur_queue",
+     0.5551749467849731
+    ],
+    [
+     "Mon chat doit-il être vacciné tous les ans ?",
+     "chat_veterinaire",
+     0.5595276355743408
+    ],
+    [
+     "Comment créer un venv sous Windows ?",
+     "python_venv",
+     0.5649172067642212
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.6050457954406738
+    ],
+    [
+     "Est-ce qu'Ollama peut garder deux modèles chargés en même temps ?",
+     "coeur_install",
+     0.5370075106620789
+    ],
+    [
+     "Comment les machines vont-elles se trouver sur le réseau local en phase 1 ?",
+     "coeur_security",
+     0.5130023956298828
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.46851903200149536
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "reunion_octobre",
+     0.46791550517082214
+    ]
+   ]
+  },
+  "model": "qwen3-embedding:0.6b",
+  "prefixes": true,
+  "dim": 1024,
+  "disk_mb": 609.5417575836182,
+  "vram_mb": 1171.9299993515015,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 1.520201600000064,
+  "ms_per_passage": 15.662218749998402,
+  "ms_per_question": 12.853849999999056
  }
 ]
