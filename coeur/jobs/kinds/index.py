@@ -1,15 +1,20 @@
 """Travaux d'indexation : fichiers & dossiers, pages web, mémoire des conversations.
 
-Chaque fichier devient une unité autonome (son payload suffit à la traiter),
-ce qui permettra en phase 1 de les répartir entre plusieurs machines.
+Chaque fichier devient une unité autonome. Fichiers et pages web sont des
+tâches portables : le calcul (extraction du texte, découpage, embeddings) peut
+se faire sur une autre machine, l'enregistrement dans la bibliothèque se fait
+toujours ici. La mémoire des conversations, elle, ne quitte jamais ce nœud.
 """
 import json
 import os
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
+
 from coeur import db, settings
-from coeur.jobs.registry import UnitSpec, register_job_kind, task
+from coeur.jobs.registry import (Interrupted, UnitSpec, register_job_kind,
+                                 register_portable, task)
 from coeur.knowledge import chunking, store
 from coeur.services import extract, media, ollama, web
 
@@ -77,27 +82,87 @@ def split_index_paths(params):
     return title, units, info
 
 
-@task("index_file")
-def run_index_file(payload):
-    path = Path(payload["path"])
-    if not path.exists():
-        raise FileNotFoundError(f"Fichier introuvable : {path}")
-    vision = transcribe = None
+def index_options() -> dict:
+    """Réglages du propriétaire, figés au moment du calcul : une machine qui
+    calcule pour une autre applique ceux de l'autre, pas les siens."""
+    vision = None
     if settings.get("media_vision"):
-        model, mode = settings.get("vision_model"), settings.get("media_vision_mode")
+        vision = {"model": settings.get("vision_model"),
+                  "mode": settings.get("media_vision_mode")}
+    return {"embed_model": settings.get("embed_model"), "vision": vision,
+            "whisper": settings.get("whisper_model") if settings.get("media_transcribe") else None}
+
+
+def requires_index(unit, options) -> dict:
+    """Ce qu'il faut à une machine pour calculer cette unité."""
+    need = {"embed": options["embed_model"]}
+    if unit["resource"] == "gpu" and options.get("vision"):
+        need["vision"] = options["vision"]["model"]
+    if unit["resource"] == "cpu" and options.get("whisper"):
+        need["whisper"] = options["whisper"]
+    return need
+
+
+EMBED_BATCH = 16
+
+
+def _embed(pieces, options, stop) -> dict:
+    vectors = []
+    for start in range(0, len(pieces), EMBED_BATCH):
+        if stop is not None and stop.is_set():
+            raise Interrupted()
+        vectors.extend(ollama.embed(pieces[start:start + EMBED_BATCH],
+                                    model=options["embed_model"]))
+    return {"pieces": pieces, "vectors": np.asarray(vectors, dtype=np.float32)}
+
+
+def compute_index_file(payload, file, options, stop=None):
+    path = Path(file)
+    if not path.exists():
+        raise FileNotFoundError(f"Fichier introuvable : {payload.get('path') or payload['source']}")
+    vision = transcribe = None
+    if options.get("vision"):
+        model, mode = options["vision"]["model"], options["vision"]["mode"]
         vision = lambda p: media.vision_extract(p, model, mode)
-    if settings.get("media_transcribe"):
-        whisper_model = settings.get("whisper_model")
-        transcribe = lambda p: media.transcribe(p, whisper_model)
+    if options.get("whisper"):
+        transcribe = lambda p: media.transcribe(p, options["whisper"], stop=stop)
     text = extract.extract_text(path, vision=vision, transcribe=transcribe)
+    if stop is not None and stop.is_set():
+        raise Interrupted()
     if not text or not text.strip():
         return {"skipped": True, "ext": path.suffix.lower() or "(sans extension)",
                 "reason": "aucun texte exploitable"}
-    pieces = chunking.chunk_text(text)
-    vectors = ollama.embed(pieces)
+    return _embed(chunking.chunk_text(text), options, stop)
+
+
+def assimilate_index_file(payload, output):
+    if output.get("skipped"):
+        return output
     store.upsert_entry(payload["collection_id"], payload["source"], payload["kind"],
-                       str(path), list(zip(pieces, vectors)))
-    return {"chunks": len(pieces)}
+                       payload["path"], list(zip(output["pieces"], output["vectors"])))
+    return {"chunks": len(output["pieces"])}
+
+
+def check_embedded(payload, output):
+    """Contrôle d'une sortie calculée sur une autre machine, avant de l'intégrer :
+    forme, valeurs finies, et même dimension que les vecteurs déjà stockés."""
+    if output.get("skipped"):
+        return
+    pieces, vectors = output.get("pieces"), output.get("vectors")
+    if not isinstance(pieces, list) or not pieces or not all(isinstance(p, str) for p in pieces):
+        raise ValueError("passages absents ou invalides")
+    if not isinstance(vectors, np.ndarray) or vectors.ndim != 2 or len(vectors) != len(pieces):
+        raise ValueError("vecteurs absents ou en nombre différent des passages")
+    if not np.isfinite(vectors).all() or (np.linalg.norm(vectors, axis=1) < 1e-6).any():
+        raise ValueError("vecteurs invalides (valeurs nulles ou non finies)")
+    dim = store.embedding_dim(payload["collection_id"])
+    if dim and vectors.shape[1] != dim:
+        raise ValueError(f"vecteurs de dimension {vectors.shape[1]} au lieu de {dim} "
+                         "(modèle d'embedding différent ?)")
+
+
+register_portable("index_file", compute_index_file, assimilate_index_file, file_key="path",
+                  options=index_options, requires=requires_index, validate=check_embedded)
 
 
 def finalize_index(job_id, params, units):
@@ -126,16 +191,25 @@ def split_index_urls(params):
     return f"Lire {len(units)} page(s) web → {target}", units, {}
 
 
-@task("index_url")
-def run_index_url(payload):
+def compute_index_url(payload, file, options, stop=None):
     title, text = web.fetch_url_text(payload["url"])
     if not text.strip():
         return {"skipped": True, "ext": "url", "reason": "page vide"}
-    pieces = chunking.chunk_text(f"{title}\n\n{text}")
-    store.upsert_entry(payload["collection_id"], payload["url"], "url", payload["url"],
-                       list(zip(pieces, ollama.embed(pieces))))
-    return {"chunks": len(pieces), "title": title}
+    output = _embed(chunking.chunk_text(f"{title}\n\n{text}"), options, stop)
+    output["title"] = title
+    return output
 
+
+def assimilate_index_url(payload, output):
+    if output.get("skipped"):
+        return output
+    store.upsert_entry(payload["collection_id"], payload["url"], "url", payload["url"],
+                       list(zip(output["pieces"], output["vectors"])))
+    return {"chunks": len(output["pieces"]), "title": output.get("title")}
+
+
+register_portable("index_url", compute_index_url, assimilate_index_url,
+                  options=index_options, requires=requires_index, validate=check_embedded)
 
 register_job_kind("index_urls", split_index_urls, finalize_index)
 

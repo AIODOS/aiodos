@@ -1,8 +1,9 @@
 """File de tâches persistante (SQLite) : création, attribution, suivi.
 
-Ordre de passage : priorité du travail, puis ordre d'arrivée (FIFO). La
-réciprocité entre machines s'ajoutera en phase 1, quand il y aura d'autres
-propriétaires ; le temps de calcul de chaque unité est déjà mesuré (compute_s).
+Ordre de passage : priorité du travail, puis ordre d'arrivée (FIFO). Une
+unité peut aussi être confiée à une autre machine pour un temps limité (bail,
+cf. leases.py) ; le temps de calcul de chaque unité est mesuré (compute_s),
+c'est la base de la réciprocité entre machines.
 La file survit aux redémarrages : « lancé le soir, récupéré le matin ».
 """
 import json
@@ -26,11 +27,16 @@ def create_job(kind, params, priority=NORMAL, owner_node="local") -> int:
              owner_node, len(units), int(info.get("skipped", 0)),
              json.dumps(info, ensure_ascii=False), now, None if units else now)).lastrowid
         c.executemany(
-            "INSERT INTO units(job_id, task, resource, payload, status, created) "
-            "VALUES(?, ?, ?, ?, ?, ?)",
+            "INSERT INTO units(job_id, task, resource, payload, status, created, local_only) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?)",
             [(job_id, u.task, u.resource, json.dumps(u.payload, ensure_ascii=False),
-              QUEUED, now) for u in units])
+              QUEUED, now, 0 if _portable(u.task) else 1) for u in units])
     return job_id
+
+
+def _portable(task) -> bool:
+    spec = registry.TASKS.get(task)
+    return bool(spec and spec.portable)
 
 
 def claim_next(resources, node) -> dict | None:
@@ -77,7 +83,8 @@ def finish_unit(unit_id, result: dict, compute_s: float):
     counter = "skipped" if status == SKIPPED else "done"
     with db.transaction() as c:
         job_id = c.execute("SELECT job_id FROM units WHERE id=?", (unit_id,)).fetchone()[0]
-        c.execute("UPDATE units SET status=?, result=?, finished=?, compute_s=? WHERE id=?",
+        c.execute("UPDATE units SET status=?, result=?, finished=?, compute_s=?, "
+                  "lease_until=NULL WHERE id=?",
                   (status, json.dumps(result, ensure_ascii=False), db.now(),
                    compute_s, unit_id))
         c.execute(f"UPDATE jobs SET {counter} = {counter} + 1 WHERE id=?", (job_id,))
@@ -90,10 +97,11 @@ def fail_unit(unit_id, error: str, compute_s: float):
         row = c.execute("SELECT job_id, attempts FROM units WHERE id=?", (unit_id,)).fetchone()
         job_id = row["job_id"]
         if row["attempts"] < MAX_ATTEMPTS:
-            c.execute("UPDATE units SET status=?, error=?, node=NULL WHERE id=?",
-                      (QUEUED, error, unit_id))
+            c.execute("UPDATE units SET status=?, error=?, node=NULL, lease_until=NULL "
+                      "WHERE id=?", (QUEUED, error, unit_id))
             return job_id, False
-        c.execute("UPDATE units SET status=?, error=?, finished=?, compute_s=? WHERE id=?",
+        c.execute("UPDATE units SET status=?, error=?, finished=?, compute_s=?, "
+                  "lease_until=NULL WHERE id=?",
                   (FAILED, error, db.now(), compute_s, unit_id))
         c.execute("UPDATE jobs SET failed = failed + 1 WHERE id=?", (job_id,))
         return job_id, _complete_if_last(c, job_id)
@@ -102,8 +110,9 @@ def fail_unit(unit_id, error: str, compute_s: float):
 def release_unit(unit_id):
     """Remet une unité en file sans compter d'essai : ce n'est pas elle qui a
     échoué, c'est le moteur (Ollama) qui était injoignable."""
-    db.execute("UPDATE units SET status=?, node=NULL, attempts=MAX(attempts - 1, 0) "
-               "WHERE id=? AND status=?", (QUEUED, unit_id, RUNNING))
+    db.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, "
+               "attempts=MAX(attempts - 1, 0) WHERE id=? AND status=?",
+               (QUEUED, unit_id, RUNNING))
 
 
 def finalize_job(job_id):
@@ -170,25 +179,39 @@ def clear_finished() -> int:
 
 
 def recover():
-    """Au démarrage : les unités interrompues par un arrêt repartent en file."""
-    db.execute("UPDATE units SET status=?, node=NULL WHERE status=?", (QUEUED, RUNNING))
+    """Au démarrage : les unités interrompues par un arrêt repartent en file
+    (y compris celles confiées à une autre machine : leur résultat tardif sera refusé)."""
+    db.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL WHERE status=?",
+               (QUEUED, RUNNING))
 
 
 # ------------------------------------------------------------------- lecture
-def _summary(row) -> dict:
+def _summary(row, remote) -> dict:
     job = dict(row)
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
+    job["remote"] = remote.get(job["id"], {})       # {machine: unités qu'elle calcule}
     return job
+
+
+def remote_counts(job_id=None) -> dict:
+    """Unités confiées en ce moment à d'autres machines : {travail: {machine: n}}."""
+    out = {}
+    for r in db.query("SELECT job_id, node, COUNT(*) AS n FROM units WHERE status=? "
+                      "AND lease_until IS NOT NULL AND (? IS NULL OR job_id=?) "
+                      "GROUP BY job_id, node", (RUNNING, job_id, job_id)):
+        out.setdefault(r["job_id"], {})[r["node"]] = r["n"]
+    return out
 
 
 def job_summary(job_id) -> dict | None:
     row = db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))
-    return _summary(row) if row else None
+    return _summary(row, remote_counts(job_id)) if row else None
 
 
 def list_jobs(limit=200) -> list:
-    return [_summary(r) for r in db.query(
+    remote = remote_counts()
+    return [_summary(r, remote) for r in db.query(
         "SELECT * FROM jobs ORDER BY CASE status WHEN 'running' THEN 0 "
         "WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, "
         "CASE WHEN status IN ('running','queued','paused') THEN priority ELSE 0 END, "

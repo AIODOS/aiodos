@@ -44,6 +44,7 @@ def list_models(max_age=MODELS_TTL) -> list:
         details = m.get("details") or {}
         out.append({
             "name": m["name"],
+            "digest": m.get("digest", ""),   # identifie la version exacte du modèle
             "size": m.get("size", 0),
             "family": details.get("family", ""),
             "parameters": details.get("parameter_size", ""),
