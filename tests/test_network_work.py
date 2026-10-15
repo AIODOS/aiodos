@@ -8,7 +8,10 @@ d'embedding (sinon le test est ignoré).
 import pytest
 import requests
 
+from coeur import settings
 from tests.nodes import Node, pair
+
+EMBED_MODEL = settings.DEFAULTS["embed_model"]       # celui des nœuds lancés ici
 
 
 def _ollama_has_embed_model() -> bool:
@@ -16,11 +19,11 @@ def _ollama_has_embed_model() -> bool:
         tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=2).json()
     except (requests.RequestException, ValueError):
         return False
-    return any(m["name"].startswith("nomic-embed-text") for m in tags.get("models", []))
+    return any(m["name"].startswith(EMBED_MODEL) for m in tags.get("models", []))
 
 
 pytestmark = pytest.mark.skipif(not _ollama_has_embed_model(),
-                                reason="Ollama avec nomic-embed-text requis")
+                                reason=f"Ollama avec {EMBED_MODEL} requis")
 
 NOTES = {
     "chats.txt": "Les chats dorment seize heures par jour, surtout l'après-midi.",
