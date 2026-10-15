@@ -1,174 +1,6 @@
 [
  {
   "rel": {
-   "min": 0.5478507876396179,
-   "p10": 0.645030391216278,
-   "median": 0.7428512573242188,
-   "max": 0.8545172214508057
-  },
-  "noise": {
-   "median": 0.5612159073352814,
-   "p90": 0.6162266433238983,
-   "p99": 0.6631526947021484,
-   "max": 0.749787449836731
-  },
-  "near": {
-   "median": 0.6001894474029541,
-   "max": 0.7725346088409424
-  },
-  "gap": -0.20193666219711304,
-  "auc": 0.9750421152860177,
-  "auc_all": 0.9738023547229685,
-  "threshold": 0.6370010375976562,
-  "at_threshold": {
-   "missed_questions": 3,
-   "noise_above": 59,
-   "near_above": 6,
-   "off_topic_with_hit": 6
-  },
-  "off_topic_max": {
-   "median": 0.6366415023803711,
-   "max": 0.7725346088409424
-  },
-  "top1": 0.8611111111111112,
-  "mrr": 0.91820987654321,
-  "recall4": 0.9722222222222222,
-  "dup": {
-   "median": 0.9438515901565552,
-   "min": 0.9042338132858276,
-   "gap_max": 0.3974384665489197,
-   "gap_median": 0.20897263288497925
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "nomic-embed-text",
-  "prefixes": false,
-  "dim": 768,
-  "disk_mb": 261.59520149230957,
-  "vram_mb": 320.1899995803833,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 2.7190222000000404,
-  "ms_per_passage": 17.235231250001704,
-  "ms_per_question": 16.223949999998567
- },
- {
-  "rel": {
-   "min": 0.5614786744117737,
-   "p10": 0.6699126839637757,
-   "median": 0.7477037906646729,
-   "max": 0.8358113765716553
-  },
-  "noise": {
-   "median": 0.5924386084079742,
-   "p90": 0.6428442299365997,
-   "p99": 0.6885029822587967,
-   "max": 0.7210258841514587
-  },
-  "near": {
-   "median": 0.6465412378311157,
-   "max": 0.7599209547042847
-  },
-  "gap": -0.15954720973968506,
-  "auc": 0.9691825972313777,
-  "auc_all": 0.9676360817121324,
-  "threshold": 0.6586618423461914,
-  "at_threshold": {
-   "missed_questions": 2,
-   "noise_above": 69,
-   "near_above": 8,
-   "off_topic_with_hit": 7
-  },
-  "off_topic_max": {
-   "median": 0.6598396301269531,
-   "max": 0.7233056426048279
-  },
-  "top1": 0.8888888888888888,
-  "mrr": 0.9273879142300194,
-  "recall4": 0.9722222222222222,
-  "dup": {
-   "median": 0.8438182473182678,
-   "min": 0.7983077764511108,
-   "gap_max": 0.27622348070144653,
-   "gap_median": 0.10216549038887024
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "nomic-embed-text",
-  "prefixes": true,
-  "dim": 768,
-  "disk_mb": 261.59520149230957,
-  "vram_mb": 320.1899995803833,
-  "ram_mb": 0.0,
-  "context": 2048,
-  "cold_s": 1.1083009000000175,
-  "ms_per_passage": 16.94587187499863,
-  "ms_per_question": 12.988822222221566
- },
- {
-  "rel": {
-   "min": 0.4900563359260559,
-   "p10": 0.5478003621101379,
-   "median": 0.6434395909309387,
-   "max": 0.7743004560470581
-  },
-  "noise": {
-   "median": 0.3113011419773102,
-   "p90": 0.39663025736808777,
-   "p99": 0.4660879820585251,
-   "max": 0.5560863614082336
-  },
-  "near": {
-   "median": 0.41208699345588684,
-   "max": 0.5969294309616089
-  },
-  "gap": -0.06603002548217773,
-  "auc": 0.9997253350911888,
-  "auc_all": 0.9994230387826119,
-  "threshold": 0.4900563359260559,
-  "at_threshold": {
-   "missed_questions": 0,
-   "noise_above": 7,
-   "near_above": 4,
-   "off_topic_with_hit": 1
-  },
-  "off_topic_max": {
-   "median": 0.4268384575843811,
-   "max": 0.5412574410438538
-  },
-  "top1": 0.9722222222222222,
-  "mrr": 0.9861111111111112,
-  "recall4": 1.0,
-  "dup": {
-   "median": 0.9571159780025482,
-   "min": 0.8536278009414673,
-   "gap_max": 0.43279021978378296,
-   "gap_median": 0.30402472615242004
-  },
-  "counts": {
-   "rel": 37,
-   "far": 1476,
-   "near": 23
-  },
-  "model": "bge-m3",
-  "prefixes": false,
-  "dim": 1024,
-  "disk_mb": 1104.0426301956177,
-  "vram_mb": 657.2599992752075,
-  "ram_mb": 0.0,
-  "context": 4096,
-  "cold_s": 3.2659932000000254,
-  "ms_per_passage": 21.021318750001683,
-  "ms_per_question": 36.13746666666707
- },
- {
-  "rel": {
    "min": 0.3363587260246277,
    "p10": 0.42631685733795166,
    "median": 0.5390102863311768,
@@ -502,5 +334,341 @@
   "cold_s": 2.1784159000000045,
   "ms_per_passage": 21.31515312499843,
   "ms_per_question": 16.973083333334042
+ },
+ {
+  "rel": {
+   "min": 0.5478507876396179,
+   "p10": 0.645030391216278,
+   "median": 0.7428512573242188,
+   "max": 0.8545172214508057
+  },
+  "noise": {
+   "median": 0.5612159073352814,
+   "p90": 0.6162266433238983,
+   "p99": 0.6631526947021484,
+   "max": 0.749787449836731
+  },
+  "near": {
+   "median": 0.6001894474029541,
+   "max": 0.7725346088409424
+  },
+  "gap": -0.20193666219711304,
+  "auc": 0.9750421152860177,
+  "auc_all": 0.9738023547229685,
+  "threshold": 0.6370010375976562,
+  "at_threshold": {
+   "missed_questions": 3,
+   "noise_above": 59,
+   "near_above": 6,
+   "off_topic_with_hit": 6
+  },
+  "off_topic_max": {
+   "median": 0.6366415023803711,
+   "max": 0.7725346088409424
+  },
+  "top1": 0.8611111111111112,
+  "mrr": 0.91820987654321,
+  "recall4": 0.9722222222222222,
+  "dup": {
+   "median": 0.9438515901565552,
+   "min": 0.9042338132858276,
+   "gap_max": 0.3974384665489197,
+   "gap_median": 0.20897263288497925
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.5478507876396179
+    ],
+    [
+     "Comment créer un venv sous Windows ?",
+     "python_venv",
+     0.6075127124786377
+    ],
+    [
+     "Comment mieux dormir ?",
+     "sante_sommeil",
+     0.6249312162399292
+    ],
+    [
+     "Jusqu'à quand puis-je déclarer mes revenus ?",
+     "impots_declaration",
+     0.6370010375976562
+    ],
+    [
+     "Que deviennent les tâches en cours si le PC s'éteint d'un coup ?",
+     "coeur_queue",
+     0.6503832936286926
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.749787449836731
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_phase1",
+     0.7125283479690552
+    ],
+    [
+     "C'est quoi await en Python ?",
+     "coeur_install",
+     0.6988642811775208
+    ],
+    [
+     "Peux-tu chercher sur le web la documentation de Seedance ?",
+     "email_devis",
+     0.6923412084579468
+    ],
+    [
+     "Quel délai le client a-t-il demandé pour son site ?",
+     "memoire_nano_banana",
+     0.6869454383850098
+    ]
+   ]
+  },
+  "model": "nomic-embed-text",
+  "prefixes": false,
+  "dim": 768,
+  "disk_mb": 261.59520149230957,
+  "vram_mb": 320.1899995803833,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 1.6371990000000096,
+  "ms_per_passage": 10.731103124999919,
+  "ms_per_question": 8.595988888888288
+ },
+ {
+  "rel": {
+   "min": 0.5614786744117737,
+   "p10": 0.6699126839637757,
+   "median": 0.7477037906646729,
+   "max": 0.8358113765716553
+  },
+  "noise": {
+   "median": 0.5924386084079742,
+   "p90": 0.6428442299365997,
+   "p99": 0.6885029822587967,
+   "max": 0.7210258841514587
+  },
+  "near": {
+   "median": 0.6465412378311157,
+   "max": 0.7599209547042847
+  },
+  "gap": -0.15954720973968506,
+  "auc": 0.9691825972313777,
+  "auc_all": 0.9676360817121324,
+  "threshold": 0.6586618423461914,
+  "at_threshold": {
+   "missed_questions": 2,
+   "noise_above": 69,
+   "near_above": 8,
+   "off_topic_with_hit": 7
+  },
+  "off_topic_max": {
+   "median": 0.6598396301269531,
+   "max": 0.7233056426048279
+  },
+  "top1": 0.8888888888888888,
+  "mrr": 0.9273879142300194,
+  "recall4": 0.9722222222222222,
+  "dup": {
+   "median": 0.8438182473182678,
+   "min": 0.7983077764511108,
+   "gap_max": 0.27622348070144653,
+   "gap_median": 0.10216549038887024
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.5614786744117737
+    ],
+    [
+     "Comment mieux dormir ?",
+     "sante_sommeil",
+     0.6330999135971069
+    ],
+    [
+     "Comment créer un venv sous Windows ?",
+     "python_venv",
+     0.6586618423461914
+    ],
+    [
+     "Mon chat doit-il être vacciné tous les ans ?",
+     "chat_veterinaire",
+     0.6657410264015198
+    ],
+    [
+     "Quels modèles faut-il télécharger dans Ollama pour démarrer ?",
+     "coeur_install",
+     0.6726937890052795
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Écris une fonction JavaScript qui inverse une chaîne de caractères.",
+     "linux_droits",
+     0.7210258841514587
+    ],
+    [
+     "Comment l'API locale est-elle protégée contre les attaques ?",
+     "memoire_nano_banana",
+     0.7160685062408447
+    ],
+    [
+     "Écris une fonction JavaScript qui inverse une chaîne de caractères.",
+     "coeur_queue",
+     0.7137138843536377
+    ],
+    [
+     "Écris une fonction JavaScript qui inverse une chaîne de caractères.",
+     "excel_recherchex",
+     0.7096696496009827
+    ],
+    [
+     "Comment trier une liste de dictionnaires par date en Python ?",
+     "reunion_octobre",
+     0.7027063369750977
+    ]
+   ]
+  },
+  "model": "nomic-embed-text",
+  "prefixes": true,
+  "dim": 768,
+  "disk_mb": 261.59520149230957,
+  "vram_mb": 320.1899995803833,
+  "ram_mb": 0.0,
+  "context": 2048,
+  "cold_s": 0.9603521000000228,
+  "ms_per_passage": 10.94648124999864,
+  "ms_per_question": 7.001897222222751
+ },
+ {
+  "rel": {
+   "min": 0.4900563359260559,
+   "p10": 0.5478003621101379,
+   "median": 0.6434395909309387,
+   "max": 0.7743004560470581
+  },
+  "noise": {
+   "median": 0.3113011419773102,
+   "p90": 0.39663025736808777,
+   "p99": 0.4660879820585251,
+   "max": 0.5560863614082336
+  },
+  "near": {
+   "median": 0.41208699345588684,
+   "max": 0.5969294309616089
+  },
+  "gap": -0.06603002548217773,
+  "auc": 0.9997253350911888,
+  "auc_all": 0.9994230387826119,
+  "threshold": 0.4900563359260559,
+  "at_threshold": {
+   "missed_questions": 0,
+   "noise_above": 7,
+   "near_above": 4,
+   "off_topic_with_hit": 1
+  },
+  "off_topic_max": {
+   "median": 0.4268384575843811,
+   "max": 0.5412574410438538
+  },
+  "top1": 0.9722222222222222,
+  "mrr": 0.9861111111111112,
+  "recall4": 1.0,
+  "dup": {
+   "median": 0.9571159780025482,
+   "min": 0.8536278009414673,
+   "gap_max": 0.43279021978378296,
+   "gap_median": 0.30402472615242004
+  },
+  "counts": {
+   "rel": 37,
+   "far": 1476,
+   "near": 23
+  },
+  "hard": {
+   "weakest_relevant": [
+    [
+     "Quel est le budget 2024 ?",
+     "budget_2024",
+     0.4900563359260559
+    ],
+    [
+     "Combien l'association consacre-t-elle à la communication ?",
+     "budget_2024",
+     0.5041425824165344
+    ],
+    [
+     "Qu'est-ce qui a été décidé à la réunion d'octobre ?",
+     "reunion_octobre",
+     0.5264405012130737
+    ],
+    [
+     "Quels modèles faut-il télécharger dans Ollama pour démarrer ?",
+     "coeur_install",
+     0.5377896428108215
+    ],
+    [
+     "Tu te souviens de ce que je t'avais demandé sur nano banana ?",
+     "memoire_nano_banana",
+     0.5544741749763489
+    ]
+   ],
+   "strongest_noise": [
+    [
+     "Comment installer Cœur IA sur mon ordinateur ?",
+     "design_logo",
+     0.5560863614082336
+    ],
+    [
+     "Comment rendre un script exécutable sous Linux ?",
+     "python_venv",
+     0.5380682945251465
+    ],
+    [
+     "Comment me préparer pour courir un semi-marathon ?",
+     "sante_sommeil",
+     0.5198146104812622
+    ],
+    [
+     "Mes photos sont floues quand il fait sombre, que dois-je régler ?",
+     "sante_sommeil",
+     0.5019991397857666
+    ],
+    [
+     "Combien de temps laisser lever la pâte du pain au levain ?",
+     "sante_sommeil",
+     0.49810680747032166
+    ]
+   ]
+  },
+  "model": "bge-m3",
+  "prefixes": false,
+  "dim": 1024,
+  "disk_mb": 1104.0426301956177,
+  "vram_mb": 657.2599992752075,
+  "ram_mb": 0.0,
+  "context": 4096,
+  "cold_s": 2.155962499999987,
+  "ms_per_passage": 15.384915624998996,
+  "ms_per_question": 13.443463888888926
  }
 ]
