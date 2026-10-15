@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cœur IA</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/pygments.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" aria-label="Navigation principale">
+      <img class="rail-logo" src="/logo.png" alt="Cœur IA">
+      <button class="rail-btn" data-view="chat" title="Conversations"><span data-icon="chat"></span></button>
+      <button class="rail-btn" data-view="library" title="Bibliothèques"><span data-icon="library"></span></button>
+      <button class="rail-btn" data-view="jobs" title="Tâches">
+        <span data-icon="jobs"></span><span class="rail-badge" id="jobs-badge" hidden></span>
+      </button>
+      <button class="rail-btn" data-view="node" title="Cette machine"><span data-icon="node"></span></button>
+      <div class="rail-spacer"></div>
+      <button class="rail-btn" data-view="settings" title="Réglages"><span data-icon="settings"></span></button>
+    </nav>
+    <main>
+      <section class="view" id="view-chat" hidden></section>
+      <section class="view" id="view-library" hidden></section>
+      <section class="view" id="view-jobs" hidden></section>
+      <section class="view" id="view-node" hidden></section>
+      <section class="view" id="view-settings" hidden></section>
+    </main>
+  </div>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

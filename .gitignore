@@ -9,5 +9,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# Réglages locaux de Claude Code (autorisations propres à cette machine)
+# RÃ©glages locaux de Claude Code (autorisations, chemins propres Ã  cette machine)
 .claude/settings.local.json
+.claude/launch.json

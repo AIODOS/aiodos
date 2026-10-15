@@ -1,0 +1,111 @@
+"""Conversations, messages et dossiers de classement."""
+import json
+
+from coeur import db
+from coeur.knowledge import store
+
+DEFAULT_TITLE = "Nouvelle conversation"
+
+
+def list_tree() -> dict:
+    return {
+        "folders": [dict(r) for r in db.query(
+            "SELECT id, name FROM folders ORDER BY name COLLATE NOCASE")],
+        "conversations": [dict(r) for r in db.query(
+            "SELECT id, title, folder_id, model, updated FROM conversations "
+            "ORDER BY updated DESC")],
+    }
+
+
+def create(title=DEFAULT_TITLE, model=None, folder_id=None) -> int:
+    now = db.now()
+    return db.execute(
+        "INSERT INTO conversations(title, folder_id, model, created, updated) "
+        "VALUES(?, ?, ?, ?, ?)", (title, folder_id, model, now, now)).lastrowid
+
+
+def get(conv_id) -> dict | None:
+    row = db.query_one("SELECT * FROM conversations WHERE id=?", (conv_id,))
+    if row is None:
+        return None
+    conv = dict(row)
+    conv["messages"] = [
+        dict(m, sources=json.loads(m["sources"] or "[]"))
+        for m in db.query("SELECT id, role, content, thinking, model, sources, created "
+                          "FROM messages WHERE conversation_id=? ORDER BY id", (conv_id,))]
+    return conv
+
+
+def rename(conv_id, title):
+    title = (title or "").strip()
+    if not title:
+        raise ValueError("Le titre ne peut pas être vide.")
+    db.execute("UPDATE conversations SET title=? WHERE id=?", (title[:200], conv_id))
+
+
+def move(conv_id, folder_id):
+    db.execute("UPDATE conversations SET folder_id=? WHERE id=?", (folder_id, conv_id))
+
+
+def delete(conv_id):
+    """Supprime la conversation ET sa trace dans la mémoire inter-conversations."""
+    db.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
+    store.remove_by_origin(store.conversation_collection_id(), str(conv_id))
+
+
+def add_message(conv_id, role, content, thinking=None, model=None, sources=None) -> int:
+    now = db.now()
+    with db.transaction() as c:
+        message_id = c.execute(
+            "INSERT INTO messages(conversation_id, role, content, thinking, model, "
+            "sources, created) VALUES(?, ?, ?, ?, ?, ?, ?)",
+            (conv_id, role, content, thinking, model,
+             json.dumps(sources or [], ensure_ascii=False), now)).lastrowid
+        c.execute("UPDATE conversations SET updated=?, model=COALESCE(?, model) WHERE id=?",
+                  (now, model, conv_id))
+    return message_id
+
+
+def history(conv_id, limit=30) -> list:
+    """Derniers échanges, dans l'ordre, au format attendu par les modèles."""
+    rows = db.query("SELECT role, content FROM messages WHERE conversation_id=? "
+                    "ORDER BY id DESC LIMIT ?", (conv_id, limit))
+    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+
+
+def auto_title(conv_id, text) -> str | None:
+    """Donne un titre à une conversation neuve à partir du premier message."""
+    row = db.query_one("SELECT title FROM conversations WHERE id=?", (conv_id,))
+    if row is None or row["title"] != DEFAULT_TITLE:
+        return None
+    line = " ".join((text or "").split())
+    title = (line[:60] + "…") if len(line) > 60 else line
+    if title:
+        db.execute("UPDATE conversations SET title=? WHERE id=?", (title, conv_id))
+    return title
+
+
+# --------------------------------------------------------------------- dossiers
+def create_folder(name) -> int:
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Le nom du dossier ne peut pas être vide.")
+    if db.query_one("SELECT 1 FROM folders WHERE name=?", (name,)):
+        raise ValueError(f"Le dossier « {name} » existe déjà.")
+    return db.execute("INSERT INTO folders(name, created) VALUES(?, ?)",
+                      (name, db.now())).lastrowid
+
+
+def rename_folder(folder_id, name):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Le nom du dossier ne peut pas être vide.")
+    clash = db.query_one("SELECT id FROM folders WHERE name=?", (name,))
+    if clash and clash["id"] != folder_id:
+        raise ValueError(f"Le dossier « {name} » existe déjà.")
+    db.execute("UPDATE folders SET name=? WHERE id=?", (name, folder_id))
+
+
+def delete_folder(folder_id):
+    """Les conversations du dossier reviennent à la racine (elles ne sont pas supprimées)."""
+    db.execute("DELETE FROM folders WHERE id=?", (folder_id,))
