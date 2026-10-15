@@ -114,6 +114,7 @@ def evaluate(data, P, Q, O, D):
     index = {pid: i for i, pid in enumerate(ids)}
     S, T = Q @ P.T, O @ P.T
     rel, far, near = [], [], []
+    rel_cases, far_cases = [], []          # (score, question, passage) : cas difficiles
     top1 = mrr = recall4 = 0
     best_rel, dup_gap, dup = [], [], []
     for i, item in enumerate(data["questions"]):
@@ -121,6 +122,8 @@ def evaluate(data, P, Q, O, D):
         close = {index[p] for p in item.get("near", [])}
         for j in range(len(ids)):
             (rel if j in good else near if j in close else far).append(float(S[i, j]))
+            if j in good or j not in close:
+                (rel_cases if j in good else far_cases).append((float(S[i, j]), item["q"], ids[j]))
         order = list(np.argsort(-S[i]))
         rank = min(order.index(j) for j in good) + 1
         top1 += rank == 1
@@ -135,6 +138,8 @@ def evaluate(data, P, Q, O, D):
         close = {index[p] for p in item.get("near", [])}
         for j in range(len(ids)):
             (off_near if j in close else far).append(float(T[i, j]))
+            if j not in close:
+                far_cases.append((float(T[i, j]), item["q"], ids[j]))
     noise = far + near + off_near
     threshold = best_threshold(rel, far)
     n = len(data["questions"])
@@ -159,6 +164,8 @@ def evaluate(data, P, Q, O, D):
         "dup": {"median": pct(dup, 50), "min": min(dup),
                 "gap_max": max(dup_gap), "gap_median": pct(dup_gap, 50)},
         "counts": {"rel": len(rel), "far": len(far), "near": len(near + off_near)},
+        "hard": {"weakest_relevant": [[q, p, s] for s, q, p in sorted(rel_cases)[:5]],
+                 "strongest_noise": [[q, p, s] for s, q, p in sorted(far_cases)[-5:][::-1]]},
     }
 
 
@@ -222,6 +229,17 @@ def report(results):
     return "\n".join(lines)
 
 
+def report_details(results):
+    lines = []
+    for r in results:
+        lines.append(f"\n{r['model']}{' (préfixes)' if r['prefixes'] else ''}")
+        lines.append("  bons passages les plus faibles :")
+        lines += [f"    {s:.3f}  {q}  →  {p}" for q, p, s in r["hard"]["weakest_relevant"]]
+        lines.append("  passages sans rapport les plus forts :")
+        lines += [f"    {s:.3f}  {q}  →  {p}" for q, p, s in r["hard"]["strongest_noise"]]
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("models", nargs="*", default=MODELS)
@@ -231,6 +249,8 @@ def main():
     parser.add_argument("--json", type=Path, help="enregistrer les résultats détaillés")
     parser.add_argument("--force", action="store_true",
                         help="refaire les mesures déjà présentes dans le fichier --json")
+    parser.add_argument("--details", action="store_true",
+                        help="afficher les cas difficiles de chaque modèle")
     args = parser.parse_args()
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
@@ -250,9 +270,12 @@ def main():
         saved = [r for r in saved if (r["model"], r["prefixes"]) != key] + [result]
         if args.json:                     # tout de suite : un plantage ne perd rien
             args.json.write_text(json.dumps(saved, indent=1, ensure_ascii=False),
-                                 encoding="utf-8")
+                                 encoding="utf-8", newline="\n")
     keys = {(m, bool(p[0] or p[1])) for m, p in wanted}
-    print(report([r for r in saved if (r["model"], r["prefixes"]) in keys]))
+    shown = [r for r in saved if (r["model"], r["prefixes"]) in keys]
+    print(report(shown))
+    if args.details:
+        print(report_details([r for r in shown if "hard" in r]))
 
 
 if __name__ == "__main__":
