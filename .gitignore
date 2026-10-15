@@ -1,0 +1,10 @@
+# Données utilisateur : conversations, base de connaissance, réglages, clés API.
+# Elles restent sur la machine et ne doivent jamais partir dans le dépôt.
+data/
+legacy/data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

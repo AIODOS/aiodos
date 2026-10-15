@@ -1,0 +1,12 @@
+PyQt6>=6.11.0
+requests
+numpy
+Pillow          # logo / icônes
+pypdf           # lecture des PDF
+python-docx     # lecture des Word (.docx)
+python-pptx     # lecture des PowerPoint (.pptx)
+openpyxl        # lecture des Excel (.xlsx)
+striprtf        # lecture des RTF
+ebooklib        # lecture des EPUB
+faster-whisper  # transcription audio/vidéo (Whisper local)
+# OCR + description des images : via un modèle de vision Ollama (qwen2.5vl), pas de paquet pip
