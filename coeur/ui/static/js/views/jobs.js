@@ -12,7 +12,7 @@ const STATUS = {
   running: ['run', 'En cours'], queued: ['idle', 'En attente'], paused: ['warn', 'En pause'],
   done: ['ok', 'Terminé'], failed: ['err', 'Échec'], cancelled: ['idle', 'Annulé'],
 };
-const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory' };
+const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry' };
 
 let root;
 const cards = new Map();             // job id → { el, shape }

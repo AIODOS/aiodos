@@ -25,6 +25,7 @@ découpé en unités indépendantes qui pourront être réparties entre les nœu
 - **Bibliothèques de connaissance** : fichiers, dossiers entiers, pages web ; tous les
   formats (PDF, Word, Excel, PowerPoint, code…), images (OCR + description par un
   modèle de vision) et audio/vidéo (transcription Whisper). L'IA cite ses sources.
+  Changer de modèle d'embedding relance tout seul la réindexation.
 - **Mémoire entre conversations** (optionnelle).
 - **File de tâches** persistante : priorités (urgent / normal / de fond) puis ordre
   d'arrivée, pause, annulation, réessais, reprise automatique après une coupure.
@@ -38,7 +39,7 @@ découpé en unités indépendantes qui pourront être réparties entre les nœu
    ```
    ollama pull qwen2.5-coder:7b
    ollama pull mistral:7b
-   ollama pull nomic-embed-text      # requis pour les bibliothèques
+   ollama pull embeddinggemma        # requis pour les bibliothèques (docs/embeddings.md)
    ollama pull qwen2.5vl:7b          # optionnel : lecture des images
    ```
 2. Python 3.12 ou plus récent, puis :
@@ -70,11 +71,13 @@ coeur/
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │   ├── queue.py       persistance, priorités, réessais, reprise
 │   ├── executor.py    exécution selon les ressources (GPU, embeddings, CPU, réseau)
-│   └── kinds/         types de travaux (indexation…)
+│   └── kinds/         types de travaux (indexation, réindexation…)
 ├── node/identity.py   profil de la machine
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native et interface web (HTML/CSS/JS, sans compilation)
 tests/                 tests automatisés (pytest)
+tools/                 outils de mesure (choix du modèle d'embedding)
+docs/                  notes de mesures et de choix techniques
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```
 

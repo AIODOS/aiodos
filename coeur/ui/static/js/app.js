@@ -46,7 +46,12 @@ function onJob(job) {
   state.jobs.set(job.id, job);
   emit('jobs:changed');
   updateBadge();
-  if (job.kind.startsWith('index_') && job.kind !== 'index_conversation') emit('knowledge:changed');
+  if ((job.kind.startsWith('index_') && job.kind !== 'index_conversation') || job.kind === 'reindex') {
+    emit('knowledge:changed');
+  }
+  if (!before && job.kind === 'reindex' && ACTIVE.includes(job.status)) {
+    toast('Nouveau modèle d\'embedding : réindexation des connaissances lancée (voir Tâches).', 'info', 6000);
+  }
   const finished = before && ACTIVE.includes(before) && !ACTIVE.includes(job.status);
   if (finished && job.kind !== 'index_conversation') {
     const kind = job.status === 'done' && !job.failed ? 'ok' : job.status === 'cancelled' ? 'info' : 'err';
