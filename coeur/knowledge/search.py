@@ -4,7 +4,6 @@ Les vecteurs de chaque bibliothèque sont gardés en mémoire sous forme de
 matrice normalisée ; toute écriture dans le stockage invalide ce cache.
 """
 import threading
-from collections import Counter
 
 import numpy as np
 
@@ -12,7 +11,7 @@ from coeur import db
 
 _lock = threading.Lock()
 _version = 0
-_cache = {}      # collection_id -> (version, ids, matrice normalisée)
+_cache = {}      # (collection_id, dimension) -> (version, ids, matrice normalisée)
 
 
 def invalidate():
@@ -21,28 +20,26 @@ def invalidate():
         _version += 1
 
 
-def _matrix(collection_id):
+def _matrix(collection_id, dim):
+    """Vecteurs de la bibliothèque qui ont la dimension de la question. Les autres
+    (passages sans vecteur, ou d'un ancien modèle d'embedding) sont ignorés :
+    pendant une réindexation, les passages déjà recalculés restent trouvables."""
     with _lock:
-        hit = _cache.get(collection_id)
+        hit = _cache.get((collection_id, dim))
         if hit and hit[0] == _version:
             return hit[1], hit[2]
         version = _version
     rows = db.query("SELECT k.id, k.embedding FROM chunks k "
-                    "JOIN entries e ON e.id = k.entry_id WHERE e.collection_id = ?",
-                    (collection_id,))
-    ids = np.empty(0, dtype=np.int64)
-    matrix = np.empty((0, 0), dtype=np.float32)
+                    "JOIN entries e ON e.id = k.entry_id WHERE e.collection_id = ? "
+                    "AND length(k.embedding) = ?", (collection_id, dim * 4))
+    ids = np.array([r["id"] for r in rows], dtype=np.int64)
+    matrix = np.empty((0, dim), dtype=np.float32)
     if rows:
-        vectors = [np.frombuffer(r["embedding"], dtype=np.float32) for r in rows]
-        # garde la dimension majoritaire (si le modèle d'embedding a changé)
-        dim = Counter(len(v) for v in vectors).most_common(1)[0][0]
-        keep = [i for i, v in enumerate(vectors) if len(v) == dim]
-        ids = np.array([rows[i]["id"] for i in keep], dtype=np.int64)
-        matrix = np.vstack([vectors[i] for i in keep])
+        matrix = np.vstack([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows])
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         matrix = matrix / np.where(norms == 0, 1, norms)
     with _lock:
-        _cache[collection_id] = (version, ids, matrix)
+        _cache[(collection_id, dim)] = (version, ids, matrix)
     return ids, matrix
 
 
@@ -67,8 +64,8 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
     query = query / norm
     candidates = []
     for collection_id, _name in allowed_collections(libraries, conversations):
-        ids, matrix = _matrix(collection_id)
-        if not len(ids) or matrix.shape[1] != query.shape[0]:
+        ids, matrix = _matrix(collection_id, query.shape[0])
+        if not len(ids):
             continue
         scores = matrix @ query
         for i in np.argsort(-scores)[:k * 3]:          # marge pour les exclusions

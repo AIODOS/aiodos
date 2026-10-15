@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from coeur import settings
+from coeur.jobs.kinds import reindex
 
 router = APIRouter(prefix="/api")
 
@@ -23,6 +24,11 @@ def read_settings():
 def write_settings(values: dict, request: Request):
     settings.set_many(values)
     request.app.state.bus.publish({"type": "settings"})
+    job_id = reindex.schedule()            # nouveau modèle d'embedding : tout recalculer
+    if job_id:
+        executor = request.app.state.executor
+        executor.wake()
+        executor.publish_job(job_id, force=True)
     return settings.public_view()
 
 

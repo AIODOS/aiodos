@@ -140,9 +140,10 @@ def max_chunk_index(entry_id) -> int:
     return row["m"] if row and row["m"] is not None else -1
 
 
-def append_chunks(collection_id, source, kind, origin, chunks_with_idx):
+def append_chunks(collection_id, source, kind, origin, chunks_with_idx, replace=False):
     """Ajoute des passages à une entrée retrouvée par son origine (créée au besoin).
-    Sert à la mémoire des conversations, indexée message par message."""
+    Sert à la mémoire des conversations, indexée message par message.
+    replace=True : les passages déjà là sont d'abord retirés (reconstruction)."""
     with db.transaction() as c:
         row = c.execute("SELECT id FROM entries WHERE collection_id=? AND origin=?",
                         (collection_id, origin)).fetchone()
@@ -154,9 +155,41 @@ def append_chunks(collection_id, source, kind, origin, chunks_with_idx):
         else:
             entry_id = row["id"]
             c.execute("UPDATE entries SET source=? WHERE id=?", (source, entry_id))
+            if replace:
+                c.execute("DELETE FROM chunks WHERE entry_id=?", (entry_id,))
         c.executemany("INSERT INTO chunks(entry_id, idx, text, embedding) VALUES(?, ?, ?, ?)",
                       [(entry_id, idx, text, np.asarray(vec, dtype=np.float32).tobytes())
                        for idx, text, vec in chunks_with_idx])
+    search.invalidate()
+
+
+def chunk_texts(entry_id) -> list:
+    """Texte des passages d'une entrée, dans l'ordre (vide si l'entrée n'existe plus)."""
+    return [r["text"] for r in db.query(
+        "SELECT text FROM chunks WHERE entry_id=? ORDER BY idx", (entry_id,))]
+
+
+def replace_chunks(entry_id, chunks) -> bool:
+    """Remplace les passages d'une entrée, qui garde son id, sa source et son
+    origine (réindexation). Faux si l'entrée a été retirée entre-temps.
+
+    chunks : liste de couples (texte, vecteur).
+    """
+    with db.transaction() as c:
+        if c.execute("SELECT 1 FROM entries WHERE id=?", (entry_id,)).fetchone() is None:
+            return False
+        c.execute("DELETE FROM chunks WHERE entry_id=?", (entry_id,))
+        c.executemany("INSERT INTO chunks(entry_id, idx, text, embedding) "
+                      "VALUES(?, ?, ?, ?)", _blobs(entry_id, chunks))
+    search.invalidate()
+    return True
+
+
+def retire_vectors():
+    """Efface les vecteurs de tous les passages, en gardant leur texte : ils
+    viennent d'un modèle d'embedding qui n'est plus celui des questions. La
+    recherche ignore les passages sans vecteur jusqu'à leur réindexation."""
+    db.execute("UPDATE chunks SET embedding=? WHERE length(embedding) > 0", (b"",))
     search.invalidate()
 
 

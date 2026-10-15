@@ -151,15 +151,21 @@ def split_index_conversation(params):
 
 @task("index_conversation")
 def run_index_conversation(payload):
-    """Indexe seulement les nouveaux messages (pas de ré-embedding du début).
+    """Indexe seulement les nouveaux messages (pas de ré-embedding du début),
+    sauf en reconstruction (payload « rebuild », après un changement de modèle
+    d'embedding) : tous les messages sont recalculés et remplacent les anciens.
     Chaque passage porte l'id du message dans son index : idx = id×1000 + n."""
     conv_id = payload["conversation_id"]
+    rebuild = bool(payload.get("rebuild"))
+    collection_id = store.conversation_collection_id()
     conv = db.query_one("SELECT title FROM conversations WHERE id=?", (conv_id,))
     if conv is None:
+        store.remove_by_origin(collection_id, str(conv_id))     # mémoire orpheline
         return {"skipped": True, "ext": "conversation", "reason": "supprimée"}
-    collection_id = store.conversation_collection_id()
     entry = store.entry_by_origin(collection_id, str(conv_id))
-    last_message = store.max_chunk_index(entry["id"]) // 1000 if entry else -1
+    if rebuild and entry is None:
+        return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
+    last_message = store.max_chunk_index(entry["id"]) // 1000 if entry and not rebuild else -1
     messages = db.query("SELECT id, role, content FROM messages WHERE conversation_id=? "
                         "AND id > ? ORDER BY id", (conv_id, last_message))
     pieces = []
@@ -168,11 +174,14 @@ def run_index_conversation(payload):
         for n, piece in enumerate(chunking.chunk_text(f"{who} : {m['content']}")[:999]):
             pieces.append((m["id"] * 1000 + n, piece))
     if not pieces:
+        if rebuild:                       # plus aucun message : rien à garder en mémoire
+            store.remove_by_origin(collection_id, str(conv_id))
         return {"chunks": 0}
     vectors = ollama.embed([p for _, p in pieces])
     store.append_chunks(collection_id, f"{conv['title']} · #{conv_id}", "conversation",
                         str(conv_id), [(idx, text, vec)
-                                       for (idx, text), vec in zip(pieces, vectors)])
+                                       for (idx, text), vec in zip(pieces, vectors)],
+                        replace=rebuild)
     return {"chunks": len(pieces)}
 
 

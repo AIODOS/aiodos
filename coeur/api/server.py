@@ -12,6 +12,7 @@ from coeur.api.security import Guard
 from coeur.api.routes import chat, conversations, jobs, knowledge, network, node, system
 from coeur.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
 from coeur.jobs.executor import Executor
+from coeur.jobs.kinds import reindex
 from coeur.network.manager import NetworkManager
 from coeur.node import identity
 
@@ -27,6 +28,9 @@ def create_app(token: str, hosts: set, network_options: dict | None = None) -> F
         app.state.executor = executor
         app.state.network = NetworkManager(node_id, bus, network_options)
         await executor.start()
+        # Modèle d'embedding changé (réglage, mise à jour) ou réindexation à reprendre
+        if await asyncio.to_thread(reindex.schedule, resume=True):
+            executor.wake()
         await app.state.network.apply()          # ne démarre que si le réseau est activé
         yield
         await app.state.network.shutdown()
