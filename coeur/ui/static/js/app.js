@@ -8,9 +8,10 @@ import { mountChat } from './views/chat.js';
 import { mountLibrary } from './views/library.js';
 import { mountJobs, loadJobs } from './views/jobs.js';
 import { mountNode, loadNode } from './views/node.js';
+import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js';
 import { mountSettings } from './views/settings.js';
 
-const VIEWS = ['chat', 'library', 'jobs', 'node', 'settings'];
+const VIEWS = ['chat', 'library', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
 
 function show(view) {
@@ -62,6 +63,12 @@ function onEvent(ev) {
     case 'conversations': emit('conversations:changed'); break;
     case 'knowledge': emit('knowledge:changed'); break;
     case 'settings': loadSettings(); break;
+    case 'network': emit('network:changed'); break;
+    case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
+    case 'pair_result':
+      toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`
+        : `Appairage avec « ${ev.name} » annulé.`, ev.outcome === 'paired' ? 'ok' : 'info', 6000);
+      break;
     default: break;
   }
 }
@@ -72,6 +79,7 @@ async function boot() {
   mountLibrary($('#view-library'));
   mountJobs($('#view-jobs'));
   mountNode($('#view-node'));
+  mountNetwork($('#view-network'));
   mountSettings($('#view-settings'));
   $$('.rail-btn').forEach(b => { b.onclick = () => show(b.dataset.view); });
   on('view:show', show);
@@ -87,6 +95,7 @@ async function boot() {
 
   loadJobs().then(updateBadge);
   loadNode();                               // en parallèle : les libellés VRAM suivront
+  loadNetwork();
   await loadSettings();
   await loadModels();
   const last = prefs.get('lastConversation', null);

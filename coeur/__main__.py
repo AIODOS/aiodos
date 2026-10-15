@@ -69,7 +69,11 @@ def main():
                          help="pas d'annonces UDP (ajout par adresse uniquement)")
     parser.add_argument("--no-migrate", action="store_true",
                         help="ne pas importer les données de la v1 (tests)")
+    parser.add_argument("--data-dir", default=None,
+                        help="dossier de données (plusieurs nœuds sur une même machine)")
     args = parser.parse_args()
+    if args.data_dir:
+        os.environ["COEUR_DATA_DIR"] = os.path.abspath(args.data_dir)
 
     _setup_logging()
     _windows_app_id()

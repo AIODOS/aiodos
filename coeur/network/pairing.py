@@ -148,4 +148,6 @@ class Pairing:
         if outcome:
             self.m.publish({"type": "pair_result", "node_id": pending.node_id,
                             "name": pending.name, "outcome": outcome})
+        if outcome == "paired":
+            self.m.on_paired(pending.node_id)
         self.m.changed()

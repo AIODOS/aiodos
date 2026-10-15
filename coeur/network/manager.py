@@ -42,6 +42,7 @@ class NetworkManager:
         self._discovery = None
         self._refresh_task = None
         self._last_profile = {}
+        self._loop = None
 
     # ------------------------------------------------------------- réglages
     def name(self) -> str:
@@ -70,6 +71,7 @@ class NetworkManager:
 
     async def _start(self):
         from coeur.network.p2p_app import create_p2p_app
+        self._loop = asyncio.get_running_loop()
         self.error = None
         config = uvicorn.Config(create_p2p_app(self), host=self.host, port=self.p2p_port,
                                 log_config=None, log_level="warning", access_log=False)
@@ -183,6 +185,13 @@ class NetworkManager:
             self._last_profile[peer["node_id"]] = time.time()
             await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)
         self.changed()
+
+    def on_paired(self, node_id: str):
+        """Nouvelle machine appairée : on demande son profil tout de suite
+        (appelable depuis n'importe quel thread)."""
+        if self._loop and not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(self.refresh_now(node_id)))
 
     async def refresh_now(self, node_id: str):
         self._last_profile.pop(node_id, None)

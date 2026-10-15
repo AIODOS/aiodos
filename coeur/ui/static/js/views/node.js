@@ -26,6 +26,7 @@ export function mountNode(container) {
   container.append(root);
   on('view:shown', view => { if (view === 'node') loadNode(); });
   on('settings:loaded', renderShare);
+  on('network:loaded', renderNetworkSummary);
   setInterval(() => { if (state.view === 'node') loadNode(); }, 5000);
 }
 
@@ -87,13 +88,27 @@ function render() {
     ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
       <tbody>${rows}</tbody></table>` : '<div class="empty">Aucun modèle (Ollama ne répond pas ?)</div>'}`;
 
-  $('#node-network', root).innerHTML = `
-    <h2>${icon('network')}Réseau local</h2>
-    <div class="empty" style="padding:22px 10px">${icon('network')}
-      <div>Aucune autre machine pour l'instant.</div>
-      <div class="faint" style="margin-top:6px;font-size:12.5px">Phase 1 : découverte automatique des nœuds Cœur IA de ton réseau,
-      appairage par code, échanges chiffrés, et répartition des tâches entre tes 2-3 PC.</div></div>`;
+  renderNetworkSummary();
   renderShare();
+}
+
+function renderNetworkSummary() {
+  const box = root && $('#node-network', root);
+  if (!box) return;
+  const net = state.network;
+  const peers = net?.peers || [];
+  const online = peers.filter(p => p.online).length;
+  const summary = !net?.enabled ? 'Désactivé'
+    : peers.length ? `${peers.length} machine(s) appairée(s), ${online} en ligne`
+      : 'Activé, aucune machine appairée pour l\'instant';
+  box.innerHTML = `
+    <h2>${icon('network')}Réseau local</h2>
+    <div class="setting-row" style="border:0;padding:0">
+      <div class="txt"><b>${summary}</b>
+        <small>Découverte des autres nœuds, appairage par code, échanges chiffrés.</small></div>
+      <button class="btn sm" id="go-network">${icon('network')}Ouvrir</button>
+    </div>`;
+  $('#go-network', box).onclick = () => emit('view:show', 'network');
 }
 
 function shareRow(key, title, text) {

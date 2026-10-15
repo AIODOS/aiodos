@@ -30,6 +30,7 @@ export function modal(opts) {
         <div class="modal">
           <h3>${opts.iconName ? icon(opts.iconName) : ''}${esc(opts.title || '')}</h3>
           ${opts.text ? `<div class="text">${esc(opts.text)}</div>` : ''}
+          ${opts.code ? `<div class="pair-code">${esc(String(opts.code).replace(/^(\d{3})(\d{3})$/, '$1 $2'))}</div>` : ''}
           ${opts.quote ? `<div class="quote">${esc(opts.quote)}</div>` : ''}
           ${field}
           ${opts.check ? `<label class="check"><input type="checkbox"> ${esc(opts.check)}</label>` : ''}
