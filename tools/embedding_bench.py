@@ -173,7 +173,7 @@ def evaluate(data, P, Q, O, D):
                    "missed_questions": int(sum(b < t for b in best_rel)),
                    "noise_above": int(sum(s >= t for s in far)),
                    "near_above": int(sum(s >= t for s in near + off_near))}
-                  for t in np.arange(0.30, 0.755, 0.01)],
+                  for t in np.arange(0.20, 0.755, 0.01)],
     }
 
 

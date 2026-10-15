@@ -550,6 +550,76 @@
   },
   "sweep": [
    {
+    "t": 0.2,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.21,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.22,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.23,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.24,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.25,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.26,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.27,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.28,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
+    "t": 0.29,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1476,
+    "near_above": 23
+   },
+   {
     "t": 0.3,
     "rel_lost": 0,
     "missed_questions": 0,
@@ -879,9 +949,9 @@
   "vram_mb": 320.1899995803833,
   "ram_mb": 0.0,
   "context": 2048,
-  "cold_s": 2.7610233000000335,
-  "ms_per_passage": 21.394193750005286,
-  "ms_per_question": 16.79622222222103
+  "cold_s": 1.6207004999998844,
+  "ms_per_passage": 19.232478124997954,
+  "ms_per_question": 15.971161111110632
  },
  {
   "rel": {
@@ -985,6 +1055,76 @@
    ]
   },
   "sweep": [
+   {
+    "t": 0.2,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1444,
+    "near_above": 23
+   },
+   {
+    "t": 0.21,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1427,
+    "near_above": 23
+   },
+   {
+    "t": 0.22,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1402,
+    "near_above": 23
+   },
+   {
+    "t": 0.23,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1356,
+    "near_above": 23
+   },
+   {
+    "t": 0.24,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1311,
+    "near_above": 23
+   },
+   {
+    "t": 0.25,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1260,
+    "near_above": 23
+   },
+   {
+    "t": 0.26,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1190,
+    "near_above": 23
+   },
+   {
+    "t": 0.27,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1114,
+    "near_above": 23
+   },
+   {
+    "t": 0.28,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 1029,
+    "near_above": 23
+   },
+   {
+    "t": 0.29,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 943,
+    "near_above": 22
+   },
    {
     "t": 0.3,
     "rel_lost": 0,
@@ -1315,9 +1455,9 @@
   "vram_mb": 657.2599992752075,
   "ram_mb": 0.0,
   "context": 4096,
-  "cold_s": 2.9575457000000824,
-  "ms_per_passage": 22.26797499999833,
-  "ms_per_question": 21.849386111107886
+  "cold_s": 2.746753099999978,
+  "ms_per_passage": 23.37893125000079,
+  "ms_per_question": 32.095588888890035
  },
  {
   "rel": {
@@ -1421,6 +1561,76 @@
    ]
   },
   "sweep": [
+   {
+    "t": 0.2,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 78,
+    "near_above": 11
+   },
+   {
+    "t": 0.21,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 65,
+    "near_above": 10
+   },
+   {
+    "t": 0.22,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 49,
+    "near_above": 10
+   },
+   {
+    "t": 0.23,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 39,
+    "near_above": 9
+   },
+   {
+    "t": 0.24,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 30,
+    "near_above": 8
+   },
+   {
+    "t": 0.25,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 20,
+    "near_above": 8
+   },
+   {
+    "t": 0.26,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 17,
+    "near_above": 8
+   },
+   {
+    "t": 0.27,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 14,
+    "near_above": 7
+   },
+   {
+    "t": 0.28,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 12,
+    "near_above": 6
+   },
+   {
+    "t": 0.29,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 8,
+    "near_above": 4
+   },
    {
     "t": 0.3,
     "rel_lost": 0,
@@ -1751,9 +1961,9 @@
   "vram_mb": 657.2599992752075,
   "ram_mb": 0.0,
   "context": 4096,
-  "cold_s": 3.2766397999998844,
-  "ms_per_passage": 22.814509375002956,
-  "ms_per_question": 26.435199999999288
+  "cold_s": 3.3966301000000385,
+  "ms_per_passage": 24.864984375000176,
+  "ms_per_question": 55.75456388889203
  },
  {
   "rel": {
@@ -1857,6 +2067,76 @@
    ]
   },
   "sweep": [
+   {
+    "t": 0.2,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 144,
+    "near_above": 20
+   },
+   {
+    "t": 0.21,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 114,
+    "near_above": 19
+   },
+   {
+    "t": 0.22,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 91,
+    "near_above": 19
+   },
+   {
+    "t": 0.23,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 78,
+    "near_above": 18
+   },
+   {
+    "t": 0.24,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 66,
+    "near_above": 17
+   },
+   {
+    "t": 0.25,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 53,
+    "near_above": 16
+   },
+   {
+    "t": 0.26,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 41,
+    "near_above": 12
+   },
+   {
+    "t": 0.27,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 33,
+    "near_above": 10
+   },
+   {
+    "t": 0.28,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 28,
+    "near_above": 10
+   },
+   {
+    "t": 0.29,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 24,
+    "near_above": 9
+   },
    {
     "t": 0.3,
     "rel_lost": 0,
@@ -2187,9 +2467,9 @@
   "vram_mb": 653.8799991607666,
   "ram_mb": 0.0,
   "context": 2048,
-  "cold_s": 2.5114203000000543,
-  "ms_per_passage": 19.564121874999785,
-  "ms_per_question": 17.874786111109287
+  "cold_s": 2.620732000000089,
+  "ms_per_passage": 21.336403125005177,
+  "ms_per_question": 18.00803611111077
  },
  {
   "rel": {
@@ -2293,6 +2573,76 @@
    ]
   },
   "sweep": [
+   {
+    "t": 0.2,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 980,
+    "near_above": 23
+   },
+   {
+    "t": 0.21,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 900,
+    "near_above": 22
+   },
+   {
+    "t": 0.22,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 823,
+    "near_above": 22
+   },
+   {
+    "t": 0.23,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 754,
+    "near_above": 21
+   },
+   {
+    "t": 0.24,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 668,
+    "near_above": 20
+   },
+   {
+    "t": 0.25,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 604,
+    "near_above": 20
+   },
+   {
+    "t": 0.26,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 528,
+    "near_above": 18
+   },
+   {
+    "t": 0.27,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 467,
+    "near_above": 18
+   },
+   {
+    "t": 0.28,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 410,
+    "near_above": 18
+   },
+   {
+    "t": 0.29,
+    "rel_lost": 0,
+    "missed_questions": 0,
+    "noise_above": 346,
+    "near_above": 18
+   },
    {
     "t": 0.3,
     "rel_lost": 0,
@@ -2623,8 +2973,8 @@
   "vram_mb": 1171.9299993515015,
   "ram_mb": 0.0,
   "context": 4096,
-  "cold_s": 2.817806699999892,
-  "ms_per_passage": 25.623428125001624,
-  "ms_per_question": 23.129027777776574
+  "cold_s": 2.2766861000000063,
+  "ms_per_passage": 26.48299375000107,
+  "ms_per_question": 19.830674999999093
  }
 ]
