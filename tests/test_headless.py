@@ -1,7 +1,8 @@
 """Nœud sans fenêtre (téléphone, machine de calcul) : il ne doit dépendre ni de la
 fenêtre native (pywebview, pythonnet), ni de la transcription (faster-whisper),
-absentes de requirements-node.txt. Vérifié dans un processus à part, où ces
-modules sont introuvables."""
+absentes de requirements-node.txt, ni des paquets de lecture des documents (un
+nœud minimal s'en passe : il annonce alors seulement les formats qu'il lit).
+Vérifié dans un processus à part, où ces modules sont introuvables."""
 import os
 import subprocess
 import sys
@@ -12,7 +13,8 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 WITHOUT_GUI = r'''
 import importlib, pkgutil, sys
 
-ABSENT = {"webview", "clr", "clr_loader", "pythonnet", "faster_whisper", "ctranslate2", "av"}
+ABSENT = {"webview", "clr", "clr_loader", "pythonnet", "faster_whisper", "ctranslate2", "av",
+          "pypdf", "docx", "pptx", "openpyxl", "striprtf", "ebooklib"}
 
 class Absent:
     def find_spec(self, name, path=None, target=None):
@@ -30,6 +32,9 @@ for module in pkgutil.walk_packages(coeur.__path__, "coeur."):
 from fastapi.testclient import TestClient
 from coeur.api.server import create_app
 from coeur.network.worker import Worker
+from coeur.services import extract
+
+assert extract.readable_documents() == [".htm", ".html", ".odt"]
 
 with TestClient(create_app("jeton", {"testserver"})) as client:
     reply = client.get("/api/settings", headers={"X-Coeur-Token": "jeton"})
