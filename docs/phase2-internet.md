@@ -1,8 +1,9 @@
 # Relier des nœuds Cœur IA par Internet (étude préalable aux phases 2 et 3)
 
-> Étude du 16/10/2026, **en cours de rédaction**. Rien n'est implémenté : ce document
-> prépare des choix, dont plusieurs reviennent à l'utilisateur (cf.
-> [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)).
+> Étude du 16/10/2026. Rien n'est implémenté : ce document prépare des choix, dont
+> plusieurs reviennent à l'utilisateur (cf.
+> [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)). Les faits sur les
+> projets étudiés datent de ce jour et vieilliront vite : les revérifier avant d'agir.
 
 ## En bref
 
@@ -133,7 +134,7 @@ rendez-vous et de repli chiffré.
   transporte une connexion TCP (3 Mo pour Windows), et `sendme` (transfert de
   fichiers), **tous deux empaquetés dans Termux**. Mais dumbpipe est câblé sur les
   relais et le DNS de n0, sans liste blanche de pairs. Pour les autres langages, la
-  documentation de n0 conseille elle-même un petit programme compagnon qui expose Iroh
+  documentation de n0 suggère elle-même un petit programme compagnon qui expose Iroh
   en local.
 - **Plateformes** : Windows x64 de première classe (les bugs Windows de 2026 sont
   corrigés). Android est géré en Rust, Kotlin et Node ; un binaire nu sous Termux
@@ -413,9 +414,11 @@ Ce que ça implique :
 - **IPv6 d'abord**, et plusieurs adresses candidates annoncées pour chaque nœud ;
 - **qui ouvre la connexion ne doit pas décider qui fait les requêtes.** Avec HTTP, le
   client parle et le serveur répond ; avec une connexion QUIC entre pairs, les deux
-  côtés ouvrent des flux dans la même connexion. Le téléphone, injoignable, ouvre la
-  connexion vers le PC, et le PC peut ensuite lui envoyer des requêtes. C'est
-  indispensable si le téléphone confie du travail au PC ;
+  côtés ouvrent des flux dans la même connexion. Le téléphone, qu'on ne peut pas
+  joindre directement, ouvre la connexion (vers le PC, ou vers le relais où il
+  s'inscrit), et le PC peut ensuite lui envoyer des requêtes. C'est indispensable si le
+  téléphone confie du travail au PC : dans le modèle « pull », c'est alors le PC qui
+  vient demander les unités ;
 - **un relais qui sait porter des unités de travail**, pas seulement coordonner le
   perçage ;
 - **mesurer nous-mêmes** : aucune mesure récente du comportement des CGNAT mobiles ou
@@ -492,9 +495,10 @@ relais (Q16) et les autres questions du § 6 restent à trancher.
 
 - **Données** : pour chaque machine appairée, `coeur-net` ouvre un port local qui
   mène, à travers Iroh, au serveur `p2p_app` de cette machine (comme dumbpipe). Dans
-  l'autre sens, il n'accepte que les clés de sa liste blanche et les passe à `p2p_app`,
-  qui n'écoute plus que sur `127.0.0.1` pour ce chemin. Les routes `/p2p/v1/…` et
-  l'enveloppe ne changent pas.
+  l'autre sens, il n'accepte que les clés de sa liste blanche et transmet leurs
+  requêtes à `p2p_app`, qui n'écoute plus que sur `127.0.0.1` pour ce chemin. Quand
+  l'autre machine a déjà ouvert une connexion, le compagnon s'en sert aussi pour ses
+  propres requêtes (cf. § 3). Les routes `/p2p/v1/…` et l'enveloppe ne changent pas.
 - **Contrôle** : une petite API locale (ma clé, état de chaque connexion, directe ou
   relayée, liste blanche, relais, invitations), utilisée par un module Python dédié qui
   lance, surveille et relance le compagnon.
@@ -539,7 +543,7 @@ et les tâches portables passent telles quelles dans un tuyau qui sait traverser
 | **Appairage avec un geste humain des deux côtés** | [`pairing.py`](../coeur/network/pairing.py) | La confiance ne s'établit jamais automatiquement. Le *canal* change (cf. plus bas), pas le principe. |
 | **Modèle « pull » avec baux** de 90 s renouvelés toutes les ~30 s ; unité rendue si l'utilisateur revient ; résultat en retard accepté tant que l'unité n'a pas été redonnée | [`leases.py`](../coeur/jobs/leases.py), [`work.py`](../coeur/network/work.py), [`worker.py`](../coeur/network/worker.py) | C'est exactement ce qu'il faut sur Internet : les coupures et les machines qui disparaissent sont déjà prévues, et c'est la machine qui calcule qui ouvre la connexion. |
 | **Tâches portables prédéfinies** : calcul n'importe où, intégration chez le propriétaire ; aucun code venu d'ailleurs | [`registry.py`](../coeur/jobs/registry.py) | Première protection d'une machine qui calcule pour d'autres (BOINC, lui, télécharge les programmes des projets). À ne jamais abandonner. |
-| **Exigence du même modèle à l'empreinte près** (digest Ollama) | `work.can_serve` | Indispensable pour que des vecteurs calculés ailleurs soient comparables. |
+| **Exigence du même modèle à l'empreinte près** (digest Ollama) | `work.can_serve` | Indispensable pour que des vecteurs calculés ailleurs soient comparables. Et les modèles ne voyagent jamais entre nœuds : chaque machine les tient du registre officiel. À garder, car les lecteurs de fichiers de modèle (GGUF) ont des failles récurrentes. |
 | **Bibliothèque « gardée sur ce PC »** | `store.local_only_ids`, `units.local_only` | Devient le premier cran d'une portée à plusieurs niveaux (cf. § 6). |
 | **Versions explicites** : `coeur/1`, `WORK_API` | `envelope.PROTOCOL`, `work.WORK_API` | Un protocole ouvert et versionné : on passe à `coeur/2`, on ne bricole pas `coeur/1`. |
 
@@ -547,13 +551,13 @@ et les tâches portables passent telles quelles dans un tuyau qui sait traverser
 
 | Aujourd'hui | Où | Sur Internet |
 |---|---|---|
-| Identité `node_id = uuid4().hex`, tirée au hasard | [`identity.py`](../coeur/node/identity.py) | **Identité = clé publique Ed25519** : c'est l'adresse du nœud sur Internet, et le transport l'authentifie. La clé privée devient le secret le plus précieux du nœud (à protéger, par exemple avec DPAPI sous Windows). Migration : les paires existantes échangent leurs nouvelles clés par un message scellé avec leur clé de paire actuelle, sans ré-appairage. |
+| Identité `node_id = uuid4().hex`, tirée au hasard | [`identity.py`](../coeur/node/identity.py) | **Identité réseau = clé publique Ed25519** (l'EndpointId d'Iroh) : c'est l'adresse du nœud sur Internet, et le transport l'authentifie. L'identifiant actuel peut rester le nom du nœud dans le protocole, lié à sa clé lors de l'appairage. La clé privée devient le secret le plus précieux du nœud (à protéger, par exemple avec DPAPI sous Windows). Migration : les paires existantes échangent leurs clés par un message scellé avec leur clé de paire actuelle, sans nouvel appairage. |
 | Machine jointe à `peers.address:port`, mise à jour par les annonces UDP | [`peers.py`](../coeur/network/peers.py), [`manager.py`](../coeur/network/manager.py) | **On joint une clé, pas une adresse.** IP directes et relais deviennent des indices mis en cache, retrouvés par la découverte. |
 | Découverte par diffusion UDP (`255.255.255.255:47700`) | [`discovery.py`](../coeur/network/discovery.py) | **Gardée pour le réseau local** (ou remplacée par la découverte locale du transport). Sur Internet, pas de découverte d'inconnus en phase 2 : on ajoute ses amis par invitation, puis on retrouve leurs adresses par une publication signée (cf. § 2). |
 | Appairage : code à 6 chiffres comparé sur les deux écrans ; `pair/start` ouvert à toute machine du réseau local (3 demandes en attente au plus) | [`pairing.py`](../coeur/network/pairing.py), [`p2p_app.py`](../coeur/network/p2p_app.py) | Les deux écrans ne sont plus côte à côte. **Invitation** : un lien ou un QR code contenant la clé publique de l'invitant, un secret à usage unique et une date d'expiration, transmis par un canal que les deux amis jugent sûr (en personne, messagerie chiffrée). `pair/start` exige ce secret : un inconnu qui connaît la clé ne peut pas déclencher de demande. Le code à 6 chiffres reste possible par téléphone ou en visio ; il faudra alors le dériver aussi des deux clés publiques (liaison au canal), pour qu'un intermédiaire ne puisse pas relayer l'appairage. |
-| Serveur entre nœuds FastAPI sur `0.0.0.0:47701`, en HTTP (contenus scellés) | [`p2p_app.py`](../coeur/network/p2p_app.py) | **Jamais exposé tel quel sur Internet** (pas de redirection de port ni d'UPnP vers lui) : il passe derrière le transport P2P, qui ne laisse entrer que des clés connues (liste blanche) et les porteurs d'une invitation valide. Le code des routes ne change pas. |
-| Appels `requests.post("http://ip:port/p2p/v1/…")`, délai 10 s | [`client.py`](../coeur/network/client.py) | Même requête, autre chemin (tunnel local ou flux du transport). Délais à revoir : un passage par relais ajoute de la latence. |
-| Clé de paire statique : qui la vole peut déchiffrer tout trafic enregistré | `crypto.pair_secrets` | Sur Internet, le trafic peut être enregistré en route. La **confidentialité persistante** (*forward secrecy*) viendra du transport (TLS 1.3 ou Noise, à clés éphémères) ; prévoir aussi une rotation de la clé de paire. |
+| Serveur entre nœuds FastAPI sur `0.0.0.0:47701`, en HTTP (contenus scellés) | [`p2p_app.py`](../coeur/network/p2p_app.py) | **Jamais exposé tel quel sur Internet** (pas de redirection de port ni d'UPnP vers lui) : il passe derrière le transport P2P (le compagnon du § 4), qui ne laisse entrer que des clés connues (liste blanche) et les porteurs d'une invitation valide, et pour ce chemin il n'écoute plus que sur `127.0.0.1`. Comme l'adresse vue est alors locale, l'identité de l'appelant vient du transport et de l'enveloppe, plus de l'adresse IP. Le code des routes ne change pas. |
+| Appels `requests.post("http://ip:port/p2p/v1/…")`, délai 10 s | [`client.py`](../coeur/network/client.py) | Même requête, autre chemin : le port local que le compagnon ouvre vers chaque machine appairée. Délais à revoir : un passage par relais ajoute de la latence. |
+| Clé de paire statique : qui la vole peut déchiffrer tout trafic enregistré | `crypto.pair_secrets` | Sur Internet, le trafic peut être enregistré en route. La **confidentialité persistante** (*forward secrecy*) viendra du transport (TLS 1.3 dans Iroh, à clés éphémères) ; prévoir aussi une rotation de la clé de paire. |
 | Fichier de l'unité envoyé en base64 dans du JSON, par morceaux de 2 Mio, jusqu'à 512 Mio, contrôlé par SHA-256 | `work.blob`, `worker._download` | **Flux binaire** (le base64 coûte un tiers de volume en plus), reprise après coupure, plafond par défaut bien plus bas : le débit montant d'une box et un forfait mobile ne sont pas ceux d'un réseau local. |
 | Contrôle des sorties : forme, valeurs finies, dimension | `index.check_embedded` | Suffisant entre ses propres machines ; **insuffisant face à un tricheur** : un vecteur plausible mais faux passe. Cf. § 6.3. |
 | Réciprocité : secondes de calcul **déclarées par le calculateur** (plafonnées à 24 h par unité) | `work.result`, `peers.account` | Acceptable entre amis ; un inconnu peut gonfler son compte pour être servi en premier. Cf. § 6.4. |
@@ -569,8 +573,8 @@ aux amis ; les autres peuvent attendre la phase 3.
 
 Constat d'ensemble : aucun projet libre et mûr ne réunit aujourd'hui « pas de
 blockchain », « inconnus », « vérification » et « incitations ». Petals, hivemind et exo
-n'ont ni vérification ni incitation : ils supposent un essaim de confiance, et Petals (à
-l'arrêt depuis septembre 2024) déconseille d'y mettre des données sensibles. Ceux qui en
+n'ont ni vérification ni incitation : ils supposent un essaim de confiance, et Petals
+(sans activité depuis septembre 2024) déconseille d'y mettre des données sensibles. Ceux qui en
 ont (Nous Psyche, Gensyn, Prime Intellect) s'appuient sur une blockchain pour la
 coordination ou les paiements, même si leurs mécanismes de vérification n'en dépendent
 pas. Il n'y a donc pas de modèle à recopier tel quel.
@@ -724,7 +728,13 @@ Ce qu'on sait :
 - **Q16 [phase 2]** — Infrastructure : accepte-t-on par défaut des relais publics gérés
   par un tiers (remplaçables, mais gérés par quelqu'un d'autre) ? Un relais hébergé par
   le projet ? Par un membre du cercle qui a une IP publique ? Aucun relais (connexion
-  directe ou rien) ?
+  directe ou rien) ? Repères : les relais publics de n0 sont gratuits, mais réservés au
+  développement et aux usages amateurs, avec des limites non publiées ; n0 vend des
+  relais à partir de 19 $ par mois ; un relais auto-hébergé demande une IP publique et
+  un nom de domaine (un petit serveur loué suffit). Un relais ne voit jamais le contenu,
+  mais il voit qui parle à qui, quand et combien. Même question pour l'annuaire : DHT
+  Mainline (aucun serveur, trafic de type BitTorrent visible) ou DNS (celui de n0, ou
+  auto-hébergé).
 - **Q17** — Responsabilité : calculer pour un inconnu, c'est lire ses fichiers (peut-être
   illicites, ou contenant des données personnelles de tiers, ce qui relève du RGPD) et
   générer du texte sur sa machine. Faut-il une charte, des tâches exclues ?
@@ -750,10 +760,12 @@ quelques unités d'indexation ; observer Termux en arrière-plan. dumbpipe passe
 relais et l'annuaire de n0 : acceptable pour un essai, pas au-delà (le contenu reste
 scellé par l'enveloppe). Quelques détails seront à contourner : à travers un tunnel,
 l'adresse vue est `127.0.0.1`.
+
 *Fini quand* : un tableau de mesures par cas réel, et la décision de continuer avec
 Iroh, ou de passer au plan B (rust-libp2p, ou aioice + aioquic).
 
 **2.1 Trancher les questions [phase 2]** du § 6 : Q1, Q2, Q3, Q5, Q6, Q9 et Q16.
+
 *Fini quand* : les réponses sont écrites dans ce document.
 
 **2.2 Le compagnon `coeur-net`.** Programme Rust (GPL-3.0) sur Iroh 1.x, à version
@@ -762,6 +774,7 @@ API locale de contrôle, relais et annuaire configurables, ouverture de port
 automatique. Compilé pour Windows x64 et Android arm64 (Termux). Côté Python, un
 module dédié le lance et le surveille, et `client.call` choisit le chemin : réseau
 local, ou compagnon.
+
 *Fini quand* : deux nœuds sur une même machine (comme les démos A et B d'aujourd'hui)
 font passer le travail par le compagnon, relais coupés, avec des tests automatiques.
 
@@ -771,27 +784,32 @@ table `peers` migrée (clé, relais, dernières adresses connues) ; contrôle qu
 authentifiée par le transport est bien celle de l'émetteur de l'enveloppe ; code de
 vérification dérivé aussi des deux clés. Les paires existantes passent à `coeur/2` par
 un message scellé avec leur clé actuelle, sans nouvel appairage.
+
 *Fini quand* : deux nœuds déjà appairés migrent seuls, et un nœud `coeur/1` reçoit un
 message clair (« mets à jour Cœur IA ») au lieu d'une erreur obscure.
 
 **2.4 Invitation à distance.** Lien ou QR code contenant la clé de l'invitant, son
 relais, un secret à usage unique et une date d'expiration ; `pair/start` exige ce
 secret ; la confirmation sur les deux machines reste obligatoire.
+
 *Fini quand* : un ami s'appaire sans être sur le même réseau, et une invitation déjà
 utilisée ou périmée est refusée.
 
 **2.5 Politique de partage** (selon les réponses de 2.1) : niveaux de confiance,
 portée des bibliothèques, métadonnées réduites (nom de fichier neutre, profil allégé),
 plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
+
 *Fini quand* : chaque réponse de 2.1 se retrouve dans un réglage ou une règle testée.
 
 **2.6 Transferts adaptés à Internet** : fichier de l'unité en flux binaire avec
 reprise, plafond de taille par défaut plus bas, délais revus pour les chemins relayés.
+
 *Fini quand* : une coupure en plein transfert reprend où elle s'était arrêtée.
 
 **2.7 Relais** (selon Q16) : relais configurables dans l'interface, état direct ou
 relayé visible pour chaque machine, guide d'auto-hébergement d'`iroh-relay` (liste
 blanche de clés ou jeton).
+
 *Fini quand* : un relais auto-hébergé sert deux machines qui ne peuvent pas se joindre
 en direct.
 
