@@ -52,7 +52,8 @@ def sharing_state(previous=None) -> dict:
     device = "ce téléphone" if supply["mobile"] else "ce PC"
     if settings.get("share_on_ac_only"):
         if supply["plugged"] is False:
-            return {"active": False, "state": "battery", "detail": f"En pause : {device} est sur batterie."}
+            return {"active": False, "state": "battery",
+                    "detail": f"En pause : {device} est sur batterie."}
         if supply["plugged"] is None and supply["mobile"]:
             return {"active": False, "state": "unknown",
                     "detail": "En pause : impossible de savoir si ce téléphone est en charge "
@@ -77,8 +78,8 @@ def _phone_pause(supply, previous) -> dict | None:
     Ici, des écarts plutôt qu'une attente, pour ne pas s'arrêter et repartir sans
     cesse : un téléphone qui calcule ne s'arrête que 5 % sous la charge minimale
     (sur le port USB d'un PC, il peut se décharger en calculant), et ne repart
-    qu'après avoir perdu 3 °C. Son inactivité n'est pas mesurable sans droits
-    root : c'est la charge qui dit qu'il n'est pas dans une poche."""
+    qu'après avoir perdu 3 °C. Son inactivité (écran allumé) n'est pas mesurable
+    sans adb : c'est la charge qui dit qu'il n'est pas dans une poche."""
     was = (previous or {}).get("state")
     level, minimum = supply["level"], int(settings.get("share_min_battery") or 0)
     floor = minimum - BATTERY_MARGIN if was == "ready" else minimum

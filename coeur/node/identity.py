@@ -95,11 +95,6 @@ def gpus() -> list:
     return result
 
 
-def on_ac_power():
-    """True sur secteur (ou en charge), False sur batterie, None si inconnu."""
-    return power.read()["plugged"]
-
-
 def idle_seconds():
     """Temps depuis la dernière action clavier/souris (base du mode « économiseur »)."""
     if sys.platform != "win32":
