@@ -9,8 +9,9 @@
 //!
 //! Si les deux machines se connectent en même temps, chacune garde celle qu'a ouverte la
 //! plus petite des deux clés (le même choix des deux côtés) ; l'autre est fermée dès
-//! qu'elle est inactive. Une connexion morte (réseau changé, machine éteinte) est retirée
-//! quand Iroh la déclare fermée ; la requête suivante en ouvre une nouvelle.
+//! qu'elle est inactive. Une connexion bien plus récente l'emporte sur l'ancienne (l'autre
+//! machine a redémarré, ou changé de réseau). Une connexion morte est retirée quand Iroh
+//! la déclare fermée ; la requête suivante en ouvre une nouvelle.
 
 use std::{
     collections::HashMap,
@@ -37,6 +38,9 @@ use crate::{ALPN, allowlist::Allowlist, close, inbound};
 const SWEEP_EVERY: Duration = Duration::from_secs(10);
 /// Une connexion en double n'est fermée qu'après ce temps sans aucun flux.
 const DUPLICATE_IDLE: Duration = Duration::from_secs(20);
+/// Deux connexions ouvertes à moins de 10 s d'écart : appels simultanés, pas un
+/// redémarrage (cf. `choose`).
+const RACE_WINDOW: Duration = Duration::from_secs(10);
 
 /// Activité d'une connexion : flux en cours, et fin du dernier flux.
 #[derive(Debug)]
@@ -361,19 +365,70 @@ impl Pool {
     }
 }
 
-/// Connexion à garder quand il y en a plusieurs avec la même machine : celle qu'a
-/// ouverte la plus petite des deux clés (les deux machines font le même choix), et
-/// parmi elles la plus récente.
+/// Connexion à garder quand il y en a plusieurs avec la même machine.
+///
+/// - Ouvertes à plus de `RACE_WINDOW` d'écart : la plus récente. L'autre machine a sans
+///   doute perdu l'ancienne (redémarrage, changement de réseau), même si on ne s'en est
+///   pas encore aperçu ici.
+/// - Ouvertes presque en même temps (les deux machines se sont appelées ensemble) : celle
+///   qu'a ouverte la plus petite des deux clés, le même choix des deux côtés.
 fn choose<'a>(
     me: EndpointId,
     peer: EndpointId,
     conns: impl Iterator<Item = &'a Tracked>,
 ) -> Option<&'a Tracked> {
+    let conns: Vec<&Tracked> = conns.collect();
+    let opened: Vec<(bool, Instant)> = conns.iter().map(|t| (t.outgoing, t.opened_at)).collect();
+    pick(me, peer, &opened).map(|i| conns[i])
+}
+
+/// Cœur de `choose` : (ouverte par cette machine-ci, instant d'ouverture) → rang retenu.
+fn pick(me: EndpointId, peer: EndpointId, opened: &[(bool, Instant)]) -> Option<usize> {
+    let newest = opened.iter().map(|(_, at)| *at).max()?;
     let lower = me.min(peer);
-    conns.max_by_key(|t| {
-        let opener = if t.outgoing { me } else { peer };
-        (opener == lower, t.opened_at)
-    })
+    opened
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, at))| newest.duration_since(*at) <= RACE_WINDOW)
+        .max_by_key(|(_, (outgoing, at))| {
+            let opener = if *outgoing { me } else { peer };
+            (opener == lower, *at)
+        })
+        .map(|(i, _)| i)
+}
+
+#[cfg(test)]
+mod tests {
+    use iroh::SecretKey;
+
+    use super::*;
+
+    fn keys() -> (EndpointId, EndpointId) {
+        let (a, b) = (SecretKey::generate().public(), SecretKey::generate().public());
+        (a.min(b), a.max(b))
+    }
+
+    #[test]
+    fn simultaneous_calls_keep_the_same_connection_on_both_sides() {
+        let (low, high) = keys();
+        let t0 = Instant::now();
+        let t1 = t0 + Duration::from_millis(300);
+        // Vue de la petite clé : sa connexion sortante (t0), l'entrante (t1)
+        assert_eq!(pick(low, high, &[(true, t0), (false, t1)]), Some(0));
+        // Vue de la grande clé : l'entrante est celle de la petite clé
+        assert_eq!(pick(high, low, &[(false, t0), (true, t1)]), Some(0));
+    }
+
+    #[test]
+    fn a_much_newer_connection_wins_after_a_restart() {
+        let (low, high) = keys();
+        let old = Instant::now();
+        let new = old + Duration::from_secs(120);
+        // L'ancienne, ouverte par la petite clé, est sans doute morte : la nouvelle l'emporte
+        assert_eq!(pick(low, high, &[(true, old), (false, new)]), Some(1));
+        assert_eq!(pick(high, low, &[(false, old), (true, new)]), Some(1));
+        assert_eq!(pick(low, high, &[]), None);
+    }
 }
 
 /// Chemin actuel d'une connexion : direct, par un relais, ou pas encore choisi.

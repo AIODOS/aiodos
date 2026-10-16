@@ -831,7 +831,7 @@ font passer le travail par le compagnon, relais coupés, avec des tests automati
   scellé (`net/info`, colonnes `peers.net_id`, `net_addrs`) ; `p2p_app` vérifie que la clé
   vue par le compagnon est celle de la machine qui a scellé l'enveloppe, et ne retient
   plus 127.0.0.1 comme adresse. Réglages `internet_*`, désactivés par défaut.
-- **Tests** : 13 tests unitaires et 7 tests à deux compagnons en Rust ; côté Python, deux
+- **Tests** : 15 tests unitaires et 8 tests à deux compagnons en Rust ; côté Python, deux
   vrais nœuds se partagent une indexation par leurs seuls compagnons, relais coupés
   (`tests/test_network_internet.py`), plus les compagnons supervisés, le choix du chemin
   et l'échange des clés.

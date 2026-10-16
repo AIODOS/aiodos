@@ -188,7 +188,7 @@ refusée ou retirée.
 ## Tests
 
 ```powershell
-cargo test                     # 13 tests unitaires + 7 tests à deux compagnons (relais coupés)
+cargo test                     # 15 tests unitaires + 8 tests à deux compagnons (relais coupés)
 ```
 
 Côté Python (le compagnon doit être compilé, sinon ces tests sont ignorés) :

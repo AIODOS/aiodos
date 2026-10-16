@@ -113,6 +113,17 @@ impl Node {
         Node { running, _dir: dir }
     }
 
+    /// Arrêt puis relance sur le même dossier (même clé) et le même port UDP.
+    async fn restart(self, forward: SocketAddr) -> Node {
+        let Node { running, _dir: dir } = self;
+        let port = running.bound[0];
+        running.stop().await;
+        let mut config = Config::local(dir.path().to_path_buf(), forward, TOKEN);
+        config.bind = Some(port);
+        let running = start(config).await.unwrap();
+        Node { running, _dir: dir }
+    }
+
     fn id(&self) -> String {
         self.running.id.to_string()
     }
@@ -299,6 +310,31 @@ async fn a_removed_machine_loses_its_connection() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(refused);
+    a.running.stop().await;
+    b.running.stop().await;
+}
+
+#[tokio::test]
+async fn a_restarted_machine_is_joined_again() {
+    let (a, b, _) = pair_of_nodes().await;
+    assert_eq!(via(&a, &b, "/p2p/v1/echo", "avant").await.0, StatusCode::OK);
+    let b_id = b.id();
+    let b = b.restart(fake_app(Arc::new(Notify::new())).await).await;
+    assert_eq!(b.id(), b_id, "même clé après la relance");
+    b.allow(vec![a.entry(true)]).await;
+    // A apprend la fermeture de l'ancienne connexion et en ouvre une autre, seul
+    let mut joined = false;
+    for _ in 0..50 {
+        if via(&a, &b, "/p2p/v1/echo", "après").await.0 == StatusCode::OK {
+            joined = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(joined);
+    let seen_by_a = a.peer_status(&b).await;
+    assert_eq!(seen_by_a["dials"], 2);
+    assert_eq!(seen_by_a["connections"], 1);
     a.running.stop().await;
     b.running.stop().await;
 }
