@@ -65,6 +65,30 @@ modifiée : c'est le dernier recours. Une version installée par mise à jour to
 depuis `data/updates/versions/`. Une machine garde la version courante, celle en
 attente, et les deux paquets les plus récents, qu'elle transmet aux autres.
 
+## Essai réel (16/10/2026)
+
+Le téléphone est un Galaxy S23 (Android 16, Termux, Python 3.14). Il a été installé à la
+main depuis l'archive de la version 2.0.0, comme chez un ami. Il est relié au PC par le
+compagnon Internet, par un chemin direct en IPv6. Le nœud de démonstration du PC (une
+copie de développement) propose la 2.0.1 à partir de 15:58:40.
+
+| Étape | Heure | Durée |
+|---|---|---|
+| Version reçue (1,3 Mo) | 15:59:58,5 | 78 s après l'offre (profil relu toutes les 60 s, service toutes les 30 s) |
+| Installée : extraction et essai à blanc | 15:59:59,8 | 1,3 s |
+| Redémarrage dans le même processus (exec), lancement à l'essai | 16:00:01,0 | 1,2 s |
+| Nœud 2.0.1 prêt | 16:00:01,6 | 0,6 s |
+| En service, après 10 s sans incident | 16:00:11,8 | 10 s |
+
+Après la mise à jour :
+
+- le processus d'origine (2.0.0, dans `~/aiodos`) accompagne la 2.0.1, qui tourne depuis
+  `data/updates/versions/2.0.1` et a relancé le compagnon ;
+- le téléphone propose à son tour la 2.0.1 à ses machines appairées.
+
+La même chaîne est vérifiée sous Windows à chaque passage des tests
+(`tests/test_updates_end_to_end.py`). Le redémarrage y lance un nouveau processus.
+
 ## Sécurité
 
 - **Signature Ed25519** du manifeste, qui donne la taille et l'empreinte SHA-256 de
