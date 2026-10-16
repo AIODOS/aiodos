@@ -56,11 +56,36 @@ async fn run(args: Args) -> Result<()> {
         watch_stdin(stop.clone());
     }
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => info!("Ctrl+C : arrêt"),
+        _ = interrupted() => info!("Signal d'arrêt reçu"),
         _ = stop.cancelled() => {}
     }
     running.stop().await;
     Ok(())
+}
+
+/// Ctrl+C, ou SIGTERM sous Unix (`kill` dans Termux). Un signal qu'on ne peut pas
+/// écouter (pas de console) ne déclenche rien.
+async fn interrupted() {
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = ctrl_c => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => ctrl_c.await,
+        }
+    }
+    #[cfg(not(unix))]
+    ctrl_c.await;
 }
 
 /// Jeton de l'API locale : donné par AIODOS (variable d'environnement), sinon tiré au

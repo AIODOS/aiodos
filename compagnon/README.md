@@ -133,7 +133,7 @@ aiodos-net --data-dir ..\data --listen 127.0.0.1:47800 --forward 127.0.0.1:47701
 | `--directory` | `n0-dns,dht` | annuaires : `n0-dns`, `dht`, ou `none` |
 | `--bind` | toutes les interfaces | sockets UDP d'Iroh (`127.0.0.1:0` pour un essai local) |
 | `--no-portmap` | — | pas d'ouverture de port automatique sur la box |
-| `--dial-timeout` | `30` | délai pour joindre une machine (secondes) |
+| `--dial-timeout` | `20` | délai pour joindre une machine (secondes ; AIODOS attend 30 s au moins une réponse par Internet) |
 | `--supervised` | — | lancé par AIODOS : s'arrête quand son entrée standard se ferme |
 
 Le jeton de l'API locale vient de la variable `AIODOS_NET_TOKEN` (jamais de la ligne de

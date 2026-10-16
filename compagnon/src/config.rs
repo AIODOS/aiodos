@@ -188,8 +188,9 @@ pub struct Args {
     #[arg(long)]
     pub no_portmap: bool,
 
-    /// Délai pour joindre une machine, en secondes
-    #[arg(long, default_value_t = 30, value_name = "S")]
+    /// Délai pour joindre une machine, en secondes (sous les 30 s qu'AIODOS attend une
+    /// réponse par Internet, pour qu'il reçoive une erreur lisible plutôt qu'un silence)
+    #[arg(long, default_value_t = 20, value_name = "S")]
     pub dial_timeout: u64,
 
     /// Lancé par AIODOS : s'arrête quand son entrée standard se ferme ; journal sans heure

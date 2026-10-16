@@ -21,6 +21,7 @@ MODES = ("auto", "lan", "internet")
 LAN_RETRY_AFTER = 60       # après un échec du réseau local, on passe par Internet pendant 1 min
 LAN_CONNECT_TIMEOUT = 3    # sur un réseau local, une connexion s'établit en quelques ms
 INTERNET_MIN_TIMEOUT = 30  # première connexion par un relais en 4G : plusieurs secondes
+                           # (le compagnon abandonne au bout de 20 s, avec un message)
 _NO_PROXY = {"http": None, "https": None}   # le compagnon est sur 127.0.0.1 : jamais de mandataire
 
 _lock = threading.Lock()

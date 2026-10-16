@@ -296,6 +296,25 @@ Nœud AIODOS prêt : http://127.0.0.1:8800/?t=…
 4. Débrancher le téléphone : en moins d'une minute, il se met en pause et rend son unité,
    que le PC reprend.
 
+## 11. Hors du Wi-Fi de la maison : le compagnon Internet (phase 2, en essai)
+
+Pour que le téléphone continue de calculer en 4G/5G, ou chez un ami, chaque machine fait
+tourner le compagnon `aiodos-net` (Rust, Iroh) à côté du nœud :
+
+1. Le construire sous Termux (`pkg install rust resolv-conf`, puis `cargo build
+   --release` dans `compagnon/`), ou le compiler sur le PC avec le NDK et le copier :
+   voir [compagnon/README.md](../compagnon/README.md). Le mettre dans `$PREFIX/bin`.
+2. Lancer le nœud avec `--internet` (ou activer le réglage `internet_enabled`), sur le
+   téléphone comme sur le PC.
+3. Appairer les deux machines sur le Wi-Fi, comme d'habitude : elles s'échangent alors
+   leurs clés Internet. Ensuite, quand le réseau local ne répond plus, les requêtes
+   passent par le compagnon (en direct, ou par un relais de n0).
+
+En 4G, le téléphone n'est pas joignable directement de l'extérieur : le PC le joint par
+le relais, ou se sert de la connexion que le téléphone a ouverte vers lui. Pas encore
+essayé sur un téléphone : la compilation pour Android a été vérifiée depuis le PC le
+16/10/2026.
+
 ## Dépannage
 
 | Symptôme | Cause probable | Que faire |
