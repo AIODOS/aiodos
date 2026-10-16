@@ -1,7 +1,8 @@
 """Conversation en streaming (SSE).
 
 Le chat est la tâche interactive : il ne passe pas par la file, il démarre
-tout de suite et suspend les nouvelles unités GPU le temps de répondre.
+tout de suite et suspend les nouvelles unités GPU le temps de répondre (si le
+modèle tourne ici ; servi par une machine appairée, c'est elle qui suspend les siennes).
 La validation des envois sortants (web, cloud) est revérifiée ici : même si
 l'interface était contournée, rien ne part dans le cloud sans accord.
 """
@@ -124,8 +125,11 @@ async def chat(body: ChatIn, request: Request):
         bus.publish({"type": "conversations"})
         return state["saved"]
 
+    local_gpu = pipeline.runs_here(body.model)
+
     async def events():
-        executor.interactive_begin()
+        if local_gpu:
+            executor.interactive_begin()
         threading.Thread(target=worker, daemon=True, name="coeur-chat").start()
         last_render = 0.0
         try:
@@ -154,7 +158,8 @@ async def chat(body: ChatIn, request: Request):
                        "html": render.to_html(state["content"])})
         finally:
             stop.set()                    # client parti ou fin : on coupe le modèle
-            executor.interactive_end()
+            if local_gpu:
+                executor.interactive_end()
             if state["saved"] is None:    # interruption (bouton Stop)
                 save()
 

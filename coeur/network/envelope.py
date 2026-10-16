@@ -2,8 +2,11 @@
 
 Requête :  {"from", "to", "ts", "box"}   (box = JSON scellé avec la clé de la paire)
 Réponse :  {"box"}                       (liée à l'horodatage de la requête)
+Flux    :  une ligne par morceau, scellé et numéroté (lié à la requête et à son rang :
+           un morceau retiré, déplacé ou rejoué est détecté) ; le dernier dit « fin ».
 """
 import base64
+import binascii
 import json
 import threading
 import time
@@ -44,6 +47,26 @@ def unwrap_reply(key: bytes, action: str, sender: str, recipient: str, ts: float
                  reply: dict) -> dict:
     data = crypto.open_sealed(key, b64d(reply["box"]), _aad("rep", action, sender, recipient, ts))
     return json.loads(data)
+
+
+def _frame_aad(action, sender, recipient, ts, seq) -> bytes:
+    return f"{PROTOCOL}|frame|{action}|{sender}|{recipient}|{ts:.6f}|{seq}".encode()
+
+
+def wrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float, seq: int,
+               payload: dict) -> str:
+    """Un morceau d'une réponse en flux (une ligne de texte)."""
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    return b64e(crypto.seal(key, data, _frame_aad(action, sender, recipient, ts, seq)))
+
+
+def unwrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float, seq: int,
+                 line: str) -> dict:
+    try:
+        box = b64d(line.strip())
+    except (binascii.Error, ValueError) as exc:
+        raise SealError("Morceau de réponse illisible.") from exc
+    return json.loads(crypto.open_sealed(key, box, _frame_aad(action, sender, recipient, ts, seq)))
 
 
 class ReplayGuard:
