@@ -72,9 +72,10 @@ def _inside(path, folder) -> bool:
     return path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
-def _delivered(activate: bool):
+def _delivered(activate: bool, failed: set | None = None):
     """Les programmes livrés (updates/binaries.py), avec leur origine ; chacun mis en
-    place au moment où on le prend, avec `activate`."""
+    place au moment où on le prend, avec `activate`. Un programme qui ne peut pas l'être
+    (illisible, disque plein…) est passé, et son origine notée dans `failed`."""
     store = Store()
     for version, item in binaries.candidates(store):
         origin = f"livré avec la version {version}"
@@ -82,18 +83,21 @@ def _delivered(activate: bool):
             yield origin, lambda version=version, item=item: store.package_path(version, item)
             continue
 
-        def prepare(version=version, item=item):
+        def prepare(version=version, item=item, origin=origin):
             try:
                 return binaries.activate(store, version, item)
-            except UpdateError as exc:
+            except (UpdateError, OSError) as exc:
                 log.warning("%s", exc)
+                if failed is not None:
+                    failed.add(origin)
                 return None
         yield origin, prepare
 
 
-def candidates(activate: bool = True, skip=()):
+def candidates(activate: bool = True, skip=(), failed: set | None = None):
     """(programme, origine) des compagnons possibles, du préféré au dernier recours,
-    hors des origines de `skip` (programmes qui n'ont pas démarré ici) :
+    hors des origines de `skip` (programmes qui n'ont pas démarré ici). `failed` reçoit
+    les origines des programmes livrés qui n'ont pas pu être mis en place :
 
     1. AIODOS_NET_BIN, choix explicite (et alors rien d'autre) ; sauf s'il désigne le
        compagnon compilé dans la version d'origine : un lanceur 2.0.x l'y met pour la
@@ -114,7 +118,7 @@ def candidates(activate: bool = True, skip=()):
     def ordered():                        # (origine, de quoi trouver le programme)
         if launcher.developer_checkout():
             yield BUILT_HERE, lambda: _built(paths.APP_ROOT)
-        yield from _delivered(activate)
+        yield from _delivered(activate, failed)
         yield BUILT_HERE, lambda: _built(paths.APP_ROOT)
         yield BUILT_IN_BASE, lambda: _built(base)
         yield BUILT_IN_BASE, lambda: _file(explicit)            # mis par un lanceur 2.0.x
@@ -127,11 +131,10 @@ def candidates(activate: bool = True, skip=()):
                 yield path, origin
 
 
-def locate(activate: bool = True, skip=()):
-    """(programme, origine) du compagnon à lancer, ou None : le premier des candidats
-    hors de `skip` ; s'ils y sont tous, le préféré, réessayé."""
-    found = next(candidates(activate, skip), None)
-    return locate(activate) if found is None and skip else found
+def locate(activate: bool = True, skip=(), failed: set | None = None):
+    """(programme, origine) du compagnon à lancer : le premier des candidats hors de
+    `skip`, ou None."""
+    return next(candidates(activate, skip, failed), None)
 
 
 def find_binary() -> Path | None:
@@ -217,12 +220,13 @@ class Companion:
         """Lance le compagnon et attend qu'il soit prêt (bloquant) ; une surveillance le
         relance ensuite s'il s'arrête. Faux si impossible : self.error dit pourquoi."""
         self._stopping = False
-        ok = self._launch()
-        if self._watcher is None or not self._watcher.is_alive():
-            self._watcher = threading.Thread(target=self._watch, daemon=True,
-                                             name="aiodos-net-surveillance")
-            self._watcher.start()
-        return ok
+        try:
+            return self._launch()
+        finally:                                # la surveillance, quoi qu'il arrive
+            if self._watcher is None or not self._watcher.is_alive():
+                self._watcher = threading.Thread(target=self._watch, daemon=True,
+                                                 name="aiodos-net-surveillance")
+                self._watcher.start()
 
     def _fail(self, message: str) -> bool:
         """Échec de lancement : au journal une fois, pas à chaque nouvel essai."""
@@ -231,9 +235,15 @@ class Companion:
         return False
 
     def _launch(self) -> bool:
-        if self._broken and locate(activate=False, skip=self._broken) is None:
+        if self._broken and next(candidates(False, self._broken), None) is None:
             self._broken.clear()                # tous essayés en vain : on recommence
-        located = locate(skip=self._broken)
+        # Un programme livré qui ne peut pas être mis en place est écarté comme celui qui
+        # ne démarre pas : sans quoi outdated() le réclamerait à chaque passage.
+        try:
+            located = locate(skip=self._broken, failed=self._broken)
+        except Exception as exc:                # jamais au point d'arrêter la surveillance
+            log.exception("Choix du compagnon aiodos-net")
+            return self._fail(f"Compagnon aiodos-net : choix du programme impossible ({exc}).")
         if located is None:
             return self._fail("Compagnon aiodos-net introuvable : il arrive avec les mises à "
                               "jour, d'une machine appairée qui l'a (ou le compiler : voir "
@@ -351,7 +361,10 @@ class Companion:
             while not self._stopping and time.monotonic() < deadline:
                 time.sleep(0.2)
             if not self._stopping:
-                self._launch()
+                try:
+                    self._launch()
+                except Exception:               # la surveillance ne s'arrête jamais
+                    log.exception("Relance du compagnon aiodos-net")
 
     def stop(self):
         """Arrêt propre : le compagnon prévient les autres machines, puis s'arrête. Un

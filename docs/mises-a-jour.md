@@ -177,9 +177,10 @@ avec la version. Les lanceurs suivants ne posent plus cette variable.
 
 **Sans jamais perdre le lien.**
 
-- Un programme qui ne démarre pas (construction ratée pour cette plateforme…) laisse
-  place au suivant de la liste. Une machine joignable seulement par Internet garde
-  ainsi son lien, et recevra la version corrigée.
+- Un programme qui ne démarre pas (construction ratée pour cette plateforme…), ou
+  qu'on ne peut pas mettre en place (disque plein…), laisse place au suivant de la
+  liste. Quand tous ont échoué, la liste reprend du début. Une machine joignable
+  seulement par Internet garde ainsi son lien, et recevra la version corrigée.
 - Une machine dont la version tourne avec un autre programme (celui du `PATH`, d'une
   version plus ancienne…) relance son compagnon sur celui qui vient d'arriver, dès
   qu'aucun travail ne passe par lui : aucun calcul, aucune unité confiée, aucune

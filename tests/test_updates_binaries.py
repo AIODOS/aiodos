@@ -116,6 +116,7 @@ def test_companion_still_running_stays_and_the_new_one_runs_from_its_package(
     monkeypatch.setattr(binaries, "__version__", "2.0.0")
     target, _ = binaries.find(store)
     monkeypatch.setattr(binaries, "__version__", "2.0.1")
+    monkeypatch.setattr(binaries, "REPLACE_ATTEMPTS", 1)
     replace = os.replace
 
     def locked(source, dest):                           # Windows : programme en service
@@ -167,8 +168,7 @@ def test_choice_order_down_to_the_path(tmp_path, store, key, installed, monkeypa
         (in_place(store), "livré avec la version 2.0.0")
     assert binaries.active(store)["version"] == "2.0.0"
     every = {origin for _, origin in companion_mod.candidates(activate=False)}
-    assert companion_mod.locate(skip=every)[1] == "livré avec la version 2.0.1"
-    assert binaries.active(store)["version"] == "2.0.1"
+    assert companion_mod.locate(skip=every) is None
 
 
 def test_companion_imposed_by_an_old_launcher_comes_after_the_delivered_one(
@@ -227,5 +227,67 @@ def test_delivered_program_that_does_not_start_gives_way(tmp_path, store, key, i
         assert companion.origin == companion_mod.BUILT_IN_BASE
         assert companion._broken == {"livré avec la version 2.0.1"}
         assert not companion.outdated()                 # pas de relance vers celui-là
+    finally:
+        companion.stop()
+
+
+def test_when_every_program_failed_the_cycle_starts_over(tmp_path, store, key, installed,
+                                                          monkeypatch):
+    """Le livré ne démarre pas, celui d'avant non plus, une fois : on recommence la
+    liste, au lieu de ne plus réessayer que le livré."""
+    package(tmp_path, store, key, "2.0.1")
+    fallback = built(installed.base)
+    tried = []
+
+    def refuse(command, **kwargs):
+        tried.append(Path(command[0]))
+        raise OSError("ne démarre pas ici")
+    monkeypatch.setattr(companion_mod.subprocess, "Popen", refuse)
+    companion = companion_mod.Companion("127.0.0.1:1")
+    for _ in range(4):
+        assert not companion._launch()
+    assert tried == [in_place(store), fallback, in_place(store), fallback]
+
+
+def test_delivered_program_that_cannot_be_put_in_place_is_set_aside(tmp_path, store, key,
+                                                                    installed, monkeypatch):
+    """Disque plein : le livré est passé, et noté, pour que la machine ne relance pas son
+    compagnon vers lui à chaque passage du service."""
+    package(tmp_path, store, key, "2.0.1")
+    fallback = built(installed.base)
+
+    def full(source, target):
+        raise OSError(28, "plus de place sur le disque")
+    monkeypatch.setattr(binaries, "_copy", full)
+    failed = set()
+    assert companion_mod.locate(skip=failed, failed=failed) == \
+        (fallback, companion_mod.BUILT_IN_BASE)
+    assert failed == {"livré avec la version 2.0.1"}
+    running = companion_mod.Companion("127.0.0.1:1")
+    running.process = SimpleNamespace(poll=lambda: None)
+    running.listen, running.origin = "127.0.0.1:2", companion_mod.BUILT_IN_BASE
+    running._broken = failed
+    assert not running.outdated()
+
+
+def test_errors_while_putting_in_place_never_stop_the_companion(tmp_path, store, key,
+                                                                 installed, monkeypatch):
+    item = manifest.binary(package(tmp_path, store, key, "2.0.1"))
+
+    def refused(path):
+        raise PermissionError("droits refusés")
+    monkeypatch.setattr(binaries, "make_executable", refused)
+    with pytest.raises(UpdateError, match="impossible à mettre en place"):
+        binaries.activate(store, "2.0.1", item)
+    assert not [p for p in in_place(store).parent.iterdir() if p.name.endswith(".tmp")]
+
+    def unexpected(**kwargs):
+        raise RuntimeError("imprévu")
+    monkeypatch.setattr(companion_mod, "locate", unexpected)
+    companion = companion_mod.Companion("127.0.0.1:1")
+    try:
+        assert not companion.start()
+        assert "choix du programme impossible" in companion.error
+        assert companion._watcher.is_alive()            # il réessaiera
     finally:
         companion.stop()

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from aiodos import __version__
@@ -31,6 +32,7 @@ from aiodos.updates.store import Store, sha256_of
 log = logging.getLogger("aiodos.updates")
 
 ACTIVE = "bin"                     # dans data/updates/ : le programme en service
+REPLACE_ATTEMPTS = 5
 
 
 def candidates(store: Store, program: str = manifests.COMPANION, running: str | None = None):
@@ -98,6 +100,27 @@ def _copy(source: Path, target: Path) -> str:
     return digest.hexdigest()
 
 
+def _discard(path: Path):
+    """Efface un fichier laissé en route ; un antivirus qui le tient encore n'y change rien."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _replace(source: Path, target: Path):
+    """os.replace, réessayé un instant : un antivirus examine souvent un programme neuf.
+    Le programme en place encore en service (Windows) refuse jusqu'au bout."""
+    for attempt in range(REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(0.2)
+
+
 def make_executable(path: Path):
     """Droit d'exécution partout où il y a droit de lecture (Android, Linux, macOS)."""
     if sys.platform == "win32":
@@ -116,25 +139,30 @@ def activate(store: Store, version: str, item: dict,
     if active(store, program).get("sha256") == item["sha256"] and _intact(target, item):
         return target
     source = store.package_path(version, item)
-    target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         digest = _copy(source, temporary)
     except OSError as exc:
-        temporary.unlink(missing_ok=True)
-        raise UpdateError(f"Compagnon de la version {version} illisible ({exc}).") from exc
+        _discard(temporary)
+        raise UpdateError(f"Compagnon de la version {version} impossible à copier ({exc}).") \
+            from exc
     if digest != item["sha256"]:
-        temporary.unlink(missing_ok=True)
-        source.unlink(missing_ok=True)
+        _discard(temporary)
+        _discard(source)
         raise UpdateError(f"Compagnon de la version {version} altéré : il sera téléchargé "
                           "de nouveau.")
-    make_executable(temporary)
     try:
-        os.replace(temporary, target)
+        make_executable(temporary)
+        _replace(temporary, target)
     except OSError as exc:
-        temporary.unlink(missing_ok=True)
+        _discard(temporary)
+        try:
+            make_executable(source)
+        except OSError as again:
+            raise UpdateError(f"Compagnon de la version {version} impossible à mettre en "
+                              f"place ({again}).") from again
         log.info("Compagnon de la version %s lancé depuis son paquet (%s)", version, exc)
-        make_executable(source)
         return source
     meta = _meta(store, program)
     try:
