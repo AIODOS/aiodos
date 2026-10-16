@@ -793,6 +793,18 @@ heures.
 
 *Fini quand* : les réponses sont écrites dans ce document.
 
+**Réponses de l'utilisateur, 16/10/2026** (étape 2.1 faite) :
+
+| Question | Décision |
+|---|---|
+| **Q1** Niveaux de confiance | Deux niveaux en phase 2 : **mes machines** (confiance totale, comme aujourd'hui) et **amis** (droits plus étroits). Le niveau « inconnus » viendra en phase 3. |
+| **Q2 / Q5** Données confiées à un ami | **Rien par défaut** : seules les bibliothèques marquées « partageable avec mes amis » peuvent partir chez un ami. Entre mes machines, la règle actuelle reste (tout sauf le cadenas). |
+| **Q3** Ce que je calcule pour un ami | **Tous les types de travaux** : textes et documents, pages web, images et sons, conversations (modèles prêtés), dans les conditions déjà en place (inactivité, secteur, charge et température des téléphones, part du GPU). |
+| **Q6** Métadonnées visibles par un ami | **Le minimum** : nom de fichier remplacé par un nom neutre (l'extension reste, elle choisit le lecteur), ni chemin, ni nom de bibliothèque, ni inactivité ; seulement ce qu'il faut pour calculer (modèles, formats lisibles). |
+| **Q9** Vérification entre amis | **Par échantillon** : le propriétaire recalcule lui-même un passage tiré au hasard et compare (similarité cosinus, seuil à mesurer, ≥ 0,999 attendu d'après le S9) ; une machine prise en défaut est mise de côté et le résultat refusé. |
+| **Q16** Relais | **Relais publics de n0 pour commencer**, remplaçables dans les réglages (relais du projet ou d'un membre du cercle plus tard). |
+| **Q16 bis** Annuaire | **Les deux** : DNS de n0 d'abord, DHT Mainline (pkarr) en secours. |
+
 **2.2 Le compagnon `aiodos-net`.** Programme Rust (GPL-3.0) sur Iroh 1.x, à version
 épinglée : protocole `aiodos/2` (ALPN), liste blanche de clés, tunnels vers `p2p_app`,
 API locale de contrôle, relais et annuaire configurables, ouverture de port
