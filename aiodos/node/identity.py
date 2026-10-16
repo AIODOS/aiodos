@@ -17,6 +17,7 @@ import uuid
 from aiodos import __version__, db, settings
 from aiodos.node import android, power
 from aiodos.services import ollama
+from aiodos.updates.store import Store
 
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # pas de console qui clignote
 _cache = {"at": 0.0, "profile": None}
@@ -144,6 +145,7 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
+        "updates": {"offer": Store().offer()},   # version transmissible (updates/p2p.py)
     }
     with _cache_lock:
         _cache.update(at=time.monotonic(), profile=data)

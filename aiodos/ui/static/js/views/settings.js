@@ -4,6 +4,7 @@ import { $, h, esc } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
+import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 
 const SECTIONS = [
   { title: 'Conversation', icon: 'chat', fields: [
@@ -48,6 +49,13 @@ const SECTIONS = [
       ['tiny', 'tiny (rapide)'], ['base', 'base'], ['small', 'small (recommandé)'],
       ['medium', 'medium'], ['large-v3', 'large-v3 (précis, lent)']] },
   ] },
+  { title: 'Mises à jour', icon: 'retry', fields: [
+    { key: 'auto_update', label: 'Installer automatiquement les nouvelles versions', type: 'switch',
+      help: 'Seules les versions signées par l\'auteur d\'AIODOS sont acceptées. Elles arrivent par tes '
+        + 'machines appairées, s\'installent à côté de la version actuelle, et AIODOS redémarre dessus quand '
+        + 'la machine est libre. Si la nouvelle version ne démarre pas, la précédente reprend la main.' },
+    { type: 'updates' },
+  ] },
   { title: 'Avancé', icon: 'settings', fields: [
     { key: 'ollama_url', label: 'Adresse d\'Ollama', type: 'text' },
   ] },
@@ -68,11 +76,16 @@ export function mountSettings(container) {
   const refresh = () => { if (state.view !== 'settings' || !Object.keys(draft).length) render(); };
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
-  on('view:shown', view => { if (view === 'settings') render(); });
+  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); } });
+  on('updates:loaded', () => {
+    const box = root && $('#updates-status', root);
+    if (box) { box.innerHTML = updatesStatus(); bindUpdates(box); }
+  });
 }
 
 function field(f) {
   const s = state.settings;
+  if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
   if (f.type === 'switch') {
@@ -121,6 +134,7 @@ function render() {
   form.querySelectorAll('[data-clear]').forEach(b => {
     b.onclick = () => { draft[b.dataset.clear] = null; save(); };
   });
+  bindUpdates(form);
   $('#settings-save', root).onclick = save;
 }
 

@@ -85,6 +85,7 @@ function peerFacts(peer) {
     facts.push(text.charAt(0).toLowerCase() + text.slice(1));
   } else if (p.on_ac_power === false) facts.push('sur batterie');
   if (p.idle_seconds != null) facts.push(p.idle_seconds < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(p.idle_seconds)}`);
+  if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
   return facts.join(' · ');
 }
 

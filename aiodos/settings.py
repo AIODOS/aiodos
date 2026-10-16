@@ -73,6 +73,8 @@ DEFAULTS = {
     "share_min_battery": 80,          # téléphone : charge minimale pour calculer (%)
     "share_max_temp": 40,             # téléphone : température maximale de la batterie (°C)
     "share_max_gpu": 100,
+    # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
+    "auto_update": True,
 }
 
 

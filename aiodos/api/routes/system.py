@@ -24,6 +24,8 @@ def read_settings():
 def write_settings(values: dict, request: Request):
     settings.set_many(values)
     request.app.state.bus.publish({"type": "settings"})
+    if values.get("auto_update"):          # réactivées : on regarde tout de suite
+        request.app.state.updates.check_now()
     job_id = reindex.schedule()            # nouveau modèle d'embedding : tout recalculer
     if job_id:
         executor = request.app.state.executor

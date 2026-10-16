@@ -3,6 +3,8 @@ import webview
 
 from aiodos import paths
 
+_open = []                         # fenêtres ouvertes (cf. close)
+
 
 class Bridge:
     """Fonctions Python appelables depuis l'interface : window.pywebview.api.*
@@ -24,6 +26,12 @@ class Bridge:
         return list(chosen or [])
 
 
+def close():
+    """Ferme la fenêtre, depuis n'importe quel thread (redémarrage pour mise à jour)."""
+    for window in list(_open):
+        window.destroy()
+
+
 def run(url: str, on_closed):
     """Ouvre la fenêtre et bloque jusqu'à sa fermeture (boucle graphique)."""
     bridge = Bridge()
@@ -31,6 +39,7 @@ def run(url: str, on_closed):
         "AIODOS", url, js_api=bridge, width=1320, height=860, min_size=(980, 640),
         background_color="#0a0f1f", text_select=True)
     bridge._window = window
+    _open.append(window)
     window.events.closed += on_closed
     storage = paths.data_dir() / "webview"
     storage.mkdir(exist_ok=True)

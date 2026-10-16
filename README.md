@@ -114,6 +114,18 @@ chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.
 Au premier lancement, les données de la v1 (`legacy/data`) sont importées
 automatiquement : conversations, dossiers, bibliothèques et réglages.
 
+## Mises à jour automatiques
+
+Une machine installée (chez un ami, un téléphone…) se met à jour seule, sans serveur :
+une version publiée est **signée** par la clé de publication de l'auteur, passe de
+machine appairée en machine appairée, s'installe **à côté** de la version actuelle, et
+AIODOS redémarre dessus quand la machine est libre. Si elle ne démarre pas, la
+précédente reprend la main aussitôt. Réglage : Réglages → Mises à jour (activé par
+défaut). Une copie de développement (dépôt git) n'est jamais remplacée.
+
+Publier : `python tools/publish.py release --notes "…"` après avoir écrit le numéro dans
+`aiodos/__init__.py`. Détails, sécurité et limites : [docs/mises-a-jour.md](docs/mises-a-jour.md).
+
 ## Architecture
 
 ```
@@ -146,11 +158,13 @@ aiodos/
 │   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
 │                      particularités d'Android (android.py)
+├── updates/           mises à jour signées : transmission entre machines, installation
+│                      à côté, lanceur avec retour en arrière (docs/mises-a-jour.md)
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native et interface web (HTML/CSS/JS, sans compilation)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
 tests/                 tests automatisés (pytest)
-tools/                 outils de mesure (choix du modèle d'embedding)
+tools/                 publication des versions, outils de mesure (modèle d'embedding)
 docs/                  notes de mesures et de choix techniques, téléphone Android
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```

@@ -22,6 +22,7 @@ from aiodos.network import envelope, lending, netinfo, peers, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
+from aiodos.updates import p2p as updates
 
 PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par le compagnon
 
@@ -53,6 +54,7 @@ HANDLERS = {
     "pair/confirm": _pair_confirm,
     "net/info": netinfo.handle,   # clés Internet (compagnon aiodos-net) échangées
     **work.HANDLERS,              # travail confié : work/lease, work/blob, work/result…
+    **updates.HANDLERS,           # versions signées : update/manifest, update/chunk
 }
 
 # Réponses en flux : fonction(manager, émetteur, contenu, stop) -> itérateur de morceaux.

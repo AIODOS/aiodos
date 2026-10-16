@@ -26,6 +26,17 @@ log = logging.getLogger("aiodos.network")
 VISIBLE_TTL = 20            # une machine non annoncée depuis 20 s disparaît de la liste
 REFRESH_EVERY = 15          # nouvelles des machines appairées
 PROFILE_EVERY = 60
+PORT_ATTEMPTS = 3           # port encore tenu par l'instance qui vient de s'arrêter (mise à jour)
+PORT_RETRY_DELAY = 2
+
+
+async def _serve(server):
+    """uvicorn « quitte » (SystemExit) quand le port est déjà pris : sans cette garde,
+    l'arrêt remonterait jusqu'à la boucle du nœud et l'arrêterait tout entier."""
+    try:
+        await server.serve()
+    except SystemExit:
+        pass
 
 
 class NetworkManager:
@@ -80,14 +91,20 @@ class NetworkManager:
         from aiodos.network.p2p_app import create_p2p_app
         self._loop = asyncio.get_running_loop()
         self.error = None
-        config = uvicorn.Config(create_p2p_app(self), host=self.host, port=self.p2p_port,
-                                log_config=None, log_level="warning", access_log=False)
-        self._server = uvicorn.Server(config)
-        self._server_task = asyncio.create_task(self._server.serve(), name="aiodos-p2p")
-        for _ in range(100):
-            if self._server.started or self._server_task.done():
+        app = create_p2p_app(self)
+        for attempt in range(PORT_ATTEMPTS):
+            config = uvicorn.Config(app, host=self.host, port=self.p2p_port,
+                                    log_config=None, log_level="warning", access_log=False)
+            self._server = uvicorn.Server(config)
+            self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
+            for _ in range(100):
+                if self._server.started or self._server_task.done():
+                    break
+                await asyncio.sleep(0.05)
+            if self._server.started or not self._server_task.done():
                 break
-            await asyncio.sleep(0.05)
+            if attempt + 1 < PORT_ATTEMPTS:
+                await asyncio.sleep(PORT_RETRY_DELAY)
         if not self._server.started:
             self.error = (f"Le port {self.p2p_port} est indisponible : le réseau n'a pas pu "
                           "démarrer.")

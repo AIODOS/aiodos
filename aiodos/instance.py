@@ -39,16 +39,20 @@ def _alive(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
+def running() -> bool:
+    """Une autre instance vivante tient-elle le verrou de ce dossier de données ?"""
+    try:
+        other = json.loads(_lock_file().read_text(encoding="utf-8"))
+        return _alive(int(other.get("pid", 0)))
+    except (OSError, ValueError):
+        return False
+
+
 def acquire(port: int) -> bool:
     """Réserve l'instance. Faux si une autre instance vivante tient déjà le verrou."""
-    lock = _lock_file()
-    try:
-        other = json.loads(lock.read_text(encoding="utf-8"))
-        if _alive(int(other.get("pid", 0))):
-            return False
-    except (OSError, ValueError):
-        pass
-    lock.write_text(json.dumps({"pid": os.getpid(), "port": port}), encoding="utf-8")
+    if running():
+        return False
+    _lock_file().write_text(json.dumps({"pid": os.getpid(), "port": port}), encoding="utf-8")
     return True
 
 

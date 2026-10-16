@@ -10,6 +10,7 @@ import { mountJobs, loadJobs } from './views/jobs.js';
 import { mountNode, loadNode } from './views/node.js';
 import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js';
 import { mountSettings } from './views/settings.js';
+import { announceUpdate, loadUpdates } from './views/updates.js';
 
 const VIEWS = ['chat', 'library', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -75,6 +76,7 @@ function onEvent(ev) {
     case 'knowledge': emit('knowledge:changed'); break;
     case 'settings': loadSettings(); break;
     case 'network': emit('network:changed'); break;
+    case 'updates': loadUpdates(); break;
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
     case 'pair_result':
       toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`
@@ -113,6 +115,7 @@ async function boot() {
   loadNode();                               // en parallèle : les libellés VRAM suivront
   loadNetwork();
   await loadSettings();
+  announceUpdate();                         // « AIODOS a été mis à jour », une fois
   await loadModels();
   const last = prefs.get('lastConversation', null);
   emit(last ? 'chat:open' : 'chat:new', last);

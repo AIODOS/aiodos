@@ -24,10 +24,11 @@ def free_port() -> int:
 
 
 class Node:
-    def __init__(self, data_dir: Path, name: str, args=()):
+    def __init__(self, data_dir: Path, name: str, args=(), root: Path = APP_ROOT):
         self.data_dir = data_dir
         self.name = name
         self.args = list(args)            # options supplémentaires (ex. --slots embed=0)
+        self.root = root                  # code lancé (une copie : machine installée)
         self.port = free_port()
         self.p2p_port = free_port()
         self.token = None
@@ -41,7 +42,7 @@ class Node:
             [sys.executable, "-m", "aiodos", "--headless", "--no-migrate",
              "--port", str(self.port), "--network", "--p2p-host", "127.0.0.1",
              "--p2p-port", str(self.p2p_port), "--no-discovery", *self.args],
-            cwd=APP_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            cwd=self.root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace")
         ready = threading.Event()
 
