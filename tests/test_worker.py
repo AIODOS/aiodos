@@ -12,6 +12,7 @@ from aiodos import db, paths, settings
 from aiodos.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâches)
 from aiodos.knowledge import store
 from aiodos.network import peers, work, worker
+from aiodos.network.client import PeerError
 from aiodos.network.worker import Assignment, Worker, sharing_state
 from aiodos.node import identity, power
 from aiodos.services import ollama
@@ -272,3 +273,27 @@ def test_gpu_share_below_100_percent_imposes_a_rest(setup):
     lender._rest_gpu(setup["assignment"], compute_s=2.0)          # unité « embed »
     remaining = lender._gpu_rest_until - worker.time.monotonic()
     assert 5.5 < remaining <= 6.0                                  # 2 s × 75 / 25
+
+
+def test_failed_work_requests_are_logged_once_per_cause_with_a_slow_link_timeout(
+        setup, monkeypatch, caplog):
+    lender = setup["lender"]
+    peer = {"node_id": OWNER, "name": "PC portable"}
+    timeouts, replies = [], [PeerError("Machine injoignable (ReadTimeout)."),
+                             PeerError("Machine injoignable (ReadTimeout)."),
+                             {"unit": None, "retry_after": 600, "reason": "Versions différentes"}]
+
+    def fake_call(my_id, peer_row, action, payload, key=None, timeout=10):
+        timeouts.append(timeout)
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+    monkeypatch.setattr(worker.client, "call", fake_call)
+    with caplog.at_level("INFO", logger="aiodos.worker"):
+        for _ in range(3):
+            lender._ask(peer, ["embed"])
+    notes = [r.getMessage() for r in caplog.records if r.name == "aiodos.worker"]
+    assert notes == ["« PC portable » : demande de travail impossible (Machine injoignable (ReadTimeout).)",
+                     "« PC portable » : Versions différentes"]
+    assert timeouts == [worker.LEASE_TIMEOUT] * 3 and worker.LEASE_TIMEOUT >= 20

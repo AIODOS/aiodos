@@ -37,6 +37,10 @@ log = logging.getLogger("aiodos.worker")
 
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
+# Délai d'une demande de travail. Sur le réseau local, une réponse vient en moins d'une
+# seconde ; à travers Internet (réseau mobile faible, relais), il a fallu jusqu'à 10 s
+# le 16/10/2026 : avec 8 s, un téléphone en 4G n'obtenait jamais rien.
+LEASE_TIMEOUT = 30
 CAPS_TTL = 30
 HEAT_MARGIN = 3          # °C : un téléphone trop chaud reprend 3 °C sous sa limite
 BATTERY_MARGIN = 5       # % : un téléphone qui calcule s'arrête 5 % sous la charge minimale
@@ -150,6 +154,7 @@ class Worker:
         # machine -> (instant où lui redemander, ressources déjà proposées) : une
         # machine qui n'avait rien pour le GPU peut en avoir pour les embeddings
         self._next_ask = {}
+        self._last_note = {}             # machine -> dernière raison de ne rien recevoir
         self._gpu_rest_until = 0.0       # pause imposée par « GPU prêté au maximum »
         self._caps = (0.0, None)
 
@@ -203,6 +208,7 @@ class Worker:
             order = (reply or {}).get("unit")
             if order:
                 self._next_ask.pop(peer["node_id"], None)
+                self._last_note.pop(peer["node_id"], None)
                 self._launch(peer, order)
                 return 0.05                        # d'autres ressources sont peut-être libres
             delay = float((reply or {}).get("retry_after") or ASK_AGAIN)
@@ -243,11 +249,22 @@ class Worker:
         if not full:
             return None
         try:
-            return client.call(self.m.node_id, full, "work/lease",
-                               {"resources": offered, "caps": self.capabilities()}, timeout=8)
+            reply = client.call(self.m.node_id, full, "work/lease",
+                                {"resources": offered, "caps": self.capabilities()},
+                                timeout=LEASE_TIMEOUT)
         except PeerError as exc:
-            log.debug("Demande de travail à %s impossible : %s", peer["name"], exc)
+            self._note(peer, f"demande de travail impossible ({exc})")
             return None
+        if reply.get("reason"):
+            self._note(peer, reply["reason"])
+        return reply
+
+    def _note(self, peer, message):
+        """Journalise ce qui empêche de recevoir du travail : une fois par cause et par
+        machine, pour qu'une machine injoignable ne remplisse pas le journal."""
+        if self._last_note.get(peer["node_id"]) != message:
+            self._last_note[peer["node_id"]] = message
+            log.info("« %s » : %s", peer["name"], message)
 
     # ------------------------------------------------------------ une unité
     def _launch(self, peer, order):
