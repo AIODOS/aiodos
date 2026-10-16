@@ -146,7 +146,8 @@ le programme dans cet ordre (`aiodos/network/companion.py`) :
 4. celui compilé dans le dossier de la version, puis dans celui de la version d'origine ;
 5. le `PATH`.
 
-Un programme qui ne démarre pas laisse place au suivant. L'état du réseau
+Un programme qui ne démarre pas, ou qui ne peut pas être mis en place, laisse place au
+suivant ; quand tous ont échoué, la liste reprend du début. L'état du réseau
 (`internet.program`) et le journal disent lequel tourne. Le
 réglage `p2p_route` choisit le chemin vers les machines appairées : `auto` (réseau local
 s'il répond, Internet sinon), `lan` ou `internet` (pour essayer le compagnon seul).
