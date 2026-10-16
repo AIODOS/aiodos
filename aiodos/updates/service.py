@@ -12,6 +12,12 @@ quand la machine est libre :
   mesurable), la nouvelle version attend le prochain démarrage, ou le bouton
   « Redémarrer maintenant ».
 
+Le compagnon Internet de la plateforme (binaries.py) se demande à part, aux machines
+qui annoncent l'avoir : pour la version reçue, avant de redémarrer dessus, et pour
+celle qui tourne, si elle l'attend encore (installée par une machine 2.0.x, qui ne
+prend que l'archive du code, ou depuis une archive). Arrivé alors qu'un autre programme
+tourne, il le remplace dès qu'aucun travail ne passe par le compagnon.
+
 Une copie de développement (dépôt git) reçoit et transmet les versions, mais ne les
 installe jamais.
 """
@@ -24,7 +30,8 @@ from aiodos.jobs import queue
 from aiodos.network import peers
 from aiodos.network.client import PeerError
 from aiodos.node import identity
-from aiodos.updates import install, launcher, p2p, restart, state
+from aiodos.updates import binaries, install, launcher, p2p, platforms, restart, state
+from aiodos.updates import manifest as manifests
 from aiodos.updates import version as versions
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import Store
@@ -93,6 +100,8 @@ class UpdateService:
         found = self._best_offer()
         if found:
             self._obtain(*found)
+        self._obtain_companion()
+        self._switch_companion()
         if launcher.developer_checkout():
             return
         self._install_newest()
@@ -139,6 +148,58 @@ class UpdateService:
         log.info("Version %s reçue de « %s »", wanted, name)
         self._set(download=None, available=None, error=None)
 
+    # ------------------------------------------------ compagnon de la plateforme
+    def _obtain_companion(self):
+        """Compagnon de cette plateforme, s'il manque, pour la version reçue la plus
+        récente et pour celle qui tourne (manifeste compris, s'il manque aussi)."""
+        kind = platforms.kind(manifests.COMPANION)
+        if kind is None:
+            return
+        for wanted in dict.fromkeys(v for v in (self.store.offer(), __version__) if v):
+            found = self.store.manifest(wanted)
+            item = manifests.binary(found) if found else None
+            if found is not None and (item is None or self.store.has(wanted, item)):
+                continue                  # pas livré pour cette plateforme, ou déjà là
+            now = time.monotonic()
+            for peer in peers.list_peers():
+                if (peer["online"] and kind in p2p.held_by(peer, wanted)
+                        and now >= self._failures.get((peer["node_id"], wanted, kind), 0)
+                        and self._obtain_file(peer["node_id"], peer["name"], wanted, kind)):
+                    break
+
+    def _obtain_file(self, node_id: str, name: str, wanted: str, kind: str) -> bool:
+        peer = peers.get(node_id)
+        if not peer:
+            return False
+        self._set(download={"version": wanted, "from": name, "received": 0, "size": 0,
+                            "what": "compagnon"})
+
+        def progress(received, size):
+            self.download = {"version": wanted, "from": name, "received": received,
+                             "size": size, "what": "compagnon"}
+            self._publish(throttle=True)
+        try:
+            p2p.fetch_file(self.network.node_id, peer, wanted, kind, self.store, progress)
+        except (PeerError, UpdateError, OSError, ValueError) as exc:
+            self._failures[(node_id, wanted, kind)] = time.monotonic() + PEER_RETRY
+            log.warning("Compagnon de la version %s non reçu de « %s » : %s", wanted, name, exc)
+            self._set(download=None,
+                      error=f"Compagnon de la version {wanted} non reçu de « {name} » : {exc}")
+            return False
+        log.info("Compagnon Internet de la version %s reçu de « %s »", wanted, name)
+        self._set(download=None, error=None)
+        return True
+
+    def _switch_companion(self):
+        """Compagnon livré arrivé alors qu'un autre programme tourne (celui du PATH, d'une
+        version plus ancienne…) : relancé dessus, quand aucun travail ne passe par lui."""
+        internet = getattr(self.network, "internet", None)
+        companion = getattr(internet, "companion", None)
+        if companion is None or not self._quiet() or not companion.outdated():
+            return
+        log.info("Relance du compagnon Internet sur un programme plus approprié")
+        internet.relaunch_from_thread()
+
     # ----------------------------------------------------------- installation
     def _install_newest(self):
         data = state.load(self.store.root)
@@ -174,8 +235,13 @@ class UpdateService:
         self._set(installing=None, error=None)
 
     def _keep(self, data: dict) -> set:
+        """Versions dont on garde le paquet ou le dossier : courante, en attente, celle qui
+        tourne, la version d'origine (son compagnon, si elle reprend la main) et celle du
+        compagnon en service (dernier recours d'une version arrivée sans le sien)."""
+        base = install.declared_version(launcher.base_dir()) if launcher.supervised() else None
         return {v for v in (data.get("current"), (data.get("pending") or {}).get("version"),
-                            __version__) if v}
+                            __version__, base, binaries.active(self.store).get("version"))
+                if v}
 
     def _tidy(self):
         self.store.prune(self._keep(state.load(self.store.root)))
@@ -193,9 +259,15 @@ class UpdateService:
             return None
         return target
 
-    def _free(self) -> bool:
+    def _quiet(self) -> bool:
+        """Aucun calcul ici ou pour une autre machine, aucune unité confiée dehors, aucune
+        conversation."""
         ex = self.executor
-        if ex.interactive or any(ex.busy.values()) or ex.remote or queue.remote_counts():
+        return not (ex.interactive or any(ex.busy.values()) or ex.remote
+                    or queue.remote_counts())
+
+    def _free(self) -> bool:
+        if not self._quiet():
             return False
         if self.windowed:
             idle = identity.idle_seconds()

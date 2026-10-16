@@ -39,7 +39,9 @@ function stateLine(u) {
   if (u.download) {
     const d = u.download;
     const progress = d.size ? ` : ${bytes(d.received)} / ${bytes(d.size)}` : '…';
-    return `Réception de la version ${esc(d.version)} depuis « ${esc(d.from)} »${progress}`;
+    const what = d.what === 'compagnon'
+      ? `du compagnon Internet de la version ${esc(d.version)}` : `de la version ${esc(d.version)}`;
+    return `Réception ${what} depuis « ${esc(d.from)} »${progress}`;
   }
   if (!u.auto) return 'Mises à jour automatiques désactivées.';
   return 'À jour : aucune version plus récente chez tes machines appairées.';

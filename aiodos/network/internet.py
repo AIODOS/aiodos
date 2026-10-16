@@ -105,6 +105,21 @@ class Internet:
         else:
             await self.stop()
 
+    @_guarded
+    async def relaunch(self):
+        """Compagnon arrêté puis relancé : sur le programme préféré, arrivé depuis son
+        lancement (le compagnon livré avec la version, cf. updates/service.py)."""
+        if self.companion is None:
+            return
+        await self.stop()
+        if self.m.running:
+            self.launch()
+
+    def relaunch_from_thread(self):
+        loop = self.m._loop
+        if loop and not loop.is_closed():
+            loop.call_soon_threadsafe(lambda: self._spawn(self.relaunch()))
+
     # ---------------------------------------------------------- liste blanche
     @_guarded
     async def sync(self):
@@ -174,11 +189,13 @@ class Internet:
     def snapshot(self) -> dict:
         companion = self.companion
         status = self._status or {}
+        running = bool(companion and companion.running)
         return {
             "enabled": self.enabled,
-            "running": bool(companion and companion.running),
+            "running": running,
             "error": companion.error if companion else None,
             "id": companion.id if companion else None,
+            "program": companion.origin if running else None,    # d'où vient le programme
             "route": route.mode(),
             "relays": [r.get("url") for r in status.get("home_relays") or []
                        if r.get("connected")],

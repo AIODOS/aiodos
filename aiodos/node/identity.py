@@ -124,6 +124,14 @@ def _models(vram_total) -> list:
     return models
 
 
+def _updates() -> dict:
+    """offer : la version la plus récente que cette machine transmet (une machine 2.0.x
+    ne lit que cette clé) ; files : les fichiers qu'elle a de chaque paquet, compagnons
+    compris, pour qu'une machine sache à qui demander celui de sa plateforme."""
+    store = Store()
+    return {"offer": store.offer(), "files": store.available()}
+
+
 def profile(max_age=5.0) -> dict:
     with _cache_lock:
         if _cache["profile"] and time.monotonic() - _cache["at"] < max_age:
@@ -145,7 +153,7 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
-        "updates": {"offer": Store().offer()},   # version transmissible (updates/p2p.py)
+        "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
     }
     with _cache_lock:
         _cache.update(at=time.monotonic(), profile=data)

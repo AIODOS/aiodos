@@ -154,4 +154,4 @@ def test_api_reports_the_state_and_clears_the_notice(data_dir):
         assert client.post("/api/updates/notice/seen", headers=headers).json() == {"ok": True}
         assert client.get("/api/updates", headers=headers).json()["notice"] is None
         node = client.get("/api/node", headers=headers).json()
-        assert node["updates"] == {"offer": None}
+        assert node["updates"] == {"offer": None, "files": {}}

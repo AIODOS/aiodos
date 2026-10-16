@@ -114,18 +114,15 @@ def dispatch(argv: list, store: Store | None = None, base_version: str = __versi
 
 
 def _child_env(ready: Path, trial: bool) -> dict:
+    """Environnement d'une version lancée. Le compagnon Internet, elle le trouve seule
+    (network/companion.locate) : le sien d'abord, celui de la version d'origine en
+    dernier recours (BASE_ENV). Les lanceurs 2.0.x, eux, mettent dans AIODOS_NET_BIN
+    celui de la version d'origine : locate le reconnaît et le fait passer après."""
     env = {k: v for k, v in os.environ.items() if k not in (READY_ENV, TRIAL_ENV)}
     env.update({CHILD_ENV: "1", READY_ENV: str(ready), BASE_ENV: str(paths.APP_ROOT),
                 "AIODOS_DATA_DIR": str(paths.data_dir())})
     if trial:
         env[TRIAL_ENV] = "1"
-    if "AIODOS_NET_BIN" not in env:      # compagnon compilé dans la version d'origine
-        for build in ("release", "debug"):
-            for name in ("aiodos-net.exe", "aiodos-net"):
-                binary = paths.APP_ROOT / "compagnon" / "target" / build / name
-                if binary.is_file():
-                    env["AIODOS_NET_BIN"] = str(binary)
-                    return env
     return env
 
 

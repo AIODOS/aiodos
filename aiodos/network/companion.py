@@ -1,7 +1,8 @@
 """Compagnon réseau aiodos-net : relie les machines appairées par Internet (phase 2).
 
-Programme Rust à part (dossier compagnon/, sur Iroh) : ce module le trouve, le lance,
-le surveille et le relance s'il s'arrête. Le compagnon n'écoute que sur 127.0.0.1 ; un
+Programme Rust à part (dossier compagnon/, sur Iroh), livré avec les versions publiées
+(updates/binaries.py) : ce module le trouve (locate), le lance, le surveille et le
+relance s'il s'arrête. Le compagnon n'écoute que sur 127.0.0.1 ; un
 jeton tiré au hasard à chaque lancement protège son API (passé par une variable
 d'environnement, jamais dans les journaux ni sur la ligne de commande). AIODOS lui donne
 la liste des machines appairées (liste blanche) et lui confie les requêtes qui ne
@@ -25,6 +26,7 @@ import requests
 from aiodos import paths
 from aiodos.network.client import error_detail
 from aiodos.network.route import NO_PROXY
+from aiodos.updates import binaries, launcher
 
 log = logging.getLogger("aiodos.net")
 
@@ -44,19 +46,72 @@ class CompanionError(Exception):
     """Compagnon introuvable, arrêté, ou qui refuse une demande."""
 
 
-def find_binary() -> Path | None:
-    """Le compagnon compilé : variable AIODOS_NET_BIN, sinon compagnon/target/release
-    (ou debug), sinon le PATH (Termux : copié dans ~/bin ou $PREFIX/bin)."""
-    explicit = os.environ.get("AIODOS_NET_BIN")
-    if explicit:
-        path = Path(explicit)
-        return path if path.is_file() else None
+BUILT_HERE = "compilé dans compagnon/target"
+BUILT_IN_BASE = "compilé dans la version d'origine"
+
+
+def _built(root) -> Path | None:
+    """Le compagnon compilé dans le dossier de code `root` (compagnon/target/release ou debug)."""
+    if root is None:
+        return None
     for build in ("release", "debug"):
-        path = paths.APP_ROOT / "compagnon" / "target" / build / EXE
+        path = Path(root) / "compagnon" / "target" / build / EXE
         if path.is_file():
             return path
+    return None
+
+
+def _inside(path, folder) -> bool:
+    path, folder = (os.path.normcase(os.path.abspath(p)) for p in (path, folder))
+    return path.startswith(folder.rstrip(os.sep) + os.sep)
+
+
+def candidates(activate: bool = True):
+    """(programme, origine) des compagnons possibles, du préféré au dernier recours :
+
+    1. AIODOS_NET_BIN, choix explicite (et alors rien d'autre) ; sauf s'il désigne le
+       compagnon compilé dans la version d'origine : un lanceur 2.0.x l'y met pour la
+       version qu'il lance, et ce programme, plus ancien, passe après celui livré avec elle ;
+    2. dans une copie de développement, celui qu'on y a compilé (compagnon/target) ;
+    3. celui livré avec la version qui tourne, puis avec les versions plus anciennes
+       (updates/binaries.py) ; avec `activate`, chacun est d'abord mis en place ;
+    4. compilé dans le dossier de cette version, puis dans celui de la version d'origine ;
+    5. le PATH (Termux : copié dans ~/bin ou $PREFIX/bin).
+    """
+    base = launcher.base_dir() if launcher.supervised() else None
+    explicit = os.environ.get("AIODOS_NET_BIN")
+    if explicit and not (base and _inside(explicit, Path(base) / "compagnon" / "target")):
+        if Path(explicit).is_file():
+            yield Path(explicit), "AIODOS_NET_BIN"
+        return
+    if launcher.developer_checkout() and _built(paths.APP_ROOT):
+        yield _built(paths.APP_ROOT), BUILT_HERE
+    for path, version in (binaries.prepared() if activate else binaries.delivered()):
+        yield path, f"livré avec la version {version}"
+    for root, origin in ((paths.APP_ROOT, BUILT_HERE), (base, BUILT_IN_BASE)):
+        if _built(root):
+            yield _built(root), origin
+    if explicit and Path(explicit).is_file():        # mis par un lanceur 2.0.x
+        yield Path(explicit), BUILT_IN_BASE
     found = shutil.which("aiodos-net")
-    return Path(found) if found else None
+    if found:
+        yield Path(found), "PATH"
+
+
+def locate(activate: bool = True, skip=()):
+    """(programme, origine) du compagnon à lancer, ou None : le premier des candidats
+    dont l'origine n'est pas dans `skip` (programmes qui n'ont pas démarré ici) ; s'ils
+    y sont tous, le préféré, réessayé."""
+    for path, origin in candidates(activate):
+        if origin not in skip:
+            return path, origin
+    return locate(activate) if skip else None
+
+
+def find_binary() -> Path | None:
+    """Le compagnon qui serait lancé (cf. locate), sans le mettre en place."""
+    found = locate(activate=False)
+    return found[0] if found else None
 
 
 def _terminate(process):
@@ -94,6 +149,9 @@ class Companion:
         self.id = None
         self.listen = None
         self.error = None
+        self.binary = None             # programme lancé, et d'où il vient (cf. locate)
+        self.origin = None
+        self._broken = set()           # origines des programmes qui n'ont pas démarré
         self.generation = 0            # +1 à chaque lancement : liste blanche à renvoyer
         self._stderr = deque(maxlen=20)
         self._lock = threading.Lock()
@@ -147,10 +205,12 @@ class Companion:
         return False
 
     def _launch(self) -> bool:
-        binary = find_binary()
-        if binary is None:
-            return self._fail("Compagnon aiodos-net introuvable : le compiler d'abord "
-                              "(voir compagnon/README.md).")
+        located = locate(skip=self._broken)
+        if located is None:
+            return self._fail("Compagnon aiodos-net introuvable : il arrive avec les mises à "
+                              "jour, d'une machine appairée qui l'a (ou le compiler : voir "
+                              "compagnon/README.md).")
+        binary, origin = located
         token = secrets.token_urlsafe(24)
         env = dict(os.environ, AIODOS_NET_TOKEN=token)
         self._stderr.clear()
@@ -160,7 +220,8 @@ class Companion:
                 stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8",
                 errors="replace", creationflags=_NO_WINDOW)
         except OSError as exc:
-            return self._fail(f"Le compagnon aiodos-net ne se lance pas : {exc}")
+            self._broken.add(origin)          # le suivant sera essayé (cf. locate)
+            return self._fail(f"Le compagnon aiodos-net ({origin}) ne se lance pas : {exc}")
         ready = threading.Event()
         found = {}
         threading.Thread(target=self._read_stdout, args=(process, ready, found), daemon=True,
@@ -177,7 +238,8 @@ class Companion:
             process.wait(5)
             time.sleep(0.2)                  # dernières lignes du journal
             last = " / ".join(self._stderr) or f"code {process.returncode}"
-            return self._fail(f"Le compagnon aiodos-net n'a pas démarré : {last}")
+            self._broken.add(origin)
+            return self._fail(f"Le compagnon aiodos-net ({origin}) n'a pas démarré : {last}")
         with self._lock:
             # Arrêt demandé pendant le lancement : ce compagnon-là ne doit pas rester
             # orphelin (stop() n'a rien trouvé à arrêter, ou l'ancien seulement).
@@ -185,6 +247,7 @@ class Companion:
             if not stopping:
                 self.process, self.token = process, token
                 self.id, self.listen = found.get("id"), found.get("listen")
+                self.binary, self.origin = binary, origin
                 self.generation += 1
                 self._info = None
                 self.error = None
@@ -192,8 +255,21 @@ class Companion:
         if stopping:
             _terminate(process)
             return False
-        log.info("Compagnon aiodos-net prêt (API locale %s)", self.listen)
+        build = ""
+        if found.get("version"):
+            build += f", version {found['version']}"
+        if found.get("commit"):
+            build += f", commit {str(found['commit'])[:10]}"
+        log.info("Compagnon aiodos-net prêt (API locale %s ; %s%s)", self.listen, origin, build)
         return True
+
+    def outdated(self) -> bool:
+        """Un programme préféré à celui qui tourne est arrivé depuis son lancement (le
+        compagnon livré avec la version, reçu après coup) : il vaut une relance."""
+        if not self.running or self.origin is None:
+            return False
+        found = locate(activate=False, skip=self._broken)
+        return found is not None and found[1] != self.origin
 
     def _read_stdout(self, process, ready, found):
         for line in process.stdout:
