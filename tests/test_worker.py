@@ -10,7 +10,7 @@ from coeur.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâ
 from coeur.knowledge import store
 from coeur.network import peers, work, worker
 from coeur.network.worker import Assignment, Worker, sharing_state
-from coeur.node import identity
+from coeur.node import identity, power
 from coeur.services import ollama
 
 OWNER, LENDER = "machine-a", "machine-b"
@@ -142,8 +142,14 @@ def test_file_changed_during_transfer_is_detected(setup, monkeypatch):
     assert "transfert" in setup["lender"]._process(a)
 
 
+def _supply(monkeypatch, plugged=True, level=None, temperature=None, mobile=False):
+    monkeypatch.setattr(power, "read", lambda: {
+        "plugged": plugged, "level": level, "temperature": temperature,
+        "mobile": mobile, "source": "test"})
+
+
 def test_sharing_conditions(monkeypatch):
-    monkeypatch.setattr(identity, "on_ac_power", lambda: True)
+    _supply(monkeypatch, plugged=True)
     monkeypatch.setattr(identity, "idle_seconds", lambda: 30.0)
     assert sharing_state()["state"] == "off"
     settings.set_many({"share_enabled": True, "idle_minutes": 10})
@@ -151,11 +157,65 @@ def test_sharing_conditions(monkeypatch):
     assert state["state"] == "busy" and "10 min" in state["detail"]
     monkeypatch.setattr(identity, "idle_seconds", lambda: 11 * 60.0)
     assert sharing_state()["active"]
-    monkeypatch.setattr(identity, "on_ac_power", lambda: False)
+    _supply(monkeypatch, plugged=False)
     assert sharing_state()["state"] == "battery"
     settings.set_many({"share_on_ac_only": False, "share_when_idle": False})
     monkeypatch.setattr(identity, "idle_seconds", lambda: 0.0)
     assert sharing_state()["active"]
+
+
+def test_a_pc_keeps_its_rules_whatever_its_battery(monkeypatch):
+    """Les critères du téléphone ne s'appliquent pas à un PC portable sur secteur,
+    ni à une machine dont l'alimentation est inconnue (comme avant)."""
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    settings.set_many({"share_enabled": True})
+    _supply(monkeypatch, plugged=True, level=30, temperature=55.0)
+    assert sharing_state()["active"]
+    _supply(monkeypatch, plugged=None)
+    assert sharing_state()["active"]
+
+
+def test_phone_computes_only_charging_charged_enough_and_cool(monkeypatch):
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)   # pas mesurable sur Android
+    settings.set_many({"share_enabled": True, "share_min_battery": 80, "share_max_temp": 40})
+    _supply(monkeypatch, plugged=True, level=85, temperature=31.5, mobile=True)
+    assert sharing_state()["active"]
+    _supply(monkeypatch, plugged=False, level=85, temperature=31.5, mobile=True)
+    state = sharing_state()
+    assert state["state"] == "battery" and "ce téléphone" in state["detail"]
+    _supply(monkeypatch, plugged=None, level=None, mobile=True)      # ni /sys ni Termux:API
+    assert sharing_state()["state"] == "unknown"
+    _supply(monkeypatch, plugged=True, level=62, temperature=31.5, mobile=True)
+    state = sharing_state()
+    assert state["state"] == "low_battery" and "62 %" in state["detail"]
+    assert "80 %" in state["detail"]
+    _supply(monkeypatch, plugged=True, level=85, temperature=None, mobile=True)
+    assert sharing_state()["active"]                                  # température inconnue
+
+
+def test_hot_phone_waits_to_cool_down_before_resuming(monkeypatch):
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    settings.set_many({"share_enabled": True, "share_max_temp": 40})
+
+    def at(degrees, previous=None):
+        _supply(monkeypatch, plugged=True, level=90, temperature=degrees, mobile=True)
+        return sharing_state(previous)
+    assert at(39.9)["active"]
+    hot = at(40.4)
+    assert hot["state"] == "hot" and hot["detail"] == (
+        "En pause : batterie à 40,4 °C (reprise à 37 °C).")
+    assert at(39.0, previous=hot)["state"] == "hot"       # pas de reprise à 39,9 °C
+    assert at(37.0, previous=at(37.5, previous=hot))["active"]
+
+
+def test_phone_rules_follow_the_settings(monkeypatch):
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    settings.set_many({"share_enabled": True, "share_on_ac_only": False,
+                       "share_min_battery": 50, "share_max_temp": 0})
+    _supply(monkeypatch, plugged=False, level=55, temperature=44.0, mobile=True)
+    assert sharing_state()["active"]                # sur batterie, si l'utilisateur l'a voulu
+    _supply(monkeypatch, plugged=False, level=45, temperature=44.0, mobile=True)
+    assert sharing_state()["state"] == "low_battery"
 
 
 def test_gpu_share_below_100_percent_imposes_a_rest(setup):

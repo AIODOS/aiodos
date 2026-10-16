@@ -2,6 +2,7 @@
 
 En phase 1, ce profil sera échangé entre nœuds pour que le planificateur sache
 qui peut faire quoi : VRAM, modèles installés, machine inactive ou sur secteur…
+L'alimentation (secteur, batterie, température) est lue par node/power.py.
 """
 import ctypes
 import json
@@ -14,6 +15,7 @@ import time
 import uuid
 
 from coeur import __version__, db, settings
+from coeur.node import power
 from coeur.services import ollama
 
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # pas de console qui clignote
@@ -57,7 +59,22 @@ def memory() -> dict:
         status.dwLength = ctypes.sizeof(MemoryStatus)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             return {"total": status.ullTotalPhys, "available": status.ullAvailPhys}
-    return {"total": 0, "available": 0}
+        return {"total": 0, "available": 0}
+    return _meminfo()
+
+
+def _meminfo(path="/proc/meminfo") -> dict:
+    """Linux et Android : « MemTotal: 7854321 kB »…"""
+    values = {}
+    try:
+        with open(path, encoding="ascii", errors="replace") as f:
+            for line in f:
+                name, _, rest = line.partition(":")
+                if name in ("MemTotal", "MemAvailable"):
+                    values[name] = int(rest.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return {"total": values.get("MemTotal", 0), "available": values.get("MemAvailable", 0)}
 
 
 def gpus() -> list:
@@ -79,18 +96,8 @@ def gpus() -> list:
 
 
 def on_ac_power():
-    """True sur secteur, False sur batterie, None si inconnu."""
-    if sys.platform != "win32":
-        return None
-
-    class PowerStatus(ctypes.Structure):
-        _fields_ = [("ACLineStatus", ctypes.c_byte), ("BatteryFlag", ctypes.c_byte),
-                    ("BatteryLifePercent", ctypes.c_byte), ("Reserved1", ctypes.c_byte),
-                    ("BatteryLifeTime", ctypes.c_ulong), ("BatteryFullLifeTime", ctypes.c_ulong)]
-    status = PowerStatus()
-    if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
-        return {1: True, 0: False}.get(status.ACLineStatus)
-    return None
+    """True sur secteur (ou en charge), False sur batterie, None si inconnu."""
+    return power.read()["plugged"]
 
 
 def idle_seconds():
@@ -127,6 +134,7 @@ def profile(max_age=5.0) -> dict:
             return _cache["profile"]
     cards = gpus()
     vram_total = max((g["vram_total"] for g in cards), default=0)
+    supply = power.read()
     data = {
         "node_id": node_id(),
         "name": settings.get("node_name"),
@@ -135,7 +143,8 @@ def profile(max_age=5.0) -> dict:
         "cpu": {"name": cpu_name(), "threads": os.cpu_count()},
         "memory": memory(),
         "gpus": cards,
-        "on_ac_power": on_ac_power(),
+        "on_ac_power": supply["plugged"],
+        "power": supply,
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
     }

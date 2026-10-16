@@ -61,7 +61,9 @@ DEFAULTS = {
     "share_enabled": False,           # calculer pour mes machines appairées
     "share_when_idle": True,          # comme l'économiseur d'écran de SETI@home
     "idle_minutes": 10,
-    "share_on_ac_only": True,
+    "share_on_ac_only": True,         # téléphone : seulement en charge
+    "share_min_battery": 80,          # téléphone : charge minimale pour calculer (%)
+    "share_max_temp": 40,             # téléphone : température maximale de la batterie (°C)
     "share_max_gpu": 100,
 }
 

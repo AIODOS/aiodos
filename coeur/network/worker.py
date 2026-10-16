@@ -1,7 +1,8 @@
 """Prêter sa puissance : côté machine qui calcule pour les autres.
 
 Quand le partage est activé et que les conditions sont réunies (PC inactif
-depuis N minutes, sur secteur), ce nœud demande du travail à ses machines
+depuis N minutes, sur secteur ; téléphone en charge, assez chargé et pas trop
+chaud, cf. node/power.py), ce nœud demande du travail à ses machines
 appairées, en commençant par celles qui ont le plus calculé pour lui
 (réciprocité). Son propre travail passe toujours avant : il ne prête que les
 ressources dont il n'a pas besoin. Dès que l'utilisateur revient, les unités en
@@ -29,31 +30,67 @@ from coeur.jobs.models import GPU_BOUND
 from coeur.network import client, peers, wire, work
 from coeur.network.client import PeerError
 from coeur.network.envelope import b64d
-from coeur.node import identity
+from coeur.node import identity, power
 
 log = logging.getLogger("coeur.worker")
 
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
 CAPS_TTL = 30
+HEAT_MARGIN = 3          # °C : un téléphone trop chaud reprend 3 °C sous sa limite
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
              *(f"LPT{i}" for i in range(1, 10))}
 
 
-def sharing_state() -> dict:
-    """Ce PC peut-il calculer pour les autres en ce moment ? Avec l'explication."""
+def sharing_state(previous=None) -> dict:
+    """Cette machine peut-elle calculer pour les autres en ce moment ? Avec
+    l'explication. `previous` : état précédent (après une pause pour la chaleur,
+    on attend que la batterie ait refroidi de quelques degrés)."""
     if not settings.get("share_enabled"):
         return {"active": False, "state": "off", "detail": "Partage désactivé."}
-    if settings.get("share_on_ac_only") and identity.on_ac_power() is False:
-        return {"active": False, "state": "battery", "detail": "En pause : ce PC est sur batterie."}
+    supply = power.read()
+    device = "ce téléphone" if supply["mobile"] else "ce PC"
+    if settings.get("share_on_ac_only"):
+        if supply["plugged"] is False:
+            return {"active": False, "state": "battery", "detail": f"En pause : {device} est sur batterie."}
+        if supply["plugged"] is None and supply["mobile"]:
+            return {"active": False, "state": "unknown",
+                    "detail": "En pause : impossible de savoir si ce téléphone est en charge "
+                              "(Termux:API manquant ? Voir docs/android.md)."}
+    if supply["mobile"]:
+        paused = _phone_pause(supply, previous)
+        if paused:
+            return paused
     if settings.get("share_when_idle"):
         idle = identity.idle_seconds()
         wait = int(settings.get("idle_minutes") or 10) * 60
         if idle is not None and idle < wait:
             left = max(1, round((wait - idle) / 60))
             return {"active": False, "state": "busy",
-                    "detail": f"En pause : ce PC est utilisé (reprise après {left} min sans activité)."}
+                    "detail": f"En pause : {device} est utilisé (reprise après {left} min sans activité)."}
     return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
+
+
+def _phone_pause(supply, previous) -> dict | None:
+    """Téléphone : batterie assez chargée et pas trop chaude, comme BOINC sous
+    Android. Son inactivité n'est pas mesurable sans droits root : c'est la
+    charge qui dit qu'il n'est pas dans une poche."""
+    level, minimum = supply["level"], int(settings.get("share_min_battery") or 0)
+    if level is not None and level < minimum:
+        return {"active": False, "state": "low_battery",
+                "detail": f"En pause : batterie à {level} % (il en faut {minimum} % pour calculer)."}
+    heat, limit = supply["temperature"], float(settings.get("share_max_temp") or 0)
+    if heat is None or not limit:
+        return None
+    resume = limit - HEAT_MARGIN
+    if heat > (resume if (previous or {}).get("state") == "hot" else limit):
+        return {"active": False, "state": "hot",
+                "detail": f"En pause : batterie à {_celsius(heat)} (reprise à {_celsius(resume)})."}
+    return None
+
+
+def _celsius(value) -> str:
+    return f"{value:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " °C"
 
 
 def safe_name(name) -> str:
@@ -138,7 +175,7 @@ class Worker:
             self._wake.clear()
 
     async def _tick(self) -> float:
-        state = await asyncio.to_thread(sharing_state)
+        state = await asyncio.to_thread(sharing_state, self.state)
         if state != self.state:
             self.state = state
             self.m.changed()
