@@ -1,6 +1,6 @@
 """Extraction de fichiers (tous formats) et rendu Markdown sûr."""
-from coeur import render
-from coeur.services import extract
+from aiodos import render
+from aiodos.services import extract
 
 
 def test_classify():

@@ -2,8 +2,8 @@
 (son nom de machine vaut « localhost »). Propriétés du système simulées."""
 import pytest
 
-from coeur import settings
-from coeur.node import android
+from aiodos import settings
+from aiodos.node import android
 
 PIXEL = {"ro.product.manufacturer": "Google", "ro.product.model": "Pixel 7",
          "ro.build.version.release": "14"}

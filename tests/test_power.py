@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from coeur.node import identity, power
+from aiodos.node import identity, power
 
 # Sortie de termux-battery-status (application Termux:API) sur un téléphone en charge
 TERMUX_CHARGING = {

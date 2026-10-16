@@ -6,16 +6,16 @@ import time
 import numpy as np
 from fastapi.testclient import TestClient
 
-from coeur import db, settings
-from coeur.api.server import create_app
-from coeur.chat import conversations
-from coeur.jobs import queue, registry
-from coeur.jobs.kinds import index as index_kinds
-from coeur.jobs.kinds import reindex
-from coeur.knowledge import chunking, search, store
-from coeur.services import media, ollama, web
+from aiodos import db, settings
+from aiodos.api.server import create_app
+from aiodos.chat import conversations
+from aiodos.jobs import queue, registry
+from aiodos.jobs.kinds import index as index_kinds
+from aiodos.jobs.kinds import reindex
+from aiodos.knowledge import chunking, search, store
+from aiodos.services import media, ollama, web
 
-AUTH = {"X-Coeur-Token": "jeton-de-test"}
+AUTH = {"X-Aiodos-Token": "jeton-de-test"}
 
 
 def _new_model(texts, model=None):
@@ -179,7 +179,7 @@ def test_empty_base_needs_no_reindex():
 
 def test_settings_change_runs_reindex_through_the_queue(fake_embed, monkeypatch):
     store.ensure_defaults()
-    with TestClient(create_app(AUTH["X-Coeur-Token"], {"testserver"})) as client:
+    with TestClient(create_app(AUTH["X-Aiodos-Token"], {"testserver"})) as client:
         general = store.list_collections()[0]["id"]
         store.upsert_entry(general, "a.txt", "file", None,
                            [("alpha bêta", fake_embed(["alpha bêta"])[0])])

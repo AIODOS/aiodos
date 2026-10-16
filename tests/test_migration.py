@@ -1,8 +1,8 @@
 """Import des données de la v1 (fichiers JSON) dans la base SQLite."""
 import json
 
-from coeur import db, migrate_legacy, settings
-from coeur.knowledge import store
+from aiodos import db, migrate_legacy, settings
+from aiodos.knowledge import store
 
 
 def _write(path, data):

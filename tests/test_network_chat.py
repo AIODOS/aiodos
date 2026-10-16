@@ -47,7 +47,7 @@ def _chat(node, model, text):
         f"http://127.0.0.1:{node.port}/api/chat",
         json={"text": text, "model": model, "think": False,
               "libraries": False, "conversations": False},
-        headers={"X-Coeur-Token": node.token}, stream=True, timeout=300)
+        headers={"X-Aiodos-Token": node.token}, stream=True, timeout=300)
     assert response.status_code == 200, response.text
     for line in response.iter_lines(decode_unicode=True):
         if line and line.startswith("data: "):

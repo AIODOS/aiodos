@@ -1,4 +1,4 @@
-"""Lancement de vrais nœuds Cœur IA dans des processus séparés (tests réseau).
+"""Lancement de vrais nœuds Aiodos dans des processus séparés (tests réseau).
 
 Chaque nœud a son propre dossier de données et écoute sur 127.0.0.1 : pas de
 pare-feu à franchir, pas de diffusion UDP (ajout par adresse).
@@ -35,10 +35,10 @@ class Node:
         self.output = []
 
     def start(self, timeout=40):
-        env = dict(os.environ, COEUR_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, AIODOS_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.process = subprocess.Popen(
-            [sys.executable, "-m", "coeur", "--headless", "--no-migrate",
+            [sys.executable, "-m", "aiodos", "--headless", "--no-migrate",
              "--port", str(self.port), "--network", "--p2p-host", "127.0.0.1",
              "--p2p-port", str(self.p2p_port), "--no-discovery", *self.args],
             cwd=APP_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -61,7 +61,7 @@ class Node:
 
     def api(self, method, path, body=None, expect=200):
         response = requests.request(method, f"http://127.0.0.1:{self.port}/api{path}",
-                                    json=body, headers={"X-Coeur-Token": self.token},
+                                    json=body, headers={"X-Aiodos-Token": self.token},
                                     timeout=30)
         assert response.status_code == expect, response.text
         return response.json()

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cœur IA : nœud de calcul sans fenêtre (téléphone Android sous Termux, Linux…).
+# Aiodos : nœud de calcul sans fenêtre (téléphone Android sous Termux, Linux…).
 #   sh lancer-noeud.sh              (les options en plus sont passées au nœud)
 # Sous Termux : garde le processeur éveillé écran éteint, et limite le téléphone
 # à une unité d'embeddings et une page web à la fois (ni vision, ni Whisper).
@@ -26,4 +26,4 @@ fi
 if [ -n "$termux" ]; then
     set -- --slots gpu=0,cpu=0,embed=1,net=1 "$@"
 fi
-exec python3 -m coeur --headless --network --port 8800 "$@"
+exec python3 -m aiodos --headless --network --port 8800 "$@"

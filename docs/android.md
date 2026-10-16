@@ -8,7 +8,7 @@
 
 Un téléphone récent a 6 à 12 Go de mémoire et 8 cœurs. C'est assez pour calculer des
 embeddings pour les bibliothèques du PC pendant qu'il recharge, la nuit par exemple. Il
-fait tourner Cœur IA **sans fenêtre** dans Termux, avec son propre Ollama, et calcule
+fait tourner Aiodos **sans fenêtre** dans Termux, avec son propre Ollama, et calcule
 pour le PC comme n'importe quelle machine appairée.
 
 ## Ce que fait le téléphone, et quand
@@ -28,7 +28,7 @@ Pour chacun, il lit le contenu, le découpe en passages et calcule les embedding
 - les conversations.
 
 Le PC ne lui confie que les unités qu'il sait traiter (`can_serve`,
-`coeur/network/work.py`).
+`aiodos/network/work.py`).
 
 **Quand il calcule :** seulement si **son** utilisateur a activé « Prêter ma
 puissance », et seulement dans ces conditions, comme BOINC sous Android :
@@ -55,7 +55,7 @@ puissance », et seulement dans ces conditions, comme BOINC sous Android :
 | Mémoire | 4 Go conseillés : le modèle embeddinggemma occupe à lui seul environ 650 Mo |
 | Espace libre | environ 2,5 Go : Termux, Python, compilateur, Ollama, modèle (622 Mo) |
 | Réseau | le même Wi-Fi que le PC. Pas un réseau « invité », qui isole les appareils les uns des autres |
-| PC | Cœur IA dans la même version que le téléphone, avec le réseau local activé |
+| PC | Aiodos dans la même version que le téléphone, avec le réseau local activé |
 | Chargeur | un vrai chargeur secteur de préférence. Branché sur le port USB d'un PC, le téléphone peut se décharger en calculant |
 
 ## 1. Installer Termux et Termux:API
@@ -98,31 +98,31 @@ termux-battery-status
   l'application Termux:API manque ou ne vient pas de la même source que Termux.
   Interrompre avec <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
-## 3. Copier Cœur IA sur le téléphone
+## 3. Copier Aiodos sur le téléphone
 
-**Sur le PC**, dans le dossier de Cœur IA (dans la même version que celle qui tourne sur
+**Sur le PC**, dans le dossier de Aiodos (dans la même version que celle qui tourne sur
 le PC) :
 
 ```sh
-git archive --format=zip -o coeur-ia.zip HEAD
+git archive --format=zip -o aiodos.zip HEAD
 ```
 
 - L'archive ne contient que le code versionné : rien du dossier `data/`, donc ni
   conversations, ni bibliothèques, ni clés API.
-- Copier `coeur-ia.zip` dans le dossier « Download » du téléphone, par exemple avec un
+- Copier `aiodos.zip` dans le dossier « Download » du téléphone, par exemple avec un
   câble USB en mode « Transfert de fichiers ».
 
 **Dans Termux** :
 
 ```sh
 termux-setup-storage
-python -m zipfile -e ~/storage/downloads/coeur-ia.zip ~/coeur-ia
-cd ~/coeur-ia
+python -m zipfile -e ~/storage/downloads/aiodos.zip ~/aiodos
+cd ~/aiodos
 ```
 
 - `termux-setup-storage` autorise l'accès aux fichiers du téléphone. Il ne sert qu'une
   fois.
-- Le code reste dans le dossier de Termux (`~/coeur-ia`), pas dans la mémoire partagée
+- Le code reste dans le dossier de Termux (`~/aiodos`), pas dans la mémoire partagée
   du téléphone.
 
 **Mettre à jour** : refaire l'archive sur le PC, puis l'extraire au même endroit. Le
@@ -211,7 +211,7 @@ ollama list
 ## 7. Lancer le nœud
 
 ```sh
-cd ~/coeur-ia
+cd ~/aiodos
 sh lancer-noeud.sh
 ```
 
@@ -225,8 +225,8 @@ sh lancer-noeud.sh
 **Lignes à repérer au démarrage :**
 
 ```
-… INFO coeur.network : Réseau local actif sur 0.0.0.0:47701 (pour ajouter cette machine depuis une autre : 192.168.1.42:47701)
-Nœud Cœur IA prêt : http://127.0.0.1:8800/?t=…
+… INFO aiodos.network : Réseau local actif sur 0.0.0.0:47701 (pour ajouter cette machine depuis une autre : 192.168.1.42:47701)
+Nœud Aiodos prêt : http://127.0.0.1:8800/?t=…
 ```
 
 - La première ligne donne l'**adresse du téléphone** à saisir sur le PC.
@@ -290,7 +290,7 @@ Nœud Cœur IA prêt : http://127.0.0.1:8800/?t=…
    - Le PC calcule aussi de son côté : le téléphone prend ce qu'il peut quand il demande
      du travail.
    - Pour voir le téléphone travailler seul, lancer le PC sans embeddings locaux :
-     `python -m coeur --slots embed=0`.
+     `python -m aiodos --slots embed=0`.
 3. Vue « Tâches » du PC : les unités calculées ailleurs indiquent la machine. Sur le
    téléphone, l'état passe à « Calcule pour tes machines » avec le nom du fichier.
 4. Débrancher le téléphone : en moins d'une minute, il se met en pause et rend son unité,
@@ -303,7 +303,7 @@ Nœud Cœur IA prêt : http://127.0.0.1:8800/?t=…
 | `termux-battery-status` ne rend pas la main ; « Charge inconnue » | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
 | « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
 | « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
-| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images ou de sons, ou versions de Cœur IA différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/coeur.log`) dit pourquoi une unité a été rendue |
+| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images ou de sons, ou versions de Aiodos différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
 | Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | relancer `sh lancer-noeud.sh` et reprendre l'adresse affichée |
 | `[Process completed (signal 9) - press Enter]` | phantom process killer | étape 6 |
 | pip : « no matching distribution » ou « has no usable wheels » | le TUR n'a pas (encore) cette version | étape 4, « Si cela échoue » |

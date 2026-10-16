@@ -6,14 +6,14 @@ import threading
 import numpy as np
 import pytest
 
-from coeur import db, settings
-from coeur.jobs import kinds, leases, queue, registry  # noqa: F401  (enregistre les tâches)
-from coeur.jobs.models import MAX_ATTEMPTS
-from coeur.knowledge import store
-from coeur.network import peers, wire, work
-from coeur.network.client import PeerError
-from coeur.network.worker import safe_name
-from coeur.services import ollama
+from aiodos import db, settings
+from aiodos.jobs import kinds, leases, queue, registry  # noqa: F401  (enregistre les tâches)
+from aiodos.jobs.models import MAX_ATTEMPTS
+from aiodos.knowledge import store
+from aiodos.network import peers, wire, work
+from aiodos.network.client import PeerError
+from aiodos.network.worker import safe_name
+from aiodos.services import ollama
 
 B = "machine-b"
 C = "machine-c"
@@ -125,7 +125,7 @@ def test_blob_is_served_only_to_the_machine_holding_the_unit(owner):
 
 
 def wire_bytes(reply):
-    from coeur.network.envelope import b64d
+    from aiodos.network.envelope import b64d
     return b64d(reply["data"])
 
 

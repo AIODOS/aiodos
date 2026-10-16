@@ -1,4 +1,8 @@
-# Cœur IA
+# Aiodos
+
+> *AI* + *hodos*, « le chemin » en grec, celui de « méthode » et de « synode » (faire
+> route ensemble) : **la voie de l'IA, faite ensemble**. Le projet s'appelait Cœur IA
+> jusqu'au 16/10/2026 ; ses données sont reprises telles quelles.
 
 Atelier d'IA **100 % local** : chat, code et documents avec des modèles open source
 (Mistral, Qwen…) via [Ollama], sur ta machine. **Plusieurs machines peuvent
@@ -37,7 +41,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 
 1. **Activer le réseau local** sur chaque PC (vue « Réseau local »). Windows demande
    l'autorisation du pare-feu pour Python : l'accepter pour les **réseaux privés** seulement.
-2. **Appairer** : les machines Cœur IA du réseau apparaissent d'elles-mêmes (sinon,
+2. **Appairer** : les machines Aiodos du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
 3. **Prêter sa puissance** (vue « Cette machine ») : par défaut, seulement quand le PC
@@ -69,7 +73,7 @@ le bouton Stop coupe la génération là-bas. Le texte de la conversation passe 
 machine qui prête le temps de la réponse, sans y être enregistré, et son travail de fond
 se met en pause pendant ce temps.
 
-Une machine dédiée au calcul peut tourner sans fenêtre : `python -m coeur --headless`.
+Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --headless`.
 `--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
 `requirements-node.txt` suffit à l'installer (ni fenêtre, ni Whisper).
 
@@ -93,9 +97,9 @@ Pas à pas : [docs/android.md](docs/android.md).
 
 ## Lancer
 
-- **Double-clic sur `lancer.bat`** : ouvre Cœur IA dans sa fenêtre.
-- En ligne de commande : `python -m coeur`
-- Nœud sans fenêtre (machine de calcul) : `python -m coeur --headless`
+- **Double-clic sur `lancer.bat`** : ouvre Aiodos dans sa fenêtre.
+- En ligne de commande : `python -m aiodos`
+- Nœud sans fenêtre (machine de calcul) : `python -m aiodos --headless`
   (affiche l'adresse locale à ouvrir dans un navigateur).
 
 Au premier lancement, les données de la v1 (`legacy/data`) sont importées
@@ -104,7 +108,7 @@ automatiquement : conversations, dossiers, bibliothèques et réglages.
 ## Architecture
 
 ```
-coeur/
+aiodos/
 ├── __main__.py        lancement : nœud (FastAPI) + fenêtre native (pywebview / WebView2)
 ├── db.py              base SQLite unique (WAL, transactions)
 ├── settings.py        réglages (les clés API ne sortent jamais en clair)
@@ -118,7 +122,7 @@ coeur/
 │   ├── leases.py      baux : unités confiées pour un temps limité à une autre machine
 │   ├── registry.py    tâches portables : calcul (n'importe où) / intégration (chez soi)
 │   └── kinds/         types de travaux (indexation, réindexation…)
-├── network/           réseau local (protocole « coeur/1 »)
+├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
 │   ├── pairing.py     appairage par code à 6 chiffres (X25519 → HKDF)
 │   ├── envelope.py    messages scellés, horodatés, anti-rejeu (ChaCha20-Poly1305)
@@ -142,7 +146,7 @@ legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 
 ## Données
 
-Tout est dans `data/` (base `coeur.db`, journaux) : ce dossier n'est jamais versionné.
+Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais versionné.
 
 ## Tests
 

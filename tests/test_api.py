@@ -5,12 +5,12 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from coeur.api.server import create_app
-from coeur.chat import pipeline
-from coeur.knowledge import store
+from aiodos.api.server import create_app
+from aiodos.chat import pipeline
+from aiodos.knowledge import store
 
 TOKEN = "jeton-de-test"
-AUTH = {"X-Coeur-Token": TOKEN}
+AUTH = {"X-Aiodos-Token": TOKEN}
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def _events(response):
 
 def test_token_and_host_are_required(client):
     assert client.get("/api/settings").status_code == 401
-    assert client.get("/api/settings", headers={"X-Coeur-Token": "faux"}).status_code == 401
+    assert client.get("/api/settings", headers={"X-Aiodos-Token": "faux"}).status_code == 401
     assert client.get("/api/settings", headers={**AUTH, "Host": "evil.example"}).status_code == 400
     assert client.get("/api/settings", headers=AUTH).status_code == 200
     assert client.get("/").status_code == 200        # l'interface elle-même est publique
@@ -47,7 +47,7 @@ def test_api_keys_never_leave_in_clear(client):
 def test_folder_indexing_runs_through_the_queue(client, tmp_path):
     folder = tmp_path / "Projet"
     (folder / "sous").mkdir(parents=True)
-    (folder / "lisez-moi.md").write_text("Cœur IA répartit le travail.", encoding="utf-8")
+    (folder / "lisez-moi.md").write_text("Aiodos répartit le travail.", encoding="utf-8")
     (folder / "sous" / "notes.txt").write_text("Budget de 5000 euros.", encoding="utf-8")
     (folder / ".env").write_text("SECRET=1", encoding="utf-8")       # caché : ignoré
     (folder / "archive.zip").write_bytes(b"PK\x03\x04")              # binaire : ignoré
@@ -107,7 +107,7 @@ def test_preflight_detects_web_intent(client):
 def test_conversation_folders(client):
     folder = client.post("/api/folders", json={"name": "Projet X"}, headers=AUTH).json()["id"]
     assert client.post("/api/folders", json={"name": "Projet X"}, headers=AUTH).status_code == 400
-    from coeur.chat import conversations
+    from aiodos.chat import conversations
     conv = conversations.create("Essai")
     client.patch(f"/api/conversations/{conv}", json={"folder_id": folder}, headers=AUTH)
     tree = client.get("/api/conversations", headers=AUTH).json()

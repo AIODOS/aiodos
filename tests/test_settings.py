@@ -1,5 +1,5 @@
 """Réglages : seuil de pertinence propre à chaque modèle d'embedding."""
-from coeur import settings
+from aiodos import settings
 
 
 def test_default_model_and_its_threshold():

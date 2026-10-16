@@ -4,13 +4,13 @@ import hashlib
 import numpy as np
 import pytest
 
-from coeur import db
-from coeur.knowledge import search
+from aiodos import db
+from aiodos.knowledge import search
 
 
 @pytest.fixture(autouse=True)
 def data_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("COEUR_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AIODOS_DATA_DIR", str(tmp_path))
     search.invalidate()
     yield tmp_path
     db.close()
@@ -29,6 +29,6 @@ def _bag_of_words(texts, model=None):
 
 @pytest.fixture
 def fake_embed(monkeypatch):
-    from coeur.services import ollama
+    from aiodos.services import ollama
     monkeypatch.setattr(ollama, "embed", _bag_of_words)
     return _bag_of_words

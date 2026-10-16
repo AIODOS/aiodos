@@ -1,6 +1,6 @@
 # Nœud de calcul sans fenêtre : téléphone Android (Termux), Linux, mini-PC…
 #   pip install -r requirements-node.txt
-#   python -m coeur --headless --network
+#   python -m aiodos --headless --network
 # Ni fenêtre native (pywebview), ni transcription (faster-whisper) : les images
 # et l'audio/vidéo restent aux machines qui ont le modèle de vision ou Whisper
 # (correspondance des capacités, network/work.py). Ce nœud traite le texte, les

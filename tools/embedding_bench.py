@@ -10,7 +10,7 @@ sans rapport, écart entre les deux, seuil de pertinence conseillé
     python tools/embedding_bench.py --json mesures.json     # résultats détaillés
 
 Ollama doit tourner et les modèles être installés (ollama pull …). Le script
-ne dépend pas du reste de Cœur IA : pas besoin de lancer le nœud.
+ne dépend pas du reste de Aiodos : pas besoin de lancer le nœud.
 
 Un seul modèle est chargé à la fois : tout modèle déjà en mémoire est déchargé
 avant chaque mesure, et le modèle mesuré l'est juste après. Avec --json, chaque
@@ -29,7 +29,7 @@ import requests
 DATASET = Path(__file__).with_name("embedding_bench_fr.json")
 MODELS = ["nomic-embed-text", "bge-m3", "snowflake-arctic-embed2", "embeddinggemma",
           "qwen3-embedding:0.6b"]
-# Préfixes recommandés par les auteurs des modèles (question, passage). Cœur IA
+# Préfixes recommandés par les auteurs des modèles (question, passage). Aiodos
 # n'en met aucun : --prefixes mesure ce qu'ils apporteraient.
 PREFIXES = {
     "nomic-embed-text": ("search_query: ", "search_document: "),
@@ -38,7 +38,7 @@ PREFIXES = {
     "qwen3-embedding:0.6b": ("Instruct: Given a web search query, retrieve relevant "
                              "passages that answer the query\nQuery:", ""),
 }
-BATCH = 16                      # comme coeur.services.ollama.embed
+BATCH = 16                      # comme aiodos.services.ollama.embed
 MEMORY_PREFIX = "Utilisateur : "  # forme d'un message dans la mémoire des conversations
 
 

@@ -8,7 +8,7 @@ d'embedding (sinon le test est ignoré).
 import pytest
 import requests
 
-from coeur import settings
+from aiodos import settings
 from tests.nodes import Node, pair
 
 EMBED_MODEL = settings.DEFAULTS["embed_model"]       # celui des nœuds lancés ici

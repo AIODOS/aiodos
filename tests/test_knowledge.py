@@ -1,7 +1,7 @@
 """Bibliothèques : stockage, recherche, filtres, sommaire, suppression."""
 import pytest
 
-from coeur.knowledge import chunking, search, store
+from aiodos.knowledge import chunking, search, store
 
 
 def _add(collection_id, source, text, embed, kind="file"):
@@ -113,8 +113,8 @@ def test_current_conversation_is_excluded_from_memory(fake_embed):
 
 
 def test_relevance_filter_drops_background_noise():
-    from coeur import settings
-    from coeur.chat.pipeline import select_relevant
+    from aiodos import settings
+    from aiodos.chat.pipeline import select_relevant
     hit = lambda score, name: {"score": score, "source": name}
     threshold = settings.get("rag_min_score")
     assert threshold == settings.RAG_THRESHOLDS["embeddinggemma"] == 0.40

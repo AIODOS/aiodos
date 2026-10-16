@@ -2,7 +2,7 @@
 pour l'ajouter depuis une autre machine."""
 import ipaddress
 
-from coeur.network import discovery
+from aiodos.network import discovery
 
 
 def test_lan_address_is_a_real_ipv4_or_nothing():

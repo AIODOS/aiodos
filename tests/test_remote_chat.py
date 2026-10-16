@@ -8,13 +8,13 @@ import threading
 import pytest
 from fastapi.testclient import TestClient
 
-from coeur import settings
-from coeur.chat import pipeline
-from coeur.network import client, envelope, lending, p2p_app, peers, remote_models
-from coeur.network.client import PeerError
-from coeur.network.crypto import SealError
-from coeur.network.envelope import ReplayGuard
-from coeur.services import ollama
+from aiodos import settings
+from aiodos.chat import pipeline
+from aiodos.network import client, envelope, lending, p2p_app, peers, remote_models
+from aiodos.network.client import PeerError
+from aiodos.network.crypto import SealError
+from aiodos.network.envelope import ReplayGuard
+from aiodos.services import ollama
 
 KEY = b"k" * 32
 A, B = "machine-a", "machine-b"
@@ -161,7 +161,7 @@ def _peer_with_models(lends=True, online=True):
          "fits_vram": True},
         {"name": "embeddinggemma:latest", "size": 1, "caps": ["embedding"]}]}})
     if not online:
-        from coeur import db
+        from aiodos import db
         db.execute("UPDATE peers SET last_seen=0 WHERE node_id=?", (B,))
 
 

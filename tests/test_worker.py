@@ -5,13 +5,13 @@ import numpy as np
 import pytest
 import requests
 
-from coeur import db, paths, settings
-from coeur.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâches)
-from coeur.knowledge import store
-from coeur.network import peers, work, worker
-from coeur.network.worker import Assignment, Worker, sharing_state
-from coeur.node import identity, power
-from coeur.services import ollama
+from aiodos import db, paths, settings
+from aiodos.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâches)
+from aiodos.knowledge import store
+from aiodos.network import peers, work, worker
+from aiodos.network.worker import Assignment, Worker, sharing_state
+from aiodos.node import identity, power
+from aiodos.services import ollama
 
 OWNER, LENDER = "machine-a", "machine-b"
 

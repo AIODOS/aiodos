@@ -1,8 +1,8 @@
 """File de tâches : ordre de passage, réessais, pause, annulation, reprise."""
-from coeur import db
-from coeur.jobs import queue, registry
-from coeur.jobs.models import BACKGROUND, NORMAL, URGENT
-from coeur.jobs.registry import UnitSpec
+from aiodos import db
+from aiodos.jobs import queue, registry
+from aiodos.jobs.models import BACKGROUND, NORMAL, URGENT
+from aiodos.jobs.registry import UnitSpec
 
 finalized = []
 
@@ -112,8 +112,8 @@ def test_engine_outage_does_not_burn_attempts():
 
 def test_engine_down_classification():
     import requests
-    from coeur.jobs.executor import engine_down
-    from coeur.services import ollama
+    from aiodos.jobs.executor import engine_down
+    from aiodos.services import ollama
 
     def error(url):
         return requests.ConnectionError("refusé", request=requests.Request("POST", url).prepare())

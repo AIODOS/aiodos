@@ -4,9 +4,9 @@ import time
 
 import pytest
 
-from coeur import db, paths
-from coeur.network import crypto, envelope
-from coeur.network.crypto import SealError
+from aiodos import db, paths
+from aiodos.network import crypto, envelope
+from aiodos.network.crypto import SealError
 
 
 def _pair():
