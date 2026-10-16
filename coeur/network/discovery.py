@@ -7,11 +7,25 @@ côtés. Aucune donnée n'y circule, seulement « je suis là ».
 import asyncio
 import json
 import logging
+import socket
 
 from coeur.network.envelope import PROTOCOL
 
 BEACON_EVERY = 5
 log = logging.getLogger("coeur.discovery")
+
+
+def lan_address() -> str | None:
+    """Adresse IPv4 de cette machine sur le réseau local : celle qu'une autre
+    machine saisit pour l'ajouter (nœud sans écran, téléphone…). Un connect()
+    UDP ne fait que choisir la route : aucun paquet ne part."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))          # adresse réservée à la documentation
+            address = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if address.startswith(("0.", "127.")) else address
 
 
 class _Protocol(asyncio.DatagramProtocol):

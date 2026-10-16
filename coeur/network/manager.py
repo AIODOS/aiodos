@@ -14,7 +14,7 @@ from coeur import settings
 from coeur.jobs import queue
 from coeur.network import client, peers
 from coeur.network.client import PeerError
-from coeur.network.discovery import Discovery
+from coeur.network.discovery import Discovery, lan_address
 from coeur.network.envelope import PROTOCOL, ReplayGuard
 from coeur.network.pairing import Pairing
 from coeur.network.worker import Worker
@@ -102,7 +102,12 @@ class NetworkManager:
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="coeur-peers")
         if self.worker:
             self.worker.start()
-        log.info("Réseau local actif sur %s:%s", self.host, self.p2p_port)
+        address = lan_address() if self.host == "0.0.0.0" else None
+        if address:
+            log.info("Réseau local actif sur %s:%s (pour ajouter cette machine depuis une "
+                     "autre : %s:%s)", self.host, self.p2p_port, address, self.p2p_port)
+        else:
+            log.info("Réseau local actif sur %s:%s", self.host, self.p2p_port)
 
     async def _stop(self):
         if self.worker:
