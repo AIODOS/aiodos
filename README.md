@@ -62,7 +62,12 @@ Comment le travail circule :
   celles qui ont le plus calculé pour toi sont servies en premier.
 
 Une machine dédiée au calcul peut tourner sans fenêtre : `python -m coeur --headless`.
-`--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle.
+`--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
+`requirements-node.txt` suffit à l'installer (ni fenêtre, ni Whisper).
+
+**Un téléphone Android** peut aussi calculer, sous Termux : il ne prête sa puissance
+qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.
+Pas à pas : [docs/android.md](docs/android.md).
 
 ## Installation
 
@@ -112,12 +117,13 @@ coeur/
 │   ├── p2p_app.py     serveur entre nœuds, séparé de l'API locale
 │   ├── work.py        travail confié : bail, fichier par morceaux, résultats
 │   └── worker.py      partage de puissance : calculer pour ses autres machines
-├── node/identity.py   profil de la machine
+├── node/              la machine : profil (identity.py), alimentation (power.py),
+│                      particularités d'Android (android.py)
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native et interface web (HTML/CSS/JS, sans compilation)
 tests/                 tests automatisés (pytest)
 tools/                 outils de mesure (choix du modèle d'embedding)
-docs/                  notes de mesures et de choix techniques
+docs/                  notes de mesures et de choix techniques, téléphone Android
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```
 
