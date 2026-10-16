@@ -2,6 +2,7 @@
 paquets signés."""
 import base64
 import json
+import os
 import time
 import zipfile
 from pathlib import Path
@@ -70,12 +71,26 @@ def zip_folder(folder: Path, archive: Path) -> Path:
     return archive
 
 
-def publish(store: Store, archive: Path, version: str, private, trusted: dict, **extra) -> dict:
-    """Range dans `store` un paquet signé (comme tools/publish.py) ; le manifeste lu."""
-    item = {"kind": "source", "name": f"aiodos-{version}.zip", "size": archive.stat().st_size,
-            "sha256": sha256_of(archive)}
+def publish(store: Store, archive: Path, version: str, private, trusted: dict,
+            companions: dict | None = None, **extra) -> dict:
+    """Range dans `store` un paquet signé (comme tools/publish.py) ; le manifeste lu.
+    companions : {plateforme : chemin du programme} à joindre (aiodos-net-<plateforme>)."""
+    files = [(archive, {"kind": "source", "name": f"aiodos-{version}.zip",
+                        "size": archive.stat().st_size, "sha256": sha256_of(archive)})]
+    for where, path in (companions or {}).items():
+        files.append((path, {"kind": f"aiodos-net-{where}", "name": f"aiodos-net-{version}-{where}",
+                             "size": path.stat().st_size, "sha256": sha256_of(path)}))
     data = {"format": 1, "app": "aiodos", "version": version, "published": int(time.time()),
-            "commit": "0" * 40, "min_python": "3.11", "notes": "", "files": [item], **extra}
+            "commit": "0" * 40, "min_python": "3.11", "notes": "",
+            "files": [item for _, item in files], **extra}
     signed = manifests.sign(data, private)
-    store.save_file(version, item, archive)
+    for path, item in files:
+        store.save_file(version, item, path)
     return store.add_manifest(signed, trusted)
+
+
+def fake_program(path: Path, content: bytes = b"") -> Path:
+    """Un faux compagnon (des octets au hasard, et `content`)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(os.urandom(2000) + content)
+    return path

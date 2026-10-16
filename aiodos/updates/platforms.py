@@ -28,17 +28,22 @@ _MACHINES = {"amd64": "x86_64", "x86_64": "x86_64", "x64": "x86_64",
 def tag() -> str | None:
     """La plateforme de cette machine, ou None si aucun programme n'est construit pour
     elle (processeur 32 bits, système inconnu)."""
-    if android.is_android():
+    return name(sys.platform, platform.machine(), android.is_android())
+
+
+def name(system: str, machine: str, on_android: bool = False) -> str | None:
+    """Plateforme d'après sys.platform et platform.machine()."""
+    if on_android:
         system = "android"
-    elif sys.platform == "win32":
+    elif system == "win32":
         system = "windows"
-    elif sys.platform.startswith("linux"):
+    elif system.startswith("linux"):
         system = "linux"
-    elif sys.platform == "darwin":
+    elif system == "darwin":
         system = "macos"
     else:
         return None
-    machine = _MACHINES.get(platform.machine().lower())
+    machine = _MACHINES.get(machine.lower())
     found = f"{system}-{machine}" if machine else None
     return found if found in RUST_TARGETS else None
 

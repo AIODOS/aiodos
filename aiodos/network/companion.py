@@ -27,6 +27,8 @@ from aiodos import paths
 from aiodos.network.client import error_detail
 from aiodos.network.route import NO_PROXY
 from aiodos.updates import binaries, launcher
+from aiodos.updates.manifest import UpdateError
+from aiodos.updates.store import Store
 
 log = logging.getLogger("aiodos.net")
 
@@ -61,51 +63,75 @@ def _built(root) -> Path | None:
     return None
 
 
+def _file(path) -> Path | None:
+    return Path(path) if path and Path(path).is_file() else None
+
+
 def _inside(path, folder) -> bool:
     path, folder = (os.path.normcase(os.path.abspath(p)) for p in (path, folder))
     return path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
-def candidates(activate: bool = True):
-    """(programme, origine) des compagnons possibles, du préféré au dernier recours :
+def _delivered(activate: bool):
+    """Les programmes livrés (updates/binaries.py), avec leur origine ; chacun mis en
+    place au moment où on le prend, avec `activate`."""
+    store = Store()
+    for version, item in binaries.candidates(store):
+        origin = f"livré avec la version {version}"
+        if not activate:
+            yield origin, lambda version=version, item=item: store.package_path(version, item)
+            continue
+
+        def prepare(version=version, item=item):
+            try:
+                return binaries.activate(store, version, item)
+            except UpdateError as exc:
+                log.warning("%s", exc)
+                return None
+        yield origin, prepare
+
+
+def candidates(activate: bool = True, skip=()):
+    """(programme, origine) des compagnons possibles, du préféré au dernier recours,
+    hors des origines de `skip` (programmes qui n'ont pas démarré ici) :
 
     1. AIODOS_NET_BIN, choix explicite (et alors rien d'autre) ; sauf s'il désigne le
        compagnon compilé dans la version d'origine : un lanceur 2.0.x l'y met pour la
        version qu'il lance, et ce programme, plus ancien, passe après celui livré avec elle ;
     2. dans une copie de développement, celui qu'on y a compilé (compagnon/target) ;
     3. celui livré avec la version qui tourne, puis avec les versions plus anciennes
-       (updates/binaries.py) ; avec `activate`, chacun est d'abord mis en place ;
+       (updates/binaries.py) ; avec `activate`, il est d'abord mis en place ;
     4. compilé dans le dossier de cette version, puis dans celui de la version d'origine ;
     5. le PATH (Termux : copié dans ~/bin ou $PREFIX/bin).
     """
     base = launcher.base_dir() if launcher.supervised() else None
     explicit = os.environ.get("AIODOS_NET_BIN")
     if explicit and not (base and _inside(explicit, Path(base) / "compagnon" / "target")):
-        if Path(explicit).is_file():
+        if _file(explicit) and "AIODOS_NET_BIN" not in skip:
             yield Path(explicit), "AIODOS_NET_BIN"
         return
-    if launcher.developer_checkout() and _built(paths.APP_ROOT):
-        yield _built(paths.APP_ROOT), BUILT_HERE
-    for path, version in (binaries.prepared() if activate else binaries.delivered()):
-        yield path, f"livré avec la version {version}"
-    for root, origin in ((paths.APP_ROOT, BUILT_HERE), (base, BUILT_IN_BASE)):
-        if _built(root):
-            yield _built(root), origin
-    if explicit and Path(explicit).is_file():        # mis par un lanceur 2.0.x
-        yield Path(explicit), BUILT_IN_BASE
-    found = shutil.which("aiodos-net")
-    if found:
-        yield Path(found), "PATH"
+
+    def ordered():                        # (origine, de quoi trouver le programme)
+        if launcher.developer_checkout():
+            yield BUILT_HERE, lambda: _built(paths.APP_ROOT)
+        yield from _delivered(activate)
+        yield BUILT_HERE, lambda: _built(paths.APP_ROOT)
+        yield BUILT_IN_BASE, lambda: _built(base)
+        yield BUILT_IN_BASE, lambda: _file(explicit)            # mis par un lanceur 2.0.x
+        yield "PATH", lambda: _file(shutil.which("aiodos-net"))
+
+    for origin, get in ordered():
+        if origin not in skip:
+            path = get()
+            if path:
+                yield path, origin
 
 
 def locate(activate: bool = True, skip=()):
     """(programme, origine) du compagnon à lancer, ou None : le premier des candidats
-    dont l'origine n'est pas dans `skip` (programmes qui n'ont pas démarré ici) ; s'ils
-    y sont tous, le préféré, réessayé."""
-    for path, origin in candidates(activate):
-        if origin not in skip:
-            return path, origin
-    return locate(activate) if skip else None
+    hors de `skip` ; s'ils y sont tous, le préféré, réessayé."""
+    found = next(candidates(activate, skip), None)
+    return locate(activate) if found is None and skip else found
 
 
 def find_binary() -> Path | None:

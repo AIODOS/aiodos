@@ -54,22 +54,18 @@ def delivered(store: Store | None = None, program: str = manifests.COMPANION,
         yield store.package_path(version, item), version
 
 
-def prepared(store: Store | None = None, program: str = manifests.COMPANION,
-             running: str | None = None):
-    """(chemin à lancer, version qui l'a livré) des programmes livrés, chacun mis en
-    place (cf. activate) au moment où on le demande."""
+def find(store: Store | None = None, program: str = manifests.COMPANION,
+         running: str | None = None):
+    """(chemin à lancer, version) du programme livré préféré, mis en place (cf.
+    activate), ou None. Le choix complet, avec les autres programmes possibles, est
+    celui de network/companion.py."""
     store = store or Store()
     for version, item in list(candidates(store, program, running)):
         try:
-            yield activate(store, version, item, program), version
+            return activate(store, version, item, program), version
         except UpdateError as exc:
             log.warning("%s", exc)
-
-
-def find(store: Store | None = None, program: str = manifests.COMPANION,
-         running: str | None = None):
-    """(chemin à lancer, version) du programme livré préféré, prêt à être lancé, ou None."""
-    return next(prepared(store, program, running), None)
+    return None
 
 
 def active(store: Store, program: str = manifests.COMPANION) -> dict:

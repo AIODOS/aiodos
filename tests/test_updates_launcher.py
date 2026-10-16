@@ -146,3 +146,12 @@ def test_a_launched_version_declares_itself_healthy(data_dir, monkeypatch):
 def test_data_dir_argument_is_not_passed_on():
     assert launcher.child_argv(["--headless", "--data-dir", "x", "--port", "1",
                                 "--data-dir=y"]) == ["--headless", "--port", "1"]
+
+
+def test_a_launched_version_finds_its_own_companion(data_dir, monkeypatch):
+    """Le lanceur n'impose plus le compagnon compilé dans la version d'origine : la
+    version lancée prend d'abord le sien (network/companion.locate)."""
+    monkeypatch.delenv("AIODOS_NET_BIN", raising=False)
+    env = launcher._child_env(data_dir / "ready", trial=True)
+    assert "AIODOS_NET_BIN" not in env
+    assert env[launcher.BASE_ENV] and env[launcher.CHILD_ENV] == "1"

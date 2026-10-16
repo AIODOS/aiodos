@@ -134,6 +134,9 @@ def companion_targets(args, commit: str) -> tuple:
     if args.no_companion:
         return [], []
     if not companion_build.has_sources(ROOT, commit):
+        if args.targets:
+            sys.exit("Le commit à publier n'a pas de dossier compagnon/ : pas de compagnon "
+                     "à construire (--no-companion pour publier sans).")
         return [], [("toutes", "le commit n'a pas de dossier compagnon/")]
     if args.targets:
         wanted = [t.strip() for t in args.targets.split(",") if t.strip()]

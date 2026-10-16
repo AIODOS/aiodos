@@ -7,10 +7,14 @@ import pytest
 
 from aiodos.network import envelope
 from aiodos.network.client import PeerError
-from aiodos.updates import p2p
+from aiodos.updates import p2p, platforms
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import Store
-from tests.updates_kit import fake_code, new_key, publish, zip_folder
+from tests.updates_kit import fake_code, fake_program, new_key, publish, zip_folder
+
+HERE = platforms.tag() or "linux-x86_64"
+OTHER = "android-aarch64" if HERE != "android-aarch64" else "windows-x86_64"
+COMPANION = f"aiodos-net-{HERE}"
 
 
 @pytest.fixture
@@ -116,3 +120,59 @@ def test_version_signed_by_an_unknown_key_is_refused(lender, tmp_path, monkeypat
     monkeypatch.setattr("aiodos.updates.keys.TRUSTED_KEYS", {})      # ici, autre clé de confiance
     with pytest.raises(UpdateError, match="clé inconnue"):
         p2p.fetch("moi", {"node_id": "lui"}, "2.0.1", Store(tmp_path / "mine"))
+
+
+@pytest.fixture
+def lender_with_companions(tmp_path, key, monkeypatch):
+    """La machine qui transmet la 2.0.1, avec le compagnon de cette plateforme et d'une autre."""
+    store = Store(tmp_path / "lender")
+    code = fake_code(tmp_path / "code", "2.0.1")
+    programs = {where: fake_program(tmp_path / f"prog-{where}", where.encode())
+                for where in (HERE, OTHER)}
+    publish(store, zip_folder(code, tmp_path / "a.zip"), "2.0.1", *key, companions=programs)
+    monkeypatch.setattr(p2p, "_store", lambda: store)
+    monkeypatch.setattr(platforms, "tag", lambda: HERE)
+    return store
+
+
+def kinds(store, version="2.0.1"):
+    return sorted(f["kind"] for f in store.held(version))
+
+
+def test_a_version_comes_with_its_code_then_only_the_companion_of_this_platform(
+        lender_with_companions, calls, tmp_path):
+    mine = Store(tmp_path / "mine")
+    p2p.fetch("moi", {"node_id": "lui"}, "2.0.1", mine)
+    assert mine.complete("2.0.1") and kinds(mine) == ["source"]
+    item = p2p.fetch_file("moi", {"node_id": "lui"}, "2.0.1", COMPANION, mine)
+    assert item["kind"] == COMPANION
+    assert kinds(mine) == sorted(["source", COMPANION])         # pas celui de l'autre plateforme
+    assert mine.package_path("2.0.1", item).read_bytes() == \
+        lender_with_companions.package_path("2.0.1", item).read_bytes()
+    with pytest.raises(UpdateError, match="ne livre pas"):
+        p2p.fetch_file("moi", {"node_id": "lui"}, "2.0.1", "aiodos-net-plan9-mips", mine)
+
+
+def test_installed_from_an_archive_the_companion_comes_with_its_manifest(
+        lender_with_companions, calls, tmp_path, monkeypatch):
+    mine = Store(tmp_path / "mine")                     # rien de cette version : pas même
+    p2p.fetch_file("moi", {"node_id": "lui"}, "2.0.1", COMPANION, mine)     # le manifeste
+    assert kinds(mine) == [COMPANION]
+    assert mine.offer() is None                         # sans l'archive, pas transmissible
+    assert mine.available() == {"2.0.1": [COMPANION]}
+    monkeypatch.setattr(p2p, "_store", lambda: mine)    # mais son compagnon, si
+    assert p2p.serve_manifest(None, "x", {"version": "2.0.1"})["signed"]
+    companion = next(f for f in mine.held("2.0.1"))
+    assert p2p.serve_chunk(None, "x", {"version": "2.0.1", "name": companion["name"]})["data"]
+    with pytest.raises(PeerError, match="absent"):
+        p2p.serve_chunk(None, "x", {"version": "2.0.1", "name": "aiodos-2.0.1.zip"})
+
+
+def test_what_a_machine_announces(lender_with_companions):
+    announced = lender_with_companions.available()
+    assert announced == {"2.0.1": sorted(["source", COMPANION, f"aiodos-net-{OTHER}"])}
+    peer = {"profile": {"updates": {"offer": "2.0.1", "files": announced}}}
+    assert COMPANION in p2p.held_by(peer, "2.0.1")
+    for profile in (None, {}, {"updates": {"offer": "2.0.1"}},               # machine 2.0.x
+                    {"updates": {"files": []}}, {"updates": {"files": {"2.0.1": "source"}}}):
+        assert p2p.held_by({"profile": profile}, "2.0.1") == []

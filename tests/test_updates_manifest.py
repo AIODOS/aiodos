@@ -81,6 +81,22 @@ def test_files_of_an_unknown_kind_are_ignored():
     assert [f["name"] for f in manifest.wanted(found)] == ["aiodos-2.0.1.zip"]
 
 
+def test_each_machine_wants_only_the_companion_of_its_platform(monkeypatch):
+    from aiodos.updates import platforms
+    data = make()
+    for where in ("windows-x86_64", "android-aarch64"):
+        data["files"].append({"kind": f"aiodos-net-{where}", "name": f"aiodos-net-2.0.1-{where}",
+                              "size": 5, "sha256": "b" * 64})
+    manifest.check(data)
+    for where in ("windows-x86_64", "android-aarch64"):
+        monkeypatch.setattr(platforms, "tag", lambda where=where: where)
+        assert [f["kind"] for f in manifest.wanted(data)] == ["source", f"aiodos-net-{where}"]
+    for where in ("linux-x86_64", None):                    # pas construit pour elle
+        monkeypatch.setattr(platforms, "tag", lambda where=where: where)
+        assert [f["kind"] for f in manifest.wanted(data)] == ["source"]
+        assert manifest.binary(data) is None
+
+
 def test_garbage_is_refused():
     _, trusted = new_key()
     kid = next(iter(trusted))

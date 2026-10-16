@@ -61,16 +61,30 @@ cargo build --release
 
 Le programme est `compagnon\target\release\aiodos-net.exe` (environ 17 Mo) : AIODOS le
 trouve là tout seul. Lancer `cargo` depuis PowerShell ou l'invite de commandes : sous Git
-Bash, le `link.exe` de Git peut masquer celui de Visual Studio.
+Bash, le `link.exe` de Git a déjà masqué celui de Visual Studio (le 16/10/2026, en
+revanche, la construction depuis Git Bash a réussi).
 
-Pour un binaire à distribuer, plus petit (10,6 Mo au lieu de 17,5 mesurés le 16/10/2026)
-mais plusieurs minutes de compilation de plus :
+### Programme livré avec les versions
+
+**On ne le copie plus à la main** : `tools/publish.py release` construit le compagnon de
+chaque plateforme à partir du commit publié et le joint à la version. Chaque machine
+reçoit celui de sa plateforme (cf.
+[docs/mises-a-jour.md](../docs/mises-a-jour.md#le-compagnon-internet-livré-avec-les-versions)).
+L'outil utilise le profil `distribution` de `Cargo.toml` :
+
+- optimisé pour la taille (`opt-level = "s"`, `lto = "fat"`, `codegen-units = 1`) ;
+- toujours sans `panic = "abort"` (cf. Android plus bas) ;
+- 10,6 Mo sous Windows au lieu de 17,5, et 9,3 Mo pour Android, mesurés le 16/10/2026 ;
+- environ 100 s et 150 s de construction une fois les dépendances compilées.
+
+Le commit d'AIODOS, donné à la construction par la variable `AIODOS_NET_COMMIT`, est
+écrit dans le programme. L'outil de publication s'en sert pour vérifier qu'un binaire
+correspond bien à la version publiée. La ligne « ready » le donne (`"commit"`).
+Construction à la main du même programme :
 
 ```powershell
-$env:CARGO_PROFILE_RELEASE_OPT_LEVEL = "s"
-$env:CARGO_PROFILE_RELEASE_LTO = "fat"
-$env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1"
-cargo build --release
+$env:AIODOS_NET_COMMIT = (git rev-parse HEAD)
+cargo build --profile distribution --target x86_64-pc-windows-msvc --locked
 ```
 
 ### Android arm64, sous Termux
@@ -102,9 +116,11 @@ cp target/release/aiodos-net $PREFIX/bin/
   4G/5G reste injoignable de l'extérieur : c'est lui qui ouvre la connexion, puis le PC
   s'en sert (cf. plus haut).
 
-**Ou compiler depuis le PC** avec le NDK Android, puis copier le binaire dans Termux
-(compilation vérifiée le 16/10/2026 avec le NDK 28.2 : exécutable ARM64 pour Android 7
-et plus, 17 Mo ; pas encore lancé sur un téléphone) :
+**Ou compiler depuis le PC** avec le NDK Android, puis copier le binaire dans Termux.
+L'outil de publication le fait de lui-même (NDK trouvé par `ANDROID_NDK_HOME`,
+`ANDROID_NDK_ROOT` ou `ANDROID_HOME/ndk/<version>`). Compilation vérifiée le
+16/10/2026 avec le NDK 28.2 : exécutable ARM64 pour Android 7 et plus, 17 Mo en
+`release`, 9,3 Mo en `distribution` ; pas encore lancé sur un téléphone. À la main :
 
 ```powershell
 rustup target add aarch64-linux-android
@@ -120,8 +136,18 @@ adb push target\aarch64-linux-android\release\aiodos-net /data/local/tmp/
 ## Lancer
 
 **Normalement, AIODOS s'en charge** : réglage `internet_enabled` (route
-`POST /api/network/internet`), ou option `python -m aiodos --internet`. AIODOS cherche le
-programme dans `AIODOS_NET_BIN`, puis `compagnon/target/release/`, puis le `PATH`. Le
+`POST /api/network/internet`), ou option `python -m aiodos --internet`. AIODOS choisit
+le programme dans cet ordre (`aiodos/network/companion.py`) :
+
+1. `AIODOS_NET_BIN`, s'il est donné (et alors rien d'autre) ;
+2. dans une copie de développement, `compagnon/target/release/` (ou `debug/`) ;
+3. celui livré avec la version qui tourne, à défaut avec une version plus ancienne,
+   copié dans `data/updates/bin/` ;
+4. celui compilé dans le dossier de la version, puis dans celui de la version d'origine ;
+5. le `PATH`.
+
+Un programme qui ne démarre pas laisse place au suivant. L'état du réseau
+(`internet.program`) et le journal disent lequel tourne. Le
 réglage `p2p_route` choisit le chemin vers les machines appairées : `auto` (réseau local
 s'il répond, Internet sinon), `lan` ou `internet` (pour essayer le compagnon seul).
 `--internet-local` lance un compagnon d'essai sans relais, sans annuaire et sans box
@@ -149,7 +175,8 @@ aiodos-net --data-dir ..\data --listen 127.0.0.1:47800 --forward 127.0.0.1:47701
 Le jeton de l'API locale vient de la variable `AIODOS_NET_TOKEN` (jamais de la ligne de
 commande, visible des autres programmes) ; sans elle, il est tiré au hasard et écrit
 dans `<data-dir>/aiodos-net.token`. Au démarrage, une ligne JSON sur la sortie standard
-annonce que le compagnon est prêt (`{"event": "ready", "id": …, "listen": …}`) ; le
+annonce que le compagnon est prêt (`{"event": "ready", "id": …, "listen": …, "version":
+…, "commit": …}`, le commit étant `null` hors d'une construction de publication) ; le
 journal va sur la sortie d'erreur (niveau réglable par `AIODOS_NET_LOG`, par exemple
 `aiodos_net=debug,iroh=info`). Windows peut demander l'autorisation du pare-feu au
 premier lancement : l'accepter pour les réseaux privés suffit en local, mais une
@@ -194,8 +221,10 @@ cargo test                     # 15 tests unitaires + 8 tests à deux compagnons
 Côté Python (le compagnon doit être compilé, sinon ces tests sont ignorés) :
 `tests/test_companion.py` (compagnons lancés et surveillés par AIODOS),
 `tests/test_network_internet.py` (deux nœuds qui se partagent une indexation par leurs
-compagnons ; il faut Ollama et le modèle d'embedding), et sans compagnon
-`tests/test_route.py`, `tests/test_netinfo.py`.
+compagnons ; il faut Ollama et le modèle d'embedding),
+`tests/test_updates_companion_end_to_end.py` (une version reçue va chercher son
+compagnon livré, le vérifie et le lance), et sans compagnon `tests/test_route.py`,
+`tests/test_netinfo.py`, `tests/test_updates_binaries.py` (choix du programme).
 
 ## Mesures du 16/10/2026 (PC principal, deux compagnons sur la même machine)
 

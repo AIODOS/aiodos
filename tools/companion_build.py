@@ -180,7 +180,7 @@ def build(target: str, commit: str, number: str, out: Path, repo: Path = ROOT) -
     result = out / file_name(number, target)
     shutil.copyfile(built, result)
     print(f"  {target} : {result.stat().st_size / 1e6:.1f} Mo, construit et vérifié en "
-          f"{time.monotonic() - started:.0f} s")
+          f"{time.monotonic() - started:.0f} s", flush=True)
     return result
 
 
