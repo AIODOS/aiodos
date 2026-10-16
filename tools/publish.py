@@ -4,10 +4,16 @@ au nœud de cette machine, qui la transmettra à ses machines appairées.
     python tools/publish.py key        crée la clé de publication (une seule fois)
     python tools/publish.py show       identifiant et clé publique (jamais la clé privée)
     python tools/publish.py release [--notes "…"] [--data-dir data] [--out dossier]
+                                    [--targets windows-x86_64,android-aarch64]
+                                    [--no-companion]
 
 Une version publiée, c'est le code du commit courant (git archive : rien d'autre que
 ce qui est dans le dépôt), au numéro écrit dans aiodos/__init__.py ; une étiquette
-v<numéro> marque le commit. La clé privée reste hors du dépôt, dans
+v<numéro> marque le commit. S'y joint le compagnon Internet aiodos-net de chaque
+plateforme, construit à partir de ce même commit et vérifié (companion_build.py) :
+par défaut, celles qu'on sait construire ici ; une plateforme sans ses outils est
+signalée, et la version part sans son compagnon ; une construction qui échoue arrête
+tout, avant que rien ne soit publié. La clé privée reste hors du dépôt, dans
 ~/.aiodos/publication/ (ou là où pointe AIODOS_RELEASE_KEY) : voir LISEZMOI.txt à côté.
 """
 import argparse
@@ -27,11 +33,14 @@ sys.path.insert(0, str(ROOT))
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 
+import companion_build  # noqa: E402
 from aiodos.updates import manifest as manifests  # noqa: E402
+from aiodos.updates import platforms  # noqa: E402
 from aiodos.updates import version as versions  # noqa: E402
 from aiodos.updates.store import Store, sha256_of  # noqa: E402
 
-# Ce qu'une machine fait tourner : ni les tests, ni la documentation, ni le compagnon à compiler
+# Ce qu'une machine fait tourner : ni les tests, ni la documentation, ni les sources du
+# compagnon (il est joint à part, construit pour chaque plateforme)
 RUNTIME = ["aiodos", "assets", "lancer.bat", "lancer-noeud.sh", "requirements.txt",
            "requirements-node.txt", "LICENSE", "README.md"]
 MIN_PYTHON = "3.11"
@@ -120,6 +129,29 @@ def cmd_show(args):
                                             else "NON (python tools/publish.py key l'ajoute)"))
 
 
+def companion_targets(args, commit: str) -> tuple:
+    """(plateformes à construire, [(plateforme, raison)] laissées de côté)."""
+    if args.no_companion:
+        return [], []
+    if not companion_build.has_sources(ROOT, commit):
+        return [], [("toutes", "le commit n'a pas de dossier compagnon/")]
+    if args.targets:
+        wanted = [t.strip() for t in args.targets.split(",") if t.strip()]
+        for target in wanted:
+            reason = companion_build.missing(target)
+            if reason:
+                sys.exit(f"Compagnon {target} impossible à construire ici : {reason}.")
+        return wanted, []
+    targets, skipped = [], []
+    for target in companion_build.default_targets():
+        reason = companion_build.missing(target)
+        if reason:
+            skipped.append((target, reason))
+        else:
+            targets.append(target)
+    return targets, skipped
+
+
 def cmd_release(args):
     private = load_key()
     kid, public = public_text(private)
@@ -146,29 +178,48 @@ def cmd_release(args):
     if store.signed(number):
         sys.exit(f"La version {number} est déjà publiée ici : change de numéro.")
     trusted = {kid: public}
+    targets, skipped = companion_targets(args, commit)
     with tempfile.TemporaryDirectory(prefix="aiodos-publication-") as work:
         archive = Path(work) / f"aiodos-{number}.zip"
         git("archive", "--format=zip", f"--output={archive}", commit, "--", *RUNTIME)
-        item = {"kind": manifests.SOURCE, "name": archive.name,
-                "size": archive.stat().st_size, "sha256": sha256_of(archive)}
+        files = [(archive, {"kind": manifests.SOURCE, "name": archive.name,
+                            "size": archive.stat().st_size, "sha256": sha256_of(archive)})]
+        if targets:
+            print(f"Construction du compagnon à partir du commit {commit[:10]} : "
+                  f"{', '.join(targets)} (plusieurs minutes)…", flush=True)
+        for target in targets:
+            try:
+                built = companion_build.build(target, commit, number, Path(work) / "compagnon")
+            except companion_build.BuildError as exc:
+                sys.exit(f"Compagnon {target} : {exc}\nRien n'a été publié.")
+            files.append((built, {"kind": platforms.kind(manifests.COMPANION, target),
+                                  "name": built.name, "size": built.stat().st_size,
+                                  "sha256": sha256_of(built)}))
         signed = manifests.sign({
             "format": manifests.FORMAT, "app": manifests.APP, "version": number,
             "published": int(time.time()), "commit": commit, "min_python": MIN_PYTHON,
-            "notes": args.notes or "", "files": [item]}, private)
+            "notes": args.notes or "", "files": [item for _, item in files]}, private)
         manifests.verify(signed, trusted)
-        store.save_file(number, item, archive)          # le manifeste en dernier : le paquet
-        store.add_manifest(signed, trusted)             # n'est proposé qu'une fois complet
+        for path, item in files:                        # le manifeste en dernier : le paquet
+            store.save_file(number, item, path)         # n'est proposé qu'une fois complet
+        store.add_manifest(signed, trusted)
         if args.out:
             out = Path(args.out)
             out.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(archive, out / archive.name)
+            for path, _ in files:
+                shutil.copyfile(path, out / path.name)
             (out / f"aiodos-{number}.manifest.json").write_bytes(
                 (store.root / "packages" / number / "manifest.json").read_bytes())
     tag = f"v{number}"
     if not git("tag", "--list", tag):
         git("tag", "-a", tag, "-m", f"AIODOS {number}", commit)
     print(f"Version {number} publiée (commit {commit[:10]}, étiquette {tag}, "
-          f"{item['size'] / 1e6:.1f} Mo) dans {store.root}.")
+          f"{files[0][1]['size'] / 1e6:.1f} Mo) dans {store.root}.")
+    for path, item in files[1:]:
+        print(f"Compagnon joint : {item['kind']} ({item['size'] / 1e6:.1f} Mo)")
+    for target, reason in skipped:
+        print(f"ATTENTION : compagnon non joint ({target}) : {reason}. Les machines de cette "
+              "plateforme garderont le compagnon qu'elles ont déjà.")
     print("Le nœud de cette machine la propose à ses machines appairées, qui se la passent.")
     if args.out:
         print(f"Copie pour une installation à la main : {Path(args.out) / archive.name}")
@@ -184,8 +235,14 @@ def main():
     release = commands.add_parser("release", help="publier le commit courant")
     release.add_argument("--notes", default="", help="ce qui change, montré aux utilisateurs")
     release.add_argument("--data-dir", default=None, help="dossier de données du nœud (défaut : data)")
-    release.add_argument("--out", default=None, help="copier aussi l'archive et son manifeste ici")
+    release.add_argument("--out", default=None,
+                         help="copier aussi l'archive, les compagnons et le manifeste ici")
     release.add_argument("--dev", action="store_true", help="accepter un numéro « -dev » (essais)")
+    release.add_argument("--targets", default=None, metavar="PLATEFORMES",
+                         help="compagnons à joindre, séparés par des virgules (défaut : ceux "
+                              f"qu'on sait construire ici parmi {', '.join(companion_build.default_targets())})")
+    release.add_argument("--no-companion", action="store_true",
+                         help="publier sans le compagnon Internet")
     release.set_defaults(run=cmd_release)
     args = parser.parse_args()
     args.run(args)
