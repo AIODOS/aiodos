@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.network import peers, sharing
+from aiodos.network import invitations, peers, sharing
 from aiodos.network.client import PeerError
 
 router = APIRouter(prefix="/api/network")
@@ -31,6 +31,10 @@ class AnswerIn(BaseModel):
 
 class TrustIn(BaseModel):
     trust: str
+
+
+class CodeIn(BaseModel):
+    code: str
 
 
 def _manager(request: Request):
@@ -94,6 +98,58 @@ async def answer(body: AnswerIn, request: Request):
     except PeerError as exc:
         raise HTTPException(400, str(exc))
     return _manager(request).snapshot()
+
+
+# ------------------------------------------- invitation à distance (étape 2.4)
+@router.post("/invitations")
+async def invite(request: Request):
+    """1. Invitation à envoyer à un ami : {id, code, expires}."""
+    manager = _manager(request)
+    try:
+        created = await asyncio.to_thread(invitations.create, manager)
+    except invitations.InvitationError as exc:
+        raise HTTPException(400, str(exc))
+    manager.changed()
+    return created
+
+
+@router.post("/invitations/accept")
+async def accept_invitation(body: CodeIn, request: Request):
+    """2. Invitation reçue d'un ami : {reply : la réponse à lui renvoyer, name}."""
+    manager = _manager(request)
+    try:
+        answer = await asyncio.to_thread(invitations.accept, manager, body.code)
+    except invitations.InvitationError as exc:
+        raise HTTPException(400, str(exc))
+    await manager.internet.sync()             # l'invitant admis par le compagnon
+    manager.changed()
+    return answer
+
+
+@router.post("/invitations/{invitation_id}/reply")
+async def invitation_reply(invitation_id: int, body: CodeIn, request: Request):
+    """3. Réponse de l'ami collée : il est admis, et l'appairage commence par Internet
+    (comme /pair : {node_id, name, code})."""
+    manager = _manager(request)
+    try:
+        target = await asyncio.to_thread(invitations.answered, manager, invitation_id, body.code)
+    except invitations.InvitationError as exc:
+        raise HTTPException(400, str(exc))
+    await manager.internet.sync()             # avant de composer sa clé
+    try:
+        pending = await asyncio.to_thread(manager.pairing.start_remote, target)
+    except PeerError as exc:
+        raise HTTPException(400, f"« {target['name']} » injoignable par Internet : {exc}")
+    return {"node_id": pending.node_id, "name": pending.name, "code": pending.code}
+
+
+@router.delete("/invitations/{invitation_id}")
+async def cancel_invitation(invitation_id: int, request: Request):
+    manager = _manager(request)
+    await asyncio.to_thread(invitations.cancel, invitation_id)
+    await manager.internet.sync()
+    manager.changed()
+    return manager.snapshot()
 
 
 @router.post("/peers/{node_id}/refresh")

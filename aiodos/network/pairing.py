@@ -7,13 +7,15 @@
    l'autre.
 4. Quand les deux ont accepté, la clé de la paire est enregistrée des deux côtés.
 
-Rien n'est automatique : un appairage exige un geste sur les deux machines.
+Rien n'est automatique : un appairage exige un geste sur les deux machines. Par
+Internet (start_remote, incoming_remote), il faut en plus une invitation acceptée des
+deux côtés (cf. invitations.py) : les messages passent alors par les compagnons.
 """
 import threading
 import time
 from dataclasses import dataclass, field
 
-from aiodos.network import client, crypto, envelope, peers, sharing
+from aiodos.network import client, crypto, envelope, invitations, peers, sharing
 from aiodos.network.client import PeerError
 
 PENDING_TTL = 180          # une demande non conclue expire au bout de 3 minutes
@@ -33,6 +35,14 @@ class Pending:
     local_ok: bool | None = None       # réponse de l'utilisateur de cette machine
     remote_ok: bool | None = None      # réponse de l'utilisateur de l'autre machine
     trust: str = sharing.MINE          # ce que l'autre machine est pour celle-ci
+    net_id: str | None = None          # par Internet : clé du compagnon de l'autre machine,
+    hints: dict | None = None          # de quoi la joindre,
+    secret: str | None = None          # et le secret de l'invitation qui le permet
+
+    def target(self) -> dict:
+        """L'autre machine, telle que client.call la joint pendant l'appairage."""
+        return {"node_id": self.node_id, "address": self.address, "port": self.port,
+                "name": self.name, "net_id": self.net_id}
 
 
 class Pairing:
@@ -82,8 +92,37 @@ class Pairing:
         self.m.changed()
         return pending
 
+    def start_remote(self, target: dict) -> Pending:
+        """Appairage par Internet avec la machine d'une invitation acceptée des deux côtés
+        (invitations.target : node_id, name, net_id, hints, secret)."""
+        private, public = crypto.new_exchange()
+        reply = client.pair_start_via({"node_id": target["node_id"], "net_id": target["net_id"]}, {
+            "node_id": self.m.node_id, "name": self.m.name(), "port": self.m.p2p_port,
+            "pub": envelope.b64e(public), "invitation": target["secret"]})
+        if reply.get("node_id") != target["node_id"]:
+            raise PeerError("La machine jointe n'est pas celle qui a répondu à l'invitation.")
+        key, code = crypto.pair_secrets(private, envelope.b64d(reply["pub"]),
+                                        self.m.node_id, reply["node_id"])
+        pending = Pending(reply["node_id"], str(reply.get("name") or target["name"])[:60],
+                          None, 0, "initiator", key, code, net_id=target["net_id"],
+                          hints=target["hints"], secret=target["secret"])
+        with self._lock:
+            self._purge()
+            self._pending[pending.node_id] = pending
+        self.m.changed()
+        return pending
+
     # -------------------------------------------- côté répondant (route réseau)
-    def incoming(self, payload: dict, address: str) -> dict:
+    def incoming_remote(self, payload: dict, net_key: str) -> dict:
+        """Demande d'appairage arrivée par le compagnon : reçue seulement de la clé d'une
+        invitation en cours, avec son secret."""
+        invitation = invitations.admit(net_key, payload.get("invitation"))
+        if invitation is None or invitation["node_id"] != str(payload.get("node_id")):
+            raise PeerError("Appairage par Internet refusé : aucune invitation en cours pour "
+                            "cette machine.")
+        return self.incoming(payload, None, invitation)
+
+    def incoming(self, payload: dict, address: str | None, invitation: dict | None = None) -> dict:
         try:
             node_id = str(payload["node_id"])
             port = int(payload["port"])
@@ -100,6 +139,9 @@ class Pairing:
         key, code = crypto.pair_secrets(private, peer_public, self.m.node_id, node_id)
         name = str(payload.get("name") or "Machine sans nom")[:60]
         pending = Pending(node_id, name, address, port, "responder", key, code)
+        if invitation:
+            pending.net_id, pending.hints = invitation["net_id"], invitation["hints"]
+            pending.secret = invitation["secret"]
         with self._lock:
             self._pending[node_id] = pending
         self.m.publish({"type": "pair_request", "node_id": node_id, "name": name, "code": code})
@@ -115,10 +157,8 @@ class Pairing:
             raise PeerError("Cette demande d'appairage a expiré.")
         pending.trust = trust
         pending.local_ok = bool(accept)
-        target = {"node_id": pending.node_id, "address": pending.address,
-                  "port": pending.port, "name": pending.name}
         try:
-            reply = client.call(self.m.node_id, target, "pair/confirm",
+            reply = client.call(self.m.node_id, pending.target(), "pair/confirm",
                                 {"accept": bool(accept)}, key=pending.key)
             if reply.get("accept") is not None:
                 pending.remote_ok = bool(reply["accept"])
@@ -148,6 +188,9 @@ class Pairing:
                 del self._pending[pending.node_id]
                 peers.save(pending.node_id, pending.name, pending.key,
                            pending.address, pending.port, pending.trust)
+                if pending.net_id:                # par Internet : sa clé, déjà vérifiée
+                    peers.set_net(pending.node_id, pending.net_id, pending.hints or {})
+                    invitations.use(pending.secret)
                 outcome = "paired"
             else:
                 outcome = None
@@ -156,4 +199,6 @@ class Pairing:
                             "name": pending.name, "outcome": outcome})
         if outcome == "paired":
             self.m.on_paired(pending.node_id)
+        if outcome and pending.net_id:
+            self.m.net_changed()              # liste blanche : l'invitation a servi
         self.m.changed()

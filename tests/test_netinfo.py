@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from aiodos.network import envelope, netinfo, peers
 from aiodos.network.p2p_app import create_p2p_app
+from aiodos.network.pairing import Pairing
 
 MY_ID, PEER_ID = "a" * 32, "b" * 32
 KEY = bytes(range(32))
@@ -19,6 +20,7 @@ class FakeManager:
 
     def __init__(self):
         self.guard = envelope.ReplayGuard()
+        self.pairing = Pairing(self)
         self.net_changes = 0
         self.removed = []
 
@@ -31,6 +33,9 @@ class FakeManager:
             self.removed.append(removed)
 
     def changed(self):
+        pass
+
+    def publish(self, event):
         pass
 
 
@@ -91,12 +96,14 @@ def test_requests_through_the_companion(server):
     assert status == 200 and peers.get(PEER_ID)["address"] == "testclient"
 
 
-def test_pairing_does_not_go_through_the_companion_yet(server):
-    """Par le compagnon, l'adresse vue serait 127.0.0.1 : l'appairage reste local (2.4)."""
+def test_pairing_through_the_companion_needs_an_invitation(server):
+    """Par le compagnon, une demande d'appairage n'est reçue que sur invitation (2.4,
+    cf. tests/test_invitations.py et tests/test_network_invitation.py)."""
     client, _ = server
-    request = {"node_id": "c" * 32, "name": "Inconnue", "port": 47701, "pub": "AAAA"}
+    request = {"node_id": "c" * 32, "name": "Inconnue", "port": 47701, "pub": "AAAA",
+               "invitation": "d" * 32}
     refused = client.post("/p2p/v1/pair/start", json=request, headers={"X-Aiodos-Peer": NET})
-    assert refused.status_code == 403 and "réseau local" in refused.json()["detail"]
+    assert refused.status_code == 403 and "invitation" in refused.json()["detail"]
 
 
 def test_a_machine_that_unpairs_leaves_the_allowlist(server):

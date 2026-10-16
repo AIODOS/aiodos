@@ -92,6 +92,12 @@ def pair_start(address, port, payload, timeout=TIMEOUT) -> dict:
     return _post(f"http://{address}:{port}/p2p/v1/pair/start", payload, timeout)
 
 
+def pair_start_via(peer: dict, payload: dict, timeout=TIMEOUT) -> dict:
+    """Début d'un appairage par le chemin de `peer` : le compagnon, sur invitation
+    (cf. invitations.py, Pairing.start_remote)."""
+    return _json(_send(peer, "/p2p/v1/pair/start", payload, timeout, pairing=True))
+
+
 def call(my_id, peer: dict, action: str, payload: dict, key: bytes = None,
          timeout=TIMEOUT) -> dict:
     """Requête scellée vers une machine appairée (ou en cours d'appairage via key : alors

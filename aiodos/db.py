@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -67,6 +67,23 @@ MIGRATIONS = {
         size    INTEGER
     );
     CREATE INDEX IF NOT EXISTS ix_shared_log_node ON shared_log(node_id, at);
+    """,
+    # Phase 2.4, invitation à distance : une invitation envoyée (« sent ») ou reçue
+    # (« received »), son secret à usage unique, et l'autre machine une fois connue (clé
+    # Internet et indices pour la joindre), le temps de s'appairer par les compagnons.
+    5: """
+    CREATE TABLE IF NOT EXISTS invitations (
+        id        INTEGER PRIMARY KEY,
+        secret    TEXT NOT NULL UNIQUE,
+        role      TEXT NOT NULL,
+        created   REAL NOT NULL,
+        expires   REAL NOT NULL,
+        node_id   TEXT,
+        name      TEXT,
+        net_id    TEXT,
+        net_addrs TEXT,
+        used      REAL
+    );
     """,
 }
 

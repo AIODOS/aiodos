@@ -31,7 +31,7 @@ def _result(owner, order, vectors, node=B):
 
 
 def test_peers_are_my_machines_unless_said_otherwise(owner):
-    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 4
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION >= 4
     assert sharing.level(B) == sharing.MINE
     assert sharing.level("pas-appairee") == sharing.FRIEND           # le plus étroit
     assert store.list_collections()[0]["scope"] == "mine"

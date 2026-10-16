@@ -860,6 +860,42 @@ secret ; la confirmation sur les deux machines reste obligatoire.
 *Fini quand* : un ami s'appaire sans être sur le même réseau, et une invitation déjà
 utilisée ou périmée est refusée.
 
+**Fait le 16/10/2026** (`aiodos/network/invitations.py`, migration 5), sans toucher au
+compagnon. Celui-ci n'admet que les clés de sa liste blanche, dans les deux sens : les
+deux machines se donnent donc d'abord leurs clés, par un canal que leurs utilisateurs
+connaissent déjà (message, courriel). Il n'y a pas de QR code pour l'instant.
+
+1. **L'invitant** crée une invitation : un code `AIODOS1-…` qui porte sa clé Internet, ses
+   relais et adresses, et un secret à usage unique, valable 24 heures.
+2. **L'ami** colle ce code dans son AIODOS : son compagnon admet l'invitant, et il reçoit
+   une réponse à renvoyer (sa clé, et le même secret).
+3. **L'invitant** colle la réponse : son compagnon admet l'ami, et l'appairage commence
+   par les compagnons. Il se conclut comme sur le réseau local : même code à 6 chiffres
+   des deux côtés, confirmation et niveau de confiance (2.5) choisis sur chaque machine.
+
+Par le compagnon, `pair/start` n'est reçu que de la clé inscrite dans une invitation en
+cours, avec son secret. `pair/confirm` doit venir de la clé de l'appairage en cours. Une
+invitation qui a servi ou qui est périmée quitte la liste blanche et n'ouvre plus rien.
+
+La vue Réseau a désormais une carte « Internet » :
+- l'interrupteur du compagnon ;
+- son état (clé, relais) ;
+- les invitations en cours ;
+- le chemin vers chaque machine (en direct ou par un relais, avec le délai).
+
+Tests : 8 tests des codes et de l'admission (`tests/test_invitations.py`). Dans un essai
+réel (`tests/test_network_invitation.py`), deux nœuds qui ne se connaissent pas sur le
+réseau local s'appairent en amis par leurs seuls compagnons, et l'invitation ne resservira
+pas.
+
+Ce que 2.3 prévoyait est en grande partie assuré par le compagnon :
+- clé Ed25519 par machine ;
+- clé du transport comparée à celle de l'émetteur ;
+- clés échangées sans nouvel appairage (`net/info`).
+
+Il reste à protéger les clés (DPAPI sous Windows) et à lier le code à 6 chiffres aux clés
+des compagnons.
+
 **2.5 Politique de partage** (selon les réponses de 2.1) : niveaux de confiance,
 portée des bibliothèques, métadonnées réduites (nom de fichier neutre, profil allégé),
 plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.

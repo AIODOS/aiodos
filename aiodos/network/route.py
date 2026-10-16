@@ -8,8 +8,8 @@ traité deux fois. Seul un échec avant l'envoi (connexion impossible) fait chan
 chemin ; il est retenu une minute, pour ne pas payer son délai à chaque requête.
 
 Le réglage p2p_route force un chemin : « lan » (réseau local seulement) ou « internet »
-(compagnon seulement, pour l'essayer). Un appairage en cours passe toujours par le
-réseau local (étape 2.2 : l'invitation à distance viendra en 2.4).
+(compagnon seulement, pour l'essayer). Un appairage en cours passe par le réseau local,
+ou par le compagnon s'il a commencé sur invitation (étape 2.4, cf. invitations.py).
 """
 import threading
 import time
@@ -73,12 +73,12 @@ def paths_for(peer: dict, pairing: bool = False) -> list:
     lan = None
     if peer.get("address") and peer.get("port"):
         lan = Path("lan", f"http://{_host(str(peer['address']))}:{int(peer['port'])}")
-    if pairing:
-        return [lan] if lan else []
     net = None
     comp = _companion
     if comp is not None and comp.running and peer.get("net_id"):
         net = Path("internet", comp.proxy_base(peer["net_id"]), comp.headers, NO_PROXY)
+    if pairing:                           # le chemin par lequel l'appairage a commencé
+        return [lan] if lan else [net] if net else []
     chosen = mode()
     if chosen == "lan":
         return [lan] if lan else []

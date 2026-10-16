@@ -1,4 +1,4 @@
-// Réseau local : activation, machines appairées et détectées, appairage par code.
+// Réseau : réseau local, Internet et invitations, machines appairées et détectées, appairage par code.
 import { get, post, del } from '../api.js';
 import { $, h, esc, ago, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
@@ -11,10 +11,11 @@ let lastJson = '';
 export function mountNetwork(container) {
   root = h(`
     <div class="page"><div class="page-inner">
-      <div class="page-head"><div><h1>Réseau local</h1>
-        <div class="sub">Fais travailler tes machines ensemble : chacune peut prêter sa puissance aux autres,
-        à la façon de SETI@home. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
+      <div class="page-head"><div><h1>Réseau</h1>
+        <div class="sub">Fais travailler tes machines ensemble, et celles de tes amis : chacune peut prêter sa
+        puissance aux autres, à la façon de SETI@home. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
       <div class="card" id="net-state"></div>
+      <div class="card" id="net-internet" style="margin-top:16px"></div>
       <div class="card" id="net-peers" style="margin-top:16px"></div>
       <div class="card" id="net-visible" style="margin-top:16px"></div>
     </div></div>`);
@@ -38,8 +39,108 @@ function render() {
   const net = state.network;
   if (!root || !net) return;
   renderState(net);
+  renderInternet(net);
   renderPeers(net);
   renderVisible(net);
+}
+
+// ----------------------------------------------- Internet et invitations (2.4)
+function host(url) {
+  try { return new URL(url).hostname.split('.')[0]; } catch { return url; }
+}
+
+function invitationRow(inv) {
+  const until = new Date(inv.expires * 1000).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const text = inv.role === 'received'
+    ? `Invitation de « ${esc(inv.name || '?')} » acceptée ${ago(inv.created)} : l'appairage commencera quand ton ami aura collé ta réponse.`
+    : inv.answered
+      ? `Réponse de « ${esc(inv.name || '?')} » reçue : appairage en cours.`
+      : `Invitation créée ${ago(inv.created)}, en attente de la réponse de ton ami (valable jusqu'à ${esc(until)}).`;
+  return `<div class="peer"><div class="peer-head">${icon('link')}<span style="flex:1">${text}</span>
+    ${inv.role === 'sent' && !inv.answered ? `<button class="btn sm" data-reply="${inv.id}">Coller la réponse</button>` : ''}
+    <button class="icon-btn danger" data-cancel="${inv.id}" title="Annuler l'invitation">${icon('x')}</button></div></div>`;
+}
+
+function renderInternet(net) {
+  const box = $('#net-internet', root);
+  const inet = net.internet || {};
+  const status = !inet.enabled
+    ? 'Désactivée : tes machines ne se joignent que sur le réseau local.'
+    : inet.running
+      ? `Prête${inet.relays?.length ? ` · relais ${inet.relays.map(r => esc(host(r))).join(', ')}` : ''}`
+        + (inet.id ? ` · clé ${esc(inet.id.slice(0, 10))}…` : '')
+      : esc(inet.error || 'Démarrage du compagnon aiodos-net…');
+  box.innerHTML = `
+    <div class="setting-row" style="border:0;padding-top:0">
+      <div class="txt"><b>Relier mes machines par Internet</b><small>${status}</small></div>
+      <label class="switch"><input type="checkbox" id="inet-toggle" ${inet.enabled ? 'checked' : ''}><span></span></label>
+    </div>
+    <h2 style="margin-top:4px">${icon('link')}Inviter un ami</h2>
+    <p class="hint">Pour appairer la machine d'un ami qui n'est pas sur ton réseau. Crée une invitation et envoie-lui le code
+      (message, courriel) ; il le colle dans son AIODOS avec « Répondre à une invitation », puis te renvoie sa réponse, que
+      tu colles ici. Vous confirmez alors chacun le même code à 6 chiffres. Une invitation sert une seule fois, pendant 24 heures,
+      et il faut la connexion par Internet des deux côtés.</p>
+    <div class="toolbar" style="margin:0 0 10px">
+      <button class="btn sm" id="inv-create" ${inet.running ? '' : 'disabled'}>${icon('plus')}Créer une invitation</button>
+      <button class="btn sm" id="inv-accept" ${inet.running ? '' : 'disabled'}>${icon('link')}Répondre à une invitation</button>
+    </div>
+    <div class="peer-list">${(net.invitations || []).map(invitationRow).join('')}</div>`;
+  $('#inet-toggle', box).onchange = async e => {
+    try { await post('/network/internet', { enabled: e.target.checked }); lastJson = ''; loadNetwork(); }
+    catch (err) { errorToast(err); }
+  };
+  $('#inv-create', box).onclick = createInvitation;
+  $('#inv-accept', box).onclick = acceptInvitation;
+  box.querySelectorAll('[data-reply]').forEach(b => { b.onclick = () => pasteReply(Number(b.dataset.reply)); });
+  box.querySelectorAll('[data-cancel]').forEach(b => {
+    b.onclick = async () => {
+      try { state.network = await del(`/network/invitations/${b.dataset.cancel}`); lastJson = ''; loadNetwork(); }
+      catch (e) { errorToast(e); }
+    };
+  });
+}
+
+async function copyCode(title, text, code, done) {
+  const r = await modal({ title, iconName: 'link', text, textarea: code, confirm: 'Copier', cancel: 'Fermer' });
+  if (!r.ok) return;
+  try { await navigator.clipboard.writeText(code); toast(done, 'ok', 8000); }
+  catch { toast('Copie impossible : sélectionne le code et copie-le à la main.', 'err', 6000); }
+}
+
+async function createInvitation() {
+  let created;
+  try { created = await post('/network/invitations'); } catch (e) { errorToast(e); return; }
+  lastJson = '';
+  loadNetwork();
+  await copyCode('Invitation à envoyer à ton ami',
+    'Envoie ce code à ton ami (message, courriel). Il le colle dans son AIODOS, puis te renvoie sa réponse : '
+      + 'colle-la ici, avec « Coller la réponse ».',
+    created.code, 'Invitation copiée : envoie-la à ton ami.');
+}
+
+async function acceptInvitation() {
+  const r = await modal({ title: 'Répondre à une invitation', iconName: 'link', textarea: '',
+    placeholder: 'AIODOS1-…', text: 'Colle ici le code d\'invitation reçu de ton ami.', confirm: 'Continuer' });
+  if (!r.ok || !r.value.trim()) return;
+  let answer;
+  try { answer = await post('/network/invitations/accept', { code: r.value }); } catch (e) { errorToast(e); return; }
+  lastJson = '';
+  loadNetwork();
+  await copyCode(`Réponse à renvoyer à « ${answer.name} »`,
+    `Renvoie cette réponse à « ${answer.name} ». Quand il l'aura collée, une demande d'appairage s'affichera ici : `
+      + 'vérifiez ensemble que vous voyez le même code à 6 chiffres.',
+    answer.reply, 'Réponse copiée : renvoie-la à ton ami.');
+}
+
+async function pasteReply(invitationId) {
+  const r = await modal({ title: 'Réponse de ton ami', iconName: 'link', textarea: '', placeholder: 'AIODOS1-…',
+    text: 'Colle ici la réponse que ton ami t\'a renvoyée.', confirm: 'Appairer' });
+  if (!r.ok || !r.value.trim()) return;
+  let pending;
+  try { pending = await post(`/network/invitations/${invitationId}/reply`, { code: r.value }); }
+  catch (e) { errorToast(e); return; }
+  await confirmPairing(pending, 'Vérifie avec ton ami (au téléphone, par message) qu\'il voit ce même code, '
+    + 'dis ce qu\'est sa machine pour toi, puis confirmez chacun de votre côté.');
 }
 
 // --------------------------------------------------------------------- état
@@ -125,7 +226,7 @@ function renderPeers(net) {
           <button class="icon-btn" data-act="more" title="Options">${icon('more')}</button>
           <button class="icon-btn danger" data-act="unpair" title="Retirer l'appairage">${icon('x')}</button>
         </div>
-        <div class="peer-facts">${peerFacts(peer)}</div>
+        <div class="peer-facts">${peerFacts(peer)}${netFact(peer)}</div>
         ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>Mise de côté ${ago(peer.set_aside_at)} :
           ${esc(peer.set_aside_reason || 'contrôle échoué')}. Plus rien ne lui est confié.</div>
           <button class="btn sm" data-act="restore">Rétablir</button></div>` : ''}
@@ -162,6 +263,13 @@ function renderPeers(net) {
     };
     list.append(row);
   }
+}
+
+function netFact(peer) {
+  const inet = peer.internet;
+  if (!inet?.connected) return '';
+  const rtt = inet.rtt_ms ? ` (${Math.round(inet.rtt_ms)} ms)` : '';
+  return ` · Internet : ${inet.path === 'direct' ? 'en direct' : 'par un relais'}${rtt}`;
 }
 
 async function setTrust(peer, trust) {
@@ -258,10 +366,14 @@ const TRUST_CHOICES = [
 async function startPairing(v) {
   let pending;
   try { pending = await post('/network/pair', { node_id: v.node_id }); } catch (e) { errorToast(e); return; }
+  await confirmPairing(pending, 'Vérifie que ce même code s\'affiche sur l\'autre machine, dis ce qu\'elle est '
+    + 'pour toi, puis confirme ici ET là-bas.');
+}
+
+/** Appairage commencé ici (réseau local ou invitation) : code vérifié, confiance choisie. */
+async function confirmPairing(pending, text) {
   const r = await modal({
-    title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code,
-    text: 'Vérifie que ce même code s\'affiche sur l\'autre machine, dis ce qu\'elle est pour toi, '
-      + 'puis confirme ici ET là-bas.',
+    title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code, text,
     choices: TRUST_CHOICES, confirm: 'Les codes sont identiques', cancel: 'Annuler',
   });
   try {

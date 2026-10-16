@@ -13,7 +13,7 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import client, peers, sharing
+from aiodos.network import client, invitations, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
@@ -285,6 +285,7 @@ class NetworkManager:
             "peers": paired,
             "visible": [v for v in self.visible.values() if v["node_id"] not in paired_ids],
             "pairing": self.pairing.snapshot(),
+            "invitations": invitations.snapshot(),
             "internet": self.internet.snapshot(),
             "offload": bool(settings.get("offload_enabled")),
             "sharing": self.worker.snapshot() if self.worker and self.running else None,

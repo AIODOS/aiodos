@@ -13,7 +13,7 @@ import logging
 import time
 
 from aiodos import settings
-from aiodos.network import client, netinfo, peers, route
+from aiodos.network import client, invitations, netinfo, peers, route
 from aiodos.network.client import PeerError
 from aiodos.network.companion import Companion, CompanionError
 
@@ -128,7 +128,8 @@ class Internet:
         companion = self.companion
         if companion is None or not companion.running:
             return
-        entries = netinfo.allowlist(await asyncio.to_thread(peers.net_list))
+        rows = await asyncio.to_thread(lambda: peers.net_list() + invitations.allowlist_rows())
+        entries = netinfo.allowlist(rows)
         state = (companion.generation, json.dumps(entries, sort_keys=True))
         if state == self._sent:
             return

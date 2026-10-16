@@ -89,15 +89,13 @@ def create_p2p_app(manager) -> FastAPI:
 
     @app.post("/p2p/v1/pair/start")
     def pair_start(body: dict, request: Request):
-        if request.headers.get(PEER_HEADER):
-            # Par le compagnon, l'adresse vue serait 127.0.0.1 : l'appairage à distance
-            # viendra avec les invitations (étape 2.4 de docs/phase2-internet.md)
-            raise HTTPException(403, "Appairage par Internet pas encore possible : "
-                                     "appairer les deux machines sur le réseau local.")
+        net_key = (request.headers.get(PEER_HEADER) or "").lower()
         try:
+            if net_key:               # par le compagnon : seulement sur invitation
+                return manager.pairing.incoming_remote(body, net_key)
             return manager.pairing.incoming(body, request.client.host)
         except PeerError as exc:
-            raise HTTPException(400, str(exc))
+            raise HTTPException(403 if net_key else 400, str(exc))
 
     # Déclarée avant la route générique ci-dessous, qui capterait sinon
     # « stream/… » comme une action inconnue (FastAPI suit l'ordre des routes)
@@ -161,6 +159,10 @@ def create_p2p_app(manager) -> FastAPI:
         sender = str(body.get("from") or "")
         if action == "pair/confirm":
             key = manager.pairing.key_for(sender)
+            pending = manager.pairing.get(sender)
+            net_key = (request.headers.get(PEER_HEADER) or "").lower()
+            if net_key and (pending is None or pending.net_id != net_key):
+                raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cet appairage.")
         else:
             peer = await asyncio.to_thread(peers.get, sender)
             key = peer["key"] if peer else None
