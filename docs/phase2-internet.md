@@ -58,7 +58,74 @@ Pour Cœur IA :
 
 ## 2. Les candidats
 
-*(recherche en cours : Iroh, autres pistes)*
+Évalués le 16/10/2026 sur des sources primaires (dépôts, versions publiées, avis de
+sécurité, documentation, articles) ; ces faits vieilliront vite.
+
+### 2.1 Iroh (n0)
+
+Iroh relie des *endpoints* identifiés par une clé publique Ed25519 : on compose une
+clé, pas une adresse IP (« Dial keys, not IPs »). Dessous : QUIC (TLS 1.3 avec clés
+publiques brutes), perçage de NAT, et des relais qui servent à la fois de point de
+rendez-vous et de repli chiffré.
+
+- **État** : 1.0 publiée le 15/06/2026 après 65 versions ; dernière version 1.3.0
+  (28/09/2026). La série 1.x promet que tout endpoint 1.x parle à tout endpoint 1.x, et
+  qu'une future 2.x restera compatible avec la 1.x sur le réseau ; la politique de
+  support est écrite. Très actif (88 commits en trois mois). Porté par n0 (une dizaine
+  de personnes, capital-risque et fondateurs), qui vit de la vente de relais hébergés
+  (à partir de 19 $ par mois). Les protocoles annexes (iroh-blobs pour les fichiers,
+  iroh-gossip pour la diffusion, iroh-docs) sont encore en 0.x.
+- **Fonctionnement** : QUIC via noq, un fork de Quinn par n0 qui gère plusieurs chemins
+  dans une même connexion. Le relais, l'IPv4 directe et l'IPv6 directe sont des
+  chemins : la connexion démarre par le relais et bascule en direct dès que le perçage
+  réussit, sans que l'application le voie. Relais en HTTPS/WebSocket (port 443).
+  Ouverture de port automatique (UPnP, NAT-PMP, PCP) activée par défaut. Annuaire par
+  défaut : un enregistrement signé façon pkarr (clé → relais du nœud, sans les IP)
+  publié sur le serveur DNS de n0 (`dns.iroh.link`) ; en option, la DHT Mainline (sans
+  serveur) et le mDNS pour le réseau local.
+- **Traversée de NAT** : n0 annonce environ 9 connexions sur 10 en direct et 95 à 99 %
+  du volume ; sa propre documentation qualifie ce chiffre d'« anecdotique », et aucune
+  mesure indépendante n'existe. Un NAT « dur » côté serveur n'est géré que depuis mai
+  2026 (1.0.0-rc.1), et seulement si un seul des deux côtés est dans ce cas.
+- **Sans serveur central ?** Par défaut, Iroh s'appuie sur l'infrastructure de n0
+  (quatre relais publics et le DNS). Mais tout s'auto-héberge, sous la même licence :
+  `iroh-relay` (binaire Windows de 3,7 Mo, ou Docker ; il lui faut une IP publique et
+  un nom de domaine, il gère seul ses certificats), `iroh-dns-server`, ou la DHT
+  Mainline à la place du DNS. Les relais publics de n0 sont réservés au développement
+  et aux usages amateurs (limites non publiées, appelées à se durcir).
+- **Python** : les liaisons officielles sont revenues avec la 1.0 (paquet `iroh` 1.1.0
+  du 16/07/2026, asyncio, roue Windows x64). Mais elles embarquent iroh 1.0.2, touché
+  par un avis de sécurité « high » corrigé en 1.1.0 ; rien n'a été publié depuis
+  juillet ; pas de paquet Android ; la CI ne teste que Python 3.12 ; l'API se limite
+  aux flux et datagrammes (ni DHT, ni mDNS, ni annuaire personnalisé). Les outils en
+  ligne de commande de n0 sont prêts, eux : `dumbpipe`, un « netcat » sur Iroh qui
+  transporte une connexion TCP (3 Mo pour Windows), et `sendme` (transfert de
+  fichiers), **tous deux empaquetés dans Termux**. Mais dumbpipe est câblé sur les
+  relais et le DNS de n0, sans liste blanche de pairs. Pour les autres langages, la
+  documentation de n0 conseille elle-même un petit programme compagnon qui expose Iroh
+  en local.
+- **Plateformes** : Windows x64 de première classe (les bugs Windows de 2026 sont
+  corrigés). Android est géré en Rust, Kotlin et Node ; un binaire nu sous Termux
+  demande des précautions de compilation (résolution DNS par JNI, restrictions
+  netlink), que la recette Termux de dumbpipe applique déjà.
+- **Licence** : MIT OR Apache-2.0, compatible GPL-3.0. Point à surveiller :
+  `webpki-roots` (CDLA-Permissive-2.0), licence dont la FSF ne parle pas.
+- **Sécurité** : pas d'audit tiers. En 2026, des failles corrigées vite : déni de
+  service du relais avant authentification (1.0.2), trois avis côté client (1.1.0),
+  écriture non autorisée dans iroh-blobs (0.103.1). Un relais voit qui est connecté,
+  qui parle à qui, quand, combien, et les adresses IP, pas le contenu. On peut refuser
+  une clé avant la fin de la poignée de main ; un relais auto-hébergé accepte une liste
+  blanche de clés ou un jeton. Pas de spécification formelle du protocole 1.0 (un
+  brouillon IETF individuel sur la traversée de NAT, juillet 2026) : c'est le code qui
+  fait foi.
+- **Qui s'en sert pour notre cas** : Mesh LLM (Apache-2.0, février 2026) mutualise les
+  GPU de machines personnelles derrière une API compatible OpenAI, sans serveur central
+  sur le chemin des données ; Buzz, de Block (Apache-2.0), l'intègre pour partager la
+  puissance inutilisée des membres d'une communauté. Aussi Holochain (depuis juin 2026)
+  et Delta Chat. Tous l'utilisent en Rust.
+
+**Verdict : le meilleur candidat**, à condition de l'utiliser depuis Rust (un programme
+compagnon) et de configurer relais et annuaire pour ne dépendre de personne (cf. § 4).
 
 ### 2.2 libp2p : py-libp2p, ou rust-libp2p / go-libp2p en processus compagnon
 
@@ -196,7 +263,7 @@ C'est exactement « où est la machine de Paul en ce moment ? », sans serveur.
 qui l'intègre plutôt qu'en direct.** En phase 3, un annuaire public des nœuds Cœur IA
 serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de chacun.
 
-### 2.6 Autres pistes
+### 2.5 Autres pistes
 
 - **Faire soi-même en Python** : aioice 0.10.2 (ICE, avec STUN et TURN, en asyncio)
   et aioquic 1.6.1 (QUIC, qui laisse l'application fournir la socket : il peut tourner
@@ -219,13 +286,13 @@ serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de
   inverse, relais), mais un démon `veilid-server` à faire tourner à côté, sans
   procédure Windows documentée.
 - **I2P / i2pd** 2.61.0 (BSD-3) : son transport échoue face aux NAT symétriques, et la
-  bibliothèque Python (i2plib) n'est plus maintenue depuis 2019. Yggdrasil : cf. § 2.5.
+  bibliothèque Python (i2plib) n'est plus maintenue depuis 2019. Yggdrasil : cf. § 2.6.
 - **Reticulum : exclu.** Depuis le 15/04/2025, sa licence (passée du MIT à une
   « Reticulum License ») interdit tout usage qui contribue à l'entraînement ou au
   développement de modèles d'IA : incompatible avec la GPL-3.0, et vise directement un
   projet comme Cœur IA.
 
-### 2.5 Pour comparaison : les réseaux privés virtuels type WireGuard
+### 2.6 Pour comparaison : les réseaux privés virtuels type WireGuard
 
 L'idée séduit : chaque machine reçoit une adresse IP virtuelle, et `coeur/1` marche
 par-dessus sans changer une ligne. Elle se heurte au brief.
@@ -276,7 +343,7 @@ d'identité.
 | Ford, Srisuresh et Kegel (2005) | 380 NAT testés par des volontaires | 82 % se laissent percer en UDP, 64 % en TCP |
 | Halkes et Pouwelse (Tribler, IFIP Networking 2011) | réseau P2P réel | plus de 80 % des tentatives réussies |
 | Trautwein et al. (DCUtR dans IPFS ; arXiv 2025, IMC 2026) | 4,4 millions de tentatives, 167 pays, déc. 2022 – janv. 2023 | **70 % ± 7,1 %**, *une fois* le relais et l'adresse publique obtenus ; TCP et QUIC à égalité ; 97,6 % des réussites au premier essai |
-| Tailscale (billet du 15/10/2025), n0 pour Iroh | métriques internes, méthode non publiée | environ 90 % de connexions directes (affirmations d'éditeurs) |
+| Tailscale (billet du 15/10/2025) ; n0 pour Iroh (documentation, 2025-2026) | métriques internes, méthode non publiée | environ 90 % de connexions directes ; n0 qualifie lui-même son chiffre d'« anecdotique » (affirmations d'éditeurs) |
 
 Ce qui fait échouer, ce sont les NAT dont la correspondance de ports dépend de la
 destination (dits « symétriques »), fréquents derrière les CGNAT et sur mobile. Quand
