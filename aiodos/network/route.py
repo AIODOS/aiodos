@@ -22,7 +22,8 @@ LAN_RETRY_AFTER = 60       # après un échec du réseau local, on passe par Int
 LAN_CONNECT_TIMEOUT = 3    # sur un réseau local, une connexion s'établit en quelques ms
 INTERNET_MIN_TIMEOUT = 30  # première connexion par un relais en 4G : plusieurs secondes
                            # (le compagnon abandonne au bout de 20 s, avec un message)
-_NO_PROXY = {"http": None, "https": None}   # le compagnon est sur 127.0.0.1 : jamais de mandataire
+BEST_EFFORT_BELOW = 10     # délai plus court demandé : appel « sans l'exiger », pas rallongé
+NO_PROXY = {"http": None, "https": None}    # le compagnon est sur 127.0.0.1 : jamais de mandataire
 
 _lock = threading.Lock()
 _companion = None          # compagnon actif (aiodos.network.companion.Companion)
@@ -77,7 +78,7 @@ def paths_for(peer: dict, pairing: bool = False) -> list:
     net = None
     comp = _companion
     if comp is not None and comp.running and peer.get("net_id"):
-        net = Path("internet", comp.proxy_base(peer["net_id"]), comp.headers, _NO_PROXY)
+        net = Path("internet", comp.proxy_base(peer["net_id"]), comp.headers, NO_PROXY)
     chosen = mode()
     if chosen == "lan":
         return [lan] if lan else []
@@ -111,8 +112,11 @@ def lan_is_down(node_id) -> bool:
 
 def timeouts(path: Path, timeout: float, fallback: bool) -> tuple:
     """(connexion, lecture) pour ce chemin : connexion courte au réseau local quand un
-    autre chemin attend derrière ; lecture plus longue par Internet (relais, 4G)."""
+    autre chemin attend derrière ; lecture plus longue par Internet (relais, 4G), sauf
+    pour un appel qui demande lui-même un délai court (prévenir sans l'exiger)."""
     if path.kind == "internet":
+        if timeout < BEST_EFFORT_BELOW:
+            return 5, timeout
         return 5, max(timeout, INTERNET_MIN_TIMEOUT)
     if fallback:
         return min(LAN_CONNECT_TIMEOUT, timeout), timeout

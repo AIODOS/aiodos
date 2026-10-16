@@ -23,6 +23,8 @@ from pathlib import Path
 import requests
 
 from aiodos import paths
+from aiodos.network.client import error_detail
+from aiodos.network.route import NO_PROXY
 
 log = logging.getLogger("aiodos.net")
 
@@ -33,7 +35,6 @@ INFO_TTL = 60              # infos Internet (relais, adresses) relues au plus to
 RESTART_DELAYS = (2, 5, 15, 30, 60)      # relances successives après un arrêt inattendu
 STABLE_AFTER = 60          # un compagnon qui a tenu une minute repart de la première attente
 TOKEN_HEADER = "X-Aiodos-Net-Token"
-_NO_PROXY = {"http": None, "https": None}
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0     # pas de console qui clignote
 _LEVELS = {"ERROR": logging.ERROR, "WARN": logging.WARNING, "INFO": logging.INFO,
            "DEBUG": logging.DEBUG, "TRACE": logging.DEBUG}
@@ -58,11 +59,18 @@ def find_binary() -> Path | None:
     return Path(found) if found else None
 
 
-def _detail(response) -> str:
+def _terminate(process):
+    """Arrête un compagnon dont on ne veut plus : entrée standard fermée (il s'arrête
+    proprement), puis tué s'il traîne."""
     try:
-        return response.json().get("detail") or response.text
-    except ValueError:
-        return f"HTTP {response.status_code}"
+        process.stdin.close()
+    except OSError:
+        pass
+    try:
+        process.wait(8)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(5)
 
 
 class Companion:
@@ -171,12 +179,19 @@ class Companion:
             last = " / ".join(self._stderr) or f"code {process.returncode}"
             return self._fail(f"Le compagnon aiodos-net n'a pas démarré : {last}")
         with self._lock:
-            self.process, self.token = process, token
-            self.id, self.listen = found.get("id"), found.get("listen")
-            self.generation += 1
-            self._info = None
-            self.error = None
-            self._started_at = time.monotonic()
+            # Arrêt demandé pendant le lancement : ce compagnon-là ne doit pas rester
+            # orphelin (stop() n'a rien trouvé à arrêter, ou l'ancien seulement).
+            stopping = self._stopping
+            if not stopping:
+                self.process, self.token = process, token
+                self.id, self.listen = found.get("id"), found.get("listen")
+                self.generation += 1
+                self._info = None
+                self.error = None
+                self._started_at = time.monotonic()
+        if stopping:
+            _terminate(process)
+            return False
         log.info("Compagnon aiodos-net prêt (API locale %s)", self.listen)
         return True
 
@@ -221,11 +236,12 @@ class Companion:
                 continue
             delay = RESTART_DELAYS[min(failures, len(RESTART_DELAYS) - 1)]
             failures += 1
-            if process is not None:
+            if process is not None:             # dit une fois ; les essais suivants, par _fail
                 log.warning("Le compagnon aiodos-net s'est arrêté (code %s) : relance dans %s s",
                             process.returncode, delay)
-            with self._lock:
-                self.listen = None
+                with self._lock:
+                    if self.process is process:
+                        self.process, self.listen = None, None
             deadline = time.monotonic() + delay
             while not self._stopping and time.monotonic() < deadline:
                 time.sleep(0.2)
@@ -233,24 +249,18 @@ class Companion:
                 self._launch()
 
     def stop(self):
-        """Arrêt propre : le compagnon prévient les autres machines, puis s'arrête."""
-        self._stopping = True
-        process = self.process
+        """Arrêt propre : le compagnon prévient les autres machines, puis s'arrête. Un
+        lancement en cours s'arrête de lui-même dès qu'il aboutit (cf. _launch)."""
+        with self._lock:
+            self._stopping = True
+            process = self.process
         if process is None or process.poll() is not None:
             return
         try:
             self.api("POST", "/net/v1/shutdown", timeout=2)
         except CompanionError:
             pass
-        try:
-            process.stdin.close()
-        except OSError:
-            pass
-        try:
-            process.wait(8)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(5)
+        _terminate(process)
         with self._lock:
             self.listen = None
         log.info("Compagnon aiodos-net arrêté")
@@ -263,12 +273,15 @@ class Companion:
         try:
             response = requests.request(method, f"http://{listen}{path}", json=body,
                                         headers=self.headers, timeout=timeout,
-                                        proxies=_NO_PROXY)
+                                        proxies=NO_PROXY)
         except requests.RequestException as exc:
             raise CompanionError(f"Compagnon injoignable ({exc.__class__.__name__}).") from exc
         if response.status_code >= 400:
-            raise CompanionError(_detail(response))
-        return response.json()
+            raise CompanionError(error_detail(response))
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise CompanionError("Réponse illisible du compagnon.") from exc
 
     def status(self) -> dict:
         return self.api("GET", "/net/v1/status")

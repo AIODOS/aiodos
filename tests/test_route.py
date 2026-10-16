@@ -108,6 +108,16 @@ def test_lan_is_tried_again_after_a_while(monkeypatch, peer, companion):
     assert client.call(MY_ID, peer, "ping", {}) == {"via": "lan"}
 
 
+def test_short_best_effort_calls_are_not_stretched(monkeypatch, peer, companion):
+    """« Prévenir sans l'exiger » (désappairage, 4 s) : pas 30 s d'attente par Internet."""
+    network = FakeNetwork()
+    monkeypatch.setattr(requests, "post", network)
+    settings.set_value("p2p_route", "internet")
+    client.call(MY_ID, peer, "unpair", {}, timeout=4)
+    client.call(MY_ID, peer, "ping", {})
+    assert [c[3][1] for c in network.calls] == [4, route.INTERNET_MIN_TIMEOUT]
+
+
 def test_no_second_path_once_the_request_may_have_left(monkeypatch, peer, companion):
     """Lecture trop longue : la requête est peut-être arrivée, pas de nouvel essai."""
     network = FakeNetwork(lan="slow")

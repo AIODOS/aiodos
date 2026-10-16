@@ -41,6 +41,7 @@ class Internet:
         self._exchanged = {}       # machine -> (instant, infos qu'on lui a données)
         self._sent = None          # (lancement du compagnon, liste blanche envoyée)
         self._status = None        # dernier état du compagnon (pour l'interface)
+        self._tasks = set()        # tâches de fond en cours (gardées jusqu'à leur fin)
 
     @property
     def enabled(self) -> bool:
@@ -67,16 +68,28 @@ class Internet:
         return f"{host}:{self.m.p2p_port}"
 
     # ------------------------------------------------------------ cycle de vie
-    async def start(self):
+    def _spawn(self, coro):
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    def launch(self):
+        """Lance le compagnon en tâche de fond : le réseau local n'attend pas qu'il soit
+        prêt (premier lancement d'un téléphone, programme qui ne répond pas…)."""
         if not self.enabled or self.companion is not None:
             return
         companion = Companion(self.forward(), self.options())
         self.companion = companion
         route.attach(companion)        # utilisé seulement quand il tourne
         self._sent = None
-        if await asyncio.to_thread(companion.start):
+        self._spawn(self._ready(companion))
+
+    @_guarded
+    async def _ready(self, companion):
+        if await asyncio.to_thread(companion.start) and self.companion is companion:
             await self.sync()
             await self.refresh_status()
+            self.m.changed()
 
     async def stop(self):
         companion, self.companion = self.companion, None
@@ -88,7 +101,7 @@ class Internet:
     async def apply(self):
         """Réglage « Internet » changé : compagnon lancé ou arrêté (réseau local requis)."""
         if self.m.running and self.enabled:
-            await self.start()
+            self.launch()
         else:
             await self.stop()
 
@@ -111,11 +124,14 @@ class Internet:
             return
         self._sent = state
 
-    def changed_from_thread(self):
-        """Clé Internet d'une machine reçue (handler réseau, dans un thread)."""
+    def changed_from_thread(self, forget=None):
+        """Clé Internet d'une machine reçue, ou machine désappairée par l'autre côté
+        (handler réseau, dans un thread) : liste blanche à revoir."""
+        if forget is not None:
+            self.forget(forget)
         loop = self.m._loop
         if loop and not loop.is_closed():
-            loop.call_soon_threadsafe(lambda: asyncio.create_task(self.sync()))
+            loop.call_soon_threadsafe(lambda: self._spawn(self.sync()))
 
     @_guarded
     async def exchange(self, peer: dict):

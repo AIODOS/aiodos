@@ -16,16 +16,17 @@ class PeerError(Exception):
     """Machine injoignable, ou qui refuse la demande (avec un message lisible)."""
 
 
-def _detail(response) -> str:
+def error_detail(response) -> str:
+    """Message lisible d'une réponse en erreur (« detail » de FastAPI ou du compagnon)."""
     try:
         return response.json().get("detail") or response.text
-    except ValueError:
+    except (ValueError, AttributeError):
         return f"HTTP {response.status_code}"
 
 
 def _json(response) -> dict:
     if response.status_code >= 400:
-        raise PeerError(_detail(response))
+        raise PeerError(error_detail(response))
     return response.json()
 
 
@@ -117,7 +118,7 @@ def stream(my_id, peer: dict, action: str, payload: dict, stop=None, connect_tim
                      (connect_timeout, read_timeout), stream=True)
     with response:
         if response.status_code >= 400:
-            raise PeerError(_detail(response))
+            raise PeerError(error_detail(response))
         seq = 0
         try:
             for line in response.iter_lines():

@@ -46,6 +46,12 @@ def _internet(node) -> dict:
     return node.api("GET", "/network/internet")
 
 
+def _ready(node) -> dict:
+    """Le compagnon démarre en tâche de fond, à côté du réseau local : on l'attend."""
+    return node.wait_for(lambda: (state := _internet(node))["running"] and state,
+                         what="compagnon prêt")
+
+
 def _seen_by_companion(node, other) -> dict:
     """Ce que le compagnon de `node` sait de la machine `other` (connexion, compteurs)."""
     key = _internet(other)["id"]
@@ -54,6 +60,7 @@ def _seen_by_companion(node, other) -> dict:
 
 def _connect_by_internet(a, b):
     """Appairage sur le réseau local, clés Internet échangées, puis tout par Internet."""
+    _ready(a), _ready(b)
     a_id, b_id = pair(a, b)
     for node, other in ((a, b), (b, a)):
         key = _internet(other)["id"]
@@ -73,8 +80,8 @@ def _job(node, job_id):
 def test_paired_nodes_talk_through_their_companions(owner_and_lender):
     a, b = owner_and_lender
     for node in (a, b):
-        state = _internet(node)
-        assert state["running"] and state["enabled"] and len(state["id"]) == 64, state
+        state = _ready(node)
+        assert state["enabled"] and len(state["id"]) == 64, state
     _, b_id = _connect_by_internet(a, b)
     before = _seen_by_companion(a, b).get("requests_out", 0)
     # Profil demandé à B : la requête scellée passe par les deux compagnons

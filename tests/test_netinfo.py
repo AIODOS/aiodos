@@ -20,12 +20,15 @@ class FakeManager:
     def __init__(self):
         self.guard = envelope.ReplayGuard()
         self.net_changes = 0
+        self.removed = []
 
     def name(self):
         return "Ici"
 
-    def net_changed(self):
+    def net_changed(self, removed=None):
         self.net_changes += 1
+        if removed:
+            self.removed.append(removed)
 
     def changed(self):
         pass
@@ -86,6 +89,21 @@ def test_requests_through_the_companion(server):
     # Par le réseau local, l'adresse vue reste retenue comme avant
     status, _ = _sealed(client, "ping", {})
     assert status == 200 and peers.get(PEER_ID)["address"] == "testclient"
+
+
+def test_pairing_does_not_go_through_the_companion_yet(server):
+    """Par le compagnon, l'adresse vue serait 127.0.0.1 : l'appairage reste local (2.4)."""
+    client, _ = server
+    request = {"node_id": "c" * 32, "name": "Inconnue", "port": 47701, "pub": "AAAA"}
+    refused = client.post("/p2p/v1/pair/start", json=request, headers={"X-Aiodos-Peer": NET})
+    assert refused.status_code == 403 and "réseau local" in refused.json()["detail"]
+
+
+def test_a_machine_that_unpairs_leaves_the_allowlist(server):
+    client, manager = server
+    status, _ = _sealed(client, "unpair", {})
+    assert status == 200 and peers.get(PEER_ID) is None
+    assert manager.removed == [PEER_ID]
 
 
 def test_unknown_machines_cannot_announce_a_key(server):

@@ -102,7 +102,7 @@ class NetworkManager:
             except OSError as exc:
                 self._discovery = None
                 self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
-        await self.internet.start()                       # si l'utilisateur l'a activé
+        self.internet.launch()                            # si activé ; prêt un peu plus tard
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="aiodos-peers")
         if self.worker:
             self.worker.start()
@@ -184,8 +184,14 @@ class NetworkManager:
     # ----------------------------------------------- machines appairées
     async def _refresh_loop(self):
         while True:
-            for peer in await asyncio.to_thread(peers.list_peers):
-                await self._refresh_peer(peer)
+            known = await asyncio.to_thread(peers.list_peers)
+            # En parallèle : une machine injoignable (jusqu'à 30 s par Internet) ne retarde
+            # pas les nouvelles des autres, qui passeraient sinon pour hors ligne
+            results = await asyncio.gather(*(self._refresh_peer(p) for p in known),
+                                           return_exceptions=True)
+            for peer, result in zip(known, results):
+                if isinstance(result, Exception):
+                    log.warning("Nouvelles de « %s » : %s", peer["name"], result)
             await self.internet.sync()
             await self.internet.refresh_status()
             await asyncio.sleep(REFRESH_EVERY)
@@ -207,13 +213,15 @@ class NetworkManager:
         await self.internet.exchange(full)                # clés Internet (compagnon)
         self.changed()
 
-    def net_changed(self):
-        """Clé Internet d'une machine appairée reçue (appelable depuis n'importe quel thread)."""
-        self.internet.changed_from_thread()
+    def net_changed(self, removed: str | None = None):
+        """Clé Internet d'une machine appairée reçue, ou machine désappairée par l'autre
+        côté (`removed`) : liste blanche du compagnon à revoir (depuis n'importe quel thread)."""
+        self.internet.changed_from_thread(forget=removed)
 
     def on_paired(self, node_id: str):
         """Nouvelle machine appairée : on demande son profil tout de suite
         (appelable depuis n'importe quel thread)."""
+        self.internet.forget(node_id)                     # clés Internet à échanger de nouveau
         if self._loop and not self._loop.is_closed():
             self._loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(self.refresh_now(node_id)))

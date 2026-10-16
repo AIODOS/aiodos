@@ -164,6 +164,32 @@ def test_the_companion_stops_when_aiodos_is_killed(tmp_path):
     assert not instance._alive(pid), "compagnon resté en vie après la mort d'AIODOS"
 
 
+def test_stopping_during_launch_leaves_no_companion_behind(tmp_path, monkeypatch):
+    """Internet activé puis désactivé aussitôt : le compagnon en train de démarrer ne
+    reste pas en vie, ni maintenant, ni après la fin de son lancement."""
+    launched = []
+    real_popen = subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        launched.append(process)
+        return process
+
+    monkeypatch.setattr(companion_mod.subprocess, "Popen", recording_popen)
+    node = Companion("127.0.0.1:9", dict(LOCAL, data_dir=tmp_path / "net"))
+    starter = threading.Thread(target=node.start)
+    starter.start()
+    while not launched:
+        time.sleep(0.01)
+    node.stop()                                      # avant, ou juste après, « prêt »
+    starter.join(40)
+    deadline = time.time() + 15
+    while time.time() < deadline and any(p.poll() is None for p in launched):
+        time.sleep(0.1)
+    assert all(p.poll() is not None for p in launched)
+    assert not node.running
+
+
 def test_a_crashed_companion_is_restarted(two_companions):
     (a, b), _ = two_companions
     generation = a.generation

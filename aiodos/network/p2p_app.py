@@ -36,6 +36,7 @@ def _profile(manager, sender, payload):
 
 def _unpair(manager, sender, payload):
     peers.remove(sender)
+    manager.net_changed(sender)       # retirée aussi de la liste blanche du compagnon
     manager.changed()
     return {"ok": True}
 
@@ -86,6 +87,11 @@ def create_p2p_app(manager) -> FastAPI:
 
     @app.post("/p2p/v1/pair/start")
     def pair_start(body: dict, request: Request):
+        if request.headers.get(PEER_HEADER):
+            # Par le compagnon, l'adresse vue serait 127.0.0.1 : l'appairage à distance
+            # viendra avec les invitations (étape 2.4 de docs/phase2-internet.md)
+            raise HTTPException(403, "Appairage par Internet pas encore possible : "
+                                     "appairer les deux machines sur le réseau local.")
         try:
             return manager.pairing.incoming(body, request.client.host)
         except PeerError as exc:
