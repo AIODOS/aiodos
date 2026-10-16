@@ -1,6 +1,6 @@
 // Cette machine : profil du nœud, modèles, préférences de partage de puissance.
 import { get, put } from '../api.js';
-import { $, h, esc, bytes, duration } from '../dom.js';
+import { $, h, esc, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { ask, toast, errorToast } from '../ui.js';
@@ -9,6 +9,7 @@ import { loadNetwork } from './network.js';
 const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedding: 'embeddings' };
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
 let root;
+let shareMobile = null;            // préférences dessinées pour un téléphone ?
 
 export function mountNode(container) {
   root = h(`
@@ -55,9 +56,9 @@ function render() {
     ? n.gpus.map(g => gauge(g.vram_used, g.vram_total,
         `${esc(g.name)} <span class="faint">· utilisation ${g.utilization} %</span>`)).join('')
     : '<span class="muted">Aucun GPU NVIDIA détecté</span>';
-  const idle = n.idle_seconds == null ? '—'
+  const idle = n.idle_seconds == null ? (n.power?.mobile ? 'Non mesurable sur un téléphone' : '—')
     : n.idle_seconds < 60 ? 'En cours d\'utilisation' : `Inactive depuis ${duration(n.idle_seconds)}`;
-  const power = n.on_ac_power == null ? '—' : n.on_ac_power ? 'Sur secteur' : 'Sur batterie';
+  const power = powerText(n);
   $('#node-machine', root).innerHTML = `
     <h2>${icon('node')}${esc(n.name)}
       <button class="icon-btn" id="rename-node" title="Renommer ce nœud">${icon('edit')}</button></h2>
@@ -94,7 +95,7 @@ function render() {
   renderNetworkSummary();
   // Les préférences ne sont reconstruites qu'à leur changement (settings:loaded) :
   // les redessiner toutes les 5 s fermerait une liste ouverte et perdrait un clic
-  if (!$('#share-status', root)) renderShare();
+  if (!$('#share-status', root) || shareMobile !== !!n.power?.mobile) renderShare();
 }
 
 function renderNetworkSummary() {
@@ -148,17 +149,33 @@ function renderShare() {
   const box = root && $('#node-share', root);
   if (!box || !state.settings) return;
   const s = state.settings;
-  box.innerHTML = `
-    <h2>${icon('bolt')}Partage de puissance</h2>
-    <div id="share-status"></div>
-    ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', 'Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ce PC. Les résultats sont enregistrés ici.')}
-    ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', 'Ce PC calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.')}
+  // Téléphone : pas d'inactivité mesurable ; en charge, assez chargé, pas trop chaud
+  const mobile = shareMobile = !!state.node?.power?.mobile;
+  const device = mobile ? 'ce téléphone' : 'ce PC';
+  const idleRows = `
     ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens.")}
     <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Avant de commencer à prêter de la puissance.</small></div>
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
-        `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>
-    ${shareRow('share_on_ac_only', 'Seulement sur secteur', 'Jamais sur batterie.')}
-    <div class="setting-row"><div class="txt"><b>GPU prêté au maximum</b><small>Part du temps de la carte graphique : en dessous de 100 %, ce PC fait des pauses entre deux unités.</small></div>
+        `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
+  const phoneRows = `
+    <div class="setting-row"><div class="txt"><b>Batterie minimale</b><small>En dessous, le téléphone se recharge d'abord.</small></div>
+      <select class="select" data-num="share_min_battery" style="width:140px">${[50, 60, 70, 80, 90].map(p =>
+        `<option value="${p}" ${p === s.share_min_battery ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>
+    <div class="setting-row"><div class="txt"><b>Température maximale de la batterie</b><small>Au-delà, pause jusqu'à ce qu'elle ait perdu 3 °C.</small></div>
+      <select class="select" data-num="share_max_temp" style="width:140px">${[35, 38, 40, 42].map(t =>
+        `<option value="${t}" ${t === s.share_max_temp ? 'selected' : ''}>${t} °C</option>`).join('')}</select></div>`;
+  box.innerHTML = `
+    <h2>${icon('bolt')}Partage de puissance</h2>
+    <div id="share-status"></div>
+    ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', `Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ${device}. Les résultats sont enregistrés ici.`)}
+    ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', `${mobile ? 'Ce téléphone' : 'Ce PC'} calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.`)}
+    ${mobile ? '' : idleRows}
+    ${shareRow('share_on_ac_only', mobile ? 'Seulement en charge' : 'Seulement sur secteur',
+      mobile ? "Jamais sur batterie. L'inactivité d'un téléphone n'est pas mesurable : c'est la charge qui compte." : 'Jamais sur batterie.')}
+    ${mobile ? phoneRows : ''}
+    <div class="setting-row"><div class="txt"><b>${mobile ? 'Calcul prêté au maximum' : 'GPU prêté au maximum'}</b><small>${mobile
+      ? 'En dessous de 100 %, ce téléphone fait des pauses entre deux unités : il chauffe moins.'
+      : 'Part du temps de la carte graphique : en dessous de 100 %, ce PC fait des pauses entre deux unités.'}</small></div>
       <select class="select" data-num="share_max_gpu" style="width:140px">${[25, 50, 75, 100].map(p =>
         `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>`;
   box.querySelectorAll('input[data-key]').forEach(input => {

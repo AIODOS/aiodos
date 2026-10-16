@@ -35,6 +35,17 @@ export function duration(seconds) {
   return `${Math.floor(s / 3600)} h ${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}`;
 }
 
+// « Sur secteur · batterie 100 % », « En charge · batterie 84 % · 31,2 °C »…
+export function powerText(profile) {
+  const p = profile.power || {};
+  const plugged = p.plugged ?? profile.on_ac_power;
+  const parts = [plugged == null ? (p.mobile ? 'Charge inconnue (Termux:API absent ?)' : '—')
+    : plugged ? (p.mobile ? 'En charge' : 'Sur secteur') : 'Sur batterie'];
+  if (p.level != null) parts.push(`batterie ${p.level} %`);
+  if (p.temperature != null) parts.push(`${String(p.temperature).replace('.', ',')} °C`);
+  return parts.join(' · ');
+}
+
 export function debounce(fn, ms = 200) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };

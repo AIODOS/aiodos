@@ -1,6 +1,6 @@
 // Réseau local : activation, machines appairées et détectées, appairage par code.
 import { get, post, del } from '../api.js';
-import { $, h, esc, ago, bytes, duration } from '../dom.js';
+import { $, h, esc, ago, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { modal, toast, errorToast, confirmDanger } from '../ui.js';
@@ -79,7 +79,10 @@ function peerFacts(peer) {
     `${bytes(p.memory?.total || 0)} de RAM`,
     `${(p.ollama?.models || []).length} modèle(s)`,
   ];
-  if (p.on_ac_power === false) facts.push('sur batterie');
+  if (p.power?.mobile) {                       // téléphone : charge, niveau, température
+    const text = powerText(p);
+    facts.push(text.charAt(0).toLowerCase() + text.slice(1));
+  } else if (p.on_ac_power === false) facts.push('sur batterie');
   if (p.idle_seconds != null) facts.push(p.idle_seconds < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(p.idle_seconds)}`);
   return facts.join(' · ');
 }

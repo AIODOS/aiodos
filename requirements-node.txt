@@ -1,0 +1,26 @@
+# Nœud de calcul sans fenêtre : téléphone Android (Termux), Linux, mini-PC…
+#   pip install -r requirements-node.txt
+#   python -m coeur --headless --network
+# Ni fenêtre native (pywebview), ni transcription (faster-whisper) : les images
+# et l'audio/vidéo restent aux machines qui ont le modèle de vision ou Whisper
+# (correspondance des capacités, network/work.py). Ce nœud traite le texte, les
+# documents et les pages web.
+# Sous Termux, numpy, cryptography, lxml et Pillow s'installent avec « pkg »
+# (déjà compilés pour Android), avant ce fichier : voir docs/android.md.
+
+# Nœud, API locale et réseau entre machines
+fastapi
+uvicorn            # sans [standard] : rien à compiler
+requests
+numpy
+cryptography
+markdown-it-py     # rendu des réponses, chargé au démarrage du nœud
+pygments
+
+# Lecture des documents confiés : PDF, Word, PowerPoint, Excel, RTF, EPUB
+pypdf
+python-docx
+python-pptx
+openpyxl
+striprtf
+ebooklib
