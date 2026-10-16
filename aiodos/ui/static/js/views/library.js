@@ -99,7 +99,7 @@ function renderCollections() {
         'sep',
         { title: 'Calcul de cette bibliothèque' },
         ...SCOPES.filter(s => s.value !== scope).map(s => ({
-          label: s.label, icon: s.icon, action: () => setScope(c, s.value) })),
+          label: s.from?.[scope] || s.label, icon: s.icon, action: () => setScope(c, s.value) })),
         'sep',
         { label: 'Supprimer', icon: 'trash', danger: true, action: () => deleteCollection(c) },
       ]);
@@ -125,6 +125,7 @@ const SCOPES = [
   { value: 'local', label: 'Garder sur ce PC uniquement', icon: 'lock',
     done: name => `« ${name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine.` },
   { value: 'mine', label: 'Calculer aussi sur mes machines', icon: 'network',
+    from: { friends: 'Ne plus partager avec mes amis' },
     done: name => `Le calcul de « ${name} » peut être confié à tes machines, pas à celles de tes amis.` },
   { value: 'friends', label: 'Partager aussi avec mes amis', icon: 'globe',
     done: name => `Le calcul de « ${name} » peut aussi être confié à tes amis, sous des noms de fichiers `
