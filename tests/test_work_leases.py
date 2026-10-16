@@ -262,3 +262,14 @@ def test_received_file_names_are_made_safe():
     assert safe_name("../../etc/passwd") == "passwd"
     assert safe_name("CON.txt") == "_CON.txt"
     assert safe_name("") == "fichier"
+
+
+def test_big_files_stay_with_machines_of_the_local_network(owner):
+    """Étape 2.6 : une machine joignable seulement par Internet ne reçoit pas de fichier
+    plus gros que le plafond internet_max_blob_mb (64 Mo par défaut)."""
+    settings.set_value("internet_max_blob_mb", 0.00001)          # une dizaine d'octets
+    peers.save(B, "PC fixe", b"k" * 32, None, None)               # B : plus de réseau local
+    assert _lease(owner)["unit"] is None
+    assert _lease(owner, node=C)["unit"] is not None              # C : sur le réseau local
+    settings.set_value("internet_max_blob_mb", 64)
+    assert _lease(owner)["unit"] is not None

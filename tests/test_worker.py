@@ -297,3 +297,60 @@ def test_failed_work_requests_are_logged_once_per_cause_with_a_slow_link_timeout
     assert notes == ["« PC portable » : demande de travail impossible (Machine injoignable (ReadTimeout).)",
                      "« PC portable » : Versions différentes"]
     assert timeouts == [worker.LEASE_TIMEOUT] * 3 and worker.LEASE_TIMEOUT >= 20
+
+
+def _reading(received):
+    def compute(payload, file, options, stop):
+        received["text"] = open(file, encoding="utf-8").read()
+        return {"pieces": [received["text"]], "vectors": np.ones((1, 4), dtype=np.float32)}
+    return compute
+
+
+def test_a_transfer_cut_in_the_middle_resumes_where_it_stopped(setup, monkeypatch):
+    """Étape 2.6 : coupure en plein transfert (4G, relais) : le morceau est redemandé au
+    même endroit, sans tout reprendre depuis le début."""
+    monkeypatch.setattr(work, "BLOB_CHUNK", 8)
+    monkeypatch.setattr(worker, "CHUNK_RETRY_DELAYS", (0.01, 0.01))
+    lender, a = setup["lender"], setup["assignment"]
+    owner_call, asked, cuts = lender._call, [], [True]
+
+    def flaky(assignment, action, payload, timeout=30):
+        if action == "work/blob":
+            asked.append(payload["offset"])
+            if payload["offset"] == 16 and cuts:
+                cuts.pop()
+                raise PeerError("Machine injoignable par Internet (ReadTimeout).")
+        return owner_call(assignment, action, payload, timeout)
+    monkeypatch.setattr(lender, "_call", flaky)
+    received = {}
+    _compute_with(monkeypatch, _reading(received))
+    assert lender._process(a).startswith("faite")
+    assert received["text"] == "Le crachin breton est une pluie fine."
+    assert asked == [0, 8, 16, 16, 24, 32]
+
+
+def test_a_transfer_cut_for_too_long_gives_up(setup, monkeypatch):
+    monkeypatch.setattr(worker, "CHUNK_RETRY_DELAYS", (0.01, 0.01))
+    lender, a = setup["lender"], setup["assignment"]
+
+    def down(assignment, action, payload, timeout=30):
+        raise PeerError("Machine injoignable.")
+    monkeypatch.setattr(lender, "_call", down)
+    _compute_with(monkeypatch, lambda *args: pytest.fail("rien à calculer"))
+    assert "injoignable" in lender._process(a)
+
+
+def test_an_owner_reached_only_by_internet_sends_smaller_pieces(setup, monkeypatch):
+    peers.save(OWNER, "PC portable", b"k" * 32, None, None)     # plus de réseau local
+    monkeypatch.setattr(work, "INTERNET_CHUNK", 10)
+    lender, a = setup["lender"], setup["assignment"]
+    owner_call, sizes = lender._call, []
+
+    def spy(assignment, action, payload, timeout=30):
+        if action == "work/blob":
+            sizes.append(payload["size"])
+        return owner_call(assignment, action, payload, timeout)
+    monkeypatch.setattr(lender, "_call", spy)
+    _compute_with(monkeypatch, _reading({}))
+    assert lender._process(a).startswith("faite")
+    assert sizes and set(sizes) == {10}

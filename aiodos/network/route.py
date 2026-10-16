@@ -89,6 +89,13 @@ def paths_for(peer: dict, pairing: bool = False) -> list:
     return [p for p in (lan, net) if p]
 
 
+def lan_first(peer: dict) -> bool:
+    """Le réseau local est-il le chemin vers cette machine ? (sinon Internet, ou rien)
+    Sert à adapter ce qui passe : morceaux plus petits, fichiers moins gros par Internet."""
+    found = paths_for(peer)
+    return bool(found) and found[0].kind == "lan"
+
+
 def lan_failed(node_id):
     with _lock:
         _lan_down[node_id] = time.monotonic() + LAN_RETRY_AFTER

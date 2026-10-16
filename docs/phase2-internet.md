@@ -943,6 +943,28 @@ reprise, plafond de taille par défaut plus bas, délais revus pour les chemins 
 
 *Fini quand* : une coupure en plein transfert reprend où elle s'était arrêtée.
 
+**Fait le 16/10/2026**, sans changer le protocole :
+
+- **Reprise.** Un morceau du fichier qui n'arrive pas (4G, relais, changement de réseau)
+  est redemandé au même endroit, après des pauses de 2 à 30 s, pendant environ 1 min 40.
+  Pendant ce temps, le bail reste renouvelé à côté. Rien n'est repris depuis le début.
+- **Morceaux.** Quand le propriétaire n'est joignable que par Internet, les morceaux sont
+  de 512 Kio au lieu de 2 Mio : chacun tient dans le délai d'une requête, même par un
+  relais.
+- **Plafond.** Une machine joignable seulement par Internet ne reçoit pas de fichier de plus
+  de 64 Mo (réglage `internet_max_blob_mb`) : les gros fichiers restent aux machines du
+  réseau local, ou à celle du propriétaire.
+- **Délais.** Les délais des chemins par Internet viennent de 2.2 (`route.timeouts`) : au
+  moins 30 s de lecture.
+- **Tests** dans `tests/test_worker.py` et `tests/test_work_leases.py` :
+  - un transfert coupé au milieu reprend à l'octet près ;
+  - une coupure trop longue abandonne ;
+  - les morceaux sont plus petits par Internet ;
+  - les gros fichiers restent au réseau local.
+
+Reste : le fichier passe encore en base64 dans des messages JSON scellés (un tiers de plus
+à transférer) ; un flux binaire scellé l'éviterait.
+
 **2.7 Relais** (selon Q16) : relais configurables dans l'interface, état direct ou
 relayé visible pour chaque machine, guide d'auto-hébergement d'`iroh-relay` (liste
 blanche de clés ou jeton).

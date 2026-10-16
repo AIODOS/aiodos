@@ -62,6 +62,7 @@ DEFAULTS = {
     "internet_directory": ["n0-dns", "dht"],   # DNS de n0 d'abord, DHT Mainline en secours
     "internet_portmap": True,         # ouverture de port automatique sur la box (UPnP, PCP…)
     "p2p_route": "auto",              # chemin vers mes machines : auto | lan | internet
+    "internet_max_blob_mb": 64,       # fichier confié par Internet : au-delà, il reste au local
     # --- Nœud & partage de puissance ---
     "node_name": "",
     "offload_enabled": True,          # confier des unités à mes machines appairées

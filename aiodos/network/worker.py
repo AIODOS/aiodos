@@ -27,7 +27,7 @@ from aiodos import __version__, paths, settings
 from aiodos.jobs import leases, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.models import GPU_BOUND
-from aiodos.network import client, peers, wire, work
+from aiodos.network import client, peers, route, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
 from aiodos.node import identity, power
@@ -41,6 +41,7 @@ ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus
 # seconde ; à travers Internet (réseau mobile faible, relais), il a fallu jusqu'à 10 s
 # le 16/10/2026 : avec 8 s, un téléphone en 4G n'obtenait jamais rien.
 LEASE_TIMEOUT = 30
+CHUNK_RETRY_DELAYS = (2, 5, 10, 20, 30, 30)   # coupure en plein transfert : ~1 min 40 de patience
 CAPS_TTL = 30
 HEAT_MARGIN = 3          # °C : un téléphone trop chaud reprend 3 °C sous sa limite
 BATTERY_MARGIN = 5       # % : un téléphone qui calcule s'arrête 5 % sous la charge minimale
@@ -347,12 +348,13 @@ class Worker:
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / safe_name(blob.get("name"))
         size, received, digest = int(blob["size"]), 0, hashlib.sha256()
+        owner = peers.get(a.peer_id)
+        chunk = work.BLOB_CHUNK if owner and route.lan_first(owner) else work.INTERNET_CHUNK
         with open(target, "wb") as f:
             while received < size:
                 if a.stop.is_set():
                     raise registry.Interrupted()
-                reply = self._call(a, "work/blob", {"unit": a.order["id"], "offset": received,
-                                                    "size": work.BLOB_CHUNK}, timeout=60)
+                reply = self._chunk(a, received, chunk)
                 data = b64d(reply.get("data") or "")
                 if not data:
                     break
@@ -362,6 +364,24 @@ class Worker:
         if received != size or digest.hexdigest() != blob.get("sha256"):
             raise RuntimeError("fichier reçu incomplet ou modifié pendant le transfert")
         return str(target)
+
+    def _chunk(self, a: Assignment, offset: int, size: int) -> dict:
+        """Un morceau du fichier. Coupure (4G, relais, changement de réseau) : redemandé au
+        même endroit après une pause qui s'allonge, tant que le bail tient (le
+        renouvellement continue à côté) et que personne n'arrête l'unité."""
+        for delay in (*CHUNK_RETRY_DELAYS, None):
+            try:
+                return self._call(a, "work/blob", {"unit": a.order["id"], "offset": offset,
+                                                   "size": size}, timeout=60)
+            except PeerError as exc:
+                if delay is None or a.stop.is_set():
+                    raise
+                log.info("Unité %s de « %s » : transfert coupé à %s/%s octets (%s), reprise "
+                         "dans %s s", a.order["id"], a.peer_name, offset,
+                         a.order["blob"]["size"], exc, delay)
+                if a.stop.wait(delay):
+                    raise registry.Interrupted() from exc
+        raise PeerError("Transfert impossible.")
 
     def _send_result(self, a: Assignment, output, compute_s) -> dict:
         body = {"unit": a.order["id"], "output": wire.pack(output), "compute_s": compute_s}

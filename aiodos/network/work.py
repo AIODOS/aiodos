@@ -22,7 +22,7 @@ from pathlib import Path
 from aiodos import settings
 from aiodos.jobs import leases, queue, registry
 from aiodos.knowledge import store
-from aiodos.network import envelope, peers, sharing, wire
+from aiodos.network import envelope, peers, route, sharing, wire
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -31,6 +31,7 @@ log = logging.getLogger("aiodos.work")
 WORK_API = 1                   # contrat de calcul (sorties, options) : à incrémenter s'il change
 MAX_BLOB = 512 * 1024 ** 2     # au-delà, le fichier reste traité sur cette machine
 BLOB_CHUNK = 2 * 1024 ** 2
+INTERNET_CHUNK = 512 * 1024    # par Internet (4G, relais) : chaque morceau tient dans le délai
 NOTHING_RETRY = 5              # rien à confier : la machine peut redemander dans 5 s
 
 
@@ -113,6 +114,7 @@ def lease(manager, sender, payload):
     friend = sharing.is_friend(sender)
     shareable = store.shareable_ids() if friend else set()
     local_only = store.local_only_ids()
+    max_blob = _max_blob(sender)
     options = {}
 
     def acceptable(unit):
@@ -128,7 +130,7 @@ def lease(manager, sender, payload):
             return False
         if spec.file_key:
             try:
-                return os.path.getsize(unit["payload"][spec.file_key]) <= MAX_BLOB
+                return os.path.getsize(unit["payload"][spec.file_key]) <= max_blob
             except OSError:
                 return False      # fichier disparu : l'exécution locale le signalera
         return True
@@ -157,6 +159,19 @@ def lease(manager, sender, payload):
     log.info("Unité %s (%s) confiée à %s", unit["id"], unit["task"], _peer_name(sender))
     manager.executor.publish_job(unit["job_id"], force=True)
     return {"unit": order}
+
+
+def _max_blob(sender) -> int:
+    """Taille de fichier qu'on confie à cette machine : moindre si elle n'est joignable
+    que par Internet (4G, relais : le plus gros reste aux machines du réseau local)."""
+    peer = peers.get(sender)
+    if peer is None or route.lan_first(peer):
+        return MAX_BLOB
+    try:
+        megabytes = float(settings.get("internet_max_blob_mb"))
+    except (TypeError, ValueError):
+        megabytes = 64.0
+    return min(MAX_BLOB, max(0, int(megabytes * 1024 ** 2)))
 
 
 def renew(manager, sender, payload):
