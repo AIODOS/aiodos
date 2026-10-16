@@ -1,10 +1,8 @@
 # Un téléphone Android comme nœud de calcul (Termux)
 
-> **État : à l'essai.** Le code est prêt et testé sur PC (alimentation du téléphone
-> simulée), mais il n'a pas encore tourné sur un vrai téléphone. Les commandes
-> ci-dessous ont été vérifiées dans les sources (dépôts Termux, Ollama, BOINC, AOSP)
-> le 16/10/2026, pas exécutées. Ce qui reste à vérifier est listé
-> [en fin de page](#ce-qui-reste-à-vérifier-sur-un-vrai-téléphone).
+> **État : essayé sur un vrai téléphone le 16/10/2026** (Galaxy S9, Android 10) :
+> l'installation, l'appairage et le calcul pour le PC fonctionnent. Résultats et points
+> encore ouverts [en fin de page](#essai-sur-un-galaxy-s9-et-ce-qui-reste-à-vérifier).
 
 Un téléphone récent a 6 à 12 Go de mémoire et 8 cœurs. C'est assez pour calculer des
 embeddings pour les bibliothèques du PC pendant qu'il recharge, la nuit par exemple. Il
@@ -309,34 +307,59 @@ Nœud Aiodos prêt : http://127.0.0.1:8800/?t=…
 | pip : « no matching distribution » ou « has no usable wheels » | le TUR n'a pas (encore) cette version | étape 4, « Si cela échoue » |
 | `ImportError … _cffi_backend` | `cffi` non compilé (clang manquait) | `pkg install clang && pkg reinstall python-cryptography` |
 
-## Ce qui reste à vérifier sur un vrai téléphone
+## Essai sur un Galaxy S9, et ce qui reste à vérifier
 
-- [ ] **Installation.** Les étapes 2 à 4 passent telles quelles avec Python 3.14 :
-  - roue `pydantic-core` du TUR ;
-  - `cffi` compilé par `python-cryptography` ;
-  - dépendances en pur Python.
-- [ ] **Démarrage.** `sh lancer-noeud.sh` démarre :
-  - Ollama et le nœud ;
-  - l'adresse du téléphone s'affiche ;
-  - le nœud porte le nom du modèle du téléphone (et non « localhost »).
-- [ ] **Interface.** Elle est utilisable dans le navigateur du téléphone, en particulier
-  la confirmation du code d'appairage.
-- [ ] **Alimentation.** Elle est bien lue :
-  - `/sys/class/power_supply` est-il lisible sur ce modèle, ou est-ce `termux-battery-status`
-    qui sert ?
-  - les mesures (en charge, %, °C) sont-elles justes ?
-  - le passage en pause se fait-il au débranchement, en moins d'une minute ?
-- [ ] **Blocages de `termux-battery-status`.** Ils surviennent au hasard ; vérifier
-  qu'aucun processus `termux-api` ne reste bloqué après des heures de fonctionnement
+Galaxy S9 (SM-G960F, Exynos 9810 de 2018, 4 Go, Android 10), le 16/10/2026, appairé
+avec le PC par le câble USB (tunnels `adb`, voir plus bas).
+
+**Vérifié :**
+- [x] **Installation.** Les étapes 2 à 4 passent telles quelles avec Python 3.14, en
+  moins de 3 minutes : roue `pydantic_core-2.50.1-cp314-cp314-android_24_arm64_v8a` du
+  TUR, `cffi` compilé par `python-cryptography`, aucune autre compilation.
+- [x] **Démarrage.** Le nœud porte le nom du modèle (« Samsung SM-G960F ») et affiche
+  l'adresse à saisir sur le PC.
+- [x] **Alimentation.** `/sys/class/power_supply` n'est pas lisible sur ce modèle :
+  c'est `termux-battery-status` qui sert. Mesures justes (« en charge par USB, 87 %,
+  24 °C »).
+- [x] **Appairage.** Même code à 6 chiffres des deux côtés ; l'appairage a même survécu
+  au renommage du projet (nouveau protocole `aiodos/1`, clés conservées).
+- [x] **Calcul.** Le PC lui confie des unités et accepte ses résultats. Vecteurs du
+  processeur du téléphone contre ceux du GPU du PC, même modèle : **cosinus ≥ 0,99998**.
+- [x] **Débit : environ 8 passages par minute** (fichiers de code, passages d'environ
+  1 000 caractères), soit une centaine de fois moins que le GPU d'un PC récent. Un fichier
+  de 170 passages a pris 21 minutes. Ce téléphone sert donc à essayer le réseau, pas à
+  accélérer ; un téléphone plus récent fera mieux.
+- [x] **Chargeur.** Branché sur le port USB d'un PC, il s'est **déchargé** de 88 à 79 %
+  en 35 minutes de calcul, en chauffant de 24 à 35 °C : un vrai chargeur secteur est
+  indispensable pour durer.
+
+**Pas encore vérifié :**
+- [ ] **Interface** dans le navigateur du téléphone (confirmation du code d'appairage).
+- [ ] **Passage en pause** au débranchement, en moins d'une minute.
+- [ ] **Blocages de `termux-battery-status`** après des heures de fonctionnement
   (`ps -e | grep termux-api`).
-- [ ] **Appairage.** Il fonctionne avec le PC par adresse IP. Le téléphone apparaît-il
-  aussi tout seul dans « Machines détectées » ?
-- [ ] **Calcul.** Le PC lui confie des unités et accepte ses résultats. Les vecteurs
-  calculés sur le processeur du téléphone doivent être quasi identiques à ceux du GPU du
-  PC : comparer un même texte des deux côtés (similarité cosinus ≥ 0,999).
-- [ ] **Durée.** Le nœud tient plusieurs heures écran éteint (wakelock, phantom process
-  killer, Doze), et la température reste sous la limite.
-- [ ] **Débit.** Combien de passages par minute sur ce téléphone, pour juger de l'intérêt.
+- [ ] **Wi-Fi.** Appairage par l'adresse Wi-Fi, et apparition seule dans « Machines
+  détectées ».
+- [ ] **Durée.** Plusieurs heures écran éteint (wakelock, Doze), température sous la limite.
+
+**Incompatible :** les tablettes et téléphones restés sous Android 4, 5 ou 6, ou en
+32 bits (par exemple la Galaxy Note 10.1 de 2014, Android 5.1.1) : Termux demande
+Android 7, et son paquet `ollama` n'existe qu'en 64 bits.
+
+### Piloter le téléphone depuis le PC (essais, développement)
+
+Pour un téléphone branché en USB avec le débogage USB activé :
+- les versions GitHub de Termux sont « débogables » : depuis le PC, `adb shell run-as
+  com.termux …` exécute des commandes dans Termux et `adb exec-in run-as com.termux sh -c
+  "cat > files/home/aiodos.zip" < aiodos.zip` y dépose des fichiers, sans rien taper sur
+  le téléphone ;
+- dans ce cas, définir `TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` (avec `PREFIX`,
+  `HOME`, `PATH`, `TMPDIR` et `LD_PRELOAD` de Termux). Sinon, lancés hors de
+  l'application Termux, les programmes passent par le chargeur d'Android et Ollama ne
+  retrouve plus son moteur (« llama-server binary not found ») ;
+- tunnels : `adb forward tcp:47701 tcp:47701` (le PC joint le téléphone),
+  `adb reverse tcp:<port P2P du PC> tcp:<même port>` (le téléphone joint le PC), et
+  `adb forward tcp:8800 tcp:8800` pour ouvrir l'interface du téléphone sur le PC.
 
 ## Sources (consultées le 16/10/2026)
 
