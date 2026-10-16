@@ -392,7 +392,106 @@ Ce que ça implique :
 
 ## 4. Recommandation
 
-*(à rédiger)*
+**Iroh 1.x, utilisé par un petit programme compagnon en Rust (`coeur-net`, GPL-3.0)
+que le nœud Python lance et pilote en local. Le protocole de travail `coeur/1` passe
+dans ce tuyau presque sans changement. Relais et annuaire restent configurables, pour
+qu'aucun ne soit obligatoire.** C'est une recommandation technique : le choix des
+relais (Q16) et les autres questions du § 6 restent à trancher.
+
+### Synthèse
+
+| Critère | Iroh (compagnon Rust) | libp2p | Hyperswarm | Mainline + pkarr | VPN type WireGuard |
+|---|---|---|---|---|---|
+| Serveur central obligatoire | non, une fois relais et annuaire choisis (par défaut : ceux de n0) | non (amorçage et relais à fournir) | non (amorçage remplaçable, relais à fournir) | non | oui, sauf Yggdrasil |
+| Traversée de NAT | ~90 % en direct annoncé, non mesuré ; repli par relais transparent | 70 % ± 7 mesuré ; relais publics bridés (128 Kio) | perçage poussé, aucun chiffre ; aucun relais public | annuaire seulement | > 90 % annoncé (Tailscale) |
+| Santé (oct. 2026) | 1.3.0 ; stable depuis juin 2026 ; très actif | py 0.8.0 bêta ; rust actif ; go incertain | actif ; un seul publieur ; failles sans réponse | actif ; API instable | actifs |
+| Licence | MIT / Apache-2.0 | MIT / Apache-2.0 | MIT / Apache-2.0 / ISC | MIT | variable (contrôleur ZeroTier non libre) |
+| Windows | ✓ | py : pas de 3.14 ; rust ✓ | moteur JS de 46 à 92 Mo | ✓ (par un compagnon) | pilote réseau, droits admin |
+| Android / Termux | dumbpipe et sendme empaquetés ; compagnon à compiler avec soin | plantages ouverts (go, rust) | Node sous Termux, non testé | libtorrent (Termux) | emplacement VPN, ou root |
+| Python 3.14 + asyncio | compagnon (liaisons officielles en retard) | trio, pas de 3.14 | compagnon JS | rien de prêt | rien à coder (IP virtuelles) |
+| Sécurité | pas d'audit ; correctifs rapides ; liste blanche par clé | pas d'audit ; dénis de service réguliers | pas d'audit ; rapport resté sans réponse | DHT surveillée | toute la machine exposée |
+
+### Pourquoi Iroh
+
+1. **Les quatre briques du § 1 d'un seul tenant** : identité par clé, annuaire (DNS,
+   DHT Mainline ou mDNS), perçage de NAT, relais. Avec libp2p ou une solution maison,
+   il faudrait les assembler soi-même.
+2. **Le relais est un chemin de la même connexion** : une connexion qui démarre relayée
+   passe en direct sans coupure, et l'inverse lors d'un changement de réseau (Wi-Fi →
+   4G). Exactement ce qu'il faut pour des baux de 90 s.
+3. **Des connexions dans les deux sens** : le téléphone, injoignable, ouvre la
+   connexion, puis chacun peut faire des requêtes (cf. § 3).
+4. **Stable depuis juin 2026**, sous licence permissive, Windows de première classe, et
+   déjà présent dans Termux (dumbpipe, sendme).
+5. **Déjà utilisé pour le même usage** : partager des GPU de machines personnelles
+   (Mesh LLM, Buzz).
+6. **Rien d'obligatoire chez n0** : relais et annuaire s'auto-hébergent sous la même
+   licence, et la DHT Mainline peut remplacer le DNS de n0.
+
+### Pourquoi un programme compagnon plutôt que les liaisons Python
+
+- Les liaisons officielles sont en retard (iroh 1.0.2, vulnérable ; rien depuis
+  juillet), absentes d'Android, et n'exposent ni la DHT, ni le mDNS, ni un annuaire
+  personnalisé.
+- Le compagnon donne toute l'API Rust (liste blanche de clés dès la poignée de main,
+  relais auto-hébergés avec jeton, DHT, mDNS). Le même code se compile pour Windows et
+  pour Termux (Rust y est disponible, et la recette de dumbpipe montre les précautions
+  à prendre). Il isole aussi le réseau dans un processus à part : un plantage ne fait
+  pas tomber le nœud, et une faille de la pile réseau reste confinée.
+- Python reste simple : asyncio continue de parler HTTP en local.
+- **Réversible** : si des liaisons Python à jour sortent (Android compris), elles
+  pourront remplacer le compagnon sans toucher au reste, puisque le transport reste
+  isolé derrière une interface.
+- Coût : une chaîne de compilation Rust de plus dans le projet, et deux binaires à
+  publier (Windows x64, Android arm64), de 3 à 5 Mo chacun d'après dumbpipe et
+  iroh-relay.
+
+### Architecture proposée (à confirmer par la mesure de l'étape 2.0)
+
+```
+ Machine A                                      Machine B (un ami)
+ nœud Python                                    nœud Python
+   client.call → 127.0.0.1:port de B              p2p_app sur 127.0.0.1
+        │                                               ▲
+        ▼                                               │
+ coeur-net (Rust + Iroh) ══ QUIC « coeur/2 » ══► coeur-net (Rust + Iroh)
+   liste blanche de clés   direct, ou par un      liste blanche de clés
+                           relais (chiffré)
+```
+
+- **Données** : pour chaque machine appairée, `coeur-net` ouvre un port local qui
+  mène, à travers Iroh, au serveur `p2p_app` de cette machine (comme dumbpipe). Dans
+  l'autre sens, il n'accepte que les clés de sa liste blanche et les passe à `p2p_app`,
+  qui n'écoute plus que sur `127.0.0.1` pour ce chemin. Les routes `/p2p/v1/…` et
+  l'enveloppe ne changent pas.
+- **Contrôle** : une petite API locale (ma clé, état de chaque connexion, directe ou
+  relayée, liste blanche, relais, invitations), utilisée par un module Python dédié qui
+  lance, surveille et relance le compagnon.
+- **Identités liées** : le compagnon transmet à `p2p_app` la clé Iroh authentifiée de
+  l'appelant, que `p2p_app` compare à l'émetteur de l'enveloppe. Une machine appairée ne
+  peut pas se faire passer pour une autre, et un programme local qui utiliserait le
+  tunnel se heurterait encore à l'enveloppe.
+- **Réseau local inchangé** pendant la transition : la découverte UDP et le HTTP direct
+  restent, et tout continue de marcher sans Internet. On ne fusionnera les deux chemins
+  qu'après mesure (Iroh sait aussi se connecter en direct sur un réseau local, et
+  trouver les machines par mDNS).
+- **Relais et annuaire** : des listes configurables, sans valeur imposée. Relais :
+  ceux de n0, un relais auto-hébergé (par un ami, par le projet) ou aucun (direct
+  seulement : IPv6, Freebox, port ouvert). Annuaire : DHT Mainline (aucun serveur, mais
+  un trafic de type BitTorrent visible) ou DNS (celui de n0, ou auto-hébergé). C'est la
+  question Q16. Une invitation contient de quoi joindre l'invitant sans annuaire.
+
+### Risques et parades
+
+| Risque | Parade |
+|---|---|
+| n0 disparaît ou change de cap | Code MIT/Apache, réutilisable ; relais et annuaire auto-hébergés ; transport isolé dans le compagnon ; plans B : rust-libp2p, ou aioice + aioquic (§ 2.5). |
+| Aucune mesure indépendante du taux de connexion directe | Étape 2.0 : mesurer sur nos propres réseaux avant tout code de production. |
+| Pas d'audit, failles régulières en 2026 | Garder l'enveloppe et l'appairage ; épingler les versions ; suivre les avis de sécurité ; liste blanche dès la poignée de main. |
+| Pas de spécification formelle du protocole Iroh | Notre protocole (`coeur/2`) reste documenté par nous et indépendant du tuyau ; la compatibilité réseau de la série 1.x est promise par écrit. |
+| Métadonnées visibles : le relais voit qui parle à qui ; le nom du protocole (ALPN) circule en clair | Choix des relais (Q16) ; plus tard, pour les inconnus, l'option Tor (Iroh a un transport Tor expérimental). |
+| Android : arrière-plan, mise en veille, restrictions réseau | Mesure sous Termux dès l'étape 2.0 ; recette de compilation de dumbpipe. |
+| Du Rust dans un projet Python | Binaires publiés pour Windows et Android ; un module court par fonctionnalité, comme côté Python. |
 
 ## 5. Partir de l'existant : ce qu'on garde, ce qui change
 
