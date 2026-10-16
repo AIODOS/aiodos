@@ -155,7 +155,10 @@ class UpdateService:
         kind = platforms.kind(manifests.COMPANION)
         if kind is None:
             return
-        for wanted in dict.fromkeys(v for v in (self.store.offer(), __version__) if v):
+        offer = self.store.offer()
+        if versions.newer(__version__, offer):
+            offer = None                  # plus ancienne que celle qui tourne : inutile ici
+        for wanted in dict.fromkeys(v for v in (offer, __version__) if v):
             found = self.store.manifest(wanted)
             item = manifests.binary(found) if found else None
             if found is not None and (item is None or self.store.has(wanted, item)):
@@ -187,7 +190,8 @@ class UpdateService:
                       error=f"Compagnon de la version {wanted} non reçu de « {name} » : {exc}")
             return False
         log.info("Compagnon Internet de la version %s reçu de « %s »", wanted, name)
-        self._set(download=None, error=None)
+        error = None if (self.error or "").startswith("Compagnon") else self.error
+        self._set(download=None, error=error)
         return True
 
     def _switch_companion(self):

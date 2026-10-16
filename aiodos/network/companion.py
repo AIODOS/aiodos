@@ -231,6 +231,8 @@ class Companion:
         return False
 
     def _launch(self) -> bool:
+        if self._broken and locate(activate=False, skip=self._broken) is None:
+            self._broken.clear()                # tous essayés en vain : on recommence
         located = locate(skip=self._broken)
         if located is None:
             return self._fail("Compagnon aiodos-net introuvable : il arrive avec les mises à "
@@ -274,6 +276,7 @@ class Companion:
                 self.process, self.token = process, token
                 self.id, self.listen = found.get("id"), found.get("listen")
                 self.binary, self.origin = binary, origin
+                self._broken.discard(origin)
                 self.generation += 1
                 self._info = None
                 self.error = None

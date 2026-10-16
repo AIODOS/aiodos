@@ -225,6 +225,7 @@ def test_delivered_program_that_does_not_start_gives_way(tmp_path, store, key, i
         assert "livré avec la version 2.0.1" in companion.error
         assert companion._launch(), companion.error
         assert companion.origin == companion_mod.BUILT_IN_BASE
-        assert not companion.outdated()
+        assert companion._broken == {"livré avec la version 2.0.1"}
+        assert not companion.outdated()                 # pas de relance vers celui-là
     finally:
         companion.stop()
