@@ -85,6 +85,9 @@ Pas à pas : [docs/android.md](docs/android.md).
 
 ## Installation
 
+> Un installeur sans manipulation (Windows, macOS, Linux, Android, iOS) est à l'étude :
+> [docs/installeurs.md](docs/installeurs.md).
+
 1. Installer [Ollama] et quelques modèles, par exemple :
    ```
    ollama pull qwen2.5-coder:7b
