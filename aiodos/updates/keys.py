@@ -7,4 +7,5 @@ ici ; retirer l'ancienne dans une version suivante, signée par la nouvelle.
 
 # identifiant (16 premiers chiffres hexadécimaux du SHA-256 de la clé) : clé Ed25519 en base64
 TRUSTED_KEYS = {
+    "3eab3940710a965e": "x3+Zw7VibMmPeiUian5y5fz3XMKH9Zm8Gbqk9IVv0Bw=",
 }
