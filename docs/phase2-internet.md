@@ -6,7 +6,38 @@
 
 ## En bref
 
-*(à compléter quand la comparaison sera terminée)*
+- **Oui, c'est possible sans serveur central obligatoire.** Chaque machine est
+  désignée par sa clé publique et se fait trouver par un annuaire distribué ; les deux
+  machines percent leurs box pour se parler en direct. Pas toujours : pour 10 à 30 %
+  des paires, et bien plus souvent avec un téléphone en 4G/5G, il faut un **relais**.
+  Il ne voit que du chiffré et n'importe qui peut l'héberger, mais qui le fournit reste
+  à décider (Q16).
+- **Recommandation : Iroh 1.x** (n0, MIT/Apache, stable depuis juin 2026), **utilisé
+  par un petit programme compagnon en Rust** que lance le nœud Python. Il fournit d'un
+  bloc l'identité par clé, l'annuaire, le perçage de NAT et le repli par relais ; il
+  tourne sous Windows et sous Termux ; il sert déjà à partager des GPU entre machines
+  personnelles (Mesh LLM, Buzz de Block). Ses liaisons Python officielles existent,
+  mais elles sont en retard (version vulnérable, pas d'Android) : pas pour l'instant.
+- **Écartés** : py-libp2p (pas de Python 3.14, bâti sur trio, encore en bêta) ;
+  Hyperswarm (moteur JavaScript à embarquer, aucun relais public, rapport de sécurité
+  resté sans réponse) ; la DHT Mainline et pkarr, qui ne sont qu'un annuaire (Iroh sait
+  s'en servir) ; les VPN type WireGuard (un serveur central, et toute la machine
+  exposée) ; Reticulum, dont la licence interdit les usages liés à l'IA.
+- **Le protocole actuel reste** : enveloppes chiffrées, appairage confirmé par un
+  humain, modèle « pull » avec baux, tâches prédéfinies. Changent : l'identité (une clé
+  publique), l'appairage à distance (une invitation), le transport, et la protection du
+  serveur entre nœuds, qui n'est plus jamais exposé directement.
+- **Un contexte favorable** : la France est première mondiale pour l'IPv6 (87 % des
+  utilisateurs de Google), ce qui simplifie beaucoup les connexions directes. Un
+  téléphone en 4G/5G reste injoignable de l'extérieur : c'est toujours lui qui doit
+  ouvrir la connexion.
+- **Ce qu'on ignore** : aucune mesure indépendante du taux de connexion directe
+  d'Iroh, aucun audit de sécurité. D'où la première étape : **mesurer chez nous avec
+  dumbpipe, sans écrire de code**.
+- **À trancher par l'utilisateur** : 20 questions de gouvernance et de confidentialité
+  (§ 6), dont 7 bloquent la phase 2. Fait central : en 2026, une machine ne peut pas
+  calculer sur des données sans les voir. La confidentialité repose donc sur le choix
+  des machines et sur ce qu'on accepte d'envoyer.
 
 ## 1. Le problème
 
@@ -704,8 +735,184 @@ Ce qu'on sait :
 
 ## 7. Plan par étapes
 
-*(à rédiger après la recommandation)*
+Pas de code de production avant que les questions **[phase 2]** soient tranchées
+(étape 2.1). Chaque étape a son critère de fin.
+
+### Phase 2 : le cercle de confiance
+
+**2.0 Mesurer sur le terrain** (aucun code, montage jetable). Faire passer le protocole
+actuel dans dumbpipe (archive de 3 Mo sous Windows, `pkg install dumbpipe` sous
+Termux, qui a aussi Python 3.14), avec un tunnel dans chaque sens, entre le PC
+principal et (a) le téléphone en 4G/5G, (b) une machine derrière une autre box, si
+possible chez un ami. Relever, pour chaque cas : connexion directe ou relayée, en IPv4
+ou en IPv6, délai d'établissement, débit, latence. Faire calculer de bout en bout
+quelques unités d'indexation ; observer Termux en arrière-plan. dumbpipe passe par les
+relais et l'annuaire de n0 : acceptable pour un essai, pas au-delà (le contenu reste
+scellé par l'enveloppe). Quelques détails seront à contourner : à travers un tunnel,
+l'adresse vue est `127.0.0.1`.
+*Fini quand* : un tableau de mesures par cas réel, et la décision de continuer avec
+Iroh, ou de passer au plan B (rust-libp2p, ou aioice + aioquic).
+
+**2.1 Trancher les questions [phase 2]** du § 6 : Q1, Q2, Q3, Q5, Q6, Q9 et Q16.
+*Fini quand* : les réponses sont écrites dans ce document.
+
+**2.2 Le compagnon `coeur-net`.** Programme Rust (GPL-3.0) sur Iroh 1.x, à version
+épinglée : protocole `coeur/2` (ALPN), liste blanche de clés, tunnels vers `p2p_app`,
+API locale de contrôle, relais et annuaire configurables, ouverture de port
+automatique. Compilé pour Windows x64 et Android arm64 (Termux). Côté Python, un
+module dédié le lance et le surveille, et `client.call` choisit le chemin : réseau
+local, ou compagnon.
+*Fini quand* : deux nœuds sur une même machine (comme les démos A et B d'aujourd'hui)
+font passer le travail par le compagnon, relais coupés, avec des tests automatiques.
+
+**2.3 Identité et `coeur/2`.** Une clé Ed25519 par nœud, rangée à l'abri (DPAPI sous
+Windows) ; l'identifiant actuel reste le nom du nœud dans le protocole, lié à sa clé ;
+table `peers` migrée (clé, relais, dernières adresses connues) ; contrôle que la clé
+authentifiée par le transport est bien celle de l'émetteur de l'enveloppe ; code de
+vérification dérivé aussi des deux clés. Les paires existantes passent à `coeur/2` par
+un message scellé avec leur clé actuelle, sans nouvel appairage.
+*Fini quand* : deux nœuds déjà appairés migrent seuls, et un nœud `coeur/1` reçoit un
+message clair (« mets à jour Cœur IA ») au lieu d'une erreur obscure.
+
+**2.4 Invitation à distance.** Lien ou QR code contenant la clé de l'invitant, son
+relais, un secret à usage unique et une date d'expiration ; `pair/start` exige ce
+secret ; la confirmation sur les deux machines reste obligatoire.
+*Fini quand* : un ami s'appaire sans être sur le même réseau, et une invitation déjà
+utilisée ou périmée est refusée.
+
+**2.5 Politique de partage** (selon les réponses de 2.1) : niveaux de confiance,
+portée des bibliothèques, métadonnées réduites (nom de fichier neutre, profil allégé),
+plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
+*Fini quand* : chaque réponse de 2.1 se retrouve dans un réglage ou une règle testée.
+
+**2.6 Transferts adaptés à Internet** : fichier de l'unité en flux binaire avec
+reprise, plafond de taille par défaut plus bas, délais revus pour les chemins relayés.
+*Fini quand* : une coupure en plein transfert reprend où elle s'était arrêtée.
+
+**2.7 Relais** (selon Q16) : relais configurables dans l'interface, état direct ou
+relayé visible pour chaque machine, guide d'auto-hébergement d'`iroh-relay` (liste
+blanche de clés ou jeton).
+*Fini quand* : un relais auto-hébergé sert deux machines qui ne peuvent pas se joindre
+en direct.
+
+**2.8 Essai réel avec un ami**, puis documentation (README, ce document complété par
+les mesures).
+
+### Phase 3 : le réseau public
+
+Après les décisions des § 6.3 à 6.5, et seulement si la phase 2 a tenu ses promesses :
+
+- **découverte publique sur adhésion explicite** (diffusion par sujet avec
+  iroh-gossip, ou annonces dans la DHT) ;
+- **vérification** : contrôle par échantillon pour les embeddings, tâches-témoins,
+  réplication adaptative façon BOINC pour les inconnus ;
+- **réciprocité** : reçus contresignés, réputation calculée à partir de ses propres
+  amis ;
+- **bac à sable** pour les fichiers d'inconnus : processus séparé, limites de temps et
+  de mémoire, sans réseau, AppContainer sous Windows ; jamais de fichier de modèle venu
+  d'un pair ; Ollama 0.35.0 au minimum ;
+- **relais communautaires**, et une option Tor pour cacher les adresses IP ;
+- **relecture juridique** (RGPD, responsabilité) avant l'ouverture.
 
 ## Sources
 
-*(à compléter)*
+Consultées le 16/10/2026 (sélection ; versions et dates relevées sur les dépôts, PyPI,
+crates.io et npm).
+
+**Iroh** —
+[Iroh 1.0, « Dial keys, not IPs »](https://www.iroh.computer/blog/v1) ·
+[politique de versions et de support](https://docs.iroh.computer/about/release-policy.md) ·
+[versions publiées (crates.io)](https://crates.io/api/v1/crates/iroh/versions) ·
+[traversée de NAT](https://docs.iroh.computer/concepts/nat-traversal.md) ·
+[origine du chiffre de 90 %](https://github.com/n0-computer/docs.iroh.computer/pull/4) ·
+[1.0.0-rc.1 et les NAT durs](https://www.iroh.computer/blog/iroh-1-0-0-rc-1) ·
+[noq](https://www.iroh.computer/blog/noq-announcement) ·
+[sécurité et vie privée](https://docs.iroh.computer/concepts/security-privacy.md) ·
+[relais publics](https://docs.iroh.computer/iroh-services/relays/public.md) ·
+[iroh-relay (contrôle d'accès)](https://github.com/n0-computer/iroh/tree/main/iroh-relay) ·
+[correctifs de sécurité 1.1.0](https://www.iroh.computer/blog/iroh-1-1-0) ·
+[avis GHSA-7cq4-mhxw-xw78](https://github.com/n0-computer/iroh/security/advisories/GHSA-7cq4-mhxw-xw78) ·
+[faille iroh-blobs](https://www.iroh.computer/blog/iroh-blobs-push-fix) ·
+[paquet Python `iroh`](https://pypi.org/project/iroh/) ·
+[documentation Python](https://docs.iroh.computer/languages/python.md) ·
+[dépendances figées d'iroh-ffi 1.1.0](https://github.com/n0-computer/iroh-ffi/blob/v1.1.0/Cargo.lock) ·
+[dumbpipe 0.39.0](https://github.com/n0-computer/dumbpipe/releases/tag/v0.39.0) ·
+[recette Termux de dumbpipe](https://github.com/termux/termux-packages/blob/master/packages/dumbpipe/build.sh) ·
+[brouillon IETF sur la traversée de NAT](https://datatracker.ietf.org/doc/draft-bruynooghe-n0-quic-nat-traversal/) ·
+[Mesh LLM](https://github.com/Mesh-LLM/mesh-llm) ·
+[Buzz](https://github.com/block/buzz)
+
+**libp2p** —
+[py-libp2p](https://github.com/libp2p/py-libp2p) ·
+[Python 3.14 (#1100)](https://github.com/libp2p/py-libp2p/issues/1100) ·
+[passage à trio (#1240)](https://github.com/libp2p/py-libp2p/pull/1240) ·
+[relais v2 (spécification)](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) ·
+[limites du relais dans go-libp2p](https://github.com/libp2p/go-libp2p/blob/v0.50.0/p2p/protocol/circuitv2/relay/resources.go) ·
+[mesure DCUtR (arXiv 2510.27500)](https://arxiv.org/abs/2510.27500) ·
+[version IMC 2026 (arXiv 2604.12484)](https://arxiv.org/abs/2604.12484) ·
+[fin d'IPFS chez Shipyard](https://ipshipyard.com/blog/2026-the-end-of-ipfs-at-shipyard/) ·
+[go-libp2p sous Android (#3537)](https://github.com/libp2p/go-libp2p/issues/3537)
+
+**Hyperswarm** —
+[hyperdht](https://github.com/holepunchto/hyperdht) ·
+[perçage de NAT (code)](https://github.com/holepunchto/hyperdht/blob/fdcda937d8cf3ca2e494396c430218e2996e6b29/lib/holepuncher.js) ·
+[relais aveugle (documentation Pear)](https://docs.pears.com/p2p/how-to/connect-to-peers/relay-connections-through-a-blind-relay/) ·
+[rapport de sécurité du 27/08/2026](https://github.com/holepunchto/hyperdht/issues/294) ·
+[FAQ Pear](https://github.com/holepunchto/pear-docs/blob/main/reference/faq.md) ·
+[QVAC SDK (Tether)](https://tether.io/news/tether-launches-qvac-sdk-as-the-ai-universal-building-block-that-runs-trains-and-evolves-intelligence-across-any-device-and-platform/)
+
+**DHT Mainline, pkarr, BitTorrent** —
+[pkarr](https://github.com/pubky/pkarr) ·
+[format pkarr](https://github.com/pubky/pkarr/blob/main/design/base.md) ·
+[BEP 44](https://www.bittorrent.org/beps/bep_0044.html) ·
+[BEP 55](https://www.bittorrent.org/beps/bep_0055.html) ·
+[BEP 55 dans Transmission](https://github.com/transmission/transmission/pull/8884) ·
+[pairs injoignables (Meulpolder et al., 2010)](https://www.usenix.org/legacy/event/iptps/tech/full_papers/Meulpolder.pdf) ·
+[RFC 6092 (pare-feu IPv6 des box)](https://www.rfc-editor.org/rfc/rfc6092.html)
+
+**Réseaux privés virtuels** —
+[Headscale](https://github.com/juanfont/headscale) ·
+[relais DERP de Headscale](https://headscale.net/stable/ref/derp/) ·
+[Tailscale, « How NAT traversal works »](https://tailscale.com/blog/how-nat-traversal-works) ·
+[Tailscale, « NAT traversal improvements, pt. 1 »](https://tailscale.com/blog/nat-traversal-improvements-pt-1) ·
+[Peer Relays](https://tailscale.com/blog/peer-relays-ga) ·
+[libtailscale](https://github.com/tailscale/libtailscale) ·
+[Nebula](https://github.com/slackhq/nebula) ·
+[NetBird](https://github.com/netbirdio/netbird) ·
+[ZeroTier](https://github.com/zerotier/ZeroTierOne) ·
+[Yggdrasil](https://yggdrasil-network.github.io/about.html) ·
+[un seul VPN actif sous Android](https://developer.android.com/develop/connectivity/vpn)
+
+**Traversée de NAT et contexte français** —
+[Ford, Srisuresh et Kegel (2005)](https://bford.info/pub/net/p2pnat/) ·
+[Halkes et Pouwelse (2011)](https://link.springer.com/doi/10.1007/978-3-642-20798-3_1) ·
+[baromètre IPv6 de l'Arcep (2026)](https://www.arcep.fr/fileadmin/reprise/observatoire/ipv6/Arcep_Barometre_2026_de_la_transition_vers_IPv6.pdf) ·
+[statistiques IPv6 de Google](https://www.google.com/intl/en/ipv6/statistics.html) ·
+[aioice](https://github.com/aiortc/aioice) ·
+[aioquic](https://github.com/aiortc/aioquic) ·
+[Tor Metrics (débits des services onion)](https://metrics.torproject.org/onionperf-throughput.csv?start=2026-08-15&end=2026-10-14) ·
+[Veilid (Python)](https://gitlab.com/veilid/veilid/-/blob/main/veilid-python/README.md) ·
+[licence de Reticulum](https://github.com/markqvist/Reticulum/blob/master/LICENSE)
+
+**Vérification, réciprocité, confidentialité** —
+[BOINC, réplication adaptative](https://github.com/BOINC/boinc/wiki/Adaptive-Replication) ·
+[BOINC, crédit](https://github.com/BOINC/boinc/wiki/CreditNew) ·
+[Anderson, « BOINC: A Platform for Volunteer Computing » (2019)](https://arxiv.org/abs/1903.01699) ·
+[triche à SETI@home (New York Times, 2001)](https://crypto.stanford.edu/~mironov/save/The%20Search%20for%20E_T_%20Yields%20Earthly%20Cheats.htm) ·
+[non-déterminisme de l'inférence (Thinking Machines)](https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/) ·
+[TOPLOC](https://arxiv.org/abs/2501.16007) ·
+[Petals : sécurité et vie privée](https://github.com/bigscience-workshop/petals/wiki/Security,-privacy,-and-AI-safety) ·
+[Seuken et Parkes, mécanismes de comptabilité](https://dash.harvard.edu/bitstream/handle/1/11856150/Seuken_AccountingMechanisms.pdf) ·
+[brouillon IETF TrustChain](https://datatracker.ietf.org/doc/html/draft-viftode-trustchain-trust-01) ·
+[chiffrement homomorphe : Cachemir](https://arxiv.org/abs/2602.11470) ·
+[NVIDIA, plateformes de calcul confidentiel](https://docs.nvidia.com/datacenter/cloud-native/confidential-containers/1.0.0/supported-platforms.html) ·
+[inversion d'embeddings (EMNLP 2023)](https://arxiv.org/abs/2310.06816)
+
+**Sécurité et droit** —
+[lxml, GHSA-vfmq-68hx-4jfw](https://github.com/lxml/lxml/security/advisories/GHSA-vfmq-68hx-4jfw) ·
+[Ollama, CVE-2026-103663](https://nvd.nist.gov/vuln/detail/CVE-2026-103663) ·
+[llama.cpp, GHSA-j8rj-fmpv-wcxw](https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw) ·
+[OWASP, injection de prompt](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) ·
+[Windows Sandbox](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/) ·
+[AppContainer](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation) ·
+[CNIL, responsable de traitement ou sous-traitant](https://www.cnil.fr/fr/rgpd-comment-bien-identifier-son-role)
