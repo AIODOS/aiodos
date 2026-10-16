@@ -3,7 +3,10 @@
 classify() range un fichier dans une famille ; extract_text() en tire le texte.
 Images et audio/vidéo passent par services.media (vision / Whisper), seulement
 si l'appelant l'autorise : ce sont des traitements lents.
+readable_documents() dit quels documents cette machine sait lire : un nœud
+minimal ou un téléphone peut manquer d'un paquet de lecture (python-pptx…).
 """
+import importlib.util
 import re
 import zipfile
 from pathlib import Path
@@ -17,6 +20,11 @@ TEXT_EXT = {
 }
 DOC_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".rtf", ".epub",
            ".html", ".htm", ".odt"}
+# Module qu'il faut pour lire chaque document (cf. _extract_document). HTML et
+# OpenDocument se lisent avec Python seul, comme les fichiers texte.
+READER_MODULES = {".pdf": "pypdf", ".docx": "docx", ".pptx": "pptx",
+                  ".xlsx": "openpyxl", ".xlsm": "openpyxl", ".rtf": "striprtf",
+                  ".epub": "ebooklib"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
              ".webp", ".heic"}
 MEDIA_EXT = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".opus",
@@ -43,6 +51,20 @@ def classify(path) -> str:
     if ext in BINARY_EXT:
         return "binary"
     return "unknown"
+
+
+def readable_documents() -> list:
+    """Formats de document (extensions) que cette machine sait lire : ceux dont
+    le paquet de lecture est installé, et ceux qui n'en demandent pas."""
+    return sorted(ext for ext in DOC_EXT
+                  if ext not in READER_MODULES or _installed(READER_MODULES[ext]))
+
+
+def _installed(module) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):        # module rendu introuvable, ou sans spec
+        return False
 
 
 def extract_text(path, vision=None, transcribe=None):
