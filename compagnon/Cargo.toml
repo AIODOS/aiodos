@@ -1,0 +1,40 @@
+[package]
+name = "aiodos-net"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+license = "GPL-3.0-only"
+description = "Compagnon réseau d'AIODOS : relie les machines appairées par Internet (Iroh)"
+repository = "https://github.com/AIODOS/aiodos"
+publish = false
+
+[dependencies]
+# Iroh : versions épinglées, à relever à la main après lecture des notes de version
+# et des avis de sécurité (cf. docs/phase2-internet.md, « Risques et parades »).
+iroh = { version = "=1.3.0", default-features = false, features = ["portmapper", "tls-ring"] }
+iroh-tickets = "=1.0.0"
+iroh-mainline-address-lookup = "=0.6.0"
+
+anyhow = "1"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+getrandom = "0.4"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+n0-future = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+# Pas de panic = "abort" : sous Android, des bibliothèques réseau interceptent une
+# panique quand l'environnement Java est absent (binaire nu sous Termux).
+lto = "thin"
+strip = true
