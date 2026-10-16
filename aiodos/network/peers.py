@@ -13,7 +13,7 @@ ONLINE_WINDOW = 45          # vue il y a moins de 45 s = en ligne
 def list_peers() -> list:
     rows = db.query("""
         SELECT p.node_id, p.name, p.address, p.port, p.profile, p.paired_at, p.last_seen,
-               COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
+               p.net_id, COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
                COALESCE(l.given_units, 0) AS given_units,
                COALESCE(l.received_units, 0) AS received_units
         FROM peers p LEFT JOIN ledger l ON l.node_id = p.node_id
@@ -52,6 +52,26 @@ def touch(node_id, address=None, port=None, name=None):
 def set_profile(node_id, profile: dict):
     db.execute("UPDATE peers SET profile=? WHERE node_id=?",
                (json.dumps(profile, ensure_ascii=False), node_id))
+
+
+def set_net(node_id, net_id: str, hints: dict) -> bool:
+    """Clé Internet (compagnon aiodos-net) d'une machine appairée, et les indices pour la
+    joindre. Vrai si elles ont changé (la liste blanche du compagnon est à revoir)."""
+    text = json.dumps(hints, sort_keys=True)
+    with db.transaction() as conn:
+        row = conn.execute("SELECT net_id, net_addrs FROM peers WHERE node_id=?",
+                           (node_id,)).fetchone()
+        if row is None:
+            return False
+        conn.execute("UPDATE peers SET net_id=?, net_addrs=?, net_seen=? WHERE node_id=?",
+                     (net_id, text, db.now(), node_id))
+    return (row["net_id"], row["net_addrs"]) != (net_id, text)
+
+
+def net_list() -> list:
+    """Machines appairées dont on connaît la clé Internet."""
+    return [dict(r) for r in db.query(
+        "SELECT node_id, net_id, net_addrs FROM peers WHERE net_id IS NOT NULL ORDER BY node_id")]
 
 
 def account(node_id, given_s=0.0, received_s=0.0, given_units=0, received_units=0):

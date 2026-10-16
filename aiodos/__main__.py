@@ -75,6 +75,10 @@ def main():
     network.add_argument("--p2p-port", type=int, default=None, help="port entre nœuds")
     network.add_argument("--no-discovery", action="store_true",
                          help="pas d'annonces UDP (ajout par adresse uniquement)")
+    network.add_argument("--internet", action="store_true",
+                         help="lance le compagnon aiodos-net (Internet) quel que soit le réglage")
+    network.add_argument("--internet-local", action="store_true",
+                         help="compagnon en essai local : ni relais, ni annuaire, ni box (tests)")
     parser.add_argument("--slots", default="", metavar="RESSOURCE=N,…",
                         help="unités simultanées sur ce nœud, ex. « embed=1,gpu=0 »")
     parser.add_argument("--no-migrate", action="store_true",
@@ -102,7 +106,9 @@ def main():
         token = secrets.token_urlsafe(24)
         app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
             "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
-            "discovery": not args.no_discovery}, _parse_slots(args.slots))
+            "discovery": not args.no_discovery,
+            "internet": args.internet or args.internet_local,
+            "internet_local": args.internet_local}, _parse_slots(args.slots))
         # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
         # de la sienne, qui suppose une console
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,

@@ -56,6 +56,12 @@ DEFAULTS = {
     "p2p_port": 47701,                # échanges chiffrés entre nœuds
     "discovery_port": 47700,          # annonces UDP sur le réseau local
     "manual_peers": [],               # adresses ajoutées à la main (« ip:port »)
+    # --- Internet (phase 2) : compagnon aiodos-net, désactivé tant que l'utilisateur ne l'active pas ---
+    "internet_enabled": False,        # relier mes machines appairées par Internet
+    "internet_relays": ["n0"],        # « n0 » (relais publics de n0), « none », ou https://…
+    "internet_directory": ["n0-dns", "dht"],   # DNS de n0 d'abord, DHT Mainline en secours
+    "internet_portmap": True,         # ouverture de port automatique sur la box (UPnP, PCP…)
+    "p2p_route": "auto",              # chemin vers mes machines : auto | lan | internet
     # --- Nœud & partage de puissance ---
     "node_name": "",
     "offload_enabled": True,          # confier des unités à mes machines appairées

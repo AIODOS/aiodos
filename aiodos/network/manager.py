@@ -1,5 +1,6 @@
 """Chef d'orchestre du réseau local : serveur entre nœuds, découverte, appairage,
-surveillance des machines appairées, partage de puissance (cf. worker.py).
+surveillance des machines appairées, partage de puissance (cf. worker.py), et
+compagnon Internet (cf. internet.py).
 
 Tout tourne dans la boucle asyncio du nœud. Le serveur réseau écoute sur toutes
 les interfaces (0.0.0.0) — séparé de l'API de l'interface, qui reste sur 127.0.0.1.
@@ -16,6 +17,7 @@ from aiodos.network import client, peers
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
+from aiodos.network.internet import Internet
 from aiodos.network.pairing import Pairing
 from aiodos.network.worker import Worker
 
@@ -39,6 +41,7 @@ class NetworkManager:
         self.discovery_on = options.get("discovery", True)
         self.guard = ReplayGuard()
         self.pairing = Pairing(self)
+        self.internet = Internet(self, options)            # --internet, --internet-local
         self.visible = {}
         self.error = None
         self._server = None
@@ -99,6 +102,7 @@ class NetworkManager:
             except OSError as exc:
                 self._discovery = None
                 self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
+        await self.internet.start()                       # si l'utilisateur l'a activé
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="aiodos-peers")
         if self.worker:
             self.worker.start()
@@ -114,6 +118,7 @@ class NetworkManager:
             await self.worker.stop()
         if self._refresh_task:
             self._refresh_task.cancel()
+        await self.internet.stop()
         if self._discovery:
             await self._discovery.stop()
             self._discovery = None
@@ -181,11 +186,13 @@ class NetworkManager:
         while True:
             for peer in await asyncio.to_thread(peers.list_peers):
                 await self._refresh_peer(peer)
+            await self.internet.sync()
+            await self.internet.refresh_status()
             await asyncio.sleep(REFRESH_EVERY)
 
     async def _refresh_peer(self, peer: dict):
         full = await asyncio.to_thread(peers.get, peer["node_id"])
-        if not full or not full.get("address"):
+        if not full or not (full.get("address") or full.get("net_id")):
             return
         want_profile = time.time() - self._last_profile.get(peer["node_id"], 0) > PROFILE_EVERY
         try:
@@ -197,7 +204,12 @@ class NetworkManager:
         if want_profile:
             self._last_profile[peer["node_id"]] = time.time()
             await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)
+        await self.internet.exchange(full)                # clés Internet (compagnon)
         self.changed()
+
+    def net_changed(self):
+        """Clé Internet d'une machine appairée reçue (appelable depuis n'importe quel thread)."""
+        self.internet.changed_from_thread()
 
     def on_paired(self, node_id: str):
         """Nouvelle machine appairée : on demande son profil tout de suite
@@ -220,6 +232,8 @@ class NetworkManager:
             except Exception:
                 pass
         await asyncio.to_thread(peers.remove, node_id)
+        self.internet.forget(node_id)
+        await self.internet.sync()                        # retirée de la liste blanche
         self.changed()
 
     # ----------------------------------------------------------- interface
@@ -236,6 +250,7 @@ class NetworkManager:
                 helping[node_id] = helping.get(node_id, 0) + n
         for peer in paired:
             peer["working_for_me"] = helping.get(peer["node_id"], 0)
+        self.internet.annotate(paired)
         return {
             "enabled": self.enabled, "running": self.running, "error": self.error,
             "node_id": self.node_id, "name": self.name(), "port": self.p2p_port,
@@ -243,6 +258,7 @@ class NetworkManager:
             "peers": paired,
             "visible": [v for v in self.visible.values() if v["node_id"] not in paired_ids],
             "pairing": self.pairing.snapshot(),
+            "internet": self.internet.snapshot(),
             "offload": bool(settings.get("offload_enabled")),
             "sharing": self.worker.snapshot() if self.worker and self.running else None,
         }

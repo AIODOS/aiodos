@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -39,6 +39,13 @@ MIGRATIONS = {
     ALTER TABLE units ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE units ADD COLUMN lease_until REAL;
     ALTER TABLE collections ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0;
+    """,
+    # Phase 2 : clé Internet de chaque machine appairée (compagnon aiodos-net), avec les
+    # indices pour la joindre (relais, adresses directes) et la date de la dernière annonce.
+    3: """
+    ALTER TABLE peers ADD COLUMN net_id TEXT;
+    ALTER TABLE peers ADD COLUMN net_addrs TEXT;
+    ALTER TABLE peers ADD COLUMN net_seen REAL;
     """,
 }
 

@@ -4,6 +4,11 @@ Deux routes publiques seulement : « hello » (qui es-tu ?) et le début d'un
 appairage (qui n'aboutit qu'après confirmation sur les deux machines). Tout le
 reste exige un message scellé par une machine appairée ; les réponses longues
 (une conversation) arrivent en flux de morceaux scellés (/p2p/v1/stream/…).
+
+Une requête venue d'Internet passe par le compagnon aiodos-net, qui la relaie depuis
+127.0.0.1 avec la clé Internet authentifiée de l'appelant (en-tête X-Aiodos-Peer) :
+cette clé doit être celle de la machine qui a scellé l'enveloppe, et l'adresse vue
+(127.0.0.1) n'est pas retenue comme adresse de la machine.
 """
 import asyncio
 import threading
@@ -13,10 +18,12 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
-from aiodos.network import envelope, lending, peers, work
+from aiodos.network import envelope, lending, netinfo, peers, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
+
+PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par le compagnon
 
 
 def _ping(manager, sender, payload):
@@ -43,6 +50,7 @@ HANDLERS = {
     "profile": _profile,
     "unpair": _unpair,
     "pair/confirm": _pair_confirm,
+    "net/info": netinfo.handle,   # clés Internet (compagnon aiodos-net) échangées
     **work.HANDLERS,              # travail confié : work/lease, work/blob, work/result…
 }
 
@@ -52,6 +60,20 @@ HANDLERS = {
 STREAM_HANDLERS = {
     "chat": lending.chat,         # conversation servie par un modèle de cette machine
 }
+
+
+def _caller_address(request: Request) -> str | None:
+    """Adresse de l'appelant à retenir ; aucune si la requête vient du compagnon
+    (l'adresse vue est alors 127.0.0.1, pas celle de la machine)."""
+    return None if request.headers.get(PEER_HEADER) else request.client.host
+
+
+def _check_transport(peer: dict, request: Request):
+    """Par Internet, la clé authentifiée par le compagnon doit être celle de la machine
+    qui a scellé l'enveloppe : une machine appairée ne se fait pas passer pour une autre."""
+    key = (request.headers.get(PEER_HEADER) or "").lower()
+    if key and peer.get("net_id") and key != peer["net_id"]:
+        raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cette machine.")
 
 
 def create_p2p_app(manager) -> FastAPI:
@@ -80,11 +102,12 @@ def create_p2p_app(manager) -> FastAPI:
         peer = await asyncio.to_thread(peers.get, sender)
         if not peer:
             raise HTTPException(403, "Machine non appairée.")
+        _check_transport(peer, request)
         try:
             payload = envelope.unwrap(peer["key"], action, manager.node_id, body, manager.guard)
         except SealError as exc:
             raise HTTPException(403, str(exc))
-        await asyncio.to_thread(peers.touch, sender, request.client.host)
+        await asyncio.to_thread(peers.touch, sender, _caller_address(request))
         stop = threading.Event()
         try:
             chunks = await asyncio.to_thread(handler, manager, sender, payload, stop)
@@ -133,6 +156,8 @@ def create_p2p_app(manager) -> FastAPI:
         else:
             peer = await asyncio.to_thread(peers.get, sender)
             key = peer["key"] if peer else None
+            if peer:
+                _check_transport(peer, request)
         if not key:
             raise HTTPException(403, "Machine non appairée.")
         try:
@@ -140,7 +165,7 @@ def create_p2p_app(manager) -> FastAPI:
         except SealError as exc:
             raise HTTPException(403, str(exc))
         if action != "pair/confirm":
-            await asyncio.to_thread(peers.touch, sender, request.client.host)
+            await asyncio.to_thread(peers.touch, sender, _caller_address(request))
         try:
             result = await asyncio.to_thread(handler, manager, sender, payload)
         except PeerError as exc:

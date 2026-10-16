@@ -171,13 +171,20 @@ fn parse_entry(entry: Entry) -> Result<(EndpointId, Hints), String> {
         id = Some(parsed);
     }
     let id = id.ok_or("clé manquante")?;
+    // Un indice illisible est ignoré : la clé seule suffit (annuaire, ou connexion ouverte
+    // par l'autre machine), et une adresse au format inattendu ne doit pas priver toutes
+    // les machines de leur place dans la liste.
     for text in &entry.addrs {
-        let addr = text.parse().map_err(|_| format!("adresse illisible « {text} »"))?;
-        hints.addrs.push(addr);
+        match text.parse() {
+            Ok(addr) => hints.addrs.push(addr),
+            Err(_) => debug!("{} : adresse ignorée « {text} »", id.fmt_short()),
+        }
     }
     for text in &entry.relays {
-        let url = text.parse().map_err(|e| format!("relais illisible « {text} » ({e})"))?;
-        hints.relays.push(url);
+        match text.parse() {
+            Ok(url) => hints.relays.push(url),
+            Err(_) => debug!("{} : relais ignoré « {text} »", id.fmt_short()),
+        }
     }
     dedup(&mut hints);
     Ok((id, hints))
@@ -271,16 +278,19 @@ mod tests {
     }
 
     #[test]
-    fn a_bad_entry_rejects_the_whole_list() {
+    fn a_bad_key_rejects_the_whole_list_a_bad_hint_is_ignored() {
         assert!(parse_entries(vec![Entry { id: Some("pas une clé".into()), ..Default::default() }]).is_err());
         assert!(parse_entries(vec![Entry::default()]).is_err());
         let a = key();
-        let wrong = Entry {
+        let odd = Entry {
             id: Some(a.to_string()),
-            addrs: vec!["machin".into()],
+            addrs: vec!["machin".into(), "127.0.0.1:9".into()],
+            relays: vec!["pas un relais".into()],
             ..Default::default()
         };
-        assert!(parse_entries(vec![wrong]).is_err());
+        let parsed = parse_entries(vec![odd]).unwrap();
+        assert_eq!(parsed[&a].addrs, vec!["127.0.0.1:9".parse::<SocketAddr>().unwrap()]);
+        assert!(parsed[&a].relays.is_empty());
     }
 
     #[test]

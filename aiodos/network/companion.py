@@ -1,0 +1,291 @@
+"""Compagnon réseau aiodos-net : relie les machines appairées par Internet (phase 2).
+
+Programme Rust à part (dossier compagnon/, sur Iroh) : ce module le trouve, le lance,
+le surveille et le relance s'il s'arrête. Le compagnon n'écoute que sur 127.0.0.1 ; un
+jeton tiré au hasard à chaque lancement protège son API (passé par une variable
+d'environnement, jamais dans les journaux ni sur la ligne de commande). AIODOS lui donne
+la liste des machines appairées (liste blanche) et lui confie les requêtes qui ne
+passent pas par le réseau local (cf. route.py). Si AIODOS s'arrête, même brutalement,
+le compagnon s'arrête avec lui (il surveille son entrée standard).
+"""
+import json
+import logging
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+import threading
+import time
+from collections import deque
+from pathlib import Path
+
+import requests
+
+from aiodos import paths
+
+log = logging.getLogger("aiodos.net")
+
+EXE = "aiodos-net.exe" if sys.platform == "win32" else "aiodos-net"
+READY_TIMEOUT = 30         # premier lancement : création de la clé, ouverture des sockets
+API_TIMEOUT = 5
+INFO_TTL = 60              # infos Internet (relais, adresses) relues au plus toutes les 60 s
+RESTART_DELAYS = (2, 5, 15, 30, 60)      # relances successives après un arrêt inattendu
+STABLE_AFTER = 60          # un compagnon qui a tenu une minute repart de la première attente
+TOKEN_HEADER = "X-Aiodos-Net-Token"
+_NO_PROXY = {"http": None, "https": None}
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0     # pas de console qui clignote
+_LEVELS = {"ERROR": logging.ERROR, "WARN": logging.WARNING, "INFO": logging.INFO,
+           "DEBUG": logging.DEBUG, "TRACE": logging.DEBUG}
+
+
+class CompanionError(Exception):
+    """Compagnon introuvable, arrêté, ou qui refuse une demande."""
+
+
+def find_binary() -> Path | None:
+    """Le compagnon compilé : variable AIODOS_NET_BIN, sinon compagnon/target/release
+    (ou debug), sinon le PATH (Termux : copié dans ~/bin ou $PREFIX/bin)."""
+    explicit = os.environ.get("AIODOS_NET_BIN")
+    if explicit:
+        path = Path(explicit)
+        return path if path.is_file() else None
+    for build in ("release", "debug"):
+        path = paths.APP_ROOT / "compagnon" / "target" / build / EXE
+        if path.is_file():
+            return path
+    found = shutil.which("aiodos-net")
+    return Path(found) if found else None
+
+
+def _detail(response) -> str:
+    try:
+        return response.json().get("detail") or response.text
+    except ValueError:
+        return f"HTTP {response.status_code}"
+
+
+class Companion:
+    """Un compagnon lancé par ce nœud.
+
+    options : relays (liste : « n0 », « none », https://…), directory (« n0-dns,dht »,
+    « none »…), bind (sockets UDP, ex. « 127.0.0.1:0 » pour les tests), portmap (bool).
+    """
+
+    def __init__(self, forward: str, options: dict | None = None):
+        options = options or {}
+        self.forward = forward
+        self.relays = [str(r) for r in options.get("relays") or []]
+        self.directory = options.get("directory")
+        self.bind = options.get("bind")
+        self.portmap = bool(options.get("portmap", True))
+        self.process = None
+        self.token = None
+        self.id = None
+        self.listen = None
+        self.error = None
+        self.generation = 0            # +1 à chaque lancement : liste blanche à renvoyer
+        self._stderr = deque(maxlen=20)
+        self._lock = threading.Lock()
+        self._info = None
+        self._stopping = False
+        self._started_at = 0.0
+        self._watcher = None
+
+    # ------------------------------------------------------------ cycle de vie
+    @property
+    def running(self) -> bool:
+        process = self.process
+        return process is not None and process.poll() is None and self.listen is not None
+
+    @property
+    def headers(self) -> dict:
+        return {TOKEN_HEADER: self.token or ""}
+
+    def proxy_base(self, net_id: str) -> str:
+        return f"http://{self.listen}/peer/{net_id}"
+
+    def command(self, binary) -> list:
+        args = [str(binary), "--data-dir", str(paths.data_dir()), "--listen", "127.0.0.1:0",
+                "--forward", self.forward, "--supervised"]
+        for relay in self.relays:
+            args += ["--relay", relay]
+        if self.directory is not None:
+            args += ["--directory", self.directory or "none"]
+        if self.bind:
+            args += ["--bind", self.bind]
+        if not self.portmap:
+            args.append("--no-portmap")
+        return args
+
+    def start(self) -> bool:
+        """Lance le compagnon et attend qu'il soit prêt (bloquant) ; une surveillance le
+        relance ensuite s'il s'arrête. Faux si impossible : self.error dit pourquoi."""
+        self._stopping = False
+        ok = self._launch()
+        if self._watcher is None or not self._watcher.is_alive():
+            self._watcher = threading.Thread(target=self._watch, daemon=True,
+                                             name="aiodos-net-surveillance")
+            self._watcher.start()
+        return ok
+
+    def _launch(self) -> bool:
+        binary = find_binary()
+        if binary is None:
+            self.error = ("Compagnon aiodos-net introuvable : le compiler d'abord "
+                          "(voir compagnon/README.md).")
+            log.warning(self.error)
+            return False
+        token = secrets.token_urlsafe(24)
+        env = dict(os.environ, AIODOS_NET_TOKEN=token)
+        self._stderr.clear()
+        try:
+            process = subprocess.Popen(
+                self.command(binary), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8",
+                errors="replace", creationflags=_NO_WINDOW)
+        except OSError as exc:
+            self.error = f"Le compagnon aiodos-net ne se lance pas : {exc}"
+            log.warning(self.error)
+            return False
+        ready = threading.Event()
+        found = {}
+        threading.Thread(target=self._read_stdout, args=(process, ready, found), daemon=True,
+                         name="aiodos-net-sortie").start()
+        threading.Thread(target=self._read_stderr, args=(process,), daemon=True,
+                         name="aiodos-net-journal").start()
+        deadline = time.monotonic() + READY_TIMEOUT
+        while not ready.wait(0.1):
+            if process.poll() is not None or time.monotonic() > deadline:
+                break
+        if not ready.is_set():
+            if process.poll() is None:
+                process.kill()
+            process.wait(5)
+            time.sleep(0.2)                  # dernières lignes du journal
+            last = " / ".join(self._stderr) or f"code {process.returncode}"
+            self.error = f"Le compagnon aiodos-net n'a pas démarré : {last}"
+            log.warning(self.error)
+            return False
+        with self._lock:
+            self.process, self.token = process, token
+            self.id, self.listen = found.get("id"), found.get("listen")
+            self.generation += 1
+            self._info = None
+            self.error = None
+            self._started_at = time.monotonic()
+        log.info("Compagnon aiodos-net prêt (API locale %s)", self.listen)
+        return True
+
+    def _read_stdout(self, process, ready, found):
+        for line in process.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                log.info("%s", line)
+                continue
+            if isinstance(event, dict) and event.get("event") == "ready" and not ready.is_set():
+                found.update(event)
+                ready.set()
+
+    def _read_stderr(self, process):
+        """Journal du compagnon (« LEVEL message ») versé dans celui d'AIODOS."""
+        for line in process.stderr:
+            line = line.rstrip()
+            if not line:
+                continue
+            word, _, message = line.strip().partition(" ")
+            level = _LEVELS.get(word)
+            if level is None:
+                level, message = logging.INFO, line.strip()
+            self._stderr.append(message.strip())
+            log.log(level, "%s", message.strip())
+
+    def _watch(self):
+        """Relance le compagnon s'il s'arrête sans qu'on le lui ait demandé."""
+        failures = 0
+        while not self._stopping:
+            time.sleep(1)
+            if self._stopping:
+                break
+            process = self.process
+            if process is not None and process.poll() is None:
+                if time.monotonic() - self._started_at > STABLE_AFTER:
+                    failures = 0
+                continue
+            delay = RESTART_DELAYS[min(failures, len(RESTART_DELAYS) - 1)]
+            failures += 1
+            if process is not None:
+                log.warning("Le compagnon aiodos-net s'est arrêté (code %s) : relance dans %s s",
+                            process.returncode, delay)
+            with self._lock:
+                self.listen = None
+            deadline = time.monotonic() + delay
+            while not self._stopping and time.monotonic() < deadline:
+                time.sleep(0.2)
+            if not self._stopping:
+                self._launch()
+
+    def stop(self):
+        """Arrêt propre : le compagnon prévient les autres machines, puis s'arrête."""
+        self._stopping = True
+        process = self.process
+        if process is None or process.poll() is not None:
+            return
+        try:
+            self.api("POST", "/net/v1/shutdown", timeout=2)
+        except CompanionError:
+            pass
+        try:
+            process.stdin.close()
+        except OSError:
+            pass
+        try:
+            process.wait(8)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(5)
+        with self._lock:
+            self.listen = None
+        log.info("Compagnon aiodos-net arrêté")
+
+    # ------------------------------------------------------------- API locale
+    def api(self, method: str, path: str, body=None, timeout=API_TIMEOUT) -> dict:
+        listen = self.listen
+        if not listen:
+            raise CompanionError("Compagnon arrêté.")
+        try:
+            response = requests.request(method, f"http://{listen}{path}", json=body,
+                                        headers=self.headers, timeout=timeout,
+                                        proxies=_NO_PROXY)
+        except requests.RequestException as exc:
+            raise CompanionError(f"Compagnon injoignable ({exc.__class__.__name__}).") from exc
+        if response.status_code >= 400:
+            raise CompanionError(_detail(response))
+        return response.json()
+
+    def status(self) -> dict:
+        return self.api("GET", "/net/v1/status")
+
+    def set_peers(self, entries: list) -> dict:
+        """Remplace la liste blanche : [{"id", "relays", "addrs"}…]."""
+        return self.api("PUT", "/net/v1/peers", {"peers": entries})
+
+    def info(self) -> dict | None:
+        """Clé et indices de cette machine, à donner aux machines appairées."""
+        with self._lock:
+            cached = self._info
+            if cached and cached[0] == self.generation and time.monotonic() - cached[1] < INFO_TTL:
+                return cached[2]
+        try:
+            ticket = self.api("GET", "/net/v1/ticket")
+        except CompanionError:
+            return None
+        info = {"id": ticket.get("id"), "relays": list(ticket.get("relays") or []),
+                "addrs": list(ticket.get("addrs") or [])}
+        with self._lock:
+            self._info = (self.generation, time.monotonic(), info)
+        return info
