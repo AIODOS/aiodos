@@ -40,7 +40,51 @@ Il faut donc quatre briques, que les solutions étudiées assemblent plus ou moi
 ## 2. Les candidats
 
 *(recherche en cours : Iroh, libp2p, Hyperswarm/HyperDHT, DHT Mainline + pkarr,
-réseaux privés type WireGuard, autres pistes)*
+autres pistes)*
+
+### 2.5 Pour comparaison : les réseaux privés virtuels type WireGuard
+
+L'idée séduit : chaque machine reçoit une adresse IP virtuelle, et `coeur/1` marche
+par-dessus sans changer une ligne. Elle se heurte au brief.
+
+| Projet (version au 16/10/2026) | Point central | Windows | Android sans root | Inconnus | Licence |
+|---|---|---|---|---|---|
+| Headscale 0.29.5 (13/10/2026) + clients Tailscale 1.104.1 | **Oui** : serveur de contrôle public en HTTPS, un seul réseau ; relais DERP de Tailscale Inc. par défaut | pilote Wintun (droits admin) ; interface graphique propriétaire | app officielle (occupe le seul emplacement VPN du téléphone) ; démon sous Termux non fonctionnel sans root | non | Headscale, démon, app Android : BSD-3 ; serveur Tailscale et interface Windows : propriétaires |
+| Nebula 1.11.2 (22/09/2026) | Pas de serveur de contrôle, mais une **autorité de certification** et des *lighthouses* à IP fixe | Wintun (admin) | app Mobile Nebula (dépôt sans fichier de licence) | non | MIT |
+| NetBird 0.81.1 (16/10/2026) | **Oui** : serveurs de gestion, de signalisation et relais à héberger (VM publique + nom de domaine) | Wintun (admin) ; client Go embarquable sans admin | app (emplacement VPN) | non | client BSD-3 ; serveurs AGPL-3.0 depuis le 05/08/2025 |
+| ZeroTier 1.16.2 (28/05/2026) | **Oui** : contrôleur + serveurs racines de ZeroTier Inc. | pilote TAP (admin) | app (emplacement VPN) ; Termux : root | non | agent MPL-2.0 ; contrôleur *source-available* non commercial depuis la 1.16 (2025) ; SDK libzt en BSL 1.1 |
+| Yggdrasil 0.5.14 (19/06/2026) | Non : pairs publics remplaçables | Wintun, ou yggstack sans admin | yggstack (non vérifié sous Termux) | oui, mais **toutes les machines sont joignables** ; projet « alpha » | LGPL-3.0 + exception de liaison |
+
+- **Un point central** : sauf Yggdrasil, il faut une autorité (serveur de contrôle,
+  autorité de certification, contrôleur) que quelqu'un administre, et qui peut faire
+  entrer n'importe quelle machine dans le réseau. Chaque cercle d'amis devient un réseau
+  administré à part ; Headscale a refusé le partage de machines entre réseaux
+  (29/11/2025).
+- **Toute la machine exposée** : en mode interface réseau, tout ce qui écoute sur le PC
+  (partage de fichiers, bureau à distance, Ollama s'il écoute sur `0.0.0.0`…) devient
+  joignable par les autres membres. Headscale/Tailscale, NetBird et ZeroTier laissent
+  tout passer par défaut ; Nebula bloque par défaut, mais contourne le pare-feu Windows
+  depuis sa 1.11.
+- **Installation lourde** : droits administrateur sous Windows (pilote réseau) ; sous
+  Android, l'unique emplacement VPN du téléphone.
+- **Pas pour des inconnus** : aucun n'est fait pour une adhésion libre (phase 3), sauf
+  Yggdrasil, qui expose tout.
+- **Ce qu'on en retient** : la traversée de NAT de Tailscale est la référence du
+  domaine (sondes simultanées depuis le socket qui sert au trafic, relais DERP adressé
+  par clé publique, relais par des pairs volontaires — *Peer Relays*, stables depuis le
+  18/02/2026). Tailscale annonce des connexions directes dans « well north of 90% » des
+  cas : chiffre interne, sans détail publié (billet du 15/10/2025). Les variantes
+  embarquées en espace utilisateur (tsnet/libtailscale, NetBird `client/embed`,
+  yggstack) n'exposent que les sockets de l'application et se passent de droits admin,
+  mais elles sont en Go ; côté Python, seules les liaisons libtailscale 0.2.0 existent,
+  à compiler soi-même, absentes de PyPI.
+
+**Verdict : écarté comme socle.** Dépannage possible en attendant : un utilisateur qui a
+déjà un réseau Tailscale ou Headscale devrait pouvoir ajouter une machine par son IP
+virtuelle (« ajouter par adresse », `manual_peers`) et l'appairer avec le code à
+6 chiffres lu au téléphone, sans rien coder (non testé). L'appairage et l'enveloppe
+scellée restent alors indispensables : l'overlay est un tuyau, pas une preuve
+d'identité.
 
 ## 3. Traversée de NAT : ce que disent les mesures
 
