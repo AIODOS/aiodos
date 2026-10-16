@@ -35,12 +35,71 @@ Il faut donc quatre briques, que les solutions étudiées assemblent plus ou moi
 4. **Un relais en dernier recours** : une machine joignable qui fait passer les paquets,
    chiffrés de bout en bout, quand le passage direct échoue.
 
-*(§ « à la façon de BitTorrent » : à compléter)*
+### Ce que « à la façon de BitTorrent » veut dire
+
+BitTorrent n'a pas de solution magique. Il empile : l'ouverture automatique d'un port
+sur la box (UPnP, NAT-PMP, PCP), active par défaut dans libtorrent, qBittorrent et
+Transmission ; le transport uTP sur UDP ; et le perçage de NAT de la BEP 55, où un pair
+déjà connecté aux deux sert d'entremetteur. Ce perçage existe dans libtorrent (donc
+qBittorrent) depuis 2013 environ, mais Transmission ne l'a reçu que le 23/08/2026, pas
+encore dans une version publiée. Malgré cela, les mesures (anciennes) trouvent de 20 à
+70 % de pairs injoignables, 39 % en moyenne dans une étude de 2010. L'essaim marche
+quand même : les pairs injoignables se connectent *vers* les joignables, et un pair
+qu'on ne joint pas est remplacé par un autre qui a les mêmes morceaux.
+
+Pour Cœur IA :
+
+- **en phase 2**, on veut joindre *une* machine précise, celle d'un ami : un échec
+  n'est compensé par personne. Il faut donc faire mieux que BitTorrent, avec un perçage
+  systématique et un relais de secours ;
+- **en phase 3**, le modèle « pull » ressemble davantage à BitTorrent : une machine
+  injoignable peut toujours calculer pour une machine joignable, puisque c'est elle qui
+  ouvre la connexion ; l'inverse demande le perçage ou un relais.
 
 ## 2. Les candidats
 
-*(recherche en cours : Iroh, libp2p, Hyperswarm/HyperDHT, DHT Mainline + pkarr,
-autres pistes)*
+*(recherche en cours : Iroh, libp2p, Hyperswarm/HyperDHT, autres pistes)*
+
+### 2.4 La DHT Mainline de BitTorrent et pkarr : un annuaire, pas un tuyau
+
+La DHT Mainline est l'annuaire distribué de BitTorrent : des millions de nœuds, sans
+serveur (15 à 27 millions par jour mesurés en 2011-2013 ; environ 10 millions selon
+l'écosystème pkarr en 2025-2026, chiffre non vérifié de façon indépendante).
+**pkarr** s'en sert pour publier, sous une clé publique Ed25519, un petit paquet DNS
+signé (1000 octets au plus, élément mutable BEP 44), republié toutes les heures.
+C'est exactement « où est la machine de Paul en ce moment ? », sans serveur.
+
+- **État** : pkarr 8.1.0 (02/10/2026), licence MIT, très actif, mais son API casse
+  souvent (v5 → v8 entre octobre 2025 et août 2026, deux versions retirées) ; le format,
+  lui, est stable. Deux relais HTTP publics par défaut, pour qui ne peut pas parler à la
+  DHT : `pkarr.pubky.app` et `pkarr.pubky.org`, du projet Pubky, à la même adresse IP.
+  Le relais s'auto-héberge (`pkarr-relay` 2.1.0).
+- **Durée de vie** : un enregistrement non republié disparaît en quelques heures. Une
+  expérience de Pubky (2025) donne 39 % de survie à un jour pour une seule copie ;
+  avec 20 copies, environ 100 % à un jour et 52 % à une semaine.
+- **Python** : aucune liaison (Rust et JavaScript seulement). Les bibliothèques DHT en
+  Python ne font que la BEP 5, pas la BEP 44 ; la liaison Python de libtorrent sait
+  faire la BEP 44, mais PyPI n'en a pas pour Python 3.14 (Termux, si). Restent un petit
+  processus compagnon, un relais HTTP, ou une implémentation maison de KRPC + BEP 44
+  en asyncio (le protocole est simple). La bibliothèque Rust `mainline` ne parle plus
+  qu'IPv4 depuis sa v5.
+- **Ce n'est pas un transport** : pkarr dit où joindre une clé, pas comment traverser
+  le NAT. Il faut l'associer à un transport ; c'est ce que fait Iroh, qui a intégré sa
+  propre version du format (iroh 0.98, 17/04/2026) et sa propre copie de la DHT
+  (`n0-mainline`).
+- **Vie privée** : la DHT est un espace public et surveillé (environ 300 000 nœuds
+  espions mesurés en 2011-2012 ; des services indexent qui télécharge quoi). Publier
+  révèle son IP aux nœuds qui stockent l'enregistrement, et le contenu est lisible par
+  quiconque connaît la clé. Ce qui trahirait « cette IP fait tourner Cœur IA » : une
+  clé de rendez-vous commune et fixe, un format reconnaissable, une IP publiée en clair.
+  Parades : une clé par nœud ou, entre amis, une clé dérivée chaque jour d'un secret de
+  paire (seuls les amis savent où chercher) ; une valeur chiffrée ; publier l'adresse
+  d'un relais plutôt que son IP. Iroh ne publie plus les IP par défaut depuis sa 0.97
+  (16/03/2026).
+
+**Verdict : le bon annuaire pour retrouver ses amis, à utiliser à travers le transport
+qui l'intègre plutôt qu'en direct.** En phase 3, un annuaire public des nœuds Cœur IA
+serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de chacun.
 
 ### 2.5 Pour comparaison : les réseaux privés virtuels type WireGuard
 
