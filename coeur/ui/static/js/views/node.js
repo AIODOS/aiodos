@@ -153,6 +153,7 @@ function renderShare() {
     <div id="share-status"></div>
     ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', 'Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ce PC. Les résultats sont enregistrés ici.')}
     ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', 'Ce PC calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.')}
+    ${shareRow('lend_models', 'Prêter mes modèles pour leurs conversations', "Elles pourront faire répondre leurs conversations par les modèles de ce PC. Le texte passe ici, chiffré, le temps de la réponse, sans être enregistré ; ton travail de fond se met en pause pendant ce temps.")}
     ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens.")}
     <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Avant de commencer à prêter de la puissance.</small></div>
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>

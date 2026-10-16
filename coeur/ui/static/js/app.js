@@ -1,6 +1,6 @@
 // Démarrage de l'interface : vues, navigation, événements du nœud.
 import { get, listen } from './api.js';
-import { $, $$, esc } from './dom.js';
+import { $, $$, esc, debounce } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import { state, emit, on, prefs } from './state.js';
 import { toast } from './ui.js';
@@ -26,6 +26,12 @@ function show(view) {
 async function loadSettings() {
   state.settings = await get('/settings');
   emit('settings:loaded');
+}
+
+let lastRemote = '';
+function remoteSignature(net) {
+  return (net?.peers || []).filter(p => p.online && p.profile?.lends_models)
+    .map(p => `${p.node_id}:${(p.profile.ollama?.models || []).length}`).sort().join(',');
 }
 
 async function loadModels() {
@@ -89,6 +95,11 @@ async function boot() {
   $$('.rail-btn').forEach(b => { b.onclick = () => show(b.dataset.view); });
   on('view:show', show);
   on('models:reload', loadModels);
+  // Les modèles prêtés par mes machines apparaissent et disparaissent avec elles
+  on('network:loaded', debounce(() => {
+    const ids = remoteSignature(state.network);
+    if (ids !== lastRemote) { lastRemote = ids; loadModels(); }
+  }, 1000));
 
   show(prefs.get('view', 'chat'));          // affichage immédiat, les données suivent
 
@@ -110,6 +121,7 @@ async function boot() {
   setInterval(() => {
     if (!state.models.some(m => m.group === 'local')) loadModels();
   }, 8000);
+  setInterval(loadNetwork, 30000);          // machines appairées qui apparaissent ou partent
 }
 
 boot().catch(err => {

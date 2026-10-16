@@ -79,6 +79,7 @@ function peerFacts(peer) {
     `${bytes(p.memory?.total || 0)} de RAM`,
     `${(p.ollama?.models || []).length} modèle(s)`,
   ];
+  if (p.lends_models) facts.push('prête ses modèles');
   if (p.on_ac_power === false) facts.push('sur batterie');
   if (p.idle_seconds != null) facts.push(p.idle_seconds < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(p.idle_seconds)}`);
   return facts.join(' · ');

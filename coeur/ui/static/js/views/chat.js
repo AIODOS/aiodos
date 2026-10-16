@@ -81,9 +81,18 @@ function vramTotal() {
   return Math.max(0, ...(state.node?.gpus || []).map(g => g.vram_total));
 }
 
+/** Libellé d'un modèle : « qwen3.6 · PC fixe » s'il est servi par une machine appairée. */
+export function modelLabel(id) {
+  const m = state.models.find(x => x.id === id);
+  if (m) return m.peer ? `${m.label} · ${m.peer}` : m.label;
+  if (id?.startsWith('peer:')) return `${id.split(':').slice(2).join(':')} · autre machine`;
+  return id || '';
+}
+
 function fillModels() {
   const wanted = el.model.value || state.currentConversation?.model || state.settings?.default_model;
   const local = state.models.filter(m => m.group === 'local');
+  const remote = state.models.filter(m => m.group === 'remote');
   const cloud = state.models.filter(m => m.group === 'cloud');
   const vram = vramTotal();
   el.model.innerHTML = '';
@@ -96,10 +105,14 @@ function fillModels() {
   };
   group('Sur cette machine', local, m =>
     `${m.label} · ${bytes(m.size)}${vram && m.size > vram * 0.92 ? ' · lent (dépasse la VRAM)' : ''}`);
+  group('Sur mes machines · réponse calculée là-bas', remote, m =>
+    `${m.label} · ${m.peer}${m.fits_vram === false ? ' · lent (dépasse sa VRAM)' : ''}`);
   group('Cloud · validation avant envoi', cloud, m => `${m.label}${m.has_key ? '' : ' · clé manquante'}`);
   const ids = state.models.map(m => m.id);
-  el.model.value = ids.includes(wanted) ? wanted : (local[0]?.id || cloud[0]?.id || '');
-  el.banner.innerHTML = local.length ? '' : `
+  el.model.value = ids.includes(wanted) ? wanted : (local[0]?.id || remote[0]?.id || cloud[0]?.id || '');
+  el.banner.innerHTML = local.length ? '' : remote.length ? `
+    <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ce PC : tes réponses seront
+    calculées par tes machines appairées qui prêtent les leurs.</div></div>` : `
     <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle local : Ollama ne répond pas ou
     aucun modèle n'est installé. Cœur IA réessaie tout seul toutes les 8 secondes.</div>
     <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`;
@@ -195,7 +208,7 @@ function appendUser(text) {
 
 function appendAssistant(model) {
   el.list.querySelector('.welcome')?.remove();
-  const label = state.models.find(m => m.id === model)?.label || model || '';
+  const label = modelLabel(model);
   const node = h(`
     <div class="msg assistant">
       <img class="avatar" src="/logo.png" alt="">
