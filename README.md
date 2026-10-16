@@ -18,7 +18,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
-| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | plus tard |
+| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (étape 2.2) |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | plus tard |
 
 ## Ce que fait la phase 0
@@ -83,6 +83,13 @@ Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --
 qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.
 Pas à pas : [docs/android.md](docs/android.md).
 
+**Par Internet (phase 2, en cours)** : un petit programme compagnon,
+[`aiodos-net`](compagnon/README.md) (Rust, Iroh), relie les machines appairées quand
+elles ne sont plus sur le même réseau (téléphone en 4G…) : une connexion chiffrée par
+machine, en direct ou par un relais, qui n'accepte que les machines appairées. Il est
+désactivé par défaut (réglage `internet_enabled`) ; le réseau local reste le premier
+chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
+
 ## Installation
 
 1. Installer [Ollama] et quelques modèles, par exemple :
@@ -132,11 +139,16 @@ aiodos/
 │   ├── work.py        travail confié : bail, fichier par morceaux, résultats
 │   ├── worker.py      partage de puissance : calculer pour ses autres machines
 │   ├── lending.py     prêter ses modèles pour les conversations des autres machines
-│   └── remote_models.py  utiliser dans ses conversations les modèles prêtés
+│   ├── remote_models.py  utiliser dans ses conversations les modèles prêtés
+│   ├── route.py       chemin vers une machine : réseau local s'il répond, Internet sinon
+│   ├── companion.py   lancer et surveiller le compagnon Internet aiodos-net
+│   ├── internet.py    le compagnon vu du réseau : liste blanche, état par machine
+│   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
 │                      particularités d'Android (android.py)
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native et interface web (HTML/CSS/JS, sans compilation)
+compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
 tests/                 tests automatisés (pytest)
 tools/                 outils de mesure (choix du modèle d'embedding)
 docs/                  notes de mesures et de choix techniques, téléphone Android

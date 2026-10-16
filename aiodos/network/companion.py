@@ -132,13 +132,17 @@ class Companion:
             self._watcher.start()
         return ok
 
+    def _fail(self, message: str) -> bool:
+        """Échec de lancement : au journal une fois, pas à chaque nouvel essai."""
+        log.log(logging.DEBUG if message == self.error else logging.WARNING, "%s", message)
+        self.error = message
+        return False
+
     def _launch(self) -> bool:
         binary = find_binary()
         if binary is None:
-            self.error = ("Compagnon aiodos-net introuvable : le compiler d'abord "
-                          "(voir compagnon/README.md).")
-            log.warning(self.error)
-            return False
+            return self._fail("Compagnon aiodos-net introuvable : le compiler d'abord "
+                              "(voir compagnon/README.md).")
         token = secrets.token_urlsafe(24)
         env = dict(os.environ, AIODOS_NET_TOKEN=token)
         self._stderr.clear()
@@ -148,9 +152,7 @@ class Companion:
                 stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8",
                 errors="replace", creationflags=_NO_WINDOW)
         except OSError as exc:
-            self.error = f"Le compagnon aiodos-net ne se lance pas : {exc}"
-            log.warning(self.error)
-            return False
+            return self._fail(f"Le compagnon aiodos-net ne se lance pas : {exc}")
         ready = threading.Event()
         found = {}
         threading.Thread(target=self._read_stdout, args=(process, ready, found), daemon=True,
@@ -167,9 +169,7 @@ class Companion:
             process.wait(5)
             time.sleep(0.2)                  # dernières lignes du journal
             last = " / ".join(self._stderr) or f"code {process.returncode}"
-            self.error = f"Le compagnon aiodos-net n'a pas démarré : {last}"
-            log.warning(self.error)
-            return False
+            return self._fail(f"Le compagnon aiodos-net n'a pas démarré : {last}")
         with self._lock:
             self.process, self.token = process, token
             self.id, self.listen = found.get("id"), found.get("listen")

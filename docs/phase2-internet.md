@@ -1,9 +1,10 @@
 # Relier des nœuds AIODOS par Internet (étude préalable aux phases 2 et 3)
 
-> Étude du 16/10/2026. Rien n'est implémenté : ce document prépare des choix, dont
-> plusieurs reviennent à l'utilisateur (cf.
-> [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)). Les faits sur les
-> projets étudiés datent de ce jour et vieilliront vite : les revérifier avant d'agir.
+> Étude du 16/10/2026. Ce document prépare des choix, dont plusieurs reviennent à
+> l'utilisateur (cf. [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)) ;
+> leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.2 faites).
+> Les faits sur les projets étudiés datent de ce jour et vieilliront vite : les
+> revérifier avant d'agir.
 
 ## En bref
 
@@ -814,6 +815,33 @@ local, ou compagnon.
 
 *Fini quand* : deux nœuds sur une même machine (comme les démos A et B d'aujourd'hui)
 font passer le travail par le compagnon, relais coupés, avec des tests automatiques.
+
+**Fait le 16/10/2026** (dossier [`compagnon/`](../compagnon/README.md), Iroh 1.3.0) :
+
+- **Le compagnon** : clé Ed25519 gardée dans le dossier de données, ALPN `aiodos/2` (un
+  échange HTTP/1.1 de l'API `/p2p/…` par flux QUIC), relais de n0 et annuaire DNS de n0
+  plus DHT Mainline par défaut, tous remplaçables ; liste blanche appliquée dès la
+  poignée de main ; flux entrants relayés vers `p2p_app` avec la clé authentifiée de
+  l'appelant ; mandataire local qui garde **une connexion par machine**, utilisable dans
+  les deux sens ; API locale avec jeton (état, liste blanche, ticket, arrêt) ; changements
+  de réseau détectés toutes les 5 s ; résolution DNS sans JNI sous Android.
+- **Côté AIODOS** : `network/companion.py` le lance, le surveille et le relance ;
+  `network/route.py` choisit le chemin (réseau local s'il répond, compagnon sinon ; réglage
+  `p2p_route`) ; les machines appairées s'échangent leurs clés Internet par un message
+  scellé (`net/info`, colonnes `peers.net_id`, `net_addrs`) ; `p2p_app` vérifie que la clé
+  vue par le compagnon est celle de la machine qui a scellé l'enveloppe, et ne retient
+  plus 127.0.0.1 comme adresse. Réglages `internet_*`, désactivés par défaut.
+- **Tests** : 13 tests unitaires et 7 tests à deux compagnons en Rust ; côté Python, deux
+  vrais nœuds se partagent une indexation par leurs seuls compagnons, relais coupés
+  (`tests/test_network_internet.py`), plus les compagnons supervisés, le choix du chemin
+  et l'échange des clés.
+- **Premières mesures** (deux compagnons sur le PC, configuration par défaut, joints par
+  la clé seule) : 0,30 s pour la première requête par le DNS de n0, 2,6 s par la DHT
+  Mainline seule, puis 10 à 30 ms par requête sur la connexion gardée (directe, en IPv6).
+
+Reste pour la suite : refaire la mesure de l'étape 2.0 (téléphone en 4G) par le
+compagnon, construire et lancer le compagnon sous Termux sur le téléphone, et observer
+la tenue sur plusieurs heures avec des changements de réseau.
 
 **2.3 Identité et `aiodos/2`.** Une clé Ed25519 par nœud, rangée à l'abri (DPAPI sous
 Windows) ; l'identifiant actuel reste le nom du nœud dans le protocole, lié à sa clé ;

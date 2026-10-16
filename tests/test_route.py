@@ -9,6 +9,7 @@ import urllib3
 
 from aiodos import settings
 from aiodos.network import client, envelope, route
+from aiodos.network.companion import Companion
 
 MY_ID, PEER_ID = "a" * 32, "b" * 32
 KEY = bytes(range(32))
@@ -143,6 +144,21 @@ def test_paths_without_companion_or_key(peer):
     assert route.paths_for(unknown) == []
     ipv6 = dict(peer, address="fe80::1")
     assert route.paths_for(ipv6)[0].base == "http://[fe80::1]:47701"
+
+
+def test_without_its_program_the_companion_leaves_the_lan_alone(monkeypatch, peer, tmp_path):
+    """Internet activé mais compagnon pas compilé : AIODOS le dit, et tout continue de
+    passer par le réseau local."""
+    monkeypatch.setenv("AIODOS_NET_BIN", str(tmp_path / "absent.exe"))
+    missing = Companion("127.0.0.1:47701", {"data_dir": tmp_path})
+    assert not missing.start()
+    assert "introuvable" in missing.error
+    route.attach(missing)
+    try:
+        assert [p.kind for p in route.paths_for(peer)] == ["lan"]
+    finally:
+        route.detach(missing)
+        missing.stop()
 
 
 def test_companion_errors_are_readable(monkeypatch, peer, companion):
