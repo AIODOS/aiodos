@@ -764,6 +764,31 @@ l'adresse vue est `127.0.0.1`.
 *Fini quand* : un tableau de mesures par cas réel, et la décision de continuer avec
 Iroh, ou de passer au plan B (rust-libp2p, ou aioice + aioquic).
 
+**Premières mesures, 16/10/2026 : cas (a), téléphone en 4G.** PC principal (nœud de
+démonstration sans embeddings locaux, `--slots embed=0`) et Galaxy S23 (Android 16,
+Termux, embeddinggemma), appairés puis reliés uniquement par deux tunnels dumbpipe 0.39
+(un dans chaque sens, sur les ports déjà enregistrés à l'appairage).
+
+| Point | Constat |
+|---|---|
+| Réseaux | PC en Ethernet derrière la box, **IPv4 seulement** (IPv6 désactivé sur la carte, alors que la box le fournit) ; Iroh signale une adresse IPv4 publique « qui varie selon la destination » (NAT strict). Téléphone en 4G Orange, **IPv6 seulement** avec IPv4 traduite (464XLAT, 192.0.0.8). |
+| Chemin | **Relais** de n0 (euc1, Francfort) : aucune famille d'adresses commune pour une connexion directe. À refaire avec l'IPv6 activé sur le PC. |
+| Établissement | Les deux sens fonctionnent, même avec un signal faible. dumbpipe ouvre **une connexion QUIC par connexion TCP**, donc par requête : 5 à 10 s par échange en 4G faible. |
+| Calcul de bout en bout | **6 notes calculées par le téléphone pour le PC en 271 s, 0 échec** (57 requêtes : baux, fichiers, résultats, renouvellements, nouvelles). Vecteurs du téléphone identiques à ceux du PC (cosinus ≥ 0,9999, mesuré sur le S9). |
+| Pannes trouvées | Demande de travail abandonnée à 8 s → porté à 30 s, échecs journalisés (69a668e). Propriétaire sans Ollama refusant en silence → raison donnée (51c4ed4). Tunnel d'écoute du PC arrêté en route (lancé depuis un shell : à détacher), tunnel d'écoute du téléphone arrêté au changement de réseau. |
+| Android | Activer « Désactiver les limites pour les processus enfants » ; après la coupure du Wi-Fi, le téléphone ne reprend pas toujours les données mobiles seul (mode avion aller-retour) ; `sh relancer.sh` dans Termux recrée les tunnels. |
+
+Enseignements pour **2.2** (le compagnon) :
+- garder **une connexion par machine**, avec des flux multiplexés, au lieu d'une
+  connexion par requête : c'est l'essentiel des 5 à 10 s mesurées ;
+- des délais adaptés aux liens lents ;
+- détecter les changements de réseau et se reconnecter seul, sans relancer le tunnel ;
+- une identité stable par nœud (ici, la clé gardée dans `dp-listen.key`).
+
+Reste à mesurer : le cas (b) (une machine derrière une autre box), une connexion
+directe (IPv6 activé sur le PC), le débit sur un gros fichier, et la tenue sur plusieurs
+heures.
+
 **2.1 Trancher les questions [phase 2]** du § 6 : Q1, Q2, Q3, Q5, Q6, Q9 et Q16.
 
 *Fini quand* : les réponses sont écrites dans ce document.
