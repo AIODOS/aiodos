@@ -3,10 +3,11 @@
 Une machine qui a de la puissance libre demande du travail (« work/lease »).
 On lui confie la première unité de la file qu'elle sait traiter : même modèle
 d'embedding au bit près (sinon ses vecteurs seraient incompatibles avec ceux de
-la bibliothèque), ressource libre chez elle, bibliothèque non réservée à cette
-machine. Elle lit le fichier morceau par morceau (« work/blob », seulement celui
-de l'unité qui lui est confiée), calcule, puis rend sa sortie (« work/result ») :
-elle est contrôlée puis intégrée ici, jamais là-bas.
+la bibliothèque), document dans un format qu'elle sait lire (un nœud minimal
+peut manquer de python-pptx…), ressource libre chez elle, bibliothèque non
+réservée à cette machine. Elle lit le fichier morceau par morceau (« work/blob »,
+seulement celui de l'unité qui lui est confiée), calcule, puis rend sa sortie
+(« work/result ») : elle est contrôlée puis intégrée ici, jamais là-bas.
 
 Rien n'est confié si l'utilisateur a désactivé l'aide de ses machines.
 Appelées dans un thread par le serveur réseau (cf. p2p_app.HANDLERS).
@@ -45,7 +46,9 @@ def local_models() -> dict:
 
 
 def can_serve(need: dict, caps: dict, mine: dict) -> bool:
-    """La machine décrite par `caps` peut-elle calculer une unité qui demande `need` ?"""
+    """La machine décrite par `caps` peut-elle calculer une unité qui demande `need` ?
+    Une machine qui ne dit pas quels formats elle lit (« readers » absent : version
+    précédente) est supposée tous les lire, comme avant."""
     theirs = caps.get("models") or {}
     embed = need.get("embed")
     if embed:
@@ -56,6 +59,9 @@ def can_serve(need: dict, caps: dict, mine: dict) -> bool:
     if vision and full_name(vision) not in theirs:
         return False
     if need.get("whisper") and not caps.get("whisper"):
+        return False
+    readers = caps.get("readers")
+    if need.get("format") and isinstance(readers, list) and need["format"] not in readers:
         return False
     return True
 

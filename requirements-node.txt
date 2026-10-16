@@ -17,7 +17,9 @@ cryptography
 markdown-it-py     # rendu des réponses, chargé au démarrage du nœud
 pygments
 
-# Lecture des documents confiés : PDF, Word, PowerPoint, Excel, RTF, EPUB
+# Lecture des documents confiés : PDF, Word, PowerPoint, Excel, RTF, EPUB.
+# Un paquet absent n'empêche pas le nœud de tourner : il annonce les formats
+# qu'il sait lire, et les autres documents restent aux autres machines.
 pypdf
 python-docx
 python-pptx

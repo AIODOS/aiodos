@@ -26,7 +26,9 @@ Pour chacun, il lit le contenu, le découpe en passages et calcule les embedding
 - les conversations.
 
 Le PC ne lui confie que les unités qu'il sait traiter (`can_serve`,
-`aiodos/network/work.py`).
+`aiodos/network/work.py`). Le téléphone annonce les formats de document qu'il sait
+lire : s'il lui manque un paquet de lecture (python-pptx par exemple), les
+présentations restent au PC ou partent vers une autre machine.
 
 **Quand il calcule :** seulement si **son** utilisateur a activé « Prêter ma
 puissance », et seulement dans ces conditions, comme BOINC sous Android :
@@ -301,7 +303,7 @@ Nœud AIODOS prêt : http://127.0.0.1:8800/?t=…
 | `termux-battery-status` ne rend pas la main ; « Charge inconnue » | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
 | « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
 | « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
-| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images ou de sons, ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
+| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images, de sons ou de documents que le téléphone ne sait pas lire (paquet de lecture manquant), ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
 | Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | relancer `sh lancer-noeud.sh` et reprendre l'adresse affichée |
 | `[Process completed (signal 9) - press Enter]` | phantom process killer | étape 6 |
 | pip : « no matching distribution » ou « has no usable wheels » | le TUR n'a pas (encore) cette version | étape 4, « Si cela échoue » |

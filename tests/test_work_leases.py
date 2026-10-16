@@ -106,6 +106,22 @@ def test_nothing_is_lent_without_the_exact_same_embedding_model(owner):
     assert _lease(owner, resources=("gpu", "cpu"))["unit"] is None
 
 
+def test_only_a_document_needs_a_machine_that_reads_its_format():
+    """Texte et extensions inconnues se lisent partout ; un document demande le
+    paquet qui lit son format (python-pptx…), qui peut manquer là-bas."""
+    options = {"embed_model": "nomic-embed-text", "vision": None, "whisper": None}
+
+    def need(task, payload):
+        unit = {"task": task, "resource": "embed", "payload": payload}
+        return registry.TASKS[task].requires(unit, options)
+    assert need("index_file", {"path": "C:/cours/Séance 1.PPTX"}) == {
+        "embed": "nomic-embed-text", "format": ".pptx"}
+    assert need("index_file", {"path": "C:/cours/notes.md"}) == {"embed": "nomic-embed-text"}
+    assert need("index_file", {"path": "C:/cours/LISEZMOI"}) == {"embed": "nomic-embed-text"}
+    assert need("index_url", {"url": "https://example.org/plan.pdf"}) == {
+        "embed": "nomic-embed-text"}
+
+
 def test_nothing_is_lent_when_offloading_is_off_or_library_is_local(owner):
     settings.set_value("offload_enabled", False)
     assert _lease(owner)["unit"] is None

@@ -1,4 +1,6 @@
 """Extraction de fichiers (tous formats) et rendu Markdown sûr."""
+import importlib.util
+
 from aiodos import render
 from aiodos.services import extract
 
@@ -41,6 +43,18 @@ def test_text_like_and_binary(tmp_path):
     assert extract.extract_text(tmp_path / "conf.weird") == "cle=valeur"
     assert extract.extract_text(tmp_path / "blob.weird") is None
     assert "Bonjour RTF" in extract.extract_text(tmp_path / "lettre.rtf")
+
+
+def test_readable_documents_follow_the_installed_packages(monkeypatch):
+    """Un nœud minimal ou un téléphone peut manquer d'un paquet de lecture : il ne
+    lit alors pas ce format. HTML et OpenDocument se lisent toujours."""
+    assert extract.readable_documents() == sorted(extract.DOC_EXT)    # requirements.txt
+    find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None:
+                        None if name == "pptx" else find_spec(name, package))
+    assert extract.readable_documents() == sorted(extract.DOC_EXT - {".pptx"})
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None: None)
+    assert extract.readable_documents() == [".htm", ".html", ".odt"]
 
 
 def test_media_needs_explicit_handlers(tmp_path):

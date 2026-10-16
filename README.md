@@ -60,8 +60,10 @@ Comment le travail circule :
   SHA-256 et effacé dès le calcul fini. **Ce qui revient** : les passages et leurs
   vecteurs, contrôlés puis enregistrés **uniquement chez le propriétaire**.
 - **Même modèle d'embedding exigé**, à l'empreinte près : sinon les vecteurs ne
-  seraient pas comparables. La mémoire des conversations ne quitte jamais sa machine,
-  et une bibliothèque peut être **gardée sur ce PC uniquement** (menu ⋯, cadenas).
+  seraient pas comparables. Une machine ne reçoit aussi que les documents qu'elle
+  sait lire (paquets de lecture installés chez elle). La mémoire des conversations
+  ne quitte jamais sa machine, et une bibliothèque peut être **gardée sur ce PC
+  uniquement** (menu ⋯, cadenas).
 - **Réciprocité** : chaque machine tient le compte du temps de calcul donné et reçu ;
   celles qui ont le plus calculé pour toi sont servies en premier.
 

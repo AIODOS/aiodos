@@ -1,6 +1,9 @@
 """La machine qui prête sa puissance : conditions de partage, unité rendue quand
 l'utilisateur revient ou qu'Ollama ne répond pas, échec signalé, fichier reçu
-vérifié puis effacé. Sans réseau : les appels vont directement au propriétaire."""
+vérifié puis effacé, formats lisibles annoncés. Sans réseau : les appels vont
+directement au propriétaire."""
+import importlib.util
+
 import numpy as np
 import pytest
 import requests
@@ -140,6 +143,32 @@ def test_file_changed_during_transfer_is_detected(setup, monkeypatch):
     a = setup["assignment"]
     a.order["blob"]["sha256"] = "0" * 64
     assert "transfert" in setup["lender"]._process(a)
+
+
+def test_presentation_goes_only_to_a_machine_that_can_read_it(setup, monkeypatch, tmp_path):
+    """Sans python-pptx (nœud minimal, téléphone sous Termux), la présentation
+    échouerait là-bas à chaque essai, et serait perdue au deuxième : elle ne lui
+    est pas confiée. Une machine qui n'annonce pas ses formats (version
+    précédente) est supposée tout lire, comme avant."""
+    slides = tmp_path / "cours.pptx"
+    slides.write_bytes(b"PK\x03\x04")              # transmise telle quelle, jamais lue ici
+    queue.create_job("index_paths", {"paths": [str(slides)], "collection_id": setup["collection"]})
+    missing = {"pptx"}
+    find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None:
+                        None if name in missing else find_spec(name, package))
+
+    def lease(caps):
+        return work.lease(OwnerManager(), LENDER, {"resources": ["embed"], "caps": caps})["unit"]
+    without_pptx = Worker(LenderManager()).capabilities()
+    assert ".pptx" not in without_pptx["readers"] and ".pdf" in without_pptx["readers"]
+    assert lease(without_pptx) is None
+    missing.clear()                                 # python-pptx installé
+    order = lease(Worker(LenderManager()).capabilities())
+    assert order["blob"]["name"] == "cours.pptx"
+    work.release(OwnerManager(), LENDER, {"unit": order["id"]})
+    previous_version = {k: v for k, v in without_pptx.items() if k != "readers"}
+    assert lease(previous_version)["id"] == order["id"]
 
 
 def _supply(monkeypatch, plugged=True, level=None, temperature=None, mobile=False):

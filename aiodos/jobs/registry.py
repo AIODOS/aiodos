@@ -39,7 +39,7 @@ class TaskSpec:
     assimilate: Optional[Callable] = None   # (payload, sortie) -> résultat ; None = non portable
     file_key: Optional[str] = None          # clé du payload désignant le fichier à transmettre
     options: Optional[Callable] = None      # () -> réglages du propriétaire, figés pour le calcul
-    requires: Optional[Callable] = None     # (unité, options) -> modèles nécessaires (cf. network.work)
+    requires: Optional[Callable] = None     # (unité, options) -> modèles, format… requis (cf. network.work)
     validate: Optional[Callable] = None     # (payload, sortie) : contrôle d'une sortie venue d'ailleurs
 
     @property

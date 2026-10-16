@@ -31,6 +31,7 @@ from aiodos.network import client, peers, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
 from aiodos.node import identity, power
+from aiodos.services import extract
 
 log = logging.getLogger("aiodos.worker")
 
@@ -232,7 +233,8 @@ class Worker:
         if caps is None or time.monotonic() - at > CAPS_TTL:
             caps = {"work_api": work.WORK_API, "version": __version__,
                     "models": work.local_models(),
-                    "whisper": importlib.util.find_spec("faster_whisper") is not None}
+                    "whisper": importlib.util.find_spec("faster_whisper") is not None,
+                    "readers": extract.readable_documents()}
             self._caps = (time.monotonic(), caps)
         return caps
 
