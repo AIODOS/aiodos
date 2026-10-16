@@ -38,14 +38,14 @@ CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
 CAPS_TTL = 30
 HEAT_MARGIN = 3          # °C : un téléphone trop chaud reprend 3 °C sous sa limite
+BATTERY_MARGIN = 5       # % : un téléphone qui calcule s'arrête 5 % sous la charge minimale
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
              *(f"LPT{i}" for i in range(1, 10))}
 
 
 def sharing_state(previous=None) -> dict:
     """Cette machine peut-elle calculer pour les autres en ce moment ? Avec
-    l'explication. `previous` : état précédent (après une pause pour la chaleur,
-    on attend que la batterie ait refroidi de quelques degrés)."""
+    l'explication. `previous` : état précédent (écarts de reprise d'un téléphone)."""
     if not settings.get("share_enabled"):
         return {"active": False, "state": "off", "detail": "Partage désactivé."}
     supply = power.read()
@@ -73,17 +73,23 @@ def sharing_state(previous=None) -> dict:
 
 def _phone_pause(supply, previous) -> dict | None:
     """Téléphone : batterie assez chargée et pas trop chaude, comme BOINC sous
-    Android. Son inactivité n'est pas mesurable sans droits root : c'est la
-    charge qui dit qu'il n'est pas dans une poche."""
+    Android (90 % et 40 °C par défaut, puis 5 min d'attente après une pause).
+    Ici, des écarts plutôt qu'une attente, pour ne pas s'arrêter et repartir sans
+    cesse : un téléphone qui calcule ne s'arrête que 5 % sous la charge minimale
+    (sur le port USB d'un PC, il peut se décharger en calculant), et ne repart
+    qu'après avoir perdu 3 °C. Son inactivité n'est pas mesurable sans droits
+    root : c'est la charge qui dit qu'il n'est pas dans une poche."""
+    was = (previous or {}).get("state")
     level, minimum = supply["level"], int(settings.get("share_min_battery") or 0)
-    if level is not None and level < minimum:
+    floor = minimum - BATTERY_MARGIN if was == "ready" else minimum
+    if level is not None and level < floor:
         return {"active": False, "state": "low_battery",
-                "detail": f"En pause : batterie à {level} % (il en faut {minimum} % pour calculer)."}
+                "detail": f"En pause : batterie à {level} % (reprise à {minimum} %)."}
     heat, limit = supply["temperature"], float(settings.get("share_max_temp") or 0)
     if heat is None or not limit:
         return None
     resume = limit - HEAT_MARGIN
-    if heat > (resume if (previous or {}).get("state") == "hot" else limit):
+    if heat > (resume if was == "hot" else limit):
         return {"active": False, "state": "hot",
                 "detail": f"En pause : batterie à {_celsius(heat)} (reprise à {_celsius(resume)})."}
     return None

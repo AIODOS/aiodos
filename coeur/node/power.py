@@ -6,10 +6,12 @@ et pas trop chaud, comme BOINC sous Android.
 
 D'où viennent les mesures :
   - Windows : GetSystemPowerStatus ;
-  - Linux et Android : /sys/class/power_supply/ (souvent fermé aux applications
-    par SELinux sur les Android récents) ;
+  - Linux et Android : /sys/class/power_supply/ (fermé aux applications par
+    SELinux sur la plupart des Android récents) ;
   - Android, à défaut : la commande termux-battery-status (paquet termux-api et
-    application Termux:API).
+    application Termux:API). Elle peut ne jamais répondre (application absente,
+    ou au hasard une fois sur dix ou vingt) : délai, puis arrêt de tout ce
+    qu'elle a lancé, et la dernière mesure reste valable deux minutes.
 
 read() renvoie un dict :
   plugged     True en charge / sur secteur, False sur batterie, None si inconnu ;
@@ -34,10 +36,11 @@ from coeur.node import android
 POWER_SUPPLY = Path("/sys/class/power_supply")
 TERMUX_COMMAND = "termux-battery-status"
 TERMUX_TIMEOUT = 10    # sans l'application Termux:API, la commande ne répond jamais
-TERMUX_TTL = 20        # elle passe par une application Android : lente, gardée 20 s
-TERMUX_RETRY = 300     # commande absente ou muette : nouvel essai dans 5 min
+TERMUX_TTL = 30        # elle passe par une application Android : lente, gardée 30 s
+TERMUX_STALE = 120     # après un raté, la dernière mesure reste valable 2 min
+TERMUX_RETRY = 300     # n'a jamais répondu (application absente ?) : nouvel essai dans 5 min
 _SOURCES = ("Mains", "USB", "Wireless")      # chargeurs (« USB_PD »… sur d'anciens noyaux)
-_termux = {"until": 0.0, "value": None}
+_termux = {"until": 0.0, "value": None, "good_at": 0.0}
 _termux_lock = threading.Lock()
 
 
@@ -147,9 +150,15 @@ def _termux_status() -> dict | None:
         if time.monotonic() < _termux["until"]:
             return _termux["value"]
         value = from_termux(_run_termux())
-        _termux.update(value=value,
-                       until=time.monotonic() + (TERMUX_TTL if value else TERMUX_RETRY))
-        return value
+        now = time.monotonic()
+        if value is not None:
+            _termux.update(value=value, good_at=now, until=now + TERMUX_TTL)
+        elif _termux["good_at"] and now - _termux["good_at"] < TERMUX_STALE:
+            _termux["until"] = now + TERMUX_TTL          # raté isolé : on garde la mesure
+        else:
+            _termux.update(value=None,
+                           until=now + (TERMUX_TTL if _termux["good_at"] else TERMUX_RETRY))
+        return _termux["value"]
 
 
 def _run_termux():
@@ -198,14 +207,25 @@ def from_termux(data) -> dict | None:
         plugged = {"CHARGING": True, "FULL": True,
                    "DISCHARGING": False}.get(str(data.get("status") or "").upper())
     level = _number(data.get("percentage"))
+    if level is None and _number(data.get("scale")):     # pourcentage absent sur cet appareil
+        level = _number(data.get("level"))
+        level = None if level is None else round(level * 100 / _number(data["scale"]))
     if level is not None and not 0 <= level <= 100:
         level = None
-    temperature = data.get("temperature")             # 30.700000762939453 (float 32 bits)
-    if (isinstance(temperature, bool) or not isinstance(temperature, (int, float))
-            or not -40 <= temperature <= 120):
-        temperature = None
-    else:
-        temperature = round(temperature, 1)
+    temperature = _celsius(data.get("temperature"))
     if plugged is None and level is None:
         return None
     return _status(plugged, level, temperature, mobile=True, source="termux-api")
+
+
+def _celsius(value):
+    """30.700000762939453 (anciennes versions), « 25,5 » (Termux:API 0.51, selon la
+    langue du téléphone), -214748364.8 (mesure absente) : °C au dixième, ou None."""
+    if isinstance(value, str):
+        try:
+            value = float(value.replace(",", "."))
+        except ValueError:
+            return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return round(value, 1) if -40 <= value <= 120 else None

@@ -158,7 +158,7 @@ function renderShare() {
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
   const phoneRows = `
-    <div class="setting-row"><div class="txt"><b>Batterie minimale</b><small>En dessous, le téléphone se recharge d'abord.</small></div>
+    <div class="setting-row"><div class="txt"><b>Batterie minimale</b><small>Pour commencer à calculer (ensuite, pause 5 % plus bas) : en dessous, le téléphone se recharge d'abord.</small></div>
       <select class="select" data-num="share_min_battery" style="width:140px">${[50, 60, 70, 80, 90].map(p =>
         `<option value="${p}" ${p === s.share_min_battery ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>
     <div class="setting-row"><div class="txt"><b>Température maximale de la batterie</b><small>Au-delà, pause jusqu'à ce qu'elle ait perdu 3 °C.</small></div>

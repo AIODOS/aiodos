@@ -208,6 +208,25 @@ def test_hot_phone_waits_to_cool_down_before_resuming(monkeypatch):
     assert at(37.0, previous=at(37.5, previous=hot))["active"]
 
 
+def test_phone_charging_slowly_does_not_stop_and_start_over_and_over(monkeypatch):
+    """Sur le port USB d'un PC, un téléphone peut se décharger en calculant : une
+    fois lancé, il ne s'arrête que 5 % sous la charge minimale."""
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    settings.set_many({"share_enabled": True, "share_min_battery": 80})
+
+    def at(level, previous=None):
+        _supply(monkeypatch, plugged=True, level=level, temperature=30.0, mobile=True)
+        return sharing_state(previous)
+    assert at(79)["state"] == "low_battery"            # pour commencer : 80 %
+    ready = at(80)
+    assert ready["active"]
+    assert at(76, previous=ready)["active"]            # en cours : jusqu'à 75 %
+    low = at(74, previous=ready)
+    assert low["detail"] == "En pause : batterie à 74 % (reprise à 80 %)."
+    assert at(79, previous=low)["state"] == "low_battery"
+    assert at(80, previous=low)["active"]
+
+
 def test_phone_rules_follow_the_settings(monkeypatch):
     monkeypatch.setattr(identity, "idle_seconds", lambda: None)
     settings.set_many({"share_enabled": True, "share_on_ac_only": False,

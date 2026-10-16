@@ -37,6 +37,7 @@ def sys_root(tmp_path):
 def fresh_cache(monkeypatch):
     monkeypatch.setitem(power._termux, "until", 0.0)
     monkeypatch.setitem(power._termux, "value", None)
+    monkeypatch.setitem(power._termux, "good_at", 0.0)
 
 
 @pytest.fixture
@@ -94,8 +95,8 @@ def test_missing_temperature_is_completed_by_termux_api(sys_root, termux):
     supply(sys_root, "battery", type="Battery", status="Charging", capacity=84)
     termux["output"] = TERMUX_CHARGING
     assert power._linux(sys_root, mobile=True)["temperature"] == 30.7
-    termux["output"] = None
-    power._termux["until"] = 0.0
+    termux["output"] = None                                # Termux:API muet depuis toujours
+    power._termux.update(until=0.0, value=None, good_at=0.0)
     partial = power._linux(sys_root, mobile=True)          # mieux que rien
     assert (partial["plugged"], partial["level"], partial["temperature"]) == (True, 84, None)
 
@@ -174,6 +175,20 @@ def test_implausible_termux_values_are_dropped():
     odd = dict(TERMUX_CHARGING, percentage=180, temperature=-273.0)
     status = power.from_termux(odd)
     assert status["level"] is None and status["temperature"] is None
+    missing = dict(TERMUX_CHARGING, temperature=-214748364.8)     # Integer.MIN_VALUE / 10
+    assert power.from_termux(missing)["temperature"] is None
+
+
+def test_termux_output_variants():
+    # Termux:API 0.51 : température en texte, selon la langue du téléphone
+    assert power.from_termux(dict(TERMUX_CHARGING, temperature="25,5"))["temperature"] == 25.5
+    assert power.from_termux(dict(TERMUX_CHARGING, temperature="?"))["temperature"] is None
+    # Pourcentage absent : niveau / échelle
+    no_percent = {k: v for k, v in TERMUX_CHARGING.items() if k != "percentage"}
+    assert power.from_termux(dict(no_percent, level=42, scale=50))["level"] == 84
+    # Termux de Google Play : valeurs manquantes à null, statut inconnu numéroté
+    play = dict(TERMUX_CHARGING, plugged=None, status="UNKNOWN_7", percentage=None)
+    assert power.from_termux(dict(play, level=None)) is None
 
 
 def test_termux_is_asked_at_most_every_few_seconds(termux):
@@ -190,6 +205,20 @@ def test_silent_termux_is_not_asked_again_at_once(termux):
     assert power._termux_status() is None
     assert power._termux_status() is None
     assert termux["calls"] == 1
+
+
+def test_one_missed_reading_keeps_the_last_one_for_a_while(termux):
+    """La commande se bloque parfois au hasard : un raté ne doit pas mettre le
+    téléphone en pause, mais une mesure trop ancienne ne vaut plus rien."""
+    termux["output"] = TERMUX_CHARGING
+    assert power._termux_status()["level"] == 84
+    termux["output"] = None
+    power._termux["until"] = 0.0
+    assert power._termux_status()["level"] == 84                # raté isolé
+    power._termux["until"] = 0.0
+    power._termux["good_at"] -= power.TERMUX_STALE + 1          # plus de nouvelles depuis 2 min
+    assert power._termux_status() is None
+    assert termux["calls"] == 3
 
 
 # ------------------------------------- la commande elle-même (sans Termux)
