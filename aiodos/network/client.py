@@ -32,7 +32,7 @@ def hello(address, port, timeout=4) -> dict:
     """Présentation publique d'un nœud (sans secret)."""
     info = _post(f"http://{address}:{port}/p2p/v1/hello", {}, timeout)
     if info.get("protocol") != envelope.PROTOCOL:
-        raise PeerError("Version de Aiodos incompatible sur cette machine.")
+        raise PeerError("Version d'AIODOS incompatible sur cette machine.")
     return info
 
 

@@ -47,7 +47,7 @@ def test_api_keys_never_leave_in_clear(client):
 def test_folder_indexing_runs_through_the_queue(client, tmp_path):
     folder = tmp_path / "Projet"
     (folder / "sous").mkdir(parents=True)
-    (folder / "lisez-moi.md").write_text("Aiodos répartit le travail.", encoding="utf-8")
+    (folder / "lisez-moi.md").write_text("AIODOS répartit le travail.", encoding="utf-8")
     (folder / "sous" / "notes.txt").write_text("Budget de 5000 euros.", encoding="utf-8")
     (folder / ".env").write_text("SECRET=1", encoding="utf-8")       # caché : ignoré
     (folder / "archive.zip").write_bytes(b"PK\x03\x04")              # binaire : ignoré

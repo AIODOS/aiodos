@@ -28,7 +28,7 @@ def run(url: str, on_closed):
     """Ouvre la fenêtre et bloque jusqu'à sa fermeture (boucle graphique)."""
     bridge = Bridge()
     window = webview.create_window(
-        "Aiodos", url, js_api=bridge, width=1320, height=860, min_size=(980, 640),
+        "AIODOS", url, js_api=bridge, width=1320, height=860, min_size=(980, 640),
         background_color="#0a0f1f", text_select=True)
     bridge._window = window
     window.events.closed += on_closed

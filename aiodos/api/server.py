@@ -37,7 +37,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         await app.state.network.shutdown()
         await executor.stop()
 
-    app = FastAPI(title="Aiodos", lifespan=lifespan,
+    app = FastAPI(title="AIODOS", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
     for module in (chat, conversations, knowledge, jobs, network, node, system):

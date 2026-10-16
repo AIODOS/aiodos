@@ -114,7 +114,7 @@ function fillModels() {
     <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ce PC : tes réponses seront
     calculées par tes machines appairées qui prêtent les leurs.</div></div>` : `
     <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle local : Ollama ne répond pas ou
-    aucun modèle n'est installé. Aiodos réessaie tout seul toutes les 8 secondes.</div>
+    aucun modèle n'est installé. AIODOS réessaie tout seul toutes les 8 secondes.</div>
     <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`;
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
 }
@@ -128,7 +128,7 @@ async function onModelChange() {
 
 function setTitle(title) {
   el.title.textContent = title || 'Nouvelle conversation';
-  document.title = title ? `${title} — Aiodos` : 'Aiodos';
+  document.title = title ? `${title} — AIODOS` : 'AIODOS';
 }
 
 async function renameCurrent() {

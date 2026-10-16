@@ -55,7 +55,7 @@ STREAM_HANDLERS = {
 
 
 def create_p2p_app(manager) -> FastAPI:
-    app = FastAPI(title="Aiodos — réseau", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="AIODOS — réseau", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.post("/p2p/v1/hello")
     def hello():

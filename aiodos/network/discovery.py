@@ -1,4 +1,4 @@
-"""Découverte des nœuds Aiodos du réseau local (diffusion UDP).
+"""Découverte des nœuds AIODOS du réseau local (diffusion UDP).
 
 Chaque nœud annonce toutes les 5 s son identifiant, son nom et son port. Une
 annonce n'est qu'un indice : rien ne se passe sans appairage confirmé des deux

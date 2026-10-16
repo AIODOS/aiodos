@@ -87,7 +87,7 @@ def lease(manager, sender, payload):
     caps = payload.get("caps") or {}
     if caps.get("work_api") != WORK_API:
         return {"unit": None, "retry_after": 600,
-                "reason": "Versions de Aiodos différentes : mets à jour les deux machines."}
+                "reason": "Versions d'AIODOS différentes : mets à jour les deux machines."}
     mine = local_models()
     local_only = store.local_only_ids()
     options = {}

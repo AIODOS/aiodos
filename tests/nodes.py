@@ -1,4 +1,4 @@
-"""Lancement de vrais nœuds Aiodos dans des processus séparés (tests réseau).
+"""Lancement de vrais nœuds AIODOS dans des processus séparés (tests réseau).
 
 Chaque nœud a son propre dossier de données et écoute sur 127.0.0.1 : pas de
 pare-feu à franchir, pas de diffusion UDP (ajout par adresse).

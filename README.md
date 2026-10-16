@@ -1,4 +1,4 @@
-# Aiodos
+# AIODOS
 
 > *AI* + *hodos*, « le chemin » en grec, celui de « méthode » et de « synode » (faire
 > route ensemble) : **la voie de l'IA, faite ensemble**. Le projet s'appelait Cœur IA
@@ -41,7 +41,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 
 1. **Activer le réseau local** sur chaque PC (vue « Réseau local »). Windows demande
    l'autorisation du pare-feu pour Python : l'accepter pour les **réseaux privés** seulement.
-2. **Appairer** : les machines Aiodos du réseau apparaissent d'elles-mêmes (sinon,
+2. **Appairer** : les machines AIODOS du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
 3. **Prêter sa puissance** (vue « Cette machine ») : par défaut, seulement quand le PC
@@ -97,7 +97,7 @@ Pas à pas : [docs/android.md](docs/android.md).
 
 ## Lancer
 
-- **Double-clic sur `lancer.bat`** : ouvre Aiodos dans sa fenêtre.
+- **Double-clic sur `lancer.bat`** : ouvre AIODOS dans sa fenêtre.
 - En ligne de commande : `python -m aiodos`
 - Nœud sans fenêtre (machine de calcul) : `python -m aiodos --headless`
   (affiche l'adresse locale à ouvrir dans un navigateur).

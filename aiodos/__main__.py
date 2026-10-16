@@ -64,7 +64,7 @@ def _windows_app_id():
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="aiodos", description="Aiodos — nœud local")
+    parser = argparse.ArgumentParser(prog="aiodos", description="AIODOS — nœud local")
     parser.add_argument("--headless", action="store_true", help="nœud seul, sans fenêtre")
     parser.add_argument("--port", type=int, default=0, help="port local (défaut : libre)")
     network = parser.add_argument_group("réseau local (tests, machines de calcul)")
@@ -89,7 +89,7 @@ def main():
     _windows_app_id()
     port = args.port or _free_port()
     if not instance.acquire(port):
-        instance.alert("Aiodos est déjà ouvert sur cette machine.")
+        instance.alert("AIODOS est déjà ouvert sur cette machine.")
         return 1
 
     try:
@@ -114,13 +114,13 @@ def main():
         while not server.started and thread.is_alive() and time.monotonic() < deadline:
             time.sleep(0.05)
         if not server.started:
-            instance.alert("Le nœud Aiodos n'a pas pu démarrer (voir data/logs).")
+            instance.alert("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
             return 1
 
         url = f"http://127.0.0.1:{port}/?t={token}"
-        log.info("Aiodos %s prêt sur le port %s", __version__, port)
+        log.info("AIODOS %s prêt sur le port %s", __version__, port)
         if args.headless:
-            print(f"Nœud Aiodos prêt : {url}", flush=True)
+            print(f"Nœud AIODOS prêt : {url}", flush=True)
             try:
                 while thread.is_alive():
                     time.sleep(1)
@@ -141,5 +141,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as exc:          # lancé sans console (pythonw) : on montre l'erreur
         log.exception("Arrêt inattendu")
-        instance.alert(f"Aiodos s'est arrêté : {exc}\n\nDétails dans data/logs/aiodos.log")
+        instance.alert(f"AIODOS s'est arrêté : {exc}\n\nDétails dans data/logs/aiodos.log")
         sys.exit(1)

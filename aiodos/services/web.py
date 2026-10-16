@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import requests
 
 # En-tête en ASCII pur : requests encode les en-têtes en latin-1 (le « œ » casse).
-HEADERS = {"User-Agent": "Mozilla/5.0 (Aiodos - recherche locale)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (AIODOS - recherche locale)"}
 
 
 class _TextExtractor(HTMLParser):

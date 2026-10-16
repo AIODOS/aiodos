@@ -24,7 +24,7 @@ de similarité cosinus, contre ≈ 0,82 pour le bon passage. Le seuil
   python tools/embedding_bench.py --prefixes --details --json tools/embedding_bench_results.json
   ```
 - **Conditions** : 16/10/2026, RTX 4070 Laptop 8 Go, Ollama 0.40.5, textes envoyés sans
-  préfixe (comme le fait Aiodos), par lots de 16.
+  préfixe (comme le fait AIODOS), par lots de 16.
 - **Indicateurs** : scores des bons passages et du bruit, AUC (probabilité qu'un bon
   passage score plus haut qu'un passage sans rapport : c'est ce qu'exige un seuil unique
   pour toutes les questions), bon passage en tête (top 1), et surtout ce que donne chaque
@@ -57,7 +57,7 @@ Ce que donne le seuil (sur 36 questions, 1 476 paires sans rapport, 23 pièges) 
 - **embeddinggemma** est le seul modèle dont les bons passages (≥ 0,449) passent tous
   au-dessus du bruit (≤ 0,444) : il existe un seuil sans perte, et le classement est
   parfait. Les deux seuls passages « sans rapport » au-dessus de 0,40 sont en fait des
-  voisins de thème (« Comment installer Aiodos ? » → la charte du logo de Aiodos ;
+  voisins de thème (« Comment installer AIODOS ? » → la charte du logo d'AIODOS ;
   « rendre un script exécutable sous Linux » → l'activation d'un venv).
 - **bge-m3** et **snowflake-arctic-embed2** (même architecture, XLM-RoBERTa) sont très
   proches l'un de l'autre, nettement meilleurs que nomic, un cran en dessous
@@ -68,7 +68,7 @@ Ce que donne le seuil (sur 36 questions, 1 476 paires sans rapport, 23 pièges) 
 
 Préfixes conseillés par les auteurs (`--prefixes`) : ils aident un peu snowflake
 (« query: », AUC 0,9999) et qwen3 (consigne en anglais), pas embeddinggemma (le meilleur
-résultat est sans préfixe) ni nomic. Aiodos n'en met donc aucun.
+résultat est sans préfixe) ni nomic. AIODOS n'en met donc aucun.
 
 ### Place en mémoire vidéo
 

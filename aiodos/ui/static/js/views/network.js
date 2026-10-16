@@ -139,12 +139,12 @@ function renderVisible(net) {
   const box = $('#net-visible', root);
   if (!net.running) {
     box.innerHTML = `<h2>${icon('search')}Machines détectées</h2>
-      <p class="hint" style="margin:0">Active le réseau pour voir les autres machines Aiodos de ton réseau.</p>`;
+      <p class="hint" style="margin:0">Active le réseau pour voir les autres machines AIODOS de ton réseau.</p>`;
     return;
   }
   box.innerHTML = `
     <h2>${icon('search')}Machines détectées</h2>
-    <p class="hint">Les nœuds Aiodos qui s'annoncent sur ton réseau. Si une machine n'apparaît pas,
+    <p class="hint">Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas,
       ajoute-la par son adresse IP.</p>
     <div class="peer-list" id="visible-list"></div>
     <div class="toolbar" style="margin:14px 0 0">

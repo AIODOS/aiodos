@@ -125,6 +125,6 @@ async function boot() {
 }
 
 boot().catch(err => {
-  document.body.innerHTML = `<div class="empty" style="margin-top:20vh">Impossible de joindre le nœud Aiodos.<br>
+  document.body.innerHTML = `<div class="empty" style="margin-top:20vh">Impossible de joindre le nœud AIODOS.<br>
     <span class="faint">${esc(err.message || err)}</span></div>`;
 });

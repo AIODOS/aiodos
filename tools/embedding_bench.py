@@ -10,7 +10,7 @@ sans rapport, écart entre les deux, seuil de pertinence conseillé
     python tools/embedding_bench.py --json mesures.json     # résultats détaillés
 
 Ollama doit tourner et les modèles être installés (ollama pull …). Le script
-ne dépend pas du reste de Aiodos : pas besoin de lancer le nœud.
+ne dépend pas du reste d'AIODOS : pas besoin de lancer le nœud.
 
 Un seul modèle est chargé à la fois : tout modèle déjà en mémoire est déchargé
 avant chaque mesure, et le modèle mesuré l'est juste après. Avec --json, chaque
@@ -29,7 +29,7 @@ import requests
 DATASET = Path(__file__).with_name("embedding_bench_fr.json")
 MODELS = ["nomic-embed-text", "bge-m3", "snowflake-arctic-embed2", "embeddinggemma",
           "qwen3-embedding:0.6b"]
-# Préfixes recommandés par les auteurs des modèles (question, passage). Aiodos
+# Préfixes recommandés par les auteurs des modèles (question, passage). AIODOS
 # n'en met aucun : --prefixes mesure ce qu'ils apporteraient.
 PREFIXES = {
     "nomic-embed-text": ("search_query: ", "search_document: "),

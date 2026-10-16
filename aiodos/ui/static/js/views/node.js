@@ -62,7 +62,7 @@ function render() {
   $('#node-machine', root).innerHTML = `
     <h2>${icon('node')}${esc(n.name)}
       <button class="icon-btn" id="rename-node" title="Renommer ce nœud">${icon('edit')}</button></h2>
-    <p class="hint">Nœud <span class="mono">${esc(n.node_id.slice(0, 12))}</span> · Aiodos ${esc(n.version)}</p>
+    <p class="hint">Nœud <span class="mono">${esc(n.node_id.slice(0, 12))}</span> · AIODOS ${esc(n.version)}</p>
     <dl class="facts">
       <dt>Système</dt><dd>${esc(n.os)}</dd>
       <dt>Processeur</dt><dd>${esc(n.cpu.name)} <span class="faint">· ${n.cpu.threads} threads</span></dd>

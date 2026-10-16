@@ -1,5 +1,5 @@
 #!/bin/sh
-# Aiodos : nœud de calcul sans fenêtre (téléphone Android sous Termux, Linux…).
+# AIODOS : nœud de calcul sans fenêtre (téléphone Android sous Termux, Linux…).
 #   sh lancer-noeud.sh              (les options en plus sont passées au nœud)
 # Sous Termux : garde le processeur éveillé écran éteint, et limite le téléphone
 # à une unité d'embeddings et une page web à la fois (ni vision, ni Whisper).

@@ -1,4 +1,4 @@
-"""Une seule instance de Aiodos à la fois par dossier de données.
+"""Une seule instance d'AIODOS à la fois par dossier de données.
 
 Deux nœuds sur la même base fonctionneraient (les réservations d'unités sont
 atomiques), mais deux fenêtres identiques prêteraient à confusion.
@@ -63,6 +63,6 @@ def release():
 
 def alert(message: str):
     if sys.platform == "win32":
-        ctypes.windll.user32.MessageBoxW(None, message, "Aiodos", 0x40)
+        ctypes.windll.user32.MessageBoxW(None, message, "AIODOS", 0x40)
     else:
         print(message)

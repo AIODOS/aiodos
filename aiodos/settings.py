@@ -27,7 +27,7 @@ DEFAULTS = {
     "default_model": "",
     "think": True,                    # laisser les modèles « réfléchir » (Qwen3…)
     "system_prompt": (
-        "Tu es Aiodos, un assistant local qui aide à coder, à réfléchir et à "
+        "Tu es AIODOS, un assistant local qui aide à coder, à réfléchir et à "
         "travailler. Réponds en français, de façon claire et structurée. "
         "Quand tu écris du code, utilise des blocs markdown avec le nom du langage."
     ),

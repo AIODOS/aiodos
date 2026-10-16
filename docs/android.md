@@ -6,7 +6,7 @@
 
 Un téléphone récent a 6 à 12 Go de mémoire et 8 cœurs. C'est assez pour calculer des
 embeddings pour les bibliothèques du PC pendant qu'il recharge, la nuit par exemple. Il
-fait tourner Aiodos **sans fenêtre** dans Termux, avec son propre Ollama, et calcule
+fait tourner AIODOS **sans fenêtre** dans Termux, avec son propre Ollama, et calcule
 pour le PC comme n'importe quelle machine appairée.
 
 ## Ce que fait le téléphone, et quand
@@ -53,7 +53,7 @@ puissance », et seulement dans ces conditions, comme BOINC sous Android :
 | Mémoire | 4 Go conseillés : le modèle embeddinggemma occupe à lui seul environ 650 Mo |
 | Espace libre | environ 2,5 Go : Termux, Python, compilateur, Ollama, modèle (622 Mo) |
 | Réseau | le même Wi-Fi que le PC. Pas un réseau « invité », qui isole les appareils les uns des autres |
-| PC | Aiodos dans la même version que le téléphone, avec le réseau local activé |
+| PC | AIODOS dans la même version que le téléphone, avec le réseau local activé |
 | Chargeur | un vrai chargeur secteur de préférence. Branché sur le port USB d'un PC, le téléphone peut se décharger en calculant |
 
 ## 1. Installer Termux et Termux:API
@@ -96,9 +96,9 @@ termux-battery-status
   l'application Termux:API manque ou ne vient pas de la même source que Termux.
   Interrompre avec <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
-## 3. Copier Aiodos sur le téléphone
+## 3. Copier AIODOS sur le téléphone
 
-**Sur le PC**, dans le dossier de Aiodos (dans la même version que celle qui tourne sur
+**Sur le PC**, dans le dossier d'AIODOS (dans la même version que celle qui tourne sur
 le PC) :
 
 ```sh
@@ -224,7 +224,7 @@ sh lancer-noeud.sh
 
 ```
 … INFO aiodos.network : Réseau local actif sur 0.0.0.0:47701 (pour ajouter cette machine depuis une autre : 192.168.1.42:47701)
-Nœud Aiodos prêt : http://127.0.0.1:8800/?t=…
+Nœud AIODOS prêt : http://127.0.0.1:8800/?t=…
 ```
 
 - La première ligne donne l'**adresse du téléphone** à saisir sur le PC.
@@ -301,7 +301,7 @@ Nœud Aiodos prêt : http://127.0.0.1:8800/?t=…
 | `termux-battery-status` ne rend pas la main ; « Charge inconnue » | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
 | « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
 | « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
-| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images ou de sons, ou versions de Aiodos différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
+| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images ou de sons, ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
 | Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | relancer `sh lancer-noeud.sh` et reprendre l'adresse affichée |
 | `[Process completed (signal 9) - press Enter]` | phantom process killer | étape 6 |
 | pip : « no matching distribution » ou « has no usable wheels » | le TUR n'a pas (encore) cette version | étape 4, « Si cela échoue » |
