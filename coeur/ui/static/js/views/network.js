@@ -79,6 +79,7 @@ function peerFacts(peer) {
     `${bytes(p.memory?.total || 0)} de RAM`,
     `${(p.ollama?.models || []).length} modèle(s)`,
   ];
+  if (p.lends_models) facts.push('prête ses modèles');
   if (p.power?.mobile) {                       // téléphone : charge, niveau, température
     const text = powerText(p);
     facts.push(text.charAt(0).toLowerCase() + text.slice(1));

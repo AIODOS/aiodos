@@ -60,6 +60,7 @@ DEFAULTS = {
     "node_name": "",
     "offload_enabled": True,          # confier des unités à mes machines appairées
     "share_enabled": False,           # calculer pour mes machines appairées
+    "lend_models": False,             # répondre aux conversations de mes machines appairées
     "share_when_idle": True,          # comme l'économiseur d'écran de SETI@home
     "idle_minutes": 10,
     "share_on_ac_only": True,         # téléphone : seulement en charge

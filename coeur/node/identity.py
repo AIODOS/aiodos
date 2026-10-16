@@ -148,6 +148,7 @@ def profile(max_age=5.0) -> dict:
         "power": supply,
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
+        "lends_models": bool(settings.get("lend_models")),
     }
     with _cache_lock:
         _cache.update(at=time.monotonic(), profile=data)

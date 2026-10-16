@@ -13,7 +13,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 | Phase | Contenu | État |
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
-| 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance | ✅ en place (modèles servis par une autre machine : à venir) |
+| 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
 | 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | plus tard |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | plus tard |
 
@@ -60,6 +60,14 @@ Comment le travail circule :
   et une bibliothèque peut être **gardée sur ce PC uniquement** (menu ⋯, cadenas).
 - **Réciprocité** : chaque machine tient le compte du temps de calcul donné et reçu ;
   celles qui ont le plus calculé pour toi sont servies en premier.
+
+**Prêter ses modèles pour les conversations** (vue « Cette machine », désactivé par
+défaut) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, choisit dans
+la conversation un modèle d'une autre machine (« Sur mes machines » dans le choix du
+modèle). La réponse est calculée là-bas et arrive en flux chiffré, morceau par morceau ;
+le bouton Stop coupe la génération là-bas. Le texte de la conversation passe par la
+machine qui prête le temps de la réponse, sans y être enregistré, et son travail de fond
+se met en pause pendant ce temps.
 
 Une machine dédiée au calcul peut tourner sans fenêtre : `python -m coeur --headless`.
 `--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
@@ -116,7 +124,9 @@ coeur/
 │   ├── envelope.py    messages scellés, horodatés, anti-rejeu (ChaCha20-Poly1305)
 │   ├── p2p_app.py     serveur entre nœuds, séparé de l'API locale
 │   ├── work.py        travail confié : bail, fichier par morceaux, résultats
-│   └── worker.py      partage de puissance : calculer pour ses autres machines
+│   ├── worker.py      partage de puissance : calculer pour ses autres machines
+│   ├── lending.py     prêter ses modèles pour les conversations des autres machines
+│   └── remote_models.py  utiliser dans ses conversations les modèles prêtés
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
 │                      particularités d'Android (android.py)
 ├── api/               API locale + flux d'événements (SSE)

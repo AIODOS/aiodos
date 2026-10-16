@@ -11,6 +11,7 @@ import re
 
 from coeur import settings
 from coeur.knowledge import search
+from coeur.network import remote_models
 from coeur.services import cloud, ollama, web
 
 log = logging.getLogger("coeur.chat")
@@ -44,6 +45,7 @@ def preflight(text: str, model: str) -> dict:
     """Ce que l'interface doit faire valider avant l'envoi (web, cloud)."""
     provider = cloud.provider_of(model)
     return {
+        "remote": remote_models.peer_name(model),     # machine appairée qui répondra
         "web_intent": bool(WEB_INTENT.search(text or "")),
         "cloud": provider,
         "cloud_host": cloud.PROVIDERS[provider]["host"] if provider else None,
@@ -52,8 +54,13 @@ def preflight(text: str, model: str) -> dict:
     }
 
 
+def runs_here(model) -> bool:
+    """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ?"""
+    return not cloud.provider_of(model) and not remote_models.parse(model)
+
+
 def available_models() -> list:
-    """Modèles de conversation : locaux (Ollama) puis cloud."""
+    """Modèles de conversation : locaux (Ollama), ceux de mes machines, puis cloud."""
     models = []
     try:
         installed = ollama.list_models()
@@ -66,6 +73,10 @@ def available_models() -> list:
                            "size": m["size"], "caps": caps})
     except Exception as exc:
         log.warning("Ollama injoignable : %s", exc)
+    try:
+        models.extend(remote_models.available())
+    except Exception as exc:
+        log.warning("Modèles des machines appairées indisponibles : %s", exc)
     for name, spec in cloud.PROVIDERS.items():
         models.append({"id": cloud.MODEL_PREFIX + name, "label": spec["label"],
                        "group": "cloud", "caps": [], "has_key": cloud.has_key(name)})
@@ -152,10 +163,12 @@ def build_messages(history, question, *, libraries, conversations, web_search,
 
 
 def generate(model, messages, think=True, stop=None):
-    """Couples (genre, texte) depuis le modèle local ou cloud."""
+    """Couples (genre, texte) depuis le modèle local, d'une machine appairée, ou cloud."""
     provider = cloud.provider_of(model)
     if provider:
         yield from cloud.chat_stream(provider, messages, stop=stop)
+    elif remote_models.parse(model):
+        yield from remote_models.chat_stream(model, messages, think, stop)
     else:
         yield from ollama.chat_stream(model, messages, think=None if think else False,
                                       stop=stop)
