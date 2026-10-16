@@ -15,7 +15,7 @@ import time
 import uuid
 
 from coeur import __version__, db, settings
-from coeur.node import power
+from coeur.node import android, power
 from coeur.services import ollama
 
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # pas de console qui clignote
@@ -139,7 +139,8 @@ def profile(max_age=5.0) -> dict:
         "node_id": node_id(),
         "name": settings.get("node_name"),
         "version": __version__,
-        "os": f"{platform.system()} {platform.release()}",
+        "os": (android.system() if android.is_android()
+               else f"{platform.system()} {platform.release()}"),
         "cpu": {"name": cpu_name(), "threads": os.cpu_count()},
         "memory": memory(),
         "gpus": cards,

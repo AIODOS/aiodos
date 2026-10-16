@@ -29,6 +29,8 @@ import threading
 import time
 from pathlib import Path
 
+from coeur.node import android
+
 POWER_SUPPLY = Path("/sys/class/power_supply")
 TERMUX_COMMAND = "termux-battery-status"
 TERMUX_TIMEOUT = 10    # sans l'application Termux:API, la commande ne répond jamais
@@ -39,12 +41,6 @@ _termux = {"until": 0.0, "value": None}
 _termux_lock = threading.Lock()
 
 
-def is_android() -> bool:
-    """Android, Termux compris : le Python de Termux se dit « linux » (avant 3.13)."""
-    return (sys.platform == "android" or hasattr(sys, "getandroidapilevel")
-            or "ANDROID_ROOT" in os.environ or "TERMUX_VERSION" in os.environ)
-
-
 def _status(plugged=None, level=None, temperature=None, mobile=False, source=None) -> dict:
     return {"plugged": plugged, "level": level, "temperature": temperature,
             "mobile": mobile, "source": source}
@@ -53,7 +49,7 @@ def _status(plugged=None, level=None, temperature=None, mobile=False, source=Non
 def read() -> dict:
     if sys.platform == "win32":
         return _windows()
-    return _linux(POWER_SUPPLY, is_android())
+    return _linux(POWER_SUPPLY, android.is_android())
 
 
 # --------------------------------------------------------------------- Windows

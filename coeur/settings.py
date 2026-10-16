@@ -7,6 +7,7 @@ import json
 import socket
 
 from coeur import db
+from coeur.node import android
 
 SECRET_KEYS = {"mistral_key", "qwen_key"}
 
@@ -68,6 +69,15 @@ DEFAULTS = {
 }
 
 
+def machine_name() -> str:
+    """Nom par défaut du nœud : celui de la machine. Sous Android, qui répond
+    « localhost », le modèle du téléphone."""
+    name = socket.gethostname()
+    if name == "localhost" and android.is_android():
+        return android.model() or "Téléphone Android"
+    return name
+
+
 def _decode(raw):
     try:
         return json.loads(raw)
@@ -89,7 +99,7 @@ def get(key):
     row = db.query_one("SELECT value FROM settings WHERE key=?", (key,))
     if row is None:
         if key == "node_name":
-            return socket.gethostname()
+            return machine_name()
         if key == "rag_min_score":
             return rag_threshold(get("embed_model"))
         return DEFAULTS.get(key)
@@ -98,7 +108,7 @@ def get(key):
 
 def get_all() -> dict:
     values = dict(DEFAULTS)
-    values["node_name"] = socket.gethostname()
+    values["node_name"] = machine_name()
     stored = set()
     for row in db.query("SELECT key, value FROM settings"):
         if row["key"] in DEFAULTS:
