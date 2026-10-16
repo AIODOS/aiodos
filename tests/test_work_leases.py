@@ -44,6 +44,9 @@ class FakeManager:
     def changed(self):
         self.changes += 1
 
+    def name(self):
+        return "PC portable"
+
 
 @pytest.fixture
 def owner(monkeypatch, tmp_path):
@@ -104,6 +107,15 @@ def test_nothing_is_lent_without_the_exact_same_embedding_model(owner):
     assert _lease(owner, caps=_caps(digest="sha256:autre"))["unit"] is None
     assert _lease(owner, caps=_caps(api=work.WORK_API + 1))["unit"] is None
     assert _lease(owner, resources=("gpu", "cpu"))["unit"] is None
+
+
+def test_owner_without_ollama_says_why_nothing_is_lent(owner, monkeypatch):
+    def down(max_age=10):
+        raise ConnectionError("Ollama arrêté")
+    monkeypatch.setattr(ollama, "list_models", down)
+    reply = _lease(owner)
+    assert reply["unit"] is None and "Ollama ne répond pas sur « PC portable »" in reply["reason"]
+    assert db.query_one("SELECT COUNT(*) AS n FROM units WHERE status='running'")["n"] == 0
 
 
 def test_only_a_document_needs_a_machine_that_reads_its_format():

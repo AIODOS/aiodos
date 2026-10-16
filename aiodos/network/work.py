@@ -95,6 +95,14 @@ def lease(manager, sender, payload):
         return {"unit": None, "retry_after": 600,
                 "reason": "Versions d'AIODOS différentes : mets à jour les deux machines."}
     mine = local_models()
+    if not mine:
+        # Sans Ollama ici, impossible de vérifier que l'autre machine a exactement le
+        # même modèle : rien n'est confié. On le dit plutôt que de refuser en silence
+        # (essai du 16/10/2026 : Ollama arrêté après un redémarrage du PC).
+        log.warning("Ollama ne répond pas : aucune unité confiée à %s", _peer_name(sender))
+        return {"unit": None, "retry_after": 30,
+                "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible d'y "
+                          "vérifier le modèle d'embedding, rien n'est confié."}
     local_only = store.local_only_ids()
     options = {}
 
