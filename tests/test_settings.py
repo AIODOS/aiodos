@@ -33,3 +33,23 @@ def test_unknown_or_empty_model():
     assert settings.get("rag_min_score") == settings.DEFAULTS["rag_min_score"]
     settings.set_value("embed_model", "")                      # vide : modèle par défaut
     assert settings.get("embed_model") == "embeddinggemma"
+
+
+def test_changing_a_companion_option_relaunches_it(data_dir, monkeypatch):
+    """Étape 2.7 : relais, annuaires, ouverture de port : le compagnon repart avec."""
+    from fastapi.testclient import TestClient
+
+    from aiodos.api.server import create_app
+    from aiodos.network.internet import Internet
+    relaunched = []
+    monkeypatch.setattr(Internet, "relaunch_from_thread", lambda self: relaunched.append(True))
+    with TestClient(create_app("jeton", {"testserver"})) as client:
+        headers = {"X-Aiodos-Token": "jeton"}
+        client.put("/api/settings", json={"think": False}, headers=headers)
+        assert relaunched == []
+        values = client.put("/api/settings", json={
+            "internet_relays": ["n0", "https://relais.example.org/"]}, headers=headers).json()
+        assert relaunched == [True]
+        assert values["internet_relays"] == ["n0", "https://relais.example.org/"]
+        client.put("/api/settings", json={"internet_portmap": False}, headers=headers)
+        assert relaunched == [True, True]

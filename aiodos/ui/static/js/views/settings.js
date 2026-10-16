@@ -49,6 +49,21 @@ const SECTIONS = [
       ['tiny', 'tiny (rapide)'], ['base', 'base'], ['small', 'small (recommandé)'],
       ['medium', 'medium'], ['large-v3', 'large-v3 (précis, lent)']] },
   ] },
+  { title: 'Internet (compagnon aiodos-net)', icon: 'globe', fields: [
+    { key: 'internet_relays', label: 'Relais', type: 'list',
+      help: '« n0 » : relais publics de n0, par défaut. Ajoute l\'adresse https://… de ton propre relais, ou de celui '
+        + 'd\'un ami (guide : docs/relais.md), avec ou sans « n0 ». « none » : aucun relais, connexion directe seulement.' },
+    { key: 'internet_directory', label: 'Annuaires', type: 'list',
+      help: '« n0-dns » : DNS de n0 ; « dht » : DHT Mainline de BitTorrent, sans serveur ; « none » : aucun '
+        + '(les machines se joignent par les adresses échangées à l\'appairage).' },
+    { key: 'internet_portmap', label: 'Ouvrir un port sur la box automatiquement (UPnP, PCP)', type: 'switch',
+      help: 'Facilite les connexions directes, sans relais. Sans effet si la box ne le permet pas.' },
+    { key: 'p2p_route', label: 'Chemin vers mes machines', type: 'select', options: [
+      ['auto', 'Réseau local s\'il répond, Internet sinon'], ['lan', 'Réseau local seulement'],
+      ['internet', 'Internet seulement (pour l\'essayer)']] },
+    { key: 'internet_max_blob_mb', label: 'Taille maximale d\'un fichier confié par Internet (Mo)', type: 'number',
+      min: 1, max: 512, help: 'Au-delà, le fichier reste aux machines du réseau local.' },
+  ] },
   { title: 'Mises à jour', icon: 'retry', fields: [
     { key: 'auto_update', label: 'Installer automatiquement les nouvelles versions', type: 'switch',
       help: 'Seules les versions signées par l\'auteur d\'AIODOS sont acceptées. Elles arrivent par tes '
@@ -106,6 +121,9 @@ function field(f) {
     control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
       autocomplete="off" placeholder="${esc(placeholder)}">${s[`${f.key}_set`]
         ? `<button class="btn" data-clear="${f.key}" type="button">Effacer</button>` : ''}</div>`;
+  } else if (f.type === 'list') {         // une liste : les valeurs séparées par des virgules
+    control = `<input class="input" type="text" id="${id}" data-key="${f.key}" data-list="1"
+      value="${esc((s[f.key] || []).join(', '))}">`;
   } else {
     const type = f.type === 'number' ? 'number' : 'text';
     const limits = f.type === 'number' ? `min="${f.min}" max="${f.max}" step="${f.step || 1}"` : '';
@@ -126,6 +144,7 @@ function render() {
     const read = () => {
       if (input.type === 'checkbox') return input.checked;
       if (input.type === 'number') return Number(input.value);
+      if (input.dataset.list) return input.value.split(/[\s,]+/).filter(Boolean);
       return input.value;
     };
     input.addEventListener(input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input',

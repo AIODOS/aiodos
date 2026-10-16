@@ -19,6 +19,17 @@ from aiodos.node import identity
 from aiodos.updates.service import UpdateService
 
 
+class Revalidated(StaticFiles):
+    """Fichiers de l'interface revalidés à chaque chargement (réponse 304 s'ils n'ont pas
+    changé) : après une mise à jour, un navigateur ouvert sur le même port (téléphone,
+    nœud sans fenêtre) ne garde pas l'ancien code de l'interface en cache."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(token: str, hosts: set, network_options: dict | None = None,
                slots: dict | None = None, windowed: bool = False) -> FastAPI:
     bus = EventBus()
@@ -60,5 +71,5 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         # renommage, la fenêtre gardait l'ancien logo en cache
         return FileResponse(paths.LOGO_PNG, headers={"Cache-Control": "no-cache"})
 
-    app.mount("/", StaticFiles(directory=paths.STATIC_DIR, html=True), name="ui")
+    app.mount("/", Revalidated(directory=paths.STATIC_DIR, html=True), name="ui")
     return Guard(app, token, hosts)

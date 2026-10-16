@@ -972,6 +972,26 @@ blanche de clés ou jeton).
 *Fini quand* : un relais auto-hébergé sert deux machines qui ne peuvent pas se joindre
 en direct.
 
+**En partie fait le 16/10/2026** :
+
+- **Réglages.** Réglages → Internet : relais (`n0`, ses propres adresses, ou `none`),
+  annuaires (`n0-dns`, `dht`), ouverture de port sur la box, chemin préféré, et taille
+  maximale d'un fichier confié par Internet. Changer une option du compagnon le relance
+  avec elle.
+- **État.** Pour chaque machine appairée, la vue Réseau montre si la connexion est en
+  direct ou par un relais, avec son délai (depuis 2.4).
+- **Guide.** [docs/relais.md](relais.md) explique comment héberger `iroh-relay` 1.3.0 :
+  - installation ;
+  - certificat Let's Encrypt et ports ;
+  - accès réservé par une liste blanche de clés (le bouton « Copier la clé de cette
+    machine » les donne) ou par un jeton ;
+  - mode d'essai `--dev`.
+
+Reste l'essai qui conclut l'étape : un relais auto-hébergé qui sert deux machines
+privées de connexion directe. Pour qu'il prouve quelque chose, il faut pouvoir couper les
+connexions directes du compagnon (une option à ajouter côté Rust), ou faire l'essai entre
+deux vrais réseaux.
+
 **2.8 Essai réel avec un ami**, puis documentation (README, ce document complété par
 les mesures).
 

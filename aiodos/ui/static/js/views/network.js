@@ -83,6 +83,7 @@ function renderInternet(net) {
     <div class="toolbar" style="margin:0 0 10px">
       <button class="btn sm" id="inv-create" ${inet.running ? '' : 'disabled'}>${icon('plus')}Créer une invitation</button>
       <button class="btn sm" id="inv-accept" ${inet.running ? '' : 'disabled'}>${icon('link')}Répondre à une invitation</button>
+      ${inet.running && inet.id ? `<button class="btn sm ghost" id="inet-key" title="Pour la liste blanche d'un relais auto-hébergé (docs/relais.md)">${icon('copy')}Copier la clé de cette machine</button>` : ''}
     </div>
     <div class="peer-list">${(net.invitations || []).map(invitationRow).join('')}</div>`;
   $('#inet-toggle', box).onchange = async e => {
@@ -90,6 +91,10 @@ function renderInternet(net) {
     catch (err) { errorToast(err); }
   };
   $('#inv-create', box).onclick = createInvitation;
+  $('#inet-key', box)?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(inet.id); toast('Clé copiée.', 'ok'); }
+    catch { toast(inet.id, 'info', 15000); }
+  });
   $('#inv-accept', box).onclick = acceptInvitation;
   box.querySelectorAll('[data-reply]').forEach(b => { b.onclick = () => pasteReply(Number(b.dataset.reply)); });
   box.querySelectorAll('[data-cancel]').forEach(b => {

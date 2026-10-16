@@ -115,3 +115,17 @@ def test_conversation_folders(client):
     client.delete(f"/api/folders/{folder}", headers=AUTH)            # la conversation reste
     tree = client.get("/api/conversations", headers=AUTH).json()
     assert tree["conversations"][0]["folder_id"] is None
+
+
+def test_interface_files_are_revalidated_after_an_update(data_dir):
+    """Un navigateur ouvert sur le même port ne doit pas garder l'ancien code de
+    l'interface après une mise à jour : chaque fichier est revalidé (304 s'il n'a pas
+    changé)."""
+    from fastapi.testclient import TestClient
+
+    from aiodos.api.server import create_app
+    with TestClient(create_app("jeton", {"testserver"})) as client:
+        first = client.get("/js/app.js")
+        assert first.status_code == 200 and first.headers["cache-control"] == "no-cache"
+        again = client.get("/js/app.js", headers={"If-None-Match": first.headers["etag"]})
+        assert again.status_code == 304

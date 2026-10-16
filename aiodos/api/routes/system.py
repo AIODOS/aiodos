@@ -10,6 +10,9 @@ from aiodos.jobs.kinds import reindex
 
 router = APIRouter(prefix="/api")
 
+# Options avec lesquelles le compagnon Internet se lance : changées, il repart avec
+COMPANION_OPTIONS = {"internet_relays", "internet_directory", "internet_portmap"}
+
 
 class UrlIn(BaseModel):
     url: str
@@ -26,6 +29,8 @@ def write_settings(values: dict, request: Request):
     request.app.state.bus.publish({"type": "settings"})
     if values.get("auto_update"):          # réactivées : on regarde tout de suite
         request.app.state.updates.check_now()
+    if COMPANION_OPTIONS & set(values):
+        request.app.state.network.internet.relaunch_from_thread()
     job_id = reindex.schedule()            # nouveau modèle d'embedding : tout recalculer
     if job_id:
         executor = request.app.state.executor
