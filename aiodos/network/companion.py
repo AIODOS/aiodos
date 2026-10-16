@@ -69,12 +69,14 @@ class Companion:
     """Un compagnon lancé par ce nœud.
 
     options : relays (liste : « n0 », « none », https://…), directory (« n0-dns,dht »,
-    « none »…), bind (sockets UDP, ex. « 127.0.0.1:0 » pour les tests), portmap (bool).
+    « none »…), bind (sockets UDP, ex. « 127.0.0.1:0 » pour les tests), portmap (bool),
+    data_dir (dossier de la clé ; défaut : celui d'AIODOS).
     """
 
     def __init__(self, forward: str, options: dict | None = None):
         options = options or {}
         self.forward = forward
+        self.data_dir = options.get("data_dir")
         self.relays = [str(r) for r in options.get("relays") or []]
         self.directory = options.get("directory")
         self.bind = options.get("bind")
@@ -106,7 +108,8 @@ class Companion:
         return f"http://{self.listen}/peer/{net_id}"
 
     def command(self, binary) -> list:
-        args = [str(binary), "--data-dir", str(paths.data_dir()), "--listen", "127.0.0.1:0",
+        data_dir = self.data_dir or paths.data_dir()
+        args = [str(binary), "--data-dir", str(data_dir), "--listen", "127.0.0.1:0",
                 "--forward", self.forward, "--supervised"]
         for relay in self.relays:
             args += ["--relay", relay]

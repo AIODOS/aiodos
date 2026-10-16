@@ -83,7 +83,8 @@ fn token(data_dir: &Path) -> Result<String> {
 
 /// Lancé par AIODOS : quand AIODOS s'arrête, même brutalement, son extrémité du tuyau se
 /// ferme et le compagnon s'arrête avec lui (un fil ordinaire, qui ne retient pas la fin
-/// du programme).
+/// du programme). L'arrêt est demandé avant d'écrire au journal : si AIODOS a été tué,
+/// le journal (sa sortie d'erreur) ne mène plus nulle part.
 fn watch_stdin(stop: CancellationToken) {
     std::thread::spawn(move || {
         let mut stdin = std::io::stdin();
@@ -94,17 +95,19 @@ fn watch_stdin(stop: CancellationToken) {
                 Ok(_) => {}
             }
         }
-        info!("AIODOS est parti : arrêt");
         stop.cancel();
+        info!("AIODOS est parti : arrêt");
     });
 }
 
 fn init_logging(supervised: bool) {
     let filter = EnvFilter::try_from_env("AIODOS_NET_LOG")
         .unwrap_or_else(|_| EnvFilter::new("aiodos_net=info,iroh=warn,warn"));
+    // Journal perdu (AIODOS parti, tuyau fermé) : on se tait plutôt que de s'arrêter net.
     let builder = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
+        .log_internal_errors(false)
         .with_target(false)
         .with_ansi(!supervised && std::io::stderr().is_terminal());
     if supervised {
