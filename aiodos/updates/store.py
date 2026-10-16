@@ -4,10 +4,13 @@
     packages/<version>/<fichier>         fichiers complets, empreinte vérifiée
     downloads/<version>/<fichier>.part   téléchargements en cours, repris où ils en étaient
     versions/<version>/                  code installé (cf. install.py, launcher.py)
+    bin/                                 compagnon livré, en service (cf. binaries.py)
     state.json                           cf. state.py
 
-Un paquet complet est gardé pour les machines appairées qui ne l'ont pas encore :
-c'est ainsi qu'une version passe de machine en machine.
+Un paquet complet (manifeste et archive du code) est gardé pour les machines appairées
+qui ne l'ont pas encore : c'est ainsi qu'une version passe de machine en machine. Le
+compagnon d'une plateforme s'y ajoute quand la machine est de cette plateforme ; une
+machine transmet aussi les fichiers d'un paquet incomplet qu'elle a en entier.
 """
 import hashlib
 import json
@@ -82,15 +85,24 @@ class Store:
             raise UpdateError("Fichier inconnu dans les paquets de cette machine.")
         return self._dir("packages", version) / name
 
+    def package_path(self, version: str, item: dict) -> Path:
+        return self._dir("packages", version) / item["name"]
+
     def has(self, version: str, item: dict) -> bool:
         """Ce fichier du paquet est-il là, entier ? (empreinte vérifiée à l'arrivée)"""
-        path = self._dir("packages", version) / item["name"]
+        path = self.package_path(version, item)
         return path.is_file() and path.stat().st_size == item["size"]
 
-    def complete(self, version: str, trusted=None) -> bool:
-        """Paquet utilisable ici : manifeste vérifié et fichiers voulus présents."""
+    def held(self, version: str, trusted=None) -> list:
+        """Fichiers de ce paquet que cette machine a en entier (manifeste vérifié)."""
         found = self.manifest(version, trusted)
-        return found is not None and all(self.has(version, f) for f in manifests.wanted(found))
+        return [f for f in found["files"] if self.has(version, f)] if found else []
+
+    def complete(self, version: str, trusted=None) -> bool:
+        """Paquet installable et transmissible : manifeste vérifié, archive du code là.
+        (Le compagnon d'une plateforme est en plus : chaque machine ne prend que le sien.)"""
+        found = self.manifest(version, trusted)
+        return found is not None and self.has(version, manifests.source(found))
 
     def package_versions(self) -> list:
         try:
@@ -106,10 +118,23 @@ class Store:
                 return candidate
         return None
 
+    def available(self, trusted=None) -> dict:
+        """{version: [types de fichiers présents]} : ce que cette machine peut transmettre,
+        compagnons compris (annoncé dans son profil, cf. identity.profile)."""
+        found = {}
+        for version in self.package_versions():
+            kinds = sorted({f["kind"] for f in self.held(version, trusted)
+                            if isinstance(f.get("kind"), str)})
+            if kinds:
+                found[version] = kinds
+        return found
+
     def read_chunk(self, version: str, name: str, offset: int, size: int) -> bytes:
-        if not self.complete(version):
-            raise UpdateError("Paquet incomplet sur cette machine.")
-        with open(self.file_path(version, name), "rb") as f:
+        """Un morceau d'un fichier nommé dans le manifeste vérifié, et présent en entier."""
+        item = next((f for f in self.held(version) if f["name"] == name), None)
+        if item is None:
+            raise UpdateError("Fichier absent des paquets de cette machine.")
+        with open(self.package_path(version, item), "rb") as f:
             f.seek(max(0, offset))
             return f.read(max(0, size))
 
@@ -152,8 +177,8 @@ class Store:
 
     def prune(self, keep: set):
         """Ménage : versions installées hors de `keep`, installations interrompues,
-        paquets anciens (on garde les KEEP_PACKAGES plus récents), téléchargements
-        d'une version déjà dépassée."""
+        paquets anciens (on garde les KEEP_PACKAGES plus récents et ceux de `keep`),
+        téléchargements d'une version déjà dépassée (hors `keep`)."""
         try:
             folders = list(self._dir("versions").iterdir())
         except OSError:
@@ -174,5 +199,5 @@ class Store:
         except OSError:
             pending = []
         for folder in pending:
-            if not versions.newer(folder.name, newest):
+            if not versions.newer(folder.name, newest) and folder.name not in keep:
                 shutil.rmtree(folder, ignore_errors=True)

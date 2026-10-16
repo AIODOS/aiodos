@@ -3,7 +3,10 @@ clé de publication (Ed25519).
 
 Le texte signé voyage et se garde tel quel, jamais re-sérialisé : on vérifie la
 signature sur ces octets-là, puis seulement on le lit. Un manifeste peut annoncer
-des fichiers d'un type inconnu (binaires d'une version future) : ils sont ignorés.
+des fichiers d'un type inconnu : ils sont ignorés. Ainsi des programmes livrés avec
+une version, un par plateforme (« aiodos-net-windows-x86_64 », cf. platforms.py et
+binaries.py) : les versions 2.0.x n'en prennent aucun, les suivantes celui de leur
+plateforme seulement.
 Le format (FORMAT) ne doit pas changer, sans quoi les machines déjà installées ne
 pourraient plus se mettre à jour.
 """
@@ -17,11 +20,12 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-from aiodos.updates import keys, version
+from aiodos.updates import keys, platforms, version
 
 FORMAT = 1
 APP = "aiodos"
 SOURCE = "source"                  # archive du code : aiodos/, assets/, lanceurs
+COMPANION = "aiodos-net"           # compagnon Internet, un fichier par plateforme
 MAX_FILE = 200 * 1024 ** 2
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -107,6 +111,16 @@ def source(manifest: dict) -> dict:
     return next(item for item in manifest["files"] if item.get("kind") == SOURCE)
 
 
+def binary(manifest: dict, program: str = COMPANION) -> dict | None:
+    """Le programme `program` construit pour cette machine, s'il est livré avec la version."""
+    wanted = platforms.kind(program)
+    return next((item for item in manifest["files"]
+                 if wanted and item.get("kind") == wanted), None)
+
+
 def wanted(manifest: dict) -> list:
-    """Fichiers que cette version-ci sait utiliser (les autres types sont ignorés)."""
-    return [source(manifest)]
+    """Fichiers que cette machine prend d'une version : l'archive du code, et le
+    compagnon de sa plateforme s'il est livré. Les autres types (autres plateformes,
+    programmes inconnus) sont ignorés."""
+    companion = binary(manifest)
+    return [source(manifest)] + ([companion] if companion else [])

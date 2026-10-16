@@ -23,6 +23,12 @@ use tracing_subscriber::EnvFilter;
 const TOKEN_ENV: &str = "AIODOS_NET_TOKEN";
 const TOKEN_FILE: &str = "aiodos-net.token";
 
+/// Commit d'AIODOS dont ce programme est construit. L'outil de publication
+/// (tools/publish.py) le donne à la construction, puis le retrouve dans le programme :
+/// c'est ainsi qu'il vérifie qu'un compagnon livré correspond à la version publiée.
+/// Absent d'une construction à la main.
+const COMMIT: Option<&str> = option_env!("AIODOS_NET_COMMIT");
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = Args::parse();
@@ -48,6 +54,7 @@ async fn run(args: Args) -> Result<()> {
         "bound": running.bound.iter().map(|a| a.to_string()).collect::<Vec<_>>(),
         "alpn": "aiodos/2",
         "version": env!("CARGO_PKG_VERSION"),
+        "commit": COMMIT,
         "created": running.created,
     });
     println!("{ready}");

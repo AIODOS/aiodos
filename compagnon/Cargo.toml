@@ -38,3 +38,12 @@ tempfile = "3"
 # panique quand l'environnement Java est absent (binaire nu sous Termux).
 lto = "thin"
 strip = true
+
+# Programme livré avec les versions publiées (tools/publish.py) : bien plus petit, à
+# transmettre de machine en machine, mais plusieurs minutes de construction de plus.
+# Toujours sans panic = "abort" (cf. plus haut).
+[profile.distribution]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
