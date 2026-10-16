@@ -196,6 +196,35 @@ C'est exactement « où est la machine de Paul en ce moment ? », sans serveur.
 qui l'intègre plutôt qu'en direct.** En phase 3, un annuaire public des nœuds Cœur IA
 serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de chacun.
 
+### 2.6 Autres pistes
+
+- **Faire soi-même en Python** : aioice 0.10.2 (ICE, avec STUN et TURN, en asyncio)
+  et aioquic 1.6.1 (QUIC, qui laisse l'application fournir la socket : il peut tourner
+  sur celle que l'ICE vient de percer). Licence BSD-3, maintenus, paquets binaires
+  pour CPython 3.14 sous Windows. aiortc (WebRTC complet) impose PyAV et FFmpeg
+  (environ 28 Mo) même pour de simples canaux de données. Le perçage lui-même tient en
+  quelques centaines de lignes ; le difficile est ailleurs : classer les NAT, ouvrir les
+  pare-feu IPv6 des box (UPnP avec async-upnp-client 0.49 ; aucune bibliothèque Python
+  maintenue pour PCP), les messages de maintien, le relais. Il faut aussi des serveurs
+  STUN (258 publics recensés, dont Google et Cloudflare) et TURN (de 0,05 à 0,40 $ par
+  Go chez les fournisseurs, ou un coturn chez un ami). **C'est le plan de secours**, si
+  le transport retenu échoue quelque part (Termux, par exemple).
+- **Tor (services onion)** : le seul à joindre n'importe quelle machine derrière
+  n'importe quel NAT sans relais à exploiter soi-même, en masquant les IP. Mais environ
+  5 Mbit/s et 280 ms de latence médiane (Tor Metrics, août-septembre 2026) ;
+  l'hébergement de services onion avec Arti 2.7.0 est encore annoncé « testing only »,
+  et le côté Python est fragile (stem n'est plus maintenu, l'API RPC d'Arti est
+  expérimentale). Une option de vie privée pour la phase 3, pas un socle.
+- **Veilid** 0.5.7 (MPL-2.0) : traversée de NAT intégrée (signalisation, connexion
+  inverse, relais), mais un démon `veilid-server` à faire tourner à côté, sans
+  procédure Windows documentée.
+- **I2P / i2pd** 2.61.0 (BSD-3) : son transport échoue face aux NAT symétriques, et la
+  bibliothèque Python (i2plib) n'est plus maintenue depuis 2019. Yggdrasil : cf. § 2.5.
+- **Reticulum : exclu.** Depuis le 15/04/2025, sa licence (passée du MIT à une
+  « Reticulum License ») interdit tout usage qui contribue à l'entraînement ou au
+  développement de modèles d'IA : incompatible avec la GPL-3.0, et vise directement un
+  projet comme Cœur IA.
+
 ### 2.5 Pour comparaison : les réseaux privés virtuels type WireGuard
 
 L'idée séduit : chaque machine reçoit une adresse IP virtuelle, et `coeur/1` marche
@@ -242,7 +271,57 @@ d'identité.
 
 ## 3. Traversée de NAT : ce que disent les mesures
 
-*(recherche en cours)*
+| Source | Méthode | Résultat |
+|---|---|---|
+| Ford, Srisuresh et Kegel (2005) | 380 NAT testés par des volontaires | 82 % se laissent percer en UDP, 64 % en TCP |
+| Halkes et Pouwelse (Tribler, IFIP Networking 2011) | réseau P2P réel | plus de 80 % des tentatives réussies |
+| Trautwein et al. (DCUtR dans IPFS ; arXiv 2025, IMC 2026) | 4,4 millions de tentatives, 167 pays, déc. 2022 – janv. 2023 | **70 % ± 7,1 %**, *une fois* le relais et l'adresse publique obtenus ; TCP et QUIC à égalité ; 97,6 % des réussites au premier essai |
+| Tailscale (billet du 15/10/2025), n0 pour Iroh | métriques internes, méthode non publiée | environ 90 % de connexions directes (affirmations d'éditeurs) |
+
+Ce qui fait échouer, ce sont les NAT dont la correspondance de ports dépend de la
+destination (dits « symétriques »), fréquents derrière les CGNAT et sur mobile. Quand
+un seul côté est dans ce cas, deviner son port façon « paradoxe des anniversaires »
+coûte peu (256 ports ouverts : 64 % de réussite ; 2 048 sondes : 99,9 %) ; quand les
+deux le sont, c'est impraticable (de l'ordre de 28 minutes à 100 paquets par seconde).
+**Un relais reste indispensable** pour 10 à 30 % des paires selon les mesures, sans
+doute davantage avec un téléphone en 4G.
+
+### Le contexte français
+
+D'après le baromètre de l'Arcep publié en juillet 2026 (données de fin 2025) et les
+statistiques de Google au 14/10/2026 :
+
+- **l'IPv6 change la donne.** La France est première mondiale : 87,3 % des
+  utilisateurs de Google, 75,6 % selon la médiane de l'Arcep (mars 2026). Fin 2025,
+  94 % des clients fixes et 83 % des clients mobiles l'ont. Fixe : Free 99 %, Orange
+  97 %, Bouygues 96 %, SFR 80 %. Mobile : Bouygues 97 %, Orange 92 %, SFR 86 %, Free
+  Mobile 50 %. En IPv6, pas de traduction d'adresse : chaque côté connaît l'adresse
+  exacte de l'autre, et le perçage à travers des pare-feu à état est trivial ;
+- **l'IPv4 est partagée presque partout** : tout le mobile (CGNAT chez les quatre
+  opérateurs, sans IPv4 dédiée possible) ; presque tout Free sur le fixe (MAP-E : seuls
+  4 % des abonnés fibre ont une IPv4 entière, l'option « Full Stack » est gratuite) ;
+  30 % de Bouygues sur le fixe ; une partie de SFR fibre, sans option ; désormais une
+  partie d'Orange (DS-Lite, avec une case pour en sortir) ;
+- **les box, en IPv6** : la Freebox laisse tout entrer (pare-feu désactivé par
+  défaut : simple, mais risqué) ; la Livebox bloque, mais s'ouvre par UPnP ; la Bbox
+  et la SFR Box bloquent, mais s'ouvrent par PCP. **Sur mobile, le pare-feu IPv6 des
+  quatre opérateurs bloque toute connexion entrante et ne s'ouvre pas** : un téléphone
+  en 4G/5G doit toujours ouvrir lui-même la connexion. Le perçage IPv6 depuis un
+  mobile devrait marcher si ce pare-feu est un pare-feu à état classique, mais rien ne
+  le documente.
+
+Ce que ça implique :
+
+- **IPv6 d'abord**, et plusieurs adresses candidates annoncées pour chaque nœud ;
+- **qui ouvre la connexion ne doit pas décider qui fait les requêtes.** Avec HTTP, le
+  client parle et le serveur répond ; avec une connexion QUIC entre pairs, les deux
+  côtés ouvrent des flux dans la même connexion. Le téléphone, injoignable, ouvre la
+  connexion vers le PC, et le PC peut ensuite lui envoyer des requêtes. C'est
+  indispensable si le téléphone confie du travail au PC ;
+- **un relais qui sait porter des unités de travail**, pas seulement coordonner le
+  perçage ;
+- **mesurer nous-mêmes** : aucune mesure récente du comportement des CGNAT mobiles ou
+  des MAP-E, MAP-T et DS-Lite français n'a été trouvée.
 
 ## 4. Recommandation
 
