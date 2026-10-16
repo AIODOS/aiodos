@@ -288,8 +288,16 @@ et les tâches portables passent telles quelles dans un tuyau qui sait traverser
 ## 6. Questions à trancher (gouvernance et confidentialité)
 
 Ces questions sont posées, **pas tranchées**. Pour chacune : ce qui existe aujourd'hui,
-les options, ce qu'elles coûtent. Les questions marquées **[phase 2]** bloquent
-l'ouverture aux amis ; les autres peuvent attendre la phase 3.
+ce qu'on sait, les options. Les questions marquées **[phase 2]** bloquent l'ouverture
+aux amis ; les autres peuvent attendre la phase 3.
+
+Constat d'ensemble : aucun projet libre et mûr ne réunit aujourd'hui « pas de
+blockchain », « inconnus », « vérification » et « incitations ». Petals, hivemind et exo
+n'ont ni vérification ni incitation : ils supposent un essaim de confiance, et Petals (à
+l'arrêt depuis septembre 2024) déconseille d'y mettre des données sensibles. Ceux qui en
+ont (Nous Psyche, Gensyn, Prime Intellect) s'appuient sur une blockchain pour la
+coordination ou les paiements, même si leurs mécanismes de vérification n'en dépendent
+pas. Il n'y a donc pas de modèle à recopier tel quel.
 
 ### 6.1 Qui peut confier quoi, à qui ?
 
@@ -319,6 +327,17 @@ chiffré pendant le voyage, mais il faut bien le déchiffrer pour en extraire le
 calculer les vecteurs. Elle voit aussi son nom et son chemin dans la bibliothèque. Elle
 l'efface après le calcul, mais rien ne permet de le vérifier.
 
+Ce qu'on sait : **en 2026, une machine grand public ne peut pas calculer sur des
+données sans les voir.** Le chiffrement homomorphe coûte encore de l'ordre de 100 s
+*par jeton* pour un modèle de 8 milliards de paramètres sur GPU (préprint de février
+2026) ; le calcul multipartite, environ 5 minutes par jeton pour LLaMA-7B ; le calcul
+confidentiel de NVIDIA n'existe que sur des GPU de centre de données (H100, H200,
+B200/B300, RTX PRO 6000 Server Edition), aucune GeForce. Et ne renvoyer que des
+vecteurs ne protège rien : on reconstruit exactement 92 % des textes de 32 jetons à
+partir de leur embedding (EMNLP 2023). La confidentialité ne peut donc venir que du
+**choix de la machine** (le cercle de confiance) et de la **minimisation** de ce qui
+part.
+
 - **Q5 [phase 2]** — Quelles catégories de données peuvent partir chez un ami ? Chez
   un inconnu ? Une piste pour les inconnus : seulement les pages web publiques, que le
   calculateur télécharge lui-même ; seule l'adresse part, ce qui révèle quand même ce
@@ -337,6 +356,28 @@ dimension). Un calculateur malveillant peut quand même renvoyer des vecteurs pl
 mais faux, ou un texte extrait falsifié : la bibliothèque est alors empoisonnée, et le
 chat citera de mauvais passages.
 
+Ce qu'on sait :
+
+- **BOINC** ne fait jamais confiance à un résultat isolé : chaque tâche est calculée
+  plusieurs fois, un validateur compare (avec une tolérance pour les nombres à virgule,
+  ou en n'appariant que des machines « numériquement équivalentes »), et le crédit
+  n'est accordé qu'après validation. Sa *réplication adaptative* fait confiance à une
+  machine après 10 résultats valides consécutifs, ne revérifie plus qu'au hasard, et
+  vise 5 à 10 % de calcul en plus au lieu d'au moins 50 %.
+- **La triche apparaît dès qu'il y a un classement** : en 2001, moins de 1 % des unités
+  de SETI@home étaient falsifiées, mais certains mois, la moitié des ressources du
+  projet servait à débusquer les tricheurs, motivés par le classement public.
+- **Recalculer ne redonne jamais exactement le même résultat** d'une machine à
+  l'autre : 1 000 exécutions identiques d'un même modèle à température 0 ont donné
+  80 réponses différentes (Thinking Machines, septembre 2025). Toute vérification par
+  recalcul doit tolérer un écart. Pour les embeddings, le plus simple est un seuil de
+  similarité cosinus sur des passages tirés au hasard et recalculés chez soi ; le seuil
+  reste à mesurer sur nos machines (aucune étude publiée pour Ollama). Pour une réponse
+  de modèle, la méthode légère la mieux documentée (TOPLOC, de Prime Intellect, licence
+  MIT) a besoin des activations internes du modèle, qu'Ollama n'expose pas ; avec Ollama
+  seul, il reste les tâches-témoins (rejouer une question connue et comparer les
+  probabilités des jetons).
+
 - **Q9 [phase 2]** — Entre amis : confiance (contrôles actuels) ou contrôle par
   échantillon (le propriétaire recalcule lui-même un passage tiré au hasard) ?
 - **Q10** — Avec des inconnus : quel surcoût accepter (calculer chaque unité deux fois,
@@ -351,6 +392,20 @@ Aujourd'hui, chaque machine tient son propre compte (temps donné et reçu, par 
 et sert d'abord celles qui ont le plus calculé pour elle. Rien n'est global ; le temps
 est déclaré par celui qui a calculé.
 
+Ce qu'on sait :
+
+- Le donnant-donnant de BitTorrent se contourne : des clients qui ne rendent jamais
+  rien obtiennent quand même de bons débits (BitThief, 2006). Les trackers privés, eux,
+  imposent un ratio et excluent ceux qui ne le tiennent pas.
+- Les points de BOINC ou de Folding@home motivent, mais supposent une autorité qui
+  valide : c'est un serveur central, exclu par le brief.
+- Les comptabilités décentralisées par reçus et réputation (BarterCast, puis
+  TrustChain et MeritRank à TU Delft, brouillon IETF de juin 2026) se passent de
+  consensus global, mais aucune n'est totalement à l'abri des fausses identités : elles
+  bornent ce que gagne un tricheur, sans l'annuler (Seuken et Parkes, 2011).
+- Amélioration simple, sans blockchain : un reçu contresigné (celui qui a reçu le calcul
+  signe le temps ou les unités reçus) supprime le mensonge unilatéral.
+
 - **Q12** — La réciprocité reste-t-elle strictement entre deux machines (comme le
   donnant-donnant de BitTorrent), ou se transmet-elle (amis d'amis, reçus signés
   présentables à d'autres) ? La transmission aide les nouveaux venus mais ouvre la porte
@@ -359,9 +414,34 @@ est déclaré par celui qui a calculé.
   donné, et dans quelle proportion ?
 - **Q14** — Unité de compte : temps déclaré, unités validées, ou coût estimé par le
   propriétaire (nombre de passages, durée d'audio…) ?
+- **Q14 bis** — Le compte reste-t-il privé, ou devient-il visible (classement) ? Un
+  classement motive, et motive aussi la triche.
 - Rappel du brief : **pas de jeton ni de blockchain** dans le cœur.
 
 ### 6.5 Ouverture du réseau
+
+Ce qu'on sait :
+
+- **Sécurité** : calculer pour des inconnus, c'est faire lire des fichiers choisis par
+  un attaquant à des bibliothèques qui publient des failles en continu. En 2026 : des
+  dizaines d'avis pour pypdf (surtout des dénis de service), des écritures hors limites
+  dans Pillow, une faille XXE active par défaut dans lxml (CVE-2026-41066, corrigée en
+  6.1.0). Ollama n'a pas d'authentification et a connu une traversée de chemin critique
+  menant à l'exécution de code (CVE-2026-103663, corrigée en 0.35.0) ; le mode RPC de
+  llama.cpp permet l'exécution de code sans authentification (CVE-2026-34159), et son
+  README interdit de l'exposer. L'injection de prompt n'est pas totalement évitable
+  (OWASP). Windows Sandbox n'existe pas sous Windows Famille (le cas de la machine
+  principale) ; AppContainer, si.
+- **Droit** (repères, à faire relire par un juriste avant la phase 3) : d'après la
+  CNIL, quand la machine d'un tiers traite des documents contenant des données
+  personnelles, le propriétaire des documents est responsable du traitement et la
+  machine qui calcule est sous-traitante, avec un contrat (article 28 du RGPD), sauf
+  « exemption domestique », que la Cour de justice de l'UE lit strictement (arrêt
+  Ryneš, C-212/13). L'AI Act exclut l'usage purement personnel et, en partie, le
+  logiciel libre ; la nouvelle directive sur les produits défectueux (2024/2853, à
+  transposer d'ici le 09/12/2026) exclut le logiciel libre fourni hors activité
+  commerciale ; la directive sur la responsabilité de l'IA a été retirée en février
+  2025.
 
 - **Q15** — Phase 3 : réseau ouvert à tous (comme un torrent public), ou cercles sur
   invitation (amis d'amis, communautés) ? Qui peut exclure qui ?
