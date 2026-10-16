@@ -18,7 +18,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
-| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (étape 2.2) |
+| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), partage avec les amis (2.5), mises à jour automatiques |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | plus tard |
 
 ## Ce que fait la phase 0
@@ -82,6 +82,13 @@ Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --
 **Un téléphone Android** peut aussi calculer, sous Termux : il ne prête sa puissance
 qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.
 Pas à pas : [docs/android.md](docs/android.md).
+
+**Avec des amis (phase 2)** : en confirmant un appairage, chaque machine dit si l'autre est
+une des siennes ou celle d'un ami. Un ami ne reçoit que les bibliothèques « partagées avec mes
+amis » (menu ⋯ de la bibliothèque), sous des noms de fichiers neutres, sans chemin ni nom de
+bibliothèque, et ne voit de ta machine qu'un profil allégé. Ce qu'il calcule est vérifié par
+échantillon : en cas d'écart, sa machine est mise de côté. La vue Réseau montre ce qui lui a été
+confié. Détails : [docs/phase2-internet.md](docs/phase2-internet.md), étape 2.5.
 
 **Par Internet (phase 2, en cours)** : un petit programme compagnon,
 [`aiodos-net`](compagnon/README.md) (Rust, Iroh), relie les machines appairées quand

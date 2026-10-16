@@ -866,6 +866,42 @@ plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
 
 *Fini quand* : chaque réponse de 2.1 se retrouve dans un réglage ou une règle testée.
 
+**Fait le 16/10/2026** (`aiodos/network/sharing.py`, migration 4) :
+
+- **Q1, niveaux de confiance.** En confirmant l'appairage, chaque machine dit si l'autre est
+  « une de mes machines » ou « la machine d'un ami ». Il n'y a pas de choix par défaut, et
+  chacune juge l'autre. Le niveau se change ensuite dans la vue Réseau. Les machines déjà
+  appairées restent « mes machines » (`peers.trust`).
+- **Q2 et Q5, données confiées.** Une bibliothèque a trois portées : ce PC uniquement (le
+  cadenas), mes machines (par défaut), ou mes machines et mes amis
+  (`collections.share_friends`). Un ami ne reçoit que des unités de la troisième.
+- **Q6, métadonnées.** Chez un ami, le fichier arrive sous un nom neutre
+  (`fichier-<n>.<extension>`). Du payload ne partent que les clés que la tâche déclare
+  nécessaires (`shared_keys` : l'adresse d'une page web) : ni chemin, ni nom de
+  bibliothèque. Chez le propriétaire, le vrai nom remplace le nom neutre dans le texte
+  calculé (« [Image : …] »). Un ami voit de cette machine un profil allégé : nom, version,
+  mises à jour, et les modèles seulement s'ils lui sont prêtés. Ni matériel, ni
+  alimentation, ni inactivité.
+- **Q9, contrôle par échantillon.**
+  - Un passage tiré au hasard est recalculé chez le propriétaire ; le cosinus doit être au
+    moins de 0,999.
+  - En cas d'écart, le résultat est refusé, l'unité est refaite ailleurs, et la machine est
+    mise de côté : plus rien ne lui est confié jusqu'à ce que l'utilisateur la rétablisse.
+  - Si le contrôle est impossible (Ollama arrêté), l'unité retourne en file sans compter
+    d'essai.
+  - Les résultats de mes machines ne sont pas contrôlés.
+- **Q3, calculer pour un ami.** Pas de règle à part : les conditions du partage de
+  puissance s'appliquent.
+- **Journal.** Chaque fichier ou page confié à un ami est noté (`shared_log`). La vue Réseau
+  en montre le total, et la liste.
+- **Tests.** 11 tests (`tests/test_sharing.py`), plus un essai à deux vrais nœuds avec
+  Ollama (`tests/test_network_work.py`). Dans cet essai, rien ne part avant le partage ;
+  ensuite, l'ami calcule sans voir un seul vrai nom de fichier, et chacun montre à l'autre
+  le profil qui convient.
+
+Reste : les plafonds de volume pour les données mobiles. Ils ne correspondent à aucune
+question de 2.1, et un téléphone ne sait pas encore dire s'il est en Wi-Fi ou en 4G.
+
 **2.6 Transferts adaptés à Internet** : fichier de l'unité en flux binaire avec
 reprise, plafond de taille par défaut plus bas, délais revus pour les chemins relayés.
 

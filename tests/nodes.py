@@ -89,14 +89,15 @@ class Node:
                 self.process.kill()
 
 
-def pair(a: Node, b: Node):
-    """Appairage complet de deux nœuds (B trouve A, codes confirmés des deux côtés)."""
+def pair(a: Node, b: Node, a_trusts="mine", b_trusts="mine"):
+    """Appairage complet de deux nœuds (B trouve A, codes confirmés des deux côtés).
+    a_trusts : ce que B est pour A (« mine », ou « friend » : un ami), et inversement."""
     a_id, b_id = a.node_id, b.node_id
     b.api("POST", "/network/add", {"address": f"127.0.0.1:{a.p2p_port}"})
     b.api("POST", "/network/pair", {"node_id": a_id})
     a.wait_for(lambda: a.api("GET", "/network")["pairing"], what="demande reçue")
-    b.api("POST", "/network/pair/answer", {"node_id": a_id, "accept": True})
-    a.api("POST", "/network/pair/answer", {"node_id": b_id, "accept": True})
+    b.api("POST", "/network/pair/answer", {"node_id": a_id, "accept": True, "trust": b_trusts})
+    a.api("POST", "/network/pair/answer", {"node_id": b_id, "accept": True, "trust": a_trusts})
     b.wait_for(lambda: [p for p in b.api("GET", "/network")["peers"] if p["online"]],
                what="appairage côté B")
     a.wait_for(lambda: [p for p in a.api("GET", "/network")["peers"] if p["online"]],

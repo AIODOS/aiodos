@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -46,6 +46,27 @@ MIGRATIONS = {
     ALTER TABLE peers ADD COLUMN net_id TEXT;
     ALTER TABLE peers ADD COLUMN net_addrs TEXT;
     ALTER TABLE peers ADD COLUMN net_seen REAL;
+    """,
+    # Phase 2.5, partage avec les amis : niveau de confiance de chaque machine appairée
+    # (« mine » : mes machines, « friend » : un ami ; les machines déjà appairées sont les
+    # miennes), mise de côté après un contrôle échoué, bibliothèques partageables avec mes
+    # amis, et journal de ce qui est parti chez eux.
+    4: """
+    ALTER TABLE peers ADD COLUMN trust TEXT NOT NULL DEFAULT 'mine';
+    ALTER TABLE peers ADD COLUMN set_aside_at REAL;
+    ALTER TABLE peers ADD COLUMN set_aside_reason TEXT;
+    ALTER TABLE collections ADD COLUMN share_friends INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS shared_log (
+        id      INTEGER PRIMARY KEY,
+        node_id TEXT NOT NULL,
+        at      REAL NOT NULL,
+        unit_id INTEGER,
+        task    TEXT NOT NULL,
+        what    TEXT NOT NULL,
+        sent_as TEXT,
+        size    INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS ix_shared_log_node ON shared_log(node_id, at);
     """,
 }
 

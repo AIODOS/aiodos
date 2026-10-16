@@ -14,9 +14,10 @@ export function errorToast(err) {
 }
 
 /**
- * Fenêtre modale. Retourne une promesse { ok, value, checked }.
+ * Fenêtre modale. Retourne une promesse { ok, value, checked, choice }.
  * Options : title, text, quote, iconName, confirm, cancel, danger,
- *           check (libellé d'une case), input / textarea (valeur initiale), placeholder.
+ *           check (libellé d'une case), input / textarea (valeur initiale), placeholder,
+ *           choices ([{ value, label, help }] : un choix à faire avant de pouvoir confirmer).
  */
 export function modal(opts) {
   return new Promise(resolve => {
@@ -25,6 +26,9 @@ export function modal(opts) {
       : opts.input !== undefined
         ? `<input class="input" value="${esc(opts.input)}" placeholder="${esc(opts.placeholder || '')}">`
         : '';
+    const choices = opts.choices ? `<div class="choices">${opts.choices.map(c => `
+      <label class="choice"><input type="radio" name="modal-choice" value="${esc(c.value)}">
+        <span><b>${esc(c.label)}</b>${c.help ? `<small>${esc(c.help)}</small>` : ''}</span></label>`).join('')}</div>` : '';
     const back = h(`
       <div class="modal-back" role="dialog" aria-modal="true">
         <div class="modal">
@@ -33,6 +37,7 @@ export function modal(opts) {
           ${opts.code ? `<div class="pair-code">${esc(String(opts.code).replace(/^(\d{3})(\d{3})$/, '$1 $2'))}</div>` : ''}
           ${opts.quote ? `<div class="quote">${esc(opts.quote)}</div>` : ''}
           ${field}
+          ${choices}
           ${opts.check ? `<label class="check"><input type="checkbox"> ${esc(opts.check)}</label>` : ''}
           <div class="buttons">
             ${opts.cancel === null ? '' : `<button class="btn ghost" data-act="no">${esc(opts.cancel || 'Annuler')}</button>`}
@@ -41,15 +46,24 @@ export function modal(opts) {
         </div>
       </div>`);
     const input = back.querySelector('.input, .textarea');
+    const yes = back.querySelector('[data-act="yes"]');
+    if (opts.choices) {               // rien de coché d'avance : le choix est délibéré
+      yes.disabled = true;
+      back.querySelectorAll('.choice input').forEach(r => { r.onchange = () => { yes.disabled = false; }; });
+    }
     const finish = ok => {
       back.remove();
       document.removeEventListener('keydown', onKey, true);
       resolve({ ok, value: input ? input.value : undefined,
-                checked: !!back.querySelector('.check input')?.checked });
+                checked: !!back.querySelector('.check input')?.checked,
+                choice: back.querySelector('.choice input:checked')?.value });
     };
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-      if (e.key === 'Enter' && !(input && input.tagName === 'TEXTAREA')) { e.preventDefault(); finish(true); }
+      if (e.key === 'Enter' && !yes.disabled && !(input && input.tagName === 'TEXTAREA')) {
+        e.preventDefault();
+        finish(true);
+      }
     };
     back.addEventListener('click', e => {
       if (e.target === back) finish(false);
@@ -58,7 +72,7 @@ export function modal(opts) {
     });
     document.addEventListener('keydown', onKey, true);
     document.body.append(back);
-    (input || back.querySelector('[data-act="yes"]')).focus();
+    (input || back.querySelector('.choice input') || yes).focus();
     if (input && input.tagName === 'INPUT') input.select();
   });
 }

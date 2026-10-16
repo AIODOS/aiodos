@@ -2,7 +2,9 @@
 
 1. Sur la machine A, l'utilisateur choisit B dans la liste et lance l'appairage.
 2. A et B échangent des clés éphémères ; chacune affiche le même code.
-3. Sur CHAQUE machine, l'utilisateur confirme que le code est identique.
+3. Sur CHAQUE machine, l'utilisateur confirme que le code est identique, et dit si
+   l'autre est une de ses machines ou celle d'un ami (cf. sharing.py) : chacune juge
+   l'autre.
 4. Quand les deux ont accepté, la clé de la paire est enregistrée des deux côtés.
 
 Rien n'est automatique : un appairage exige un geste sur les deux machines.
@@ -11,7 +13,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from aiodos.network import client, crypto, envelope, peers
+from aiodos.network import client, crypto, envelope, peers, sharing
 from aiodos.network.client import PeerError
 
 PENDING_TTL = 180          # une demande non conclue expire au bout de 3 minutes
@@ -30,6 +32,7 @@ class Pending:
     created: float = field(default_factory=time.time)
     local_ok: bool | None = None       # réponse de l'utilisateur de cette machine
     remote_ok: bool | None = None      # réponse de l'utilisateur de l'autre machine
+    trust: str = sharing.MINE          # ce que l'autre machine est pour celle-ci
 
 
 class Pairing:
@@ -104,10 +107,13 @@ class Pairing:
         return {"node_id": self.m.node_id, "name": self.m.name(), "pub": envelope.b64e(public)}
 
     # ------------------------------------- réponse de l'utilisateur d'ici
-    def answer(self, node_id, accept: bool):
+    def answer(self, node_id, accept: bool, trust: str = sharing.MINE):
+        if trust not in sharing.LEVELS:
+            raise PeerError(f"Niveau de confiance inconnu : {trust!r}")
         pending = self.get(node_id)
         if pending is None:
             raise PeerError("Cette demande d'appairage a expiré.")
+        pending.trust = trust
         pending.local_ok = bool(accept)
         target = {"node_id": pending.node_id, "address": pending.address,
                   "port": pending.port, "name": pending.name}
@@ -141,7 +147,7 @@ class Pairing:
             elif pending.local_ok and pending.remote_ok:
                 del self._pending[pending.node_id]
                 peers.save(pending.node_id, pending.name, pending.key,
-                           pending.address, pending.port)
+                           pending.address, pending.port, pending.trust)
                 outcome = "paired"
             else:
                 outcome = None

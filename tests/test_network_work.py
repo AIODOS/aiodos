@@ -5,6 +5,8 @@ L'indexation lancée sur A doit se faire entièrement sur B, et les résultats
 n'être enregistrés que chez A. Il faut un Ollama local avec le modèle
 d'embedding (sinon le test est ignoré).
 """
+import time
+
 import pytest
 import requests
 
@@ -78,3 +80,43 @@ def test_indexing_is_computed_by_the_paired_machine_and_kept_by_the_owner(owner_
 
     # B n'a gardé aucun fichier reçu
     assert not any((tmp_path / "b" / "tmp" / "work").rglob("*.*"))
+
+
+def test_a_friend_computes_only_shared_libraries_and_never_sees_the_names(owner_and_lender,
+                                                                         tmp_path):
+    """Étape 2.5 : pour A, B est la machine d'un ami. Rien ne lui part tant que la
+    bibliothèque n'est pas partagée avec les amis ; ensuite, les fichiers lui arrivent sous
+    des noms neutres, et ce qu'il rend est contrôlé par échantillon (vrai Ollama ici)."""
+    a, b = owner_and_lender
+    pair(a, b, a_trusts="friend")
+    b.api("PUT", "/settings", {"share_enabled": True, "share_when_idle": False,
+                               "share_on_ac_only": False})
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    for name, text in NOTES.items():
+        (folder / name).write_text(text, encoding="utf-8")
+    collection = a.api("GET", "/collections")["collections"][0]["id"]
+    job_id = a.api("POST", "/index", {"paths": [str(folder)],
+                                      "collection_id": collection})["job_id"]
+    b_id = b.node_id
+    time.sleep(8)                         # B demande du travail : on ne lui confie rien
+    assert _job(a, job_id)["done"] == 0
+    assert a.api("GET", f"/network/peers/{b_id}/shared")["entries"] == []
+
+    a.api("PATCH", f"/collections/{collection}", {"scope": "friends"})
+    job = a.wait_for(lambda: (j := _job(a, job_id)) and j["status"] not in
+                     ("queued", "running") and j, timeout=120, what="indexation terminée")
+    assert job["status"] == "done" and job["done"] == 3, job
+    sent = a.api("GET", f"/network/peers/{b_id}/shared")["entries"]
+    assert len(sent) == 3 and all(e["sent_as"].startswith("fichier-") for e in sent)
+    entries = a.api("GET", f"/entries?collection_id={collection}")
+    assert sorted(e["source"] for e in entries) == sorted(f"notes/{n}" for n in NOTES)
+    log = (tmp_path / "b" / "logs" / "aiodos.log").read_text(encoding="utf-8")
+    assert "fichier-" in log and not any(name in log for name in NOTES)
+    # Chacun montre à l'autre le profil que mérite ce que l'autre est pour lui
+    of_a = b.wait_for(lambda: b.api("GET", "/network")["peers"][0].get("profile"), timeout=40,
+                      what="profil de A vu par B")
+    assert "memory" not in of_a and "idle_seconds" not in of_a   # pour A, B est un ami
+    of_b = a.wait_for(lambda: a.api("GET", "/network")["peers"][0].get("profile"), timeout=40,
+                      what="profil de B vu par A")
+    assert "memory" in of_b                                      # pour B, A est à lui

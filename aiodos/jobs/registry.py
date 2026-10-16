@@ -41,6 +41,10 @@ class TaskSpec:
     options: Optional[Callable] = None      # () -> réglages du propriétaire, figés pour le calcul
     requires: Optional[Callable] = None     # (unité, options) -> modèles, format… requis (cf. network.work)
     validate: Optional[Callable] = None     # (payload, sortie) : contrôle d'une sortie venue d'ailleurs
+    # Chez un ami (cf. network/sharing.py) : les seules clés du payload qui partent, et
+    # sample(payload, sortie, options), le contrôle par échantillon de ce qu'il a calculé
+    shared_keys: tuple = ()
+    sample: Optional[Callable] = None
 
     @property
     def portable(self) -> bool:
@@ -50,6 +54,11 @@ class TaskSpec:
 class Interrupted(Exception):
     """Calcul arrêté en route (l'utilisateur de la machine est revenu…) :
     l'unité est rendue, elle n'a pas échoué."""
+
+
+class SampleMismatch(Exception):
+    """Contrôle par échantillon échoué : la sortie d'un ami ne correspond pas au calcul
+    refait ici (cf. TaskSpec.sample, network/sharing.py)."""
 
 
 JOB_KINDS: dict = {}
@@ -69,8 +78,9 @@ def task(name):
 
 
 def register_portable(name, compute, assimilate, file_key=None, options=None,
-                      requires=None, validate=None):
-    TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate)
+                      requires=None, validate=None, shared_keys=(), sample=None):
+    TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
+                           tuple(shared_keys), sample)
 
 
 def run_local(name, payload, stop=None) -> dict:

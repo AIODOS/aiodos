@@ -9,7 +9,9 @@ réservée à cette machine. Elle lit le fichier morceau par morceau (« work/bl
 seulement celui de l'unité qui lui est confiée), calcule, puis rend sa sortie
 (« work/result ») : elle est contrôlée puis intégrée ici, jamais là-bas.
 
-Rien n'est confié si l'utilisateur a désactivé l'aide de ses machines.
+Rien n'est confié si l'utilisateur a désactivé l'aide de ses machines. À un ami, seules
+les bibliothèques partageables, sous des noms neutres, et ce qu'il rend est contrôlé par
+échantillon ; une machine prise en défaut est mise de côté (cf. sharing.py).
 Appelées dans un thread par le serveur réseau (cf. p2p_app.HANDLERS).
 """
 import hashlib
@@ -20,7 +22,7 @@ from pathlib import Path
 from aiodos import settings
 from aiodos.jobs import leases, queue, registry
 from aiodos.knowledge import store
-from aiodos.network import envelope, peers, wire
+from aiodos.network import envelope, peers, sharing, wire
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -103,6 +105,13 @@ def lease(manager, sender, payload):
         return {"unit": None, "retry_after": 30,
                 "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible d'y "
                           "vérifier le modèle d'embedding, rien n'est confié."}
+    aside = sharing.set_aside_reason(sender)
+    if aside:
+        return {"unit": None, "retry_after": 600,
+                "reason": f"« {manager.name()} » ne te confie plus rien : {aside}. Cela se "
+                          "rétablit dans sa vue Réseau."}
+    friend = sharing.is_friend(sender)
+    shareable = store.shareable_ids() if friend else set()
     local_only = store.local_only_ids()
     options = {}
 
@@ -110,7 +119,8 @@ def lease(manager, sender, payload):
         spec = registry.TASKS.get(unit["task"])
         if spec is None or not spec.portable:
             return False
-        if unit["payload"].get("collection_id") in local_only:
+        collection = unit["payload"].get("collection_id")
+        if collection in local_only or (friend and collection not in shareable):
             return False
         if unit["task"] not in options:
             options[unit["task"]] = spec.options() if spec.options else {}
@@ -138,6 +148,12 @@ def lease(manager, sender, payload):
         except OSError:
             leases.release(unit["id"], sender)
             return {"unit": None, "retry_after": NOTHING_RETRY}
+    if friend:
+        order = sharing.order_for_friend(order, spec, unit)
+        blob = order.get("blob") or {}
+        sharing.log_sent(sender, unit["id"], unit["task"],
+                         unit["payload"].get("source") or unit["payload"].get("url") or "?",
+                         blob.get("name") or unit["payload"].get("url"), blob.get("size"))
     log.info("Unité %s (%s) confiée à %s", unit["id"], unit["task"], _peer_name(sender))
     manager.executor.publish_job(unit["job_id"], force=True)
     return {"unit": order}
@@ -169,11 +185,27 @@ def result(manager, sender, payload):
     if unit is None:
         return {"accepted": False, "reason": "Unité reprise ou annulée entre-temps."}
     spec = registry.TASKS[unit["task"]]
+    friend = sharing.is_friend(sender)
     try:
         output = wire.unpack(payload.get("output") or {})
         if spec.validate:
             spec.validate(unit["payload"], output)
+        if friend and spec.sample:
+            if not _sampled(manager, sender, unit, spec, output):
+                return {"accepted": False, "reason": "Vérification impossible pour l'instant "
+                                                     "chez le propriétaire : unité remise en file."}
+            output = sharing.restore_names(output, unit, spec)
         outcome = spec.assimilate(unit["payload"], output) or {}
+    except registry.SampleMismatch as exc:
+        reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
+        peers.set_aside(sender, reason[:300])
+        log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
+        job_id, finished = queue.fail_unit(
+            unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {reason}"[:500], compute_s)
+        manager.executor.settle(job_id, finished)
+        manager.changed()
+        return {"accepted": False, "reason": "Résultat refusé : le contrôle par échantillon a "
+                                             "échoué, plus rien ne te sera confié."}
     except Exception as exc:
         log.warning("Résultat de %s refusé pour l'unité %s : %s", _peer_name(sender), unit_id, exc)
         job_id, finished = queue.fail_unit(
@@ -185,6 +217,24 @@ def result(manager, sender, payload):
     manager.executor.settle(job_id, finished)
     manager.changed()
     return {"accepted": True}
+
+
+def _sampled(manager, sender, unit, spec, output) -> bool:
+    """Contrôle par échantillon d'un résultat d'ami (SampleMismatch s'il ne correspond pas).
+    Faux si le contrôle est impossible ici pour l'instant (Ollama arrêté…) : ce n'est pas
+    sa faute, l'unité retourne en file sans compter d'essai."""
+    try:
+        spec.sample(unit["payload"], output, spec.options() if spec.options else {})
+        return True
+    except registry.SampleMismatch:
+        raise
+    except Exception as exc:
+        log.warning("Résultat de %s non vérifiable ici pour l'instant : %s",
+                    _peer_name(sender), exc)
+        queue.release_unit(unit["id"])
+        manager.executor.publish_job(unit["job_id"], force=True)
+        manager.executor.wake()
+        return False
 
 
 def fail(manager, sender, payload):

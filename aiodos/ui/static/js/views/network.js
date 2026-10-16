@@ -3,7 +3,7 @@ import { get, post, del } from '../api.js';
 import { $, h, esc, ago, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
-import { modal, toast, errorToast, confirmDanger } from '../ui.js';
+import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
 
 let root;
 let lastJson = '';
@@ -73,6 +73,12 @@ function renderState(net) {
 function peerFacts(peer) {
   const p = peer.profile;
   if (!p) return '<span class="faint">Profil pas encore reçu.</span>';
+  if (!p.memory) {                    // profil allégé : cette machine nous voit comme un ami
+    const facts = ['profil réduit (cette machine te compte parmi ses amis)'];
+    if (p.lends_models) facts.push(`prête ${(p.ollama?.models || []).length} modèle(s)`);
+    if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
+    return facts.join(' · ');
+  }
   const gpu = p.gpus?.[0];
   const facts = [
     gpu ? `${esc(gpu.name)} · ${bytes(gpu.vram_total)} de VRAM` : 'Pas de GPU NVIDIA',
@@ -92,10 +98,10 @@ function peerFacts(peer) {
 function renderPeers(net) {
   const box = $('#net-peers', root);
   box.innerHTML = `
-    <h2>${icon('network')}Mes machines</h2>
-    <p class="hint">Appairées avec celle-ci. Les échanges sont chiffrés, et chaque machine applique ses
-      propres règles de partage (réglables dans « Cette machine »).
-      ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}</p>
+    <h2>${icon('network')}Machines appairées</h2>
+    <p class="hint">Tes machines et celles de tes amis. Les échanges sont chiffrés, et chaque machine applique ses
+      propres règles de partage (réglables dans « Cette machine »). Un ami ne reçoit que les bibliothèques
+      partagées avec tes amis. ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}</p>
     <div class="peer-list"></div>`;
   const list = box.querySelector('.peer-list');
   if (!net.peers.length) {
@@ -103,23 +109,46 @@ function renderPeers(net) {
     return;
   }
   for (const peer of net.peers) {
+    const friend = peer.trust === 'friend';
+    const shared = peer.shared;
     const row = h(`
       <div class="peer">
         <div class="peer-head">
           <span class="dot ${peer.online ? 'on' : ''}" title="${peer.online ? 'En ligne' : 'Hors ligne'}"></span>
           <b>${esc(peer.name)}</b>
+          ${friend ? '<span class="pill" title="Machine d\'un ami : droits plus étroits">ami</span>' : ''}
+          ${peer.set_aside_at ? '<span class="pill err">mise de côté</span>' : ''}
           <span class="faint">${esc(peer.address || '?')}:${peer.port || '?'}</span>
           <span class="faint">${peer.online ? 'en ligne' : peer.last_seen ? `vue ${ago(peer.last_seen)}` : 'jamais vue'}</span>
           <span style="flex:1"></span>
           <button class="icon-btn" data-act="refresh" title="Actualiser">${icon('retry')}</button>
+          <button class="icon-btn" data-act="more" title="Options">${icon('more')}</button>
           <button class="icon-btn danger" data-act="unpair" title="Retirer l'appairage">${icon('x')}</button>
         </div>
         <div class="peer-facts">${peerFacts(peer)}</div>
+        ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>Mise de côté ${ago(peer.set_aside_at)} :
+          ${esc(peer.set_aside_reason || 'contrôle échoué')}. Plus rien ne lui est confié.</div>
+          <button class="btn sm" data-act="restore">Rétablir</button></div>` : ''}
         ${peer.working_for_me ? `<div class="peer-work">${icon('bolt')}Calcule pour toi en ce moment :
           ${peer.working_for_me} unité(s)</div>` : ''}
         <div class="peer-ledger faint">A calculé pour toi : ${duration(peer.received_s)} (${peer.received_units} unité(s))
           · Tu as calculé pour elle : ${duration(peer.given_s)} (${peer.given_units} unité(s))</div>
+        ${shared ? `<div class="peer-ledger faint">Confié à cette machine : ${shared.count} fichier(s) ou page(s)
+          ${shared.bytes ? `(${bytes(shared.bytes)})` : ''}, le dernier ${ago(shared.last)}</div>` : ''}
       </div>`);
+    row.querySelector('[data-act="more"]').onclick = e => {
+      e.stopPropagation();
+      menu(e.currentTarget, [
+        friend
+          ? { label: 'C\'est une de mes machines', icon: 'network', action: () => setTrust(peer, 'mine') }
+          : { label: 'C\'est la machine d\'un ami', icon: 'shield', action: () => setTrust(peer, 'friend') },
+        ...(shared ? [{ label: 'Voir ce qui lui a été confié', icon: 'file', action: () => showShared(peer) }] : []),
+      ]);
+    };
+    row.querySelector('[data-act="restore"]')?.addEventListener('click', async () => {
+      try { state.network = await post(`/network/peers/${peer.node_id}/restore`); lastJson = ''; loadNetwork(); }
+      catch (e) { errorToast(e); }
+    });
     row.querySelector('[data-act="refresh"]').onclick = async () => {
       try { state.network = await post(`/network/peers/${peer.node_id}/refresh`); lastJson = ''; loadNetwork(); }
       catch (e) { errorToast(e); }
@@ -133,6 +162,30 @@ function renderPeers(net) {
     };
     list.append(row);
   }
+}
+
+async function setTrust(peer, trust) {
+  try {
+    state.network = await post(`/network/peers/${peer.node_id}/trust`, { trust });
+    toast(trust === 'friend'
+      ? `« ${peer.name} » est désormais la machine d'un ami : seules les bibliothèques partagées avec tes amis lui seront confiées.`
+      : `« ${peer.name} » est désormais une de tes machines : confiance totale.`, 'ok', 7000);
+    lastJson = '';
+    loadNetwork();
+  } catch (e) { errorToast(e); }
+}
+
+async function showShared(peer) {
+  let entries;
+  try { ({ entries } = await get(`/network/peers/${peer.node_id}/shared`)); } catch (e) { errorToast(e); return; }
+  const lines = entries.map(e => `${new Date(e.at * 1000).toLocaleString('fr-FR')} · ${e.what}`
+    + `${e.sent_as && e.sent_as !== e.what ? ` → ${e.sent_as}` : ''}${e.size ? ` (${bytes(e.size)})` : ''}`);
+  await modal({
+    title: `Confié à « ${peer.name} »`, iconName: 'file', cancel: null, confirm: 'Fermer',
+    text: 'Les fichiers et pages dont le calcul lui a été confié, du plus récent au plus ancien '
+      + '(à droite de la flèche, le nom sous lequel il les a reçus).',
+    quote: lines.join('\n') || 'Rien pour l\'instant.',
+  });
 }
 
 // ----------------------------------------------------------- machines détectées
@@ -193,16 +246,27 @@ function renderVisible(net) {
 }
 
 // ------------------------------------------------------------------ appairage
+// Ce qu'est l'autre machine pour celle-ci (network/sharing.py) : choisi sur chacune
+const TRUST_CHOICES = [
+  { value: 'mine', label: 'Une de mes machines',
+    help: 'Confiance totale : toutes tes bibliothèques peuvent y être calculées, sauf celles gardées sur ce PC.' },
+  { value: 'friend', label: 'La machine d\'un ami',
+    help: 'Seulement les bibliothèques partagées avec tes amis, sous des noms de fichiers neutres ; '
+      + 'ses calculs sont vérifiés par échantillon.' },
+];
+
 async function startPairing(v) {
   let pending;
   try { pending = await post('/network/pair', { node_id: v.node_id }); } catch (e) { errorToast(e); return; }
   const r = await modal({
     title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code,
-    text: 'Vérifie que ce même code s\'affiche sur l\'autre machine, puis confirme ici ET là-bas.',
-    confirm: 'Les codes sont identiques', cancel: 'Annuler',
+    text: 'Vérifie que ce même code s\'affiche sur l\'autre machine, dis ce qu\'elle est pour toi, '
+      + 'puis confirme ici ET là-bas.',
+    choices: TRUST_CHOICES, confirm: 'Les codes sont identiques', cancel: 'Annuler',
   });
   try {
-    const snap = await post('/network/pair/answer', { node_id: pending.node_id, accept: r.ok });
+    const snap = await post('/network/pair/answer',
+      { node_id: pending.node_id, accept: r.ok, trust: r.choice || 'mine' });
     const done = snap.peers.some(p => p.node_id === pending.node_id);
     if (r.ok && !done) toast('Confirmé ici. Confirme maintenant sur l\'autre machine.', 'info', 8000);
   } catch (e) { errorToast(e); }
@@ -215,10 +279,12 @@ export async function answerPairRequest(ev) {
   const r = await modal({
     title: 'Demande d\'appairage', iconName: 'shield', code: ev.code,
     text: `« ${ev.name} » veut s'appairer avec cette machine. Accepte seulement si ce même code `
-      + 's\'affiche sur son écran.',
-    confirm: 'Accepter', cancel: 'Refuser',
+      + 's\'affiche sur son écran, et dis ce qu\'elle est pour toi.',
+    choices: TRUST_CHOICES, confirm: 'Accepter', cancel: 'Refuser',
   });
-  try { await post('/network/pair/answer', { node_id: ev.node_id, accept: r.ok }); } catch (e) { errorToast(e); }
+  try {
+    await post('/network/pair/answer', { node_id: ev.node_id, accept: r.ok, trust: r.choice || 'mine' });
+  } catch (e) { errorToast(e); }
   lastJson = '';
   loadNetwork();
 }

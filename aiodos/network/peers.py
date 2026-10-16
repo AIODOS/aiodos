@@ -2,6 +2,8 @@
 
 Le compte (ledger) mesure le temps de calcul donné à chaque machine et reçu
 d'elle : c'est la base de la règle de réciprocité (qui prête plus est servi plus vite).
+Chaque machine a un niveau de confiance, « mine » (mes machines) ou « friend » (un ami),
+et peut être mise de côté après un contrôle échoué (cf. sharing.py).
 """
 import json
 
@@ -13,7 +15,7 @@ ONLINE_WINDOW = 45          # vue il y a moins de 45 s = en ligne
 def list_peers() -> list:
     rows = db.query("""
         SELECT p.node_id, p.name, p.address, p.port, p.profile, p.paired_at, p.last_seen,
-               p.net_id,
+               p.net_id, p.trust, p.set_aside_at, p.set_aside_reason,
                COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
                COALESCE(l.given_units, 0) AS given_units,
                COALESCE(l.received_units, 0) AS received_units
@@ -30,13 +32,16 @@ def get(node_id) -> dict | None:
     return dict(row) if row else None
 
 
-def save(node_id, name, key: bytes, address, port):
+def save(node_id, name, key: bytes, address, port, trust: str = "mine"):
+    """Machine appairée (de nouveau) : un nouvel appairage redonne sa chance à une machine
+    mise de côté, et fixe son niveau de confiance."""
     db.execute(
-        "INSERT INTO peers(node_id, name, key, address, port, paired_at, last_seen) "
-        "VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(node_id) DO UPDATE SET name=excluded.name, "
+        "INSERT INTO peers(node_id, name, key, address, port, paired_at, last_seen, trust) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(node_id) DO UPDATE SET name=excluded.name, "
         "key=excluded.key, address=excluded.address, port=excluded.port, "
-        "paired_at=excluded.paired_at, last_seen=excluded.last_seen",
-        (node_id, name, key, address, port, db.now(), db.now()))
+        "paired_at=excluded.paired_at, last_seen=excluded.last_seen, trust=excluded.trust, "
+        "set_aside_at=NULL, set_aside_reason=NULL",
+        (node_id, name, key, address, port, db.now(), db.now(), trust))
 
 
 def remove(node_id):
@@ -53,6 +58,22 @@ def touch(node_id, address=None, port=None, name=None):
 def set_profile(node_id, profile: dict):
     db.execute("UPDATE peers SET profile=? WHERE node_id=?",
                (json.dumps(profile, ensure_ascii=False), node_id))
+
+
+def trust_of(node_id) -> str | None:
+    """Niveau de confiance de cette machine appairée (None : pas appairée)."""
+    row = db.query_one("SELECT trust FROM peers WHERE node_id=?", (node_id,))
+    return row["trust"] if row else None
+
+
+def set_trust(node_id, trust: str) -> bool:
+    return db.execute("UPDATE peers SET trust=? WHERE node_id=?", (trust, node_id)).rowcount > 0
+
+
+def set_aside(node_id, reason: str | None):
+    """Machine mise de côté (reason) ou rétablie (None) : plus rien ne lui est confié."""
+    db.execute("UPDATE peers SET set_aside_at=?, set_aside_reason=? WHERE node_id=?",
+               (db.now() if reason else None, reason, node_id))
 
 
 def set_net(node_id, net_id: str, hints: dict) -> bool:

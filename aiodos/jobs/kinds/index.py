@@ -7,13 +7,14 @@ toujours ici. La mémoire des conversations, elle, ne quitte jamais ce nœud.
 """
 import json
 import os
+import random
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
 from aiodos import db, settings
-from aiodos.jobs.registry import (Interrupted, UnitSpec, register_job_kind,
+from aiodos.jobs.registry import (Interrupted, SampleMismatch, UnitSpec, register_job_kind,
                                  register_portable, task)
 from aiodos.knowledge import chunking, store
 from aiodos.services import extract, media, ollama, web
@@ -149,6 +150,25 @@ def assimilate_index_file(payload, output):
     return {"chunks": len(output["pieces"])}
 
 
+SAMPLE_MIN = 0.999     # cosinus minimal d'un passage recalculé ici (0,9999 mesuré PC/S9)
+
+
+def sample_embedded(payload, output, options):
+    """Contrôle par échantillon d'une sortie calculée par un ami : un passage tiré au
+    hasard est recalculé ici, avec le même modèle ; son vecteur doit être celui reçu.
+    SampleMismatch sinon ; une autre exception si le calcul est impossible ici (Ollama)."""
+    if output.get("skipped"):
+        return
+    i = random.randrange(len(output["pieces"]))
+    mine = np.asarray(ollama.embed([output["pieces"][i]], model=options["embed_model"])[0],
+                      dtype=np.float32)
+    theirs = np.asarray(output["vectors"][i], dtype=np.float32)
+    cosine = float(np.dot(mine, theirs) / (np.linalg.norm(mine) * np.linalg.norm(theirs)))
+    if not cosine >= SAMPLE_MIN:
+        raise SampleMismatch(f"passage {i + 1} recalculé ici : similarité {cosine:.4f}, "
+                             f"au moins {SAMPLE_MIN} attendu")
+
+
 def check_embedded(payload, output):
     """Contrôle d'une sortie calculée sur une autre machine, avant de l'intégrer :
     forme, valeurs finies, et même dimension que les vecteurs déjà stockés."""
@@ -168,7 +188,8 @@ def check_embedded(payload, output):
 
 
 register_portable("index_file", compute_index_file, assimilate_index_file, file_key="path",
-                  options=index_options, requires=requires_index, validate=check_embedded)
+                  options=index_options, requires=requires_index, validate=check_embedded,
+                  sample=sample_embedded)
 
 
 def finalize_index(job_id, params, units):
@@ -215,7 +236,8 @@ def assimilate_index_url(payload, output):
 
 
 register_portable("index_url", compute_index_url, assimilate_index_url,
-                  options=index_options, requires=requires_index, validate=check_embedded)
+                  options=index_options, requires=requires_index, validate=check_embedded,
+                  shared_keys=("url",), sample=sample_embedded)
 
 register_job_kind("index_urls", split_index_urls, finalize_index)
 

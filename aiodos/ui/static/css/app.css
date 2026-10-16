@@ -383,6 +383,8 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .remote-item .mono { color: var(--text); }
 .coll .local-only { color: var(--warn); display: inline-flex; }
 .peer-ledger { font-size: 12px; margin-top: 4px; }
+.peer-aside { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--warn); }
+.peer-aside > div { flex: 1; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.on { background: var(--ok); box-shadow: 0 0 8px rgba(63, 214, 154, .6); }
 .pair-code { margin: 16px 0 4px; padding: 16px; text-align: center; border-radius: 12px; background: var(--bg-2);
@@ -402,6 +404,13 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .modal .text { color: var(--muted); white-space: pre-wrap; }
 .modal .quote { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); font-size: 13px; max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
 .modal .check { display: flex; gap: 8px; align-items: center; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.modal .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.modal .choice { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg-2); cursor: pointer; }
+.modal .choice:has(input:checked) { border-color: var(--cyan); }
+.modal .choice input { margin-top: 3px; }
+.modal .choice b { display: block; font-weight: 500; }
+.modal .choice small { color: var(--muted); font-size: 12.5px; }
 .modal .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .modal .input, .modal .textarea { margin-top: 12px; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }

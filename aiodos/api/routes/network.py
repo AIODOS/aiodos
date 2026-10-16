@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
+from aiodos.network import peers, sharing
 from aiodos.network.client import PeerError
 
 router = APIRouter(prefix="/api/network")
@@ -25,6 +26,11 @@ class NodeIn(BaseModel):
 class AnswerIn(BaseModel):
     node_id: str
     accept: bool
+    trust: str = sharing.MINE           # l'autre machine : une des miennes, ou un ami
+
+
+class TrustIn(BaseModel):
+    trust: str
 
 
 def _manager(request: Request):
@@ -83,7 +89,8 @@ async def pair(body: NodeIn, request: Request):
 @router.post("/pair/answer")
 async def answer(body: AnswerIn, request: Request):
     try:
-        await asyncio.to_thread(_manager(request).pairing.answer, body.node_id, body.accept)
+        await asyncio.to_thread(_manager(request).pairing.answer, body.node_id, body.accept,
+                                body.trust)
     except PeerError as exc:
         raise HTTPException(400, str(exc))
     return _manager(request).snapshot()
@@ -93,6 +100,31 @@ async def answer(body: AnswerIn, request: Request):
 async def refresh(node_id: str, request: Request):
     await _manager(request).refresh_now(node_id)
     return _manager(request).snapshot()
+
+
+@router.post("/peers/{node_id}/trust")
+async def set_trust(node_id: str, body: TrustIn, request: Request):
+    """Une de mes machines, ou celle d'un ami (cf. network/sharing.py)."""
+    if body.trust not in sharing.LEVELS:
+        raise HTTPException(400, f"Niveau de confiance inconnu : {body.trust!r}")
+    if not await asyncio.to_thread(peers.set_trust, node_id, body.trust):
+        raise HTTPException(404, "Machine appairée introuvable.")
+    _manager(request).changed()
+    return _manager(request).snapshot()
+
+
+@router.post("/peers/{node_id}/restore")
+async def restore(node_id: str, request: Request):
+    """Rétablit une machine mise de côté après un contrôle échoué."""
+    await asyncio.to_thread(peers.set_aside, node_id, None)
+    _manager(request).changed()
+    return _manager(request).snapshot()
+
+
+@router.get("/peers/{node_id}/shared")
+def shared(node_id: str):
+    """Journal de ce qui est parti chez cette machine (fichiers et pages confiés)."""
+    return {"entries": sharing.sent_log(node_id)}
 
 
 @router.delete("/peers/{node_id}")

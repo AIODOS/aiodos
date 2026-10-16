@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
-from aiodos.network import envelope, lending, netinfo, peers, work
+from aiodos.network import envelope, lending, netinfo, peers, sharing, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -32,7 +32,7 @@ def _ping(manager, sender, payload):
 
 
 def _profile(manager, sender, payload):
-    return identity.profile()
+    return sharing.profile_for(sender, identity.profile())     # allégé pour un ami
 
 
 def _unpair(manager, sender, payload):

@@ -76,6 +76,7 @@ function renderCollections() {
         ${icon('library')}
         <div class="name"><b>${esc(c.name)}</b><small>${c.entries} élément(s) · ${c.chunks} passages</small></div>
         ${c.local_only ? `<span class="local-only" title="Gardée sur ce PC : jamais confiée à une autre machine">${icon('lock')}</span>` : ''}
+        ${c.share_friends && !c.local_only ? `<span class="local-only" title="Partagée avec tes amis : leurs machines peuvent la calculer, sous des noms de fichiers neutres">${icon('globe')}</span>` : ''}
         <label class="switch" title="${c.enabled ? 'Utilisée dans les réponses' : 'Ignorée dans les réponses'}">
           <input type="checkbox" ${c.enabled ? 'checked' : ''}><span></span></label>
         <button class="icon-btn" title="Options">${icon('more')}</button>
@@ -92,11 +93,14 @@ function renderCollections() {
     };
     item.querySelector('.icon-btn').onclick = e => {
       e.stopPropagation();
+      const scope = c.scope || (c.local_only ? 'local' : 'mine');
       menu(e.currentTarget, [
         { label: 'Renommer', icon: 'edit', action: () => renameCollection(c) },
-        c.local_only
-          ? { label: 'Autoriser le calcul sur mes machines', icon: 'network', action: () => setLocalOnly(c, false) }
-          : { label: 'Garder sur ce PC uniquement', icon: 'lock', action: () => setLocalOnly(c, true) },
+        'sep',
+        { title: 'Calcul de cette bibliothèque' },
+        ...SCOPES.filter(s => s.value !== scope).map(s => ({
+          label: s.label, icon: s.icon, action: () => setScope(c, s.value) })),
+        'sep',
         { label: 'Supprimer', icon: 'trash', danger: true, action: () => deleteCollection(c) },
       ]);
     };
@@ -116,12 +120,21 @@ async function createCollection() {
   } catch (e) { errorToast(e); }
 }
 
-async function setLocalOnly(c, localOnly) {
+// Où le calcul d'une bibliothèque peut partir (network/sharing.py, knowledge/store.set_scope)
+const SCOPES = [
+  { value: 'local', label: 'Garder sur ce PC uniquement', icon: 'lock',
+    done: name => `« ${name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine.` },
+  { value: 'mine', label: 'Calculer aussi sur mes machines', icon: 'network',
+    done: name => `Le calcul de « ${name} » peut être confié à tes machines, pas à celles de tes amis.` },
+  { value: 'friends', label: 'Partager aussi avec mes amis', icon: 'globe',
+    done: name => `Le calcul de « ${name} » peut aussi être confié à tes amis, sous des noms de fichiers `
+      + 'neutres ; ce qu\'ils calculent est vérifié par échantillon.' },
+];
+
+async function setScope(c, scope) {
   try {
-    await patch(`/collections/${c.id}`, { local_only: localOnly });
-    toast(localOnly
-      ? `« ${c.name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine.`
-      : `Le calcul de « ${c.name} » peut désormais être confié à tes machines appairées.`, 'ok', 6000);
+    await patch(`/collections/${c.id}`, { scope });
+    toast(SCOPES.find(s => s.value === scope).done(c.name), 'ok', 7000);
   } catch (e) { errorToast(e); }
 }
 

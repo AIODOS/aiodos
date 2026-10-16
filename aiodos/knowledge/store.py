@@ -27,14 +27,23 @@ def ensure_defaults():
 # ----------------------------------------------------------------- collections
 def list_collections(include_system=False) -> list:
     rows = db.query("""
-        SELECT c.id, c.name, c.enabled, c.system, c.local_only,
+        SELECT c.id, c.name, c.enabled, c.system, c.local_only, c.share_friends,
                (SELECT COUNT(*) FROM entries e WHERE e.collection_id = c.id) AS entries,
                (SELECT COUNT(*) FROM chunks k JOIN entries e ON e.id = k.entry_id
                  WHERE e.collection_id = c.id) AS chunks
         FROM collections c ORDER BY c.system, c.name COLLATE NOCASE""")
     return [dict(r, enabled=bool(r["enabled"]), system=bool(r["system"]),
-                 local_only=bool(r["local_only"]))
+                 local_only=bool(r["local_only"]), share_friends=bool(r["share_friends"]),
+                 scope=_scope(r))
             for r in rows if include_system or not r["system"]]
+
+
+def _scope(row) -> str:
+    """Où le calcul d'une bibliothèque peut partir : « local » (ce PC seulement), « mine »
+    (mes machines), « friends » (mes machines et mes amis)."""
+    if row["local_only"]:
+        return "local"
+    return "friends" if row["share_friends"] else "mine"
 
 
 def collection_name(collection_id) -> str:
@@ -105,6 +114,25 @@ def set_local_only(collection_id, local_only: bool):
 
 def local_only_ids() -> set:
     return {r["id"] for r in db.query("SELECT id FROM collections WHERE local_only=1")}
+
+
+SCOPES = ("local", "mine", "friends")
+
+
+def set_scope(collection_id, scope: str):
+    """Portée d'une bibliothèque (cf. _scope) : ce PC seulement, mes machines, ou mes
+    machines et mes amis (étape 2.5, network/sharing.py)."""
+    if scope not in SCOPES:
+        raise ValueError(f"Portée inconnue : {scope!r}")
+    _ensure_editable(collection_id)
+    db.execute("UPDATE collections SET local_only=?, share_friends=? WHERE id=?",
+               (1 if scope == "local" else 0, 1 if scope == "friends" else 0, collection_id))
+
+
+def shareable_ids() -> set:
+    """Bibliothèques dont le calcul peut partir chez un ami."""
+    return {r["id"] for r in db.query(
+        "SELECT id FROM collections WHERE share_friends=1 AND local_only=0")}
 
 
 def embedding_dim(collection_id) -> int | None:
