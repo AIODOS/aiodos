@@ -58,7 +58,102 @@ Pour Cœur IA :
 
 ## 2. Les candidats
 
-*(recherche en cours : Iroh, libp2p, Hyperswarm/HyperDHT, autres pistes)*
+*(recherche en cours : Iroh, autres pistes)*
+
+### 2.2 libp2p : py-libp2p, ou rust-libp2p / go-libp2p en processus compagnon
+
+libp2p est la boîte à outils réseau d'IPFS et d'Ethereum : identité par clé, DHT
+Kademlia, GossipSub, relais, perçage de NAT (DCUtR).
+
+- **py-libp2p 0.8.0** (26/09/2026, MIT + Apache-2.0) : une version tous les deux
+  mois, une pile presque complète (TCP, QUIC, WebSocket, Noise, TLS, Yamux, Kademlia,
+  GossipSub, relais v2, DCUtR, mDNS, réseau privé par clé partagée), interopérable avec
+  go et rust sur TCP, WebSocket et QUIC. Mais :
+  - classé « Beta », pas déclaré prêt pour la production ;
+  - **ne s'installe pas sous Python 3.14** : `coincurve` est épinglé dans une version
+    sans paquet pour 3.14, et sa compilation échoue (issue #1100, ouverte) ;
+  - **bâti sur trio, pas sur asyncio** (les derniers usages d'asyncio ont été retirés
+    en février 2026) : il faudrait faire cohabiter deux boucles d'événements avec
+    FastAPI ;
+  - perçage de NAT absent des tests d'interopérabilité ; AutoNAT en v1 seulement ;
+  - une faille de déni de service (CVE-2026-73568, yamux) touchait les versions
+    jusqu'à la 0.7.0.
+- **Processus compagnon** : le démon officiel `go-libp2p-daemon` est presque en
+  sommeil (v0.9.2 du 09/03/2026, bâtie sur un go-libp2p d'août 2024 et un quic-go
+  vulnérables) ; hivemind, le réseau de Petals, reste sur un fork figé de 2023 et ne
+  gère Windows que par WSL. Un petit compagnon maison sur **rust-libp2p** (0.57.1,
+  15/10/2026, deux mainteneurs nommés) ou **go-libp2p** (0.50.0, 21/09/2026) serait la
+  variante saine. L'avenir de go-libp2p est incertain : Shipyard, qui l'entretenait et
+  exploitait les nœuds d'amorçage publics d'IPFS, a arrêté son travail IPFS le
+  30/09/2026, Protocol Labs n'ayant pas renouvelé son financement ; aucun commit sur sa
+  branche principale depuis le 21/09.
+- **Traversée de NAT** : la meilleure mesure publique du domaine porte sur DCUtR
+  (IPFS, 4,4 millions de tentatives dans 167 pays, déc. 2022 – janv. 2023, publiée en
+  2025 et à IMC 2026) : **70 % ± 7,1 % de réussite**, TCP et QUIC à égalité, 97,6 % des
+  réussites au premier essai, *une fois* la réservation de relais et la découverte de
+  l'adresse publique réussies (29 % des cas sont écartés avant). Le relais v2 est
+  **limité par conception** : par défaut, 2 minutes et 128 Kio par sens et par
+  connexion. Il sert à coordonner le perçage, pas à transporter des unités de travail ;
+  pour les échecs, il faut ses propres relais, sans ces limites.
+- **Android** : un binaire go-libp2p tourne sous Termux (le paquet `kubo` y est à
+  jour), mais go-libp2p plante à chaque connexion QUIC quand la table de routage est
+  illisible, ce qui est le cas sur Android (#3537, correctifs non fusionnés). UPnP et
+  NAT-PMP ne marchent plus depuis Android 12. rust-libp2p a deux bugs ouverts sous
+  Android (WebSocket, DNS).
+- **Licences** : MIT, Apache-2.0, BSD ; zeroconf (mDNS de py-libp2p) en LGPL-2.1+.
+  Toutes compatibles avec la GPL-3.0.
+- **Sécurité** : aucun audit tiers public trouvé ; des avis réguliers, surtout des
+  dénis de service (côté rust : gossipsub et yamux en mars 2026, libp2p-quic en
+  septembre 2026 ; quic-go de 2023 à 2026). La DHT publique d'IPFS reste attaquable :
+  une attaque Sybil publiée en 2026 fait encore échouer environ 80 % des recherches sur
+  Kubo.
+
+**Verdict : la référence technique, la mieux mesurée, mais le chemin le plus long.**
+py-libp2p n'est pas prêt pour nous (3.14, trio, bêta) ; un compagnon rust-libp2p
+obligerait à assembler soi-même identité, relais sans limites, amorçage et découverte,
+ce que d'autres fournissent tout faits.
+
+### 2.3 Hyperswarm / HyperDHT (Holepunch)
+
+La pile de Keet et de Pear : une DHT de type Kademlia où l'on s'annonce sous un
+« sujet » de 32 octets, et des connexions chiffrées (Noise IK sur clés Ed25519)
+ouvertes par perçage de NAT.
+
+- **État** : hyperdht 6.34.1 (05/10/2026), hyperswarm 4.17.2 (22/09/2026), moteur
+  JavaScript Bare 1.35.1 (13/10/2026). Éditeur : Holepunch, soutenu par Tether. Point
+  fragile : un seul compte npm publie tout le cœur de la pile. À surveiller : le QVAC
+  SDK de Tether (annoncé le 09/04/2026, Apache-2.0), bâti sur la pile Holepunch, qui
+  fait de l'inférence déléguée entre appareils, très proche de Cœur IA.
+- **Fonctionnement** : trois nœuds d'amorçage codés en dur (un chez Hetzner, deux chez
+  DigitalOcean), remplaçables par option. Le NAT est classé (ouvert, cohérent,
+  aléatoire) ; le perçage vise même un NAT « aléatoire » (rafales vers des ports au
+  hasard pendant environ 35 s, ou 256 sockets façon « paradoxe des anniversaires »),
+  mais **échoue par construction quand les deux côtés ont un NAT aléatoire**.
+- **Relais** : `blind-relay` ne voit que du chiffré, mais **aucun relais public
+  n'existe** : c'est à l'application d'en fournir un (la documentation de Pear conseille
+  un serveur loué). Sans relais fourni, pas de repli.
+- **Taux de réussite** : aucun chiffre publié, seulement des déclarations
+  qualitatives. Des compteurs internes (`stats.punches`, `stats.relaying`)
+  permettraient de mesurer chez nous.
+- **Python** : rien de natif (un « KadePy » qui pilote un démon Node, un portage Rust
+  qui se dit instable). Il faudrait un processus compagnon Node ou Bare avec un petit
+  script JS : `bare.exe` pèse 45,9 Mo, `node.exe` 92,5 Mo ; les modules natifs existent
+  précompilés pour Windows x64 et Android arm64 ; Node 24 et 26 existent sous Termux
+  (non testé avec hyperswarm).
+- **Licences** : MIT (hyperdht, hyperswarm, dht-rpc), Apache-2.0 (secret-stream,
+  blind-relay, Bare), ISC : compatibles avec la GPL-3.0, en gardant les fichiers
+  `NOTICE`. Holesail, un outil voisin, est en AGPL-3.0 : ne pas copier son code.
+- **Sécurité** : on peut filtrer par clé avant toute réponse (`firewall`), mais
+  l'adresse que reçoit ce filtre peut être falsifiée. L'IP est échangée avec les pairs
+  (la FAQ de Pear conseille un VPN). Aucun avis de sécurité publié, pas de politique de
+  sécurité, aucun audit public ; un rapport externe du 27/08/2026 (déni de service par
+  inondation de poignées de main, réflexion UDP par les relais, contournement du filtre
+  par IP, valeurs sans plafond de taille dans la DHT) **est resté sans réponse** et
+  n'est pas corrigé dans la 6.34.1.
+
+**Verdict : la meilleure ergonomie « à la BitTorrent »** (on s'annonce sous un sujet,
+on se retrouve), **mais** un moteur JavaScript à embarquer à côté de Python, aucun
+relais public, aucun taux mesuré, et des failles signalées restées sans réponse.
 
 ### 2.4 La DHT Mainline de BitTorrent et pkarr : un annuaire, pas un tuyau
 
