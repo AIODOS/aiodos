@@ -94,12 +94,18 @@ def index_options() -> dict:
 
 
 def requires_index(unit, options) -> dict:
-    """Ce qu'il faut à une machine pour calculer cette unité."""
+    """Ce qu'il faut à une machine pour calculer cette unité. Un document demande
+    en plus de savoir lire son format : le paquet de lecture (python-pptx…) peut
+    manquer là-bas. Texte et extensions inconnues se lisent partout."""
     need = {"embed": options["embed_model"]}
     if unit["resource"] == "gpu" and options.get("vision"):
         need["vision"] = options["vision"]["model"]
     if unit["resource"] == "cpu" and options.get("whisper"):
         need["whisper"] = options["whisper"]
+    if unit["task"] == "index_file":
+        path = Path(unit["payload"]["path"])
+        if extract.classify(path) == "document":
+            need["format"] = path.suffix.lower()
     return need
 
 
