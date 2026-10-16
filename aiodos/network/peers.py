@@ -13,7 +13,8 @@ ONLINE_WINDOW = 45          # vue il y a moins de 45 s = en ligne
 def list_peers() -> list:
     rows = db.query("""
         SELECT p.node_id, p.name, p.address, p.port, p.profile, p.paired_at, p.last_seen,
-               p.net_id, COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
+               p.net_id,
+               COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
                COALESCE(l.given_units, 0) AS given_units,
                COALESCE(l.received_units, 0) AS received_units
         FROM peers p LEFT JOIN ledger l ON l.node_id = p.node_id

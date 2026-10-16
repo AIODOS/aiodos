@@ -7,6 +7,7 @@ machines appairées (action scellée « net/info », cf. netinfo.py) ; décrire 
 l'interface (chemin direct ou relayé, latence, pour chaque machine).
 """
 import asyncio
+import functools
 import json
 import logging
 import time
@@ -17,6 +18,18 @@ from aiodos.network.client import PeerError
 from aiodos.network.companion import Companion, CompanionError
 
 log = logging.getLogger("aiodos.net")
+
+
+def _guarded(method):
+    """Une erreur imprévue côté Internet n'arrête jamais la surveillance des machines
+    appairées (boucle de manager.py) : elle est écrite au journal, c'est tout."""
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        try:
+            return await method(self, *args, **kwargs)
+        except Exception:
+            log.exception("Internet : erreur imprévue (%s)", method.__name__)
+    return wrapper
 
 
 class Internet:
@@ -80,6 +93,7 @@ class Internet:
             await self.stop()
 
     # ---------------------------------------------------------- liste blanche
+    @_guarded
     async def sync(self):
         """Liste blanche du compagnon = machines appairées dont on connaît la clé ;
         envoyée quand elle change, et après chaque relance du compagnon."""
@@ -103,6 +117,7 @@ class Internet:
         if loop and not loop.is_closed():
             loop.call_soon_threadsafe(lambda: asyncio.create_task(self.sync()))
 
+    @_guarded
     async def exchange(self, peer: dict):
         """Échange des clés Internet avec une machine appairée qui vient de répondre :
         la première fois, puis toutes les 5 minutes ou quand les nôtres changent."""
@@ -124,6 +139,7 @@ class Internet:
         self._exchanged.pop(node_id, None)
 
     # ------------------------------------------------------------------ état
+    @_guarded
     async def refresh_status(self):
         companion = self.companion
         if companion is None or not companion.running:

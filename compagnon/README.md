@@ -63,6 +63,16 @@ Le programme est `compagnon\target\release\aiodos-net.exe` (environ 17 Mo) : AIO
 trouve là tout seul. Lancer `cargo` depuis PowerShell ou l'invite de commandes : sous Git
 Bash, le `link.exe` de Git peut masquer celui de Visual Studio.
 
+Pour un binaire à distribuer, plus petit (10,6 Mo au lieu de 17,5 mesurés le 16/10/2026)
+mais plusieurs minutes de compilation de plus :
+
+```powershell
+$env:CARGO_PROFILE_RELEASE_OPT_LEVEL = "s"
+$env:CARGO_PROFILE_RELEASE_LTO = "fat"
+$env:CARGO_PROFILE_RELEASE_CODEGEN_UNITS = "1"
+cargo build --release
+```
+
 ### Android arm64, sous Termux
 
 Rust est empaqueté dans Termux ; la compilation se fait sur le téléphone lui-même.
