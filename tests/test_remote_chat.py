@@ -2,15 +2,17 @@
 
 Flux de morceaux scellés (ordre, troncature, altération), machine qui prête ses
 modèles (refus lisibles, priorité à l'interactif), modèles proposés dans le
-choix, routage de la génération. Sans réseau ni Ollama."""
+choix, routage de la génération, sur le réseau local ou par le compagnon (machine
+appairée sur invitation). Sans réseau ni Ollama."""
 import threading
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 from aiodos import settings
 from aiodos.chat import pipeline
-from aiodos.network import client, envelope, lending, p2p_app, peers, remote_models
+from aiodos.network import client, envelope, lending, p2p_app, peers, remote_models, route
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.network.envelope import ReplayGuard
@@ -18,6 +20,7 @@ from aiodos.services import ollama
 
 KEY = b"k" * 32
 A, B = "machine-a", "machine-b"
+NET_ID = "c" * 64
 
 
 class FakeExecutor:
@@ -198,3 +201,66 @@ def test_generation_is_routed_to_the_machine_that_lends(monkeypatch):
     assert not pipeline.runs_here("peer:machine-b:qwen3.6:latest")
     assert pipeline.runs_here("qwen3.6:latest") and not pipeline.runs_here("cloud:mistral")
     assert pipeline.preflight("Salut", "peer:machine-b:qwen3.6:latest")["remote"] == "PC fixe"
+
+
+# ----------------------------------- machine jointe seulement par Internet (invitation)
+class FakeCompanion:
+    """Compagnon aiodos-net qui tourne, tel que route.paths_for le voit."""
+    running = True
+    headers = {"X-Aiodos-Net-Token": "jeton"}
+
+    def proxy_base(self, net_id):
+        return f"http://127.0.0.1:47800/peer/{net_id}"
+
+
+class StreamReply:
+    """Réponse en flux telle que requests la rend : un morceau scellé par ligne."""
+    status_code = 200
+
+    def __init__(self, lines):
+        self.lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def iter_lines(self):
+        return iter(self.lines)
+
+
+@pytest.fixture
+def companion():
+    fake = FakeCompanion()
+    route.attach(fake)
+    yield fake
+    route.detach(fake)
+
+
+def test_a_machine_paired_by_invitation_answers_through_the_companion(companion, monkeypatch):
+    """Appairée sur invitation (étape 2.4), la machine qui prête n'a pas d'adresse sur le
+    réseau local, seulement sa clé Internet : la conversation passe par le compagnon."""
+    peers.save(B, "PC de Léa", KEY, None, None, trust="friend")
+    peers.set_net(B, NET_ID, {"relays": [], "addrs": []})
+    sent = []
+
+    def fake_post(url, json=None, headers=None, proxies=None, timeout=None, stream=False):
+        sent.append(url)
+        frames = [{"content": "Bonjour"}, {"end": True}]
+        return StreamReply([envelope.wrap_frame(KEY, "chat", B, json["from"], json["ts"], seq,
+                                                frame).encode()
+                            for seq, frame in enumerate(frames)])
+    monkeypatch.setattr(requests, "post", fake_post)
+    answer = remote_models.chat_stream("peer:machine-b:qwen3.6:latest", QUESTION, think=False)
+    assert list(answer) == [("content", "Bonjour")]
+    assert sent == [f"http://127.0.0.1:47800/peer/{NET_ID}/p2p/v1/stream/chat"]
+
+
+def test_a_machine_reachable_in_no_way_is_refused_clearly(companion, monkeypatch):
+    peers.save(B, "PC de Léa", KEY, None, None, trust="friend")      # ni adresse, ni clé
+    monkeypatch.setattr(requests, "post", lambda *a, **k: pytest.fail("rien ne doit partir"))
+    with pytest.raises(PeerError) as refused:
+        list(remote_models.chat_stream("peer:machine-b:qwen3.6:latest", QUESTION))
+    assert str(refused.value) == ("« PC de Léa » est injoignable pour l'instant (ni adresse "
+                                  "sur le réseau local, ni clé Internet).")

@@ -51,13 +51,16 @@ def peer_name(model) -> str | None:
 
 def chat_stream(model, messages, think=True, stop=None):
     """Couples (genre, texte), comme ollama.chat_stream, mais calculés par une autre
-    machine. Machine injoignable, refus ou réponse altérée : PeerError (message lisible)."""
+    machine, jointe sur le réseau local ou par Internet (une machine appairée sur
+    invitation n'a qu'une clé Internet). Machine injoignable, refus ou réponse altérée :
+    PeerError (message lisible)."""
     node_id, name = parse(model)
     peer = peers.get(node_id)
     if not peer:
         raise PeerError("Cette machine n'est plus appairée : choisis un autre modèle.")
-    if not peer.get("address"):
-        raise PeerError(f"Adresse de « {peer['name']} » inconnue pour l'instant.")
+    if not (peer.get("address") or peer.get("net_id")):
+        raise PeerError(f"« {peer['name']} » est injoignable pour l'instant (ni adresse sur "
+                        "le réseau local, ni clé Internet).")
     for frame in client.stream(identity.node_id(), peer, "chat",
                                {"model": name, "messages": messages, "think": bool(think)},
                                stop=stop):
