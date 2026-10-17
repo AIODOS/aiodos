@@ -83,19 +83,14 @@ pub async fn proxy(
     }
 }
 
-/// Ouvre un flux sur la connexion gardée avec la machine (ou une nouvelle si elle vient
-/// de mourir) et y fait passer la requête.
-async fn exchange(
-    pool: &Arc<Pool>,
-    id: EndpointId,
-    req: Request<Body>,
-) -> Result<Response<Incoming>, Failure> {
+/// Ouvre un flux sur la connexion gardée avec la machine, ou sur une nouvelle si elle
+/// vient de mourir (réseau changé, autre machine redémarrée) : rien n'était parti, on en
+/// ouvre une autre, une fois.
+async fn stream(pool: &Arc<Pool>, id: EndpointId) -> Result<QuicIo, Failure> {
     let mut tracked = pool.connection(id).await.map_err(Failure::Dial)?;
     let (send, recv) = match tracked.conn.open_bi().await {
         Ok(pair) => pair,
         Err(err) => {
-            // Connexion morte entre-temps (réseau changé, autre machine redémarrée) :
-            // rien n'est parti, on en ouvre une autre, une fois.
             debug!("flux impossible vers {} ({err}) : nouvelle connexion", id.fmt_short());
             pool.forget(&id, &tracked.conn);
             tracked = pool.connection(id).await.map_err(Failure::Dial)?;
@@ -106,7 +101,24 @@ async fn exchange(
                 .map_err(|err| Failure::Exchange(err.to_string()))?
         }
     };
-    let io = QuicIo::new(send, recv, tracked.activity());
+    Ok(QuicIo::new(send, recv, tracked.activity()))
+}
+
+/// Flux brut vers la machine (tunnels, cf. tunnel.rs), erreur en clair.
+pub(crate) async fn open_stream(pool: &Arc<Pool>, id: EndpointId) -> Result<QuicIo, String> {
+    stream(pool, id).await.map_err(|failure| match failure {
+        Failure::Dial(err) => format!("machine injoignable : {err}"),
+        Failure::Exchange(err) => format!("flux impossible : {err}"),
+    })
+}
+
+/// Fait passer la requête dans un flux vers la machine.
+async fn exchange(
+    pool: &Arc<Pool>,
+    id: EndpointId,
+    req: Request<Body>,
+) -> Result<Response<Incoming>, Failure> {
+    let io = stream(pool, id).await?;
     let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(io))
         .await
         .map_err(|err| Failure::Exchange(err.to_string()))?;

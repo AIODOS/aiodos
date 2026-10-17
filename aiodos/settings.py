@@ -80,6 +80,10 @@ DEFAULTS = {
     # --- Travail de fond (jobs/pacing.py, docs/arriere-plan.md) ---
     "battery_mode": "eco",            # sur batterie : eco (ménagé) | pause | normal
     "close_to_tray": True,            # Windows : fermer la fenêtre la cache (ui/tray.py)
+    # --- Gros modèles répartis entre mes machines (docs/gros-modeles.md) ---
+    "lend_gpu": False,                # prêter ma carte graphique à mes machines (llama.cpp RPC)
+    "lend_gpu_device": "",            # carte prêtée (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
+    "llamacpp_dir": "",               # dossier de llama.cpp ; vide : data/engines/llama.cpp
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
 }

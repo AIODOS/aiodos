@@ -9,7 +9,9 @@
 //!   local d'AIODOS (`p2p_app`), avec la clé authentifiée de l'appelant ;
 //! - **sortant** : un mandataire HTTP local (`/peer/<clé>/…`) garde une seule connexion
 //!   QUIC par machine et y ouvre un flux par requête ;
-//! - **contrôle** : état, liste blanche, ticket (`/net/v1/…`), sur 127.0.0.1 seulement.
+//! - **contrôle** : état, liste blanche, ticket (`/net/v1/…`), sur 127.0.0.1 seulement ;
+//! - **tunnels** : un service TCP local (serveur RPC de llama.cpp) ouvert à une machine
+//!   nommée, joint par un port local de l'autre côté (cf. tunnel.rs).
 //!
 //! Le contenu des requêtes reste scellé par AIODOS (enveloppes ChaCha20) : le compagnon
 //! n'est qu'un tuyau, qui ne laisse entrer que les machines appairées.
@@ -28,6 +30,7 @@ pub mod reply;
 pub mod service;
 pub mod status;
 pub mod stream_io;
+pub mod tunnel;
 
 pub use config::Config;
 pub use service::{Running, start};

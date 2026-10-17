@@ -9,6 +9,9 @@
 //! - `GET  /net/v1/ticket`   : ticket à donner à une autre machine (clé, relais, adresses)
 //! - `POST /net/v1/shutdown` : arrêt propre
 //! - `*    /peer/<clé>/…`    : requête relayée vers cette machine (cf. outbound.rs)
+//! - `PUT  /net/v1/exposed`  : services locaux ouverts à des machines nommées (cf. tunnel.rs)
+//! - `POST /net/v1/tunnels`  : port local relié au service d'une machine ; `DELETE
+//!   /net/v1/tunnels/<port>` le ferme
 
 use std::{
     convert::Infallible,
@@ -34,7 +37,7 @@ use crate::{
     outbound,
     pool::Pool,
     reply::{self, Body},
-    status,
+    status, tunnel,
 };
 
 /// Taille maximale de la liste blanche reçue.
@@ -107,8 +110,37 @@ async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
             ctx.pool.shutdown.cancel();
             reply::json(StatusCode::OK, json!({ "ok": true }))
         }
+        (&Method::PUT, "/net/v1/exposed") => match read_json::<tunnel::ExposedIn>(req).await {
+            Ok(wanted) => match tunnel::set_exposed(&ctx.pool, wanted) {
+                Ok(count) => reply::json(StatusCode::OK, json!({ "ok": true, "exposed": count })),
+                Err(err) => reply::detail(StatusCode::BAD_REQUEST, format!("Services refusés : {err}.")),
+            },
+            Err(response) => response,
+        },
+        (&Method::POST, "/net/v1/tunnels") => match read_json::<tunnel::OpenIn>(req).await {
+            Ok(wanted) => tunnel::open(&ctx.pool, wanted).await,
+            Err(response) => response,
+        },
+        (&Method::DELETE, path) if path.starts_with("/net/v1/tunnels/") => {
+            match path["/net/v1/tunnels/".len()..].parse::<u16>() {
+                Ok(port) if tunnel::close(&ctx.pool, port) => {
+                    reply::json(StatusCode::OK, json!({ "ok": true }))
+                }
+                _ => reply::detail(StatusCode::NOT_FOUND, "Aucun tunnel sur ce port."),
+            }
+        }
         _ => reply::detail(StatusCode::NOT_FOUND, "Chemin inconnu."),
     }
+}
+
+/// Corps JSON d'une requête de l'API locale, ou la réponse d'erreur à renvoyer.
+async fn read_json<T: serde::de::DeserializeOwned>(req: Request<Incoming>) -> Result<T, Response<Body>> {
+    let body = match Limited::new(req.into_body(), MAX_PEERS_BODY).collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(_) => return Err(reply::detail(StatusCode::PAYLOAD_TOO_LARGE, "Requête trop longue.")),
+    };
+    serde_json::from_slice(&body)
+        .map_err(|err| reply::detail(StatusCode::BAD_REQUEST, format!("Requête illisible : {err}.")))
 }
 
 /// Juste après le démarrage, Iroh n'a pas encore joint son relais : un ticket donné alors
