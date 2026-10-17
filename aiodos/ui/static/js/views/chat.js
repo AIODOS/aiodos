@@ -19,6 +19,7 @@ export function mountChat(container) {
   const chat = h(`
     <div class="chat">
       <header class="chat-head">
+        <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="Conversations">${icon('menu')}</button>
         <div class="chat-title" id="chat-title" title="Cliquer pour renommer">Nouvelle conversation</div>
         <select class="select" id="model-select" title="Modèle utilisé pour répondre"></select>
         <select class="select" id="machine-select" hidden
@@ -50,6 +51,12 @@ export function mountChat(container) {
   };
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
+  // Écran étroit (téléphone) : la liste des conversations s'ouvre par-dessus, à la demande
+  $('#chat-list-toggle').onclick = () => container.classList.toggle('show-list');
+  const hideList = () => container.classList.remove('show-list');
+  on('chat:open', hideList);
+  on('chat:new', hideList);
+  el.scroll.addEventListener('click', hideList);
   el.model.onchange = onModelChange;
   on('cluster:changed', showPreparation);
   el.machine.onchange = rememberModel;

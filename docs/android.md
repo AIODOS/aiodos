@@ -264,9 +264,15 @@ encore dans Termux.
   `--ui-file`, fichier lisible par Termux seul, effacé à l'arrêt). Si ce fichier manque ou
   ne répond plus, elle arrête un nœud lancé à la main et le relance avec cette option ;
   journal : `~/aiodos-noeud.log`.
+- **Options du nœud** : `~/.aiodos-options`, s'il existe, est ajouté à la commande (par
+  exemple `--internet` pour lancer le compagnon Internet quel que soit le réglage).
 - Il faut la version d'AIODOS qui connaît `--ui-file` (17/10/2026 et après) dans
   `~/aiodos` : elle arrive par les mises à jour, ou par une copie (« Piloter le téléphone
   depuis le PC », plus bas).
+- **Sur un écran étroit**, l'interface passe sur une colonne : la liste des conversations
+  s'ouvre par le bouton ☰ de l'en-tête.
+- **Essai du 17/10/2026 sur le Galaxy S23** (Android 16, Termux 0.118.3) : nœud démarré
+  par l'application en 36 s, compagnon Internet compris, interface affichée.
 
 ## 8. Appairer avec le PC
 

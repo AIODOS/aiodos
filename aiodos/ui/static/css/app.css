@@ -199,6 +199,7 @@ main { min-width: 0; height: 100vh; overflow: hidden; }
 .chat-head .select { width: auto; min-width: 230px; max-width: 320px; height: 34px; }
 .chat-head #machine-select { min-width: 140px; max-width: 220px; }
 .chat-head .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chat-list-toggle { display: none; }
 
 .banner { margin: 12px 22px 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
 .banner.warn { background: rgba(245, 182, 75, .1); border: 1px solid rgba(245, 182, 75, .35); color: #ffd99a; }
@@ -499,4 +500,34 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
   .img-view-box { flex-direction: column; overflow-y: auto; }
   .img-view-box > img, .img-view-box > video { max-width: 100%; max-height: calc(100vh - 250px); }
   .img-view-side { width: auto; }
+}
+
+/* Téléphone (application Android, écran étroit) : une colonne, la liste des conversations
+   par-dessus à la demande, des marges resserrées */
+@media (max-width: 760px) {
+  .app { grid-template-columns: 52px 1fr; }
+  .rail { padding: 10px 0; gap: 2px; }
+  .rail-logo { width: 32px; height: 32px; margin-bottom: 8px; }
+  .rail-btn { width: 40px; height: 40px; }
+  .page { padding: 16px 12px 32px; }
+  .page-head h1 { font-size: 19px; }
+  #view-chat { grid-template-columns: 1fr; position: relative; }
+  #view-chat .sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: min(320px, 86vw);
+    z-index: 30; transform: translateX(-105%); transition: transform .18s ease-out;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, .45); }
+  #view-chat.show-list .sidebar { transform: none; }
+  .chat-list-toggle { display: inline-grid; }
+  .chat-head { padding: 8px 10px; gap: 8px; min-height: 0; }
+  .chat-title { min-width: 0; flex: 1 1 120px; font-size: 14px; }
+  .chat-head .select, .chat-head #machine-select { min-width: 0; max-width: none; flex: 1 1 100%; }
+  .chat-head .chips { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 2px; }
+  .chip { flex: none; }
+  .banner { margin: 8px 10px 0; }
+  .messages { padding: 14px 10px 8px; }
+  .msg.user .bubble { max-width: 90%; }
+  .composer { padding: 6px 8px 10px; }
+  .composer .hint { display: none; }
+  .library { grid-template-columns: 1fr; }
+  .img-controls .select, .img-controls .input { flex: 1 1 140px; width: auto; min-width: 0; }
+  .img-grid { columns: 2 140px; }
 }

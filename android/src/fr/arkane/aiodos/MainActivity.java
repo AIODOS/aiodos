@@ -35,7 +35,8 @@ public class MainActivity extends Activity {
     private static final String BASH = "/data/data/com.termux/files/usr/bin/bash";
 
     /** Trouve le nœud en marche (adresse dans ~/.aiodos-ui, qui répond), ou le (re)démarre
-     *  avec --ui-file, puis écrit l'adresse de son interface. */
+     *  avec --ui-file et les options de ~/.aiodos-options (« --internet »…), puis écrit
+     *  l'adresse de son interface. */
     static final String SCRIPT =
         "F=\"$HOME/.aiodos-ui\"\n"
         + "cd \"$HOME/aiodos\" 2>/dev/null || { echo \"AIODOS n'est pas dans ~/aiodos "
@@ -49,7 +50,8 @@ public class MainActivity extends Activity {
         + "  pkill -INT -f 'python3 -m aiodos'\n"
         + "  for i in $(seq 1 20); do pgrep -f 'python3 -m aiodos' >/dev/null || break; sleep 1; done\n"
         + "fi\n"
-        + "nohup sh lancer-noeud.sh --ui-file \"$F\" >\"$HOME/aiodos-noeud.log\" 2>&1 &\n"
+        + "OPTIONS=$(cat \"$HOME/.aiodos-options\" 2>/dev/null)\n"
+        + "nohup sh lancer-noeud.sh --ui-file \"$F\" $OPTIONS >\"$HOME/aiodos-noeud.log\" 2>&1 &\n"
         + "for i in $(seq 1 150); do [ -s \"$F\" ] && { cat \"$F\"; exit 0; }; sleep 1; done\n"
         + "echo \"Le nœud AIODOS n'a pas démarré : voir ~/aiodos-noeud.log dans Termux.\" >&2\n"
         + "tail -n 5 \"$HOME/aiodos-noeud.log\" >&2\n"
