@@ -2,7 +2,8 @@
 
 > Étude du 16/10/2026. Ce document prépare des choix, dont plusieurs reviennent à
 > l'utilisateur (cf. [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)) ;
-> leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.2 faites).
+> leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.7 faites,
+> 2.3 en partie ; ce qui reste est noté à chaque étape).
 > Les faits sur les projets étudiés datent de ce jour et vieilliront vite : les
 > revérifier avant d'agir.
 
@@ -972,7 +973,7 @@ blanche de clés ou jeton).
 *Fini quand* : un relais auto-hébergé sert deux machines qui ne peuvent pas se joindre
 en direct.
 
-**En partie fait le 16/10/2026** :
+**Fait le 16/10/2026, essai conclu le 17/10/2026** :
 
 - **Réglages.** Réglages → Internet : relais (`n0`, ses propres adresses, ou `none`),
   annuaires (`n0-dns`, `dht`), ouverture de port sur la box, chemin préféré, et taille
@@ -987,10 +988,59 @@ en direct.
     machine » les donne) ou par un jeton ;
   - mode d'essai `--dev`.
 
-Reste l'essai qui conclut l'étape : un relais auto-hébergé qui sert deux machines
-privées de connexion directe. Pour qu'il prouve quelque chose, il faut pouvoir couper les
-connexions directes du compagnon (une option à ajouter côté Rust), ou faire l'essai entre
-deux vrais réseaux.
+**L'essai qui conclut l'étape** (17/10/2026, sur le PC principal) :
+
+- **Relais seulement.** Deux compagnons sur une même machine se joignent toujours en
+  direct. Le compagnon a donc une option réservée aux essais, `--relay-only` : Iroh n'y
+  a aucun transport IP, donc aucune socket UDP. Il n'y a ni perçage de NAT, ni adresse
+  directe annoncée, ni ouverture de port, dans un sens comme dans l'autre. C'est ainsi
+  qu'Iroh 1.3.0 coupe le direct dans ses propres essais. Un sélecteur de chemin maison
+  (API instable d'Iroh) n'aurait choisi que le chemin d'envoi d'une des deux machines.
+  Côté nœud, l'option correspondante est `--internet-relay-only <adresse du relais>`.
+- **Le relais.** `iroh-relay` 1.3.0, construit avec `cargo install iroh-relay --version
+  1.3.0 --features server --locked` (environ une minute), lancé en `--dev` (HTTP) avec le
+  fichier de réglages du guide et sa liste blanche de deux clés.
+- **L'essai automatique** (`tests/test_network_relay.py`, 33 s) :
+  - deux vrais nœuds qui ne se connaissent pas sur le réseau local s'appairent sur
+    invitation, par le relais ;
+  - ils se confient une indexation (3 notes en 2,6 s) ;
+  - la vue Réseau montre `relay` comme chemin de chaque machine appairée ;
+  - une troisième machine, absente de la liste blanche, est refusée par le relais. Même
+    invitée, et admise par les deux compagnons, elle reste injoignable ; rien n'atteint
+    même la poignée de main de l'autre compagnon.
+- **Côté Rust** (`compagnon/tests/relay_only.rs`, relais iroh-relay lancé dans l'essai) :
+  dix allers-retours restent par le relais ; une clé hors liste blanche est refusée. Un
+  contrôle montre que les mêmes machines, sans l'option, passent en direct : l'essai
+  verrait donc un chemin direct s'il y en avait un.
+- **Mesures** (une seule machine) : première requête par le relais en 20 ms, puis 1 à
+  4 ms.
+
+L'essai a fait apparaître quatre défauts, corrigés :
+- **L'exemple du guide ouvrait le relais à tous.** La liste blanche y suivait la section
+  `[tls]` : en TOML, elle appartenait alors à cette section, et `iroh-relay` l'ignorait
+  sans rien dire (vérifié : `AllowAll` au lieu d'`AllowlistAccess`). Le guide la place
+  désormais avant, et dit comment le vérifier.
+- **Une machine appairée sur invitation ne recevait jamais de travail.** La machine qui
+  prête ne demandait du travail qu'aux machines dont elle connaît l'adresse sur le réseau
+  local, comme en phase 1 (`worker.py`). Deux amis appairés à distance (2.4) ne se
+  seraient donc rien prêté. Elle demande désormais aussi aux machines qu'elle sait
+  joindre par Internet.
+- **Un ticket donné juste après le démarrage n'avait pas de relais.** Une invitation
+  acceptée dans la seconde où le compagnon démarre partait avec la seule clé ; sans
+  annuaire, l'autre machine ne pouvait pas la joindre. Le compagnon attend désormais son
+  relais avant de donner son ticket, 4 s au plus après le démarrage.
+- **Une machine refusée par le relais semblait prête.** La carte « Internet » le dit
+  maintenant : « le relais … refuse cette machine ».
+
+Le guide ([docs/relais.md](relais.md)) dit aussi ce que l'essai a appris d'autre :
+- `iroh-relay` ouvre ses statistiques sur le port 9090, sur toutes les interfaces ;
+- il est muet par défaut (`RUST_LOG=iroh_relay=info` pour voir les refus) ;
+- après l'ajout d'une clé, il faut le relancer, et la machine refusée réessaie seule ;
+- aucun annuaire n'est nécessaire entre machines appairées.
+
+Reste, hors de cette étape : le même essai entre deux vrais réseaux (2.8), et deux
+fonctions qui supposent encore une adresse sur le réseau local (conversation avec un
+modèle prêté par une machine appairée sur invitation, prévenance au désappairage).
 
 **2.8 Essai réel avec un ami**, puis documentation (README, ce document complété par
 les mesures).

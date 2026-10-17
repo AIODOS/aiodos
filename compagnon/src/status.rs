@@ -29,6 +29,9 @@ pub fn snapshot(ctx: &Ctx) -> Value {
                 "url": relay.url().to_string(),
                 "connected": relay.is_connected(),
                 "error": relay.last_error().map(|e| e.to_string()),
+                // Le relais refuse cette clé (absente de sa liste blanche, jeton manquant) :
+                // Iroh réessaie, mais en vain tant que son hébergeur ne l'a pas ajoutée.
+                "denied": relay.auth_denied_reason(),
             })
         })
         .collect();
@@ -38,6 +41,7 @@ pub fn snapshot(ctx: &Ctx) -> Value {
         "version": env!("CARGO_PKG_VERSION"),
         "alpn": String::from_utf8_lossy(ALPN),
         "relay_mode": ctx.config.relays.label(),
+        "relay_only": ctx.config.relay_only,
         "home_relays": home_relays,
         "relay_urls": addr.relay_urls().map(|u| u.to_string()).collect::<Vec<_>>(),
         "addrs": addr.ip_addrs().map(|a| a.to_string()).collect::<Vec<_>>(),

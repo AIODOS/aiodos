@@ -45,8 +45,12 @@ function render() {
 }
 
 // ----------------------------------------------- Internet et invitations (2.4)
+// Relais de n0 : leur région suffit (« euc1-1 ») ; un relais à soi garde son nom entier.
 function host(url) {
-  try { return new URL(url).hostname.split('.')[0]; } catch { return url; }
+  try {
+    const u = new URL(url);
+    return /\.iroh\.link\.?$/.test(u.hostname) ? u.hostname.split('.')[0] : u.host;
+  } catch { return url; }
 }
 
 function invitationRow(inv) {
@@ -68,7 +72,10 @@ function renderInternet(net) {
     ? 'Désactivée : tes machines ne se joignent que sur le réseau local.'
     : inet.running
       ? `Prête${inet.relays?.length ? ` · relais ${inet.relays.map(r => esc(host(r))).join(', ')}` : ''}`
+        + (inet.relay_only ? ' (essai : relais seulement)' : '')
         + (inet.id ? ` · clé ${esc(inet.id.slice(0, 10))}…` : '')
+        + (inet.denied_by || []).map(r => ` · le relais ${esc(host(r))} refuse cette machine : `
+          + 'sa clé doit être dans la liste blanche du relais').join('')
       : esc(inet.error || 'Démarrage du compagnon aiodos-net…');
   box.innerHTML = `
     <div class="setting-row" style="border:0;padding-top:0">

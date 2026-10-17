@@ -122,6 +122,10 @@ pub struct Config {
     pub bind: Option<SocketAddr>,
     /// Ouverture de port automatique sur la box (UPnP, NAT-PMP, PCP).
     pub portmap: bool,
+    /// Essais : jamais de connexion directe, tout passe par les relais. Aucune socket UDP
+    /// n'est ouverte : ni perçage de NAT, ni adresse directe annoncée, dans un sens comme
+    /// dans l'autre (cf. endpoint.rs).
+    pub relay_only: bool,
     /// Jeton exigé sur l'API locale (contrôle et mandataire).
     pub token: String,
     /// Délai pour établir une connexion avec une machine.
@@ -143,6 +147,7 @@ impl Config {
             directory: Directory::NONE,
             bind: Some(SocketAddr::from(([127, 0, 0, 1], 0))),
             portmap: false,
+            relay_only: false,
             token: token.to_string(),
             dial_timeout: Duration::from_secs(10),
             idle_timeout: Duration::from_secs(60),
@@ -188,6 +193,11 @@ pub struct Args {
     #[arg(long)]
     pub no_portmap: bool,
 
+    /// Essais : relais seulement, jamais de connexion directe (aucune socket UDP ; ni
+    /// perçage de NAT, ni ouverture de port). Demande au moins un relais
+    #[arg(long)]
+    pub relay_only: bool,
+
     /// Délai pour joindre une machine, en secondes (sous les 30 s qu'AIODOS attend une
     /// réponse par Internet, pour qu'il reçoive une erreur lisible plutôt qu'un silence)
     #[arg(long, default_value_t = 20, value_name = "S")]
@@ -207,14 +217,25 @@ impl Args {
         if self.dial_timeout == 0 {
             bail!("--dial-timeout doit être supérieur à 0");
         }
+        let relays = Relays::parse(&self.relays)?;
+        if self.relay_only {
+            if relays == Relays::Disabled {
+                bail!("« --relay-only » demande au moins un relais (pas « --relay none »)");
+            }
+            if self.bind.is_some() {
+                bail!("« --relay-only » n'ouvre aucune socket UDP : « --bind » ne s'y combine pas");
+            }
+        }
         Ok(Config {
             data_dir: self.data_dir,
             listen: self.listen,
             forward: self.forward,
-            relays: Relays::parse(&self.relays)?,
+            relays,
             directory: Directory::parse(&self.directory)?,
             bind: self.bind,
-            portmap: !self.no_portmap,
+            // Sans socket UDP, il n'y a rien à ouvrir sur la box.
+            portmap: !self.no_portmap && !self.relay_only,
+            relay_only: self.relay_only,
             token,
             dial_timeout: Duration::from_secs(self.dial_timeout),
             idle_timeout: Duration::from_secs(60),
@@ -265,5 +286,22 @@ mod tests {
         assert_eq!(config.relays, Relays::N0);
         assert_eq!(config.directory, Directory { n0_dns: true, dht: true });
         assert!(config.portmap);
+        assert!(!config.relay_only);
+    }
+
+    #[test]
+    fn relay_only_needs_a_relay_and_no_udp_socket() {
+        let config = |extra: &[&str]| {
+            let mut args = vec!["aiodos-net", "--data-dir", "d"];
+            args.extend_from_slice(extra);
+            Args::parse_from(args).into_config("t".into())
+        };
+        let only = config(&["--relay-only", "--relay", "http://127.0.0.1:3340"]).unwrap();
+        assert!(only.relay_only);
+        assert!(!only.portmap, "rien à ouvrir sur la box sans socket UDP");
+        assert!(matches!(only.relays, Relays::Custom(ref urls) if urls.len() == 1));
+        assert!(config(&["--relay-only"]).unwrap().relay_only, "relais de n0 par défaut");
+        assert!(config(&["--relay-only", "--relay", "none"]).is_err());
+        assert!(config(&["--relay-only", "--bind", "127.0.0.1:0"]).is_err());
     }
 }

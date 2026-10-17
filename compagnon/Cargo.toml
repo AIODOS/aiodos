@@ -31,6 +31,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dev-dependencies]
+# Relais lancé dans les essais « relais seulement » (tests/relay_only.rs), en HTTP comme
+# `iroh-relay --dev` : la même version que celle d'Iroh, avec sa partie serveur.
+iroh-relay = { version = "=1.3.0", features = ["server"] }
 tempfile = "3"
 
 [profile.release]
