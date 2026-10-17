@@ -1,9 +1,9 @@
 """Les programmes de llama.cpp : llama-server (la machine qui pose la question) et
 ggml-rpc-server (les machines qui prêtent leur carte graphique).
 
-Le dossier du moteur : réglage « llamacpp_dir », sinon data/engines/llama.cpp, où les
-mises à jour signées le livreront. Toutes les machines d'un groupe doivent avoir la même
-version (« build ») : le protocole RPC change d'une version à l'autre.
+Le dossier du moteur : réglage « llamacpp_dir », sinon celui livré avec les mises à jour
+signées (delivery.py). Toutes les machines d'un groupe doivent avoir la même version
+(« build ») : le protocole RPC change d'une version à l'autre.
 
 Les deux programmes n'écoutent que sur 127.0.0.1 : le serveur RPC n'a ni mot de passe
 ni chiffrement, il n'est joint que par un tunnel du compagnon ; llama-server exige une
@@ -21,6 +21,7 @@ from pathlib import Path
 import requests
 
 from aiodos import paths, settings
+from aiodos.cluster import delivery
 from aiodos.node import children
 
 log = logging.getLogger("aiodos.cluster")
@@ -42,12 +43,17 @@ class EngineError(Exception):
 
 
 def folder() -> Path | None:
-    """Dossier de llama.cpp s'il contient les deux programmes, sinon None."""
+    """Dossier de llama.cpp s'il contient les deux programmes, sinon None : celui du
+    réglage, sinon celui livré avec les versions (delivery.py), sinon un llama.cpp posé à la
+    main dans data/engines/llama.cpp."""
     configured = str(settings.get("llamacpp_dir") or "").strip()
-    for candidate in ([Path(configured)] if configured else []) + \
-            [paths.data_dir() / "engines" / "llama.cpp"]:
-        if (candidate / f"{SERVER}{EXE}").is_file() and (candidate / f"{RPC}{EXE}").is_file():
-            return candidate
+    if configured:
+        return Path(configured) if delivery.complete(Path(configured)) else None
+    delivered = delivery.find()
+    if delivered is not None:
+        return delivered
+    manual = delivery.root()
+    return manual if delivery.complete(manual) else None
     return None
 
 

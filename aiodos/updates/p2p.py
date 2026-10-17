@@ -76,8 +76,9 @@ def _manifest(my_id: str, peer: dict, wanted: str, store: Store) -> dict:
 
 
 def _download(my_id: str, peer: dict, wanted: str, item: dict, store: Store, progress=None):
-    """Un fichier du paquet, gardé seulement une fois son empreinte vérifiée."""
-    if store.has(wanted, item):
+    """Un fichier du paquet, gardé seulement une fois son empreinte vérifiée. Déjà reçu
+    avec une autre version (même empreinte) : copié sans rien demander au réseau."""
+    if store.has(wanted, item) or store.reuse(wanted, item):
         return
     part = store.partial(wanted, item["name"])
     received = part.stat().st_size if part.exists() else 0

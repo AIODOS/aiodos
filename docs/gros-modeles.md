@@ -152,22 +152,29 @@ relais de n0, pas en direct.
   tunnels et lance `llama-server` sur le fichier d'Ollama. Le groupe reste prêt 10 minutes
   après la dernière réponse.
 - **Le moteur** (`aiodos/cluster/engine.py`) cherche llama.cpp dans le réglage « Dossier de
-  llama.cpp », sinon dans `data/engines/llama.cpp`. Sous Windows, llama-server et le serveur
+  llama.cpp », sinon celui livré avec les versions, sinon un llama.cpp posé à la main dans
+  `data/engines/llama.cpp`. Sous Windows, llama-server et le serveur
   RPC sont rangés dans un objet de travail (`aiodos/node/children.py`) : ils s'arrêtent avec
   AIODOS, même s'il est tué, au lieu de garder la mémoire de la carte graphique.
 - **Les conversations** passent par l'API de llama-server. Les consignes données au milieu
   de la conversation (résultats web, rappel juste avant la question) rejoignent le message
   de l'utilisateur qui les suit : certains modèles (Mistral) refusent tout ce qui n'alterne
   pas utilisateur et assistant, ce qu'Ollama cachait.
+- **Livré avec les versions** (`tools/engine_release.py`, `aiodos/cluster/delivery.py`) :
+  l'outil de publication joint l'archive officielle de llama.cpp, d'une version épinglée
+  (b11707, Vulkan, 30 Mo pour Windows), empreinte vérifiée et signée dans le manifeste. Le
+  service de mise à jour la reçoit comme le compagnon ; identique d'une version à l'autre,
+  elle est copiée au lieu d'être retéléchargée (`store.reuse`). Elle se déplie une fois dans
+  `data/engines/llama.cpp/<empreinte>/`. Toutes les machines d'une même version d'AIODOS
+  ont donc la même version de llama.cpp, condition pour se prêter leur carte.
 - **Essai de bout en bout** (`tests/test_cluster_e2e.py`, variable `AIODOS_LLAMACPP_DIR`) :
   deux nœuds sur ce PC, appairés sur invitation. La carte graphique de A est cachée à
   llama.cpp ; A converse avec mistral:7b, calculé par la carte de B à travers le tunnel.
 
 ## 5. Suite
 
-1. **Livrer llama.cpp avec les mises à jour signées**, comme le compagnon : version Vulkan
-   pour Windows (30 Mo), construction Android par le NDK. Jusque-là, il faut le dossier à
-   la main.
+1. **llama.cpp pour Android** : il n'y a pas d'archive officielle ; à construire avec le
+   NDK, comme le compagnon. Windows est livré depuis le 17/10/2026.
 2. **Remplir le cache d'une machine par le réseau local**, avant le premier usage :
    aujourd'hui, les poids passent par le tunnel à la première conversation.
 3. **Essai réel à deux PC** (M5), puis avec un ami, quand le serveur RPC de llama.cpp sera

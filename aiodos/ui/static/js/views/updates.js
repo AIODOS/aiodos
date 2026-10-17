@@ -40,7 +40,8 @@ function stateLine(u) {
     const d = u.download;
     const progress = d.size ? ` : ${bytes(d.received)} / ${bytes(d.size)}` : '…';
     const what = d.what === 'compagnon'
-      ? `du compagnon Internet de la version ${esc(d.version)}` : `de la version ${esc(d.version)}`;
+      ? `du compagnon Internet de la version ${esc(d.version)}`
+      : d.what ? `du ${esc(d.what)} de la version ${esc(d.version)}` : `de la version ${esc(d.version)}`;
     return `Réception ${what} depuis « ${esc(d.from)} »${progress}`;
   }
   if (!u.auto) return 'Mises à jour automatiques désactivées.';

@@ -85,6 +85,11 @@ publication compte quelques minutes de plus.
 - **`--targets windows-x86_64,android-aarch64`** exige exactement ces plateformes. Un
   outil manquant arrête tout.
 - **`--no-companion`** publie sans compagnon.
+- **Le moteur llama.cpp** des gros modèles répartis est joint aussi : l'archive officielle
+  d'une version épinglée dans `tools/engine_release.py` (nom, taille, empreinte), gardée
+  dans `~/.aiodos/moteurs/` après le premier téléchargement. S'il ne peut être téléchargé,
+  ou ne correspond pas à l'empreinte épinglée, la version part sans lui
+  (« ATTENTION : moteur llama.cpp non joint »). **`--no-engine`** publie sans lui.
 - **Une construction ou une vérification qui échoue arrête tout** : rien n'est publié,
   et le numéro reste libre. Ce PC est sujet à des plantages : un `rustc` arrêté net
   (`STATUS_ACCESS_VIOLATION`) s'est produit une fois le 16/10. Il suffit de relancer.
@@ -118,6 +123,7 @@ chaque plateforme. Il voyage avec les versions.
 | `source` | `aiodos-2.0.3.zip` | toutes les machines |
 | `aiodos-net-windows-x86_64` | `aiodos-net-2.0.3-windows-x86_64.exe` | PC Windows 64 bits |
 | `aiodos-net-android-aarch64` | `aiodos-net-2.0.3-android-aarch64` | téléphones Android 64 bits (Termux, Android 7 et plus) |
+| `llama.cpp-windows-x86_64` | `llama-b11707-bin-win-vulkan-x64.zip` | PC Windows 64 bits : moteur des gros modèles répartis (docs/gros-modeles.md) |
 
 Le format du manifeste ne change pas (`FORMAT = 1`).
 
@@ -146,6 +152,10 @@ le compagnon de sa plateforme à une machine qui l'annonce (actions `update/mani
 
 Une machine transmet aussi les fichiers d'un paquet incomplet, s'ils sont entiers : par
 exemple le compagnon d'une machine installée depuis une archive.
+
+Le moteur llama.cpp suit le même chemin que le compagnon (`_obtain_engine`). Un fichier
+déjà reçu avec une autre version, de même empreinte, est copié au lieu d'être téléchargé
+de nouveau (`store.reuse`) : le moteur, épinglé, ne change pas à chaque version.
 
 **Où il est rangé.** Le compagnon reçu reste dans le paquet
 (`packages/<version>/aiodos-net-…`), pour les machines de même plateforme. Pour le

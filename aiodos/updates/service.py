@@ -101,6 +101,7 @@ class UpdateService:
         if found:
             self._obtain(*found)
         self._obtain_companion()
+        self._obtain_engine()
         self._switch_companion()
         if launcher.developer_checkout():
             return
@@ -148,11 +149,20 @@ class UpdateService:
         log.info("Version %s reçue de « %s »", wanted, name)
         self._set(download=None, available=None, error=None)
 
-    # ------------------------------------------------ compagnon de la plateforme
+    # ------------------------------------ programmes livrés pour la plateforme
     def _obtain_companion(self):
-        """Compagnon de cette plateforme, s'il manque, pour la version reçue la plus
-        récente et pour celle qui tourne (manifeste compris, s'il manque aussi)."""
-        kind = platforms.kind(manifests.COMPANION)
+        """Compagnon Internet de cette plateforme, s'il manque."""
+        self._obtain_program(manifests.COMPANION, "compagnon")
+
+    def _obtain_engine(self):
+        """Moteur llama.cpp de cette plateforme (gros modèles répartis), s'il manque. Il
+        reste le même d'une version à l'autre : déjà reçu, il est copié (store.reuse)."""
+        self._obtain_program(manifests.ENGINE, "moteur llama.cpp")
+
+    def _obtain_program(self, program: str, what: str):
+        """Programme `program` de cette plateforme, s'il manque, pour la version reçue la
+        plus récente et pour celle qui tourne (manifeste compris, s'il manque aussi)."""
+        kind = platforms.kind(program)
         if kind is None:
             return
         offer = self.store.offer()
@@ -160,37 +170,43 @@ class UpdateService:
             offer = None                  # plus ancienne que celle qui tourne : inutile ici
         for wanted in dict.fromkeys(v for v in (offer, __version__) if v):
             found = self.store.manifest(wanted)
-            item = manifests.binary(found) if found else None
+            item = manifests.binary(found, program) if found else None
             if found is not None and (item is None or self.store.has(wanted, item)):
                 continue                  # pas livré pour cette plateforme, ou déjà là
+            if item is not None and self.store.reuse(wanted, item):
+                continue                  # le même, reçu avec une autre version
             now = time.monotonic()
             for peer in peers.list_peers():
                 if (peer["online"] and kind in p2p.held_by(peer, wanted)
                         and now >= self._failures.get((peer["node_id"], wanted, kind), 0)
-                        and self._obtain_file(peer["node_id"], peer["name"], wanted, kind)):
+                        and self._obtain_file(peer["node_id"], peer["name"], wanted, kind,
+                                              what)):
                     break
 
-    def _obtain_file(self, node_id: str, name: str, wanted: str, kind: str) -> bool:
+    def _obtain_file(self, node_id: str, name: str, wanted: str, kind: str,
+                     what: str = "compagnon") -> bool:
         peer = peers.get(node_id)
         if not peer:
             return False
+        label = what[:1].upper() + what[1:]
         self._set(download={"version": wanted, "from": name, "received": 0, "size": 0,
-                            "what": "compagnon"})
+                            "what": what})
 
         def progress(received, size):
             self.download = {"version": wanted, "from": name, "received": received,
-                             "size": size, "what": "compagnon"}
+                             "size": size, "what": what}
             self._publish(throttle=True)
         try:
             p2p.fetch_file(self.network.node_id, peer, wanted, kind, self.store, progress)
         except (PeerError, UpdateError, OSError, ValueError) as exc:
             self._failures[(node_id, wanted, kind)] = time.monotonic() + PEER_RETRY
-            log.warning("Compagnon de la version %s non reçu de « %s » : %s", wanted, name, exc)
+            log.warning("%s de la version %s non reçu de « %s » : %s", label, wanted, name, exc)
             self._set(download=None,
-                      error=f"Compagnon de la version {wanted} non reçu de « {name} » : {exc}")
+                      error=f"{label} de la version {wanted} non reçu de « {name} » : {exc}")
             return False
-        log.info("Compagnon Internet de la version %s reçu de « %s »", wanted, name)
-        error = None if (self.error or "").startswith("Compagnon") else self.error
+        log.info("%s de la version %s reçu de « %s »",
+                 "Compagnon Internet" if what == "compagnon" else label, wanted, name)
+        error = None if (self.error or "").startswith(label) else self.error
         self._set(download=None, error=error)
         return True
 
