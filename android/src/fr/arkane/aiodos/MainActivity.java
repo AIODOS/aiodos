@@ -36,7 +36,8 @@ public class MainActivity extends Activity {
 
     /** Trouve le nœud en marche (adresse dans ~/.aiodos-ui, qui répond), ou le (re)démarre
      *  avec --ui-file et les options de ~/.aiodos-options (« --internet »…), puis écrit
-     *  l'adresse de son interface. */
+     *  l'adresse de son interface. SIGTERM pour arrêter l'ancien : lancé en arrière-plan,
+     *  le nœud ignore SIGINT (les versions récentes s'arrêtent proprement sur les deux). */
     static final String SCRIPT =
         "F=\"$HOME/.aiodos-ui\"\n"
         + "cd \"$HOME/aiodos\" 2>/dev/null || { echo \"AIODOS n'est pas dans ~/aiodos "
@@ -47,7 +48,7 @@ public class MainActivity extends Activity {
         + "if alive; then cat \"$F\"; exit 0; fi\n"
         + "rm -f \"$F\"\n"
         + "if command -v pgrep >/dev/null && pgrep -f 'python3 -m aiodos' >/dev/null; then\n"
-        + "  pkill -INT -f 'python3 -m aiodos'\n"
+        + "  pkill -TERM -f 'python3 -m aiodos'\n"
         + "  for i in $(seq 1 20); do pgrep -f 'python3 -m aiodos' >/dev/null || break; sleep 1; done\n"
         + "fi\n"
         + "OPTIONS=$(cat \"$HOME/.aiodos-options\" 2>/dev/null)\n"

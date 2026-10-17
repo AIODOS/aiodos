@@ -11,6 +11,7 @@ import argparse
 import logging
 import os
 import secrets
+import signal
 import socket
 import sys
 import threading
@@ -112,6 +113,16 @@ def main():
     return _serve(args)
 
 
+def _stop_on_signals():
+    """Nœud sans fenêtre : SIGINT et SIGTERM l'arrêtent proprement (KeyboardInterrupt).
+    Lancé en arrière-plan par un script (application Android, service), il hérite d'un
+    SIGINT ignoré, et SIGTERM le tuerait sans rendre son verrou ni effacer --ui-file."""
+    def interrupt(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, interrupt)
+
+
 def _write_ui_file(path: str, url: str) -> Path:
     """L'adresse de l'interface pour l'application Android, qui la lit par Termux : un
     fichier lisible par soi seul (0600), écrit d'un coup."""
@@ -176,6 +187,7 @@ def _serve(args) -> int:
             ui_file = _write_ui_file(args.ui_file, url)
         if args.headless:
             print(f"Nœud AIODOS prêt : {url}", flush=True)
+            _stop_on_signals()
             try:
                 while thread.is_alive() and not restart.requested():
                     time.sleep(1)

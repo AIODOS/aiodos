@@ -75,5 +75,27 @@ def test_the_phone_app_script_restarts_a_node_without_the_file():
     à la main, puis rendre l'adresse."""
     source = (paths.APP_ROOT / "android" / "src" / "fr" / "arkane" / "aiodos"
               / "MainActivity.java").read_text(encoding="utf-8")
-    assert "lancer-noeud.sh --ui-file" in source and "pkill -INT -f 'python3 -m aiodos'" in source
+    # SIGTERM : lancé en arrière-plan par ce même script, le nœud ignore SIGINT
+    assert "lancer-noeud.sh --ui-file" in source and "pkill -TERM -f 'python3 -m aiodos'" in source
     assert "com.termux.RUN_COMMAND_PENDING_INTENT" in source
+
+
+def test_a_headless_node_stops_cleanly_on_sigint_and_sigterm():
+    """Lancé en arrière-plan par un script (Termux), le nœud hérite d'un SIGINT ignoré :
+    SIGINT et SIGTERM doivent tous deux devenir un arrêt normal (KeyboardInterrupt), qui
+    rend le verrou de l'instance et efface --ui-file."""
+    import signal
+
+    import pytest
+
+    from aiodos import __main__ as entry
+    before = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)            # comme hérité du script
+    try:
+        entry._stop_on_signals()
+        assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
+        with pytest.raises(KeyboardInterrupt):
+            signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+    finally:
+        signal.signal(signal.SIGINT, before[0])
+        signal.signal(signal.SIGTERM, before[1])
