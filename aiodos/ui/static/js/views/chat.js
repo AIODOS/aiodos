@@ -271,7 +271,7 @@ function showWelcome() {
   el.list.innerHTML = '';
   const welcome = h(`
     <div class="welcome">
-      <img src="/logo.png?v=aiodos" alt="">
+      <img src="/logo.png?v=serpents" alt="">
       <h1>Que fait-on aujourd'hui&nbsp;?</h1>
       <p>Tout tourne sur ta machine. Le web et le cloud ne servent qu'avec ton accord.</p>
       <div class="suggestions">
@@ -297,7 +297,7 @@ function appendAssistant(model, here = false) {
   const label = modelLabel(model, here);
   const node = h(`
     <div class="msg assistant">
-      <img class="avatar" src="/logo.png?v=aiodos" alt="">
+      <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body">
         <details class="thinking" hidden>
           <summary>${icon('think')}<span class="label">Réflexion</span><span class="faint time"></span></summary>

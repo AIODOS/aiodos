@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône adaptative (Android 8 et plus) : le premier plan est opaque, avec le fond du logo,
+     et le lanceur en découpe la forme ; ses images viennent de tools/build_android.py -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+</adaptive-icon>

@@ -3,7 +3,7 @@
     python tools/build_android.py [--out dist] [--install]
 
 android/ : le manifeste, les ressources et le code Java (une activité, sans bibliothèque).
-Étapes : icônes tirées de assets/logo.png (Pillow) ; aapt2 (ressources et manifeste,
+Étapes : icônes tirées du logo (assets/, tools/make_logo.py ; Pillow) ; aapt2 (ressources et manifeste,
 numéro de version d'AIODOS) ; javac contre android.jar ; d8 (dex) ; zipalign ; apksigner,
 avec une clé de développement gardée hors du dépôt (~/.aiodos/android/, créée au besoin).
 --install : « adb install -r » sur le téléphone branché (débogage USB autorisé).
@@ -25,6 +25,7 @@ SOURCE = ROOT / "android"
 PACKAGE = "fr.arkane.aiodos"
 PLATFORM = "android-34"
 ICONS = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+ADAPTIVE = 108 / 48                  # premier plan d'une icône adaptative : 108 dp pour 48
 KEYS = Path.home() / ".aiodos" / "android"
 EXE = ".exe" if os.name == "nt" else ""
 BAT = ".bat" if os.name == "nt" else ""
@@ -79,12 +80,18 @@ def run(*command, cwd=None):
 
 
 def icons(res: Path):
+    """Icônes tirées du logo (tools/make_logo.py) : l'icône classique aux coins arrondis, et
+    le premier plan de l'icône adaptative (res/mipmap-anydpi-v26), dont le lanceur découpe
+    la forme : sans lui, Android 8 et plus réduit l'icône classique dans un cadre."""
     from PIL import Image
     logo = Image.open(ROOT / "assets" / "logo.png").convert("RGBA")
+    adaptive = Image.open(ROOT / "assets" / "logo-adaptive.png").convert("RGBA")
     for density, size in ICONS.items():
         folder = res / f"mipmap-{density}"
         folder.mkdir(parents=True, exist_ok=True)
         logo.resize((size, size), Image.LANCZOS).save(folder / "ic_launcher.png")
+        side = round(size * ADAPTIVE)
+        adaptive.resize((side, side), Image.LANCZOS).save(folder / "ic_launcher_foreground.png")
 
 
 def keystore(tools: Path) -> Path:
