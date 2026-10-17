@@ -104,7 +104,9 @@ def _note(kind: str, applied: list):
 
 # ------------------------------------------------------------------ threads
 def lower_current_thread() -> list:
-    """Abaisse le thread courant (cf. en-tête). Renvoie ce qui a été appliqué."""
+    """Abaisse le thread courant (cf. en-tête). Renvoie ce qui a été appliqué. Ne lève
+    jamais : appelé à la création de chaque thread de fond, une exception rendrait tout
+    le groupe inutilisable (ThreadPoolExecutor)."""
     try:
         if sys.platform == "win32":
             applied = _windows_thread()
@@ -112,7 +114,7 @@ def lower_current_thread() -> list:
             applied = _nice_thread(threading.get_native_id())
         else:
             applied = []
-    except (OSError, AttributeError) as exc:   # fonction absente (ancien système)…
+    except Exception as exc:       # fonction absente (ancien système), refus…
         log.debug("Priorité du thread inchangée : %s", exc)
         applied = []
     _note("threads", applied)
@@ -192,7 +194,7 @@ def lower_process(pid: int) -> list:
             applied = _nice_process(pid)
         else:
             applied = []
-    except (OSError, AttributeError) as exc:
+    except Exception as exc:       # jamais au point d'empêcher le lancement du programme
         log.debug("Priorité du programme %s inchangée : %s", pid, exc)
         applied = []
     _note("programmes", applied)

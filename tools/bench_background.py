@@ -20,6 +20,7 @@ Windows seulement (tools/cpu_probe.py). Ollama doit tourner, avec le modèle d'e
 du nœud (embeddinggemma) et le modèle de conversation (--chat-model).
 """
 import argparse
+import ctypes
 import html
 import json
 import os
@@ -136,9 +137,11 @@ class Recorder:
         }, watch_threads=pid)
         self._gpu_process = None
         self.models_seen = set()          # un modèle qui n'est pas d'ici : mesure à refaire
-        self._threads = [threading.Thread(target=t, daemon=True)
-                         for t in (self._sample_cpu, self._probe_api, self._sample_gpu,
-                                   self._watch_ollama)]
+        self.battery = []
+        samplers = [self._sample_cpu, self._probe_api, self._sample_gpu, self._watch_ollama]
+        if unplugged():
+            samplers.append(self._sample_battery)
+        self._threads = [threading.Thread(target=t, daemon=True) for t in samplers]
 
     def start(self):
         for t in self._threads:
@@ -172,6 +175,19 @@ class Recorder:
             except requests.RequestException:
                 continue
             self.api.append({**self._tag(), "ms": (time.perf_counter() - started) * 1000})
+
+    def _sample_battery(self):
+        """PC vraiment débranché : décharge de la batterie (mW), toutes les 5 s."""
+        command = ["powershell", "-NoProfile", "-Command",
+                   "(Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus)"
+                   ".DischargeRate | Measure-Object -Sum | ForEach-Object Sum"]
+        while not self._stop.wait(5):
+            try:
+                out = subprocess.run(command, capture_output=True, text=True, timeout=20,
+                                     creationflags=subprocess.CREATE_NO_WINDOW).stdout
+                self.battery.append({**self._tag(), "mw": float(out.strip().replace(",", "."))})
+            except (OSError, subprocess.SubprocessError, ValueError):
+                continue
 
     def _watch_ollama(self):
         """Modèles chargés dans Ollama pendant la mesure : un autre programme qui s'en
@@ -207,6 +223,9 @@ class Recorder:
             return [r for r in rows if r["phase"] == phase and (chat is None or r["chat"] == chat)]
         cpu, gpu, api = keep(self.cpu), keep(self.gpu), keep(self.api)
         out = {"samples": len(cpu)}
+        battery = keep(self.battery)
+        if battery:
+            out["battery_w"] = _mean([r["mw"] / 1000 for r in battery])
         for key in ("system", "cores_P", "cores_E", "aiodos", "ollama", "threads_lowered",
                     "threads_normal"):
             values = [r[key] for r in cpu if key in r]
@@ -270,6 +289,17 @@ def chat_summary(chats: list) -> dict:
 
 
 # --------------------------------------------------------------- scénario
+def unplugged() -> bool:
+    """Le PC est-il vraiment sur batterie (GetSystemPowerStatus) ?"""
+    class PowerStatus(ctypes.Structure):
+        _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                    ("BatteryLifePercent", ctypes.c_ubyte), ("Reserved1", ctypes.c_ubyte),
+                    ("BatteryLifeTime", ctypes.c_ulong), ("BatteryFullLifeTime", ctypes.c_ulong)]
+    status = PowerStatus()
+    return bool(ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
+                and status.ACLineStatus == 0)
+
+
 def wait_job(node: Node, job_id: int, timeout: float) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

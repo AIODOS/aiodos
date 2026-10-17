@@ -94,6 +94,17 @@ def test_a_refusal_is_harmless(monkeypatch):
     assert priority.lower_process(4242) == []
 
 
+def test_an_unexpected_error_never_escapes(monkeypatch):
+    """Appelé à la création de chaque thread de fond : une exception rendrait le groupe
+    de threads inutilisable."""
+    def broken(*args):
+        raise ValueError("inattendu")
+    for name in ("_windows_thread", "_nice_thread", "_windows_process", "_nice_process"):
+        monkeypatch.setattr(priority, name, broken)
+    assert priority.lower_current_thread() == []
+    assert priority.lower_process(4242) == []
+
+
 def test_other_systems_are_left_alone(monkeypatch):
     monkeypatch.setattr(priority.sys, "platform", "darwin")
     monkeypatch.setattr(priority.android, "is_android", lambda: False)
