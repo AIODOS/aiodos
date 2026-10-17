@@ -144,6 +144,14 @@ function lentPills(ex) {
     `<span class="pill run">${icon('network')}Calcule pour « ${esc(name)} » : ${n} unité(s)</span>`).join('');
 }
 
+// Sur batterie : moins d'unités à la fois (les points ci-contre), ou aucune (jobs/pacing.py)
+function batteryPill(p) {
+  if (!p?.on_battery || p.mode === 'normal') return '';
+  const text = p.mode === 'pause' ? 'Sur batterie : en attente du secteur'
+    : 'Sur batterie : travail de fond ménagé';
+  return `<span class="pill warn" title="${esc(p.detail)}">${icon('bolt')}${text}</span>`;
+}
+
 function renderSlots() {
   const ex = state.executor;
   const box = $('#jobs-slots', root);
@@ -154,6 +162,7 @@ function renderSlots() {
     return `<span class="slot">${dots} ${RESOURCES[name] || name} ${busy}/${n}</span>`;
   }).join('') + (ex.interactive
     ? `<span class="pill warn">${icon('chat')}Conversation en cours : le GPU lui est réservé</span>` : '')
+    + batteryPill(ex.pacing)
     + lentPills(ex)
     + (Object.keys(ex.waiting || {}).length
       ? `<span class="pill warn">${icon('warn')}Ollama injoignable : nouvel essai automatique</span>` : '');

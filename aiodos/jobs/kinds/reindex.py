@@ -26,11 +26,11 @@ import logging
 from pathlib import Path
 
 from aiodos import db, settings
-from aiodos.jobs import queue
+from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import NORMAL, PAUSED, QUEUED, RUNNING
 from aiodos.jobs.registry import UnitSpec, register_job_kind, task
 from aiodos.knowledge import chunking, search, store
-from aiodos.services import extract, ollama
+from aiodos.services import extract
 
 log = logging.getLogger("aiodos.reindex")
 
@@ -131,7 +131,7 @@ def run_reindex_entry(payload):
         return {"skipped": True, "reason": "retirée entre-temps"}
     fresh = _read(payload.get("path"))
     pieces = fresh or stored
-    if not store.replace_chunks(payload["entry_id"], list(zip(pieces, ollama.embed(pieces)))):
+    if not store.replace_chunks(payload["entry_id"], list(zip(pieces, pacing.embed(pieces)))):
         return {"skipped": True, "reason": "retirée entre-temps"}
     return {"chunks": len(pieces), "reread": bool(fresh)}
 

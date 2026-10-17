@@ -116,8 +116,12 @@ def _serve(args) -> int:
     from aiodos.knowledge import store
 
     port = args.port or _free_port()
-    if not instance.acquire(port):
-        _alert("AIODOS est déjà ouvert sur cette machine.")
+    token = secrets.token_urlsafe(24)
+    show_key = secrets.token_urlsafe(24)        # pour faire revenir la fenêtre, sans le jeton
+    if not instance.acquire(port, show_key):
+        # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
+        if args.headless or not instance.wake_running():
+            _alert("AIODOS est déjà ouvert sur cette machine.")
         return launcher.ALREADY_RUNNING
 
     try:
@@ -127,14 +131,13 @@ def _serve(args) -> int:
         if migrated:
             log.info("Import v1 : %s", migrated)
 
-        token = secrets.token_urlsafe(24)
         app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
             "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
             "discovery": not args.no_discovery,
             "internet": args.internet or args.internet_local or bool(args.internet_relay_only),
             "internet_local": args.internet_local,
             "internet_relay_only": args.internet_relay_only}, _parse_slots(args.slots),
-            windowed=not args.headless)
+            windowed=not args.headless, show_key=show_key)
         # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
         # de la sienne, qui suppose une console
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,

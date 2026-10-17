@@ -7,7 +7,9 @@ jeton tiré au hasard à chaque lancement protège son API (passé par une varia
 d'environnement, jamais dans les journaux ni sur la ligne de commande). AIODOS lui donne
 la liste des machines appairées (liste blanche) et lui confie les requêtes qui ne
 passent pas par le réseau local (cf. route.py). Si AIODOS s'arrête, même brutalement,
-le compagnon s'arrête avec lui (il surveille son entrée standard).
+le compagnon s'arrête avec lui (il surveille son entrée standard). Il garde la priorité
+normale : il relaie aussi des conversations (modèles prêtés par Internet), et son
+processeur est négligeable (docs/arriere-plan.md § 2).
 """
 import json
 import logging
