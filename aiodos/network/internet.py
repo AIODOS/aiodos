@@ -37,6 +37,7 @@ class Internet:
         self.m = manager
         self.force = bool(options.get("internet"))            # --internet
         self.local = bool(options.get("internet_local"))      # --internet-local (tests)
+        self.relay_only = options.get("internet_relay_only")  # --internet-relay-only URL (tests)
         self.companion = None
         self._exchanged = {}       # machine -> (instant, infos qu'on lui a données)
         self._sent = None          # (lancement du compagnon, liste blanche envoyée)
@@ -51,6 +52,9 @@ class Internet:
         if self.local:             # deux nœuds sur une machine : ni relais, ni annuaire, ni box
             return {"relays": ["none"], "directory": "none", "bind": "127.0.0.1:0",
                     "portmap": False}
+        if self.relay_only:        # essai d'un relais : lui seul, jamais en direct, ni annuaire
+            return {"relays": [str(self.relay_only)], "directory": "none", "portmap": False,
+                    "relay_only": True}
         relays = [str(r) for r in settings.get("internet_relays") or []] or ["none"]
         directory = ",".join(str(d) for d in settings.get("internet_directory") or [])
         return {"relays": relays, "directory": directory or "none",
@@ -200,6 +204,10 @@ class Internet:
             "route": route.mode(),
             "relays": [r.get("url") for r in status.get("home_relays") or []
                        if r.get("connected")],
+            # Relais qui refusent cette machine : sa clé manque à leur liste blanche
+            "denied_by": [r.get("url") for r in status.get("home_relays") or []
+                          if r.get("denied")],
+            "relay_only": bool(status.get("relay_only")),
         }
 
     def annotate(self, paired: list):

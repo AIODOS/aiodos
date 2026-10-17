@@ -87,6 +87,9 @@ def main():
                          help="lance le compagnon aiodos-net (Internet) quel que soit le réglage")
     network.add_argument("--internet-local", action="store_true",
                          help="compagnon en essai local : ni relais, ni annuaire, ni box (tests)")
+    network.add_argument("--internet-relay-only", metavar="URL", default=None,
+                         help="compagnon en essai par ce relais seulement, jamais en direct, "
+                              "sans annuaire ni box (tests)")
     parser.add_argument("--slots", default="", metavar="RESSOURCE=N,…",
                         help="unités simultanées sur ce nœud, ex. « embed=1,gpu=0 »")
     parser.add_argument("--no-migrate", action="store_true",
@@ -128,8 +131,9 @@ def _serve(args) -> int:
         app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
             "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
             "discovery": not args.no_discovery,
-            "internet": args.internet or args.internet_local,
-            "internet_local": args.internet_local}, _parse_slots(args.slots),
+            "internet": args.internet or args.internet_local or bool(args.internet_relay_only),
+            "internet_local": args.internet_local,
+            "internet_relay_only": args.internet_relay_only}, _parse_slots(args.slots),
             windowed=not args.headless)
         # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
         # de la sienne, qui suppose une console
