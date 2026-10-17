@@ -289,6 +289,24 @@ def chat_summary(chats: list) -> dict:
 
 
 # --------------------------------------------------------------- scénario
+def big_files(folder: Path, count: int, size: int = 1_500_000) -> list:
+    """`count` gros fichiers texte (un livre, un long journal…), faits des sources de la
+    bibliothèque standard : une seule unité de travail pour des centaines de lots."""
+    sources = sorted(STDLIB.glob("*.py"))
+    files, index = [], 0
+    for n in range(count):
+        parts, length = [], 0
+        while length < size:
+            text = sources[index % len(sources)].read_text(encoding="utf-8", errors="ignore")
+            parts.append(text)
+            length += len(text)
+            index += 1
+        path = folder / f"gros-{n + 1}.txt"
+        path.write_text("".join(parts)[:size], encoding="utf-8")
+        files.append(path)
+    return files
+
+
 def unplugged() -> bool:
     """Le PC est-il vraiment sur batterie (GetSystemPowerStatus) ?"""
     class PowerStatus(ctypes.Structure):
@@ -355,6 +373,7 @@ def run(args) -> dict:
     recorder = Recorder(node)
     result = {"label": args.label, "code": str(code), "revision": revision(code),
               "simulation": simulate, "settings": dict(args.set), "slots": args.slots,
+              "corpus": f"{args.big} gros fichiers" if args.big else args.corpus,
               "machine": machine(), "chat_model": args.chat_model, "at": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:
         node.api("PUT", "/api/settings", {"media_vision": False, "media_transcribe": False,
@@ -376,9 +395,13 @@ def run(args) -> dict:
         time.sleep(2)
 
         recorder.phase = "indexation"
-        paths = [str(p) for p in (Path(n) if Path(n).is_absolute() else STDLIB / n
-                                  for n in args.corpus) if p.exists()]
-        print(f"Indexation de {len(paths)} dossiers ({', '.join(args.corpus)})…", flush=True)
+        if args.big:
+            paths = [str(p) for p in big_files(data, args.big)]
+            print(f"Indexation de {len(paths)} gros fichiers…", flush=True)
+        else:
+            paths = [str(p) for p in (Path(n) if Path(n).is_absolute() else STDLIB / n
+                                      for n in args.corpus) if p.exists()]
+            print(f"Indexation de {len(paths)} dossiers ({', '.join(args.corpus)})…", flush=True)
         started = time.monotonic()
         job_id = node.api("POST", "/api/index", {"paths": paths, "collection_id": collection})["job_id"]
         busy_chats = []
@@ -447,6 +470,8 @@ def main():
     parser.add_argument("--slots", default=None, help="option --slots du nœud")
     parser.add_argument("--corpus", nargs="+", default=CORPUS,
                         help=f"dossiers à indexer : chemins, ou noms de dossiers de {STDLIB}")
+    parser.add_argument("--big", type=int, default=0, metavar="N",
+                        help="indexer N gros fichiers (1,5 Mo chacun) au lieu des dossiers")
     parser.add_argument("--chat-model", default="qwen2.5:7b")
     parser.add_argument("--chats", type=int, default=6, help="conversations pendant l'indexation")
     parser.add_argument("--chat-delay", type=float, default=8.0)
