@@ -1,5 +1,14 @@
-"""Mises à jour : état, vérification immédiate, redémarrage, message vu."""
+"""Mises à jour : état, vérification immédiate, redémarrage, message vu ; approbation des
+versions sur un deuxième appareil (updates/approval.py)."""
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+
+from aiodos.network.client import PeerError
+from aiodos.node import identity
+from aiodos.updates import approval
+from aiodos.updates import manifest as manifests
+from aiodos.updates.manifest import UpdateError
+from aiodos.updates.store import Store
 
 router = APIRouter(prefix="/api")
 
@@ -26,3 +35,39 @@ def restart_now(request: Request):
 def notice_seen(request: Request):
     request.app.state.updates.notice_seen()
     return {"ok": True}
+
+
+# ------------------------------------------------- approbation (deuxième appareil)
+class Approve(BaseModel):
+    node_id: str
+    version: str
+
+
+@router.get("/updates/approval")
+def approval_state():
+    """Clé d'approbation de cet appareil, si elle existe ; versions publiées ici qui
+    attendent leur approbation."""
+    return {"key": approval.public_info(), "required": bool(manifests.declared_approvers()),
+            "waiting_here": [version for version, _ in Store().pending()]}
+
+
+@router.get("/updates/approval/pending")
+def approval_pending():
+    """Versions qui attendent une approbation chez mes machines en ligne."""
+    return {"pending": approval.pending_from_peers(identity.node_id())}
+
+
+@router.post("/updates/approval/key")
+def approval_key():
+    try:
+        return approval.create_key()
+    except UpdateError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/updates/approval/approve")
+def approval_approve(body: Approve):
+    try:
+        return approval.approve(identity.node_id(), body.node_id, body.version)
+    except (UpdateError, PeerError) as exc:
+        raise HTTPException(400, str(exc)) from exc

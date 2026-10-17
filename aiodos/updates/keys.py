@@ -9,3 +9,12 @@ ici ; retirer l'ancienne dans une version suivante, signée par la nouvelle.
 TRUSTED_KEYS = {
     "3eab3940710a965e": "x3+Zw7VibMmPeiUian5y5fz3XMKH9Zm8Gbqk9IVv0Bw=",
 }
+
+# Appareils d'approbation (deuxième signature, cf. approval.py et docs/mises-a-jour.md).
+# Vide : la signature de l'auteur suffit. Sinon, une version ne s'installe et ne se
+# transmet qu'approuvée par l'un d'eux. Pour en ajouter un : créer sa clé dans la vue
+# Mises à jour de l'appareil (le téléphone), coller ici la ligne qu'elle donne, faire un
+# commit, puis publier. En déclarer deux (téléphone et appareil de secours) : sans
+# approbateur, plus aucune version ne peut partir.
+APPROVER_KEYS = {
+}

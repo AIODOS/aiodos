@@ -14,6 +14,7 @@ confiance : seule compte la signature de la clé de publication.
 """
 from aiodos.network import client, envelope
 from aiodos.network.client import PeerError
+from aiodos.updates import approval
 from aiodos.updates import manifest as manifests
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import Store
@@ -55,6 +56,7 @@ def serve_chunk(manager, sender, payload):
 HANDLERS = {
     "update/manifest": serve_manifest,
     "update/chunk": serve_chunk,
+    **approval.HANDLERS,          # update/pending, update/approve (deuxième appareil)
 }
 
 
