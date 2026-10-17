@@ -176,7 +176,12 @@ relais de n0, pas en direct.
 1. **llama.cpp pour Android** : il n'y a pas d'archive officielle ; à construire avec le
    NDK, comme le compagnon. Windows est livré depuis le 17/10/2026.
 2. **Remplir le cache d'une machine par le réseau local**, avant le premier usage :
-   aujourd'hui, les poids passent par le tunnel à la première conversation.
+   aujourd'hui, les poids passent par le tunnel à la première conversation. Format lu
+   dans ggml-rpc.cpp (b11707) : un fichier par tenseur de poids de plus de 10 Mio, dans
+   `$LLAMA_CACHE/rpc/`, nommé par l'empreinte FNV-1a 64 bits du tenseur entier
+   (`%016x`). Recalculer ces empreintes en Python sur des Go serait bien trop lent ; la
+   voie simple est un « préchauffage » : réunir le groupe et charger le modèle une fois,
+   à l'avance (bouton, ou machines au repos), puis tout rendre.
 3. **Essai réel à deux PC** (M5), puis avec un ami, quand le serveur RPC de llama.cpp sera
    sorti du stade du prototype.
 4. **Images et vidéo** : étude dans [generation-repartie.md](generation-repartie.md). Couper
