@@ -5,7 +5,7 @@ au nœud de cette machine, qui la transmettra à ses machines appairées.
     python tools/publish.py show       identifiant et clé publique (jamais la clé privée)
     python tools/publish.py release [--notes "…"] [--data-dir data] [--out dossier]
                                     [--targets windows-x86_64,android-aarch64]
-                                    [--no-companion]
+                                    [--no-companion] [--no-engine]
 
 Une version publiée, c'est le code du commit courant (git archive : rien d'autre que
 ce qui est dans le dépôt), au numéro écrit dans aiodos/__init__.py ; une étiquette
@@ -13,7 +13,9 @@ v<numéro> marque le commit. S'y joint le compagnon Internet aiodos-net de chaqu
 plateforme, construit à partir de ce même commit et vérifié (companion_build.py) :
 par défaut, celles qu'on sait construire ici ; une plateforme sans ses outils est
 signalée, et la version part sans son compagnon ; une construction qui échoue arrête
-tout, avant que rien ne soit publié. La clé privée reste hors du dépôt, dans
+tout, avant que rien ne soit publié. S'y joint aussi le moteur llama.cpp des gros modèles
+répartis, l'archive officielle d'une version épinglée (engine_release.py) ; s'il ne peut
+être téléchargé, la version part sans lui. La clé privée reste hors du dépôt, dans
 ~/.aiodos/publication/ (ou là où pointe AIODOS_RELEASE_KEY) : voir LISEZMOI.txt à côté.
 """
 import argparse
@@ -34,6 +36,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 
 import companion_build  # noqa: E402
+import engine_release  # noqa: E402
 from aiodos.updates import manifest as manifests  # noqa: E402
 from aiodos.updates import platforms  # noqa: E402
 from aiodos.updates import version as versions  # noqa: E402
@@ -198,6 +201,16 @@ def cmd_release(args):
             files.append((built, {"kind": platforms.kind(manifests.COMPANION, target),
                                   "name": built.name, "size": built.stat().st_size,
                                   "sha256": sha256_of(built)}))
+        skipped_engines = []
+        for where in ([] if args.no_engine else engine_release.targets()):
+            try:
+                engine = engine_release.fetch(where)
+            except engine_release.EngineError as exc:
+                skipped_engines.append((where, str(exc)))
+                continue
+            files.append((engine, {"kind": platforms.kind(manifests.ENGINE, where),
+                                   "name": engine.name, "size": engine.stat().st_size,
+                                   "sha256": sha256_of(engine)}))
         signed = manifests.sign({
             "format": manifests.FORMAT, "app": manifests.APP, "version": number,
             "published": int(time.time()), "commit": commit, "min_python": MIN_PYTHON,
@@ -219,10 +232,14 @@ def cmd_release(args):
     print(f"Version {number} publiée (commit {commit[:10]}, étiquette {tag}, "
           f"{files[0][1]['size'] / 1e6:.1f} Mo) dans {store.root}.")
     for path, item in files[1:]:
-        print(f"Compagnon joint : {item['kind']} ({item['size'] / 1e6:.1f} Mo)")
+        what = "Moteur" if item["kind"].startswith(manifests.ENGINE) else "Compagnon"
+        print(f"{what} joint : {item['kind']} ({item['size'] / 1e6:.1f} Mo)")
     for target, reason in skipped:
         print(f"ATTENTION : compagnon non joint ({target}) : {reason}. Les machines de cette "
               "plateforme garderont le compagnon qu'elles ont déjà.")
+    for where, reason in skipped_engines:
+        print(f"ATTENTION : moteur llama.cpp non joint ({where}) : {reason}. Les machines de "
+              "cette plateforme garderont celui qu'elles ont déjà.")
     print("Le nœud de cette machine la propose à ses machines appairées, qui se la passent.")
     if args.out:
         print(f"Copie pour une installation à la main : {Path(args.out) / archive.name}")
@@ -246,6 +263,8 @@ def main():
                               f"qu'on sait construire ici parmi {', '.join(companion_build.default_targets())})")
     release.add_argument("--no-companion", action="store_true",
                          help="publier sans le compagnon Internet")
+    release.add_argument("--no-engine", action="store_true",
+                         help="publier sans le moteur llama.cpp des gros modèles répartis")
     release.set_defaults(run=cmd_release)
     args = parser.parse_args()
     args.run(args)

@@ -127,6 +127,16 @@ def _safe_parts(entry: zipfile.ZipInfo) -> tuple:
 
 
 def extract(archive: Path, dest: Path):
+    """Archive du code d'une version : dépliée, puis le paquet aiodos doit y être."""
+    unpack(archive, dest)
+    if not (dest / "aiodos" / "__init__.py").is_file():
+        raise UpdateError("Archive sans le code d'AIODOS.")
+
+
+def unpack(archive: Path, dest: Path):
+    """Déplie une archive zip dans `dest` (qui ne doit pas exister) : chemins vérifiés un
+    à un, liens refusés, taille et nombre de fichiers bornés (cf. cluster/delivery.py pour
+    le moteur llama.cpp)."""
     dest.mkdir(parents=True)
     try:
         with zipfile.ZipFile(archive) as z:
@@ -150,8 +160,6 @@ def extract(archive: Path, dest: Path):
                         out.write(block)
     except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
         raise UpdateError(f"Archive endommagée ({exc}).") from exc
-    if not (dest / "aiodos" / "__init__.py").is_file():
-        raise UpdateError("Archive sans le code d'AIODOS.")
 
 
 def declared_version(folder: Path) -> str | None:

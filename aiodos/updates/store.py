@@ -160,6 +160,27 @@ class Store:
             pass
         return target
 
+    def reuse(self, version: str, item: dict) -> bool:
+        """Le même fichier (même empreinte) est déjà dans le paquet d'une autre version :
+        copié plutôt que téléchargé de nouveau. Le moteur llama.cpp, épinglé, reste le même
+        d'une version à l'autre. Faux s'il n'y en a pas, ou si la copie échoue."""
+        for other in self.package_versions():
+            if other == version:
+                continue
+            found = self.manifest(other)
+            twin = next((f for f in (found or {}).get("files") or []
+                         if f.get("sha256") == item["sha256"] and f.get("size") == item["size"]),
+                        None)
+            if twin is None or not self.has(other, twin):
+                continue
+            try:
+                shutil.copyfile(self.package_path(other, twin), self.partial(version, item["name"]))
+                self.finish_download(version, item)       # empreinte revérifiée
+                return True
+            except (OSError, UpdateError):
+                continue
+        return False
+
     def save_file(self, version: str, item: dict, source: Path):
         """Fichier fourni par l'outil de publication (déjà sur le disque)."""
         target = self._dir("packages", version) / item["name"]

@@ -6,7 +6,8 @@ signature sur ces octets-là, puis seulement on le lit. Un manifeste peut annonc
 des fichiers d'un type inconnu : ils sont ignorés. Ainsi des programmes livrés avec
 une version, un par plateforme (« aiodos-net-windows-x86_64 », cf. platforms.py et
 binaries.py) : les versions 2.0.x n'en prennent aucun, les suivantes celui de leur
-plateforme seulement.
+plateforme seulement. De même pour le moteur llama.cpp des gros modèles répartis
+(« llama.cpp-windows-x86_64 », l'archive officielle, cf. cluster/delivery.py).
 Le format (FORMAT) ne doit pas changer, sans quoi les machines déjà installées ne
 pourraient plus se mettre à jour.
 """
@@ -26,6 +27,7 @@ FORMAT = 1
 APP = "aiodos"
 SOURCE = "source"                  # archive du code : aiodos/, assets/, lanceurs
 COMPANION = "aiodos-net"           # compagnon Internet, un fichier par plateforme
+ENGINE = "llama.cpp"               # moteur des gros modèles répartis, une archive par plateforme
 MAX_FILE = 200 * 1024 ** 2
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
