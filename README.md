@@ -143,8 +143,9 @@ alors en « réparti » dans le choix du modèle. Il faut, sur les machines qui 
 « Prêter ma carte graphique pour les gros modèles » (vue « Cette machine », coupé par
 défaut), et partout le compagnon : les tranches passent par ses tunnels chiffrés, entre
 mes machines seulement, jamais chez un ami. llama.cpp est livré avec les mises à jour
-signées, la même version partout. Au premier message, la conversation montre la mise en
-place (cartes demandées, chargement) ; ensuite, chaque machine garde les poids en cache.
+signées, la même version partout. Dès qu'on le choisit, il se prépare pendant qu'on écrit
+la question (cartes demandées, chargement), et la conversation montre où il en est ;
+ensuite, chaque machine garde les poids en cache.
 Mesures, choix et limites : [docs/gros-modeles.md](docs/gros-modeles.md) ; images et
 vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 
