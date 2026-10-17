@@ -1038,9 +1038,10 @@ Le guide ([docs/relais.md](relais.md)) dit aussi ce que l'essai a appris d'autre
 - après l'ajout d'une clé, il faut le relancer, et la machine refusée réessaie seule ;
 - aucun annuaire n'est nécessaire entre machines appairées.
 
-Reste, hors de cette étape : le même essai entre deux vrais réseaux (2.8), et deux
-fonctions qui supposent encore une adresse sur le réseau local (conversation avec un
-modèle prêté par une machine appairée sur invitation, prévenance au désappairage).
+Reste, hors de cette étape : le même essai entre deux vrais réseaux (2.8). La
+conversation avec un modèle prêté et la prévenance au désappairage marchent aussi avec
+une machine appairée sur invitation, qui n'a qu'une clé Internet (17/10/2026,
+`tests/test_network_chat.py`, `tests/test_network_invitation.py`).
 
 **2.8 Essai réel avec un ami**, puis documentation (README, ce document complété par
 les mesures).

@@ -231,7 +231,8 @@ function renderPeers(net) {
           <b>${esc(peer.name)}</b>
           ${friend ? '<span class="pill" title="Machine d\'un ami : droits plus étroits">ami</span>' : ''}
           ${peer.set_aside_at ? '<span class="pill err">mise de côté</span>' : ''}
-          <span class="faint">${esc(peer.address || '?')}:${peer.port || '?'}</span>
+          <span class="faint">${peer.address ? `${esc(peer.address)}:${peer.port || '?'}`
+            : peer.net_id ? 'par Internet' : 'adresse inconnue'}</span>
           <span class="faint">${peer.online ? 'en ligne' : peer.last_seen ? `vue ${ago(peer.last_seen)}` : 'jamais vue'}</span>
           <span style="flex:1"></span>
           <button class="icon-btn" data-act="refresh" title="Actualiser">${icon('retry')}</button>

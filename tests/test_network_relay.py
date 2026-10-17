@@ -27,7 +27,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from aiodos import settings
 from aiodos.network import companion
-from tests.nodes import APP_ROOT, Node, free_port
+from tests.nodes import APP_ROOT, Node, free_port, pair_by_invitation
 
 
 def _relay_binary() -> Path | None:
@@ -130,32 +130,13 @@ def _peer(node, node_id):
     return next((p for p in node.api("GET", "/network")["peers"] if p["node_id"] == node_id), None)
 
 
-def _pair_by_invitation(inviter, friend):
-    """Appairage sans réseau local (étape 2.4) : invitation, réponse, puis le même code à
-    6 chiffres confirmé des deux côtés ; chacun voit l'autre comme une de ses machines."""
-    a_id, b_id = inviter.node_id, friend.node_id
-    invitation = inviter.api("POST", "/network/invitations")
-    reply = friend.api("POST", "/network/invitations/accept", {"code": invitation["code"]})
-    started = inviter.api("POST", f"/network/invitations/{invitation['id']}/reply",
-                          {"code": reply["reply"]})
-    pending = friend.wait_for(lambda: friend.api("GET", "/network")["pairing"],
-                              what="demande d'appairage reçue")
-    assert pending[0]["code"] == started["code"]
-    friend.api("POST", "/network/pair/answer", {"node_id": a_id, "accept": True, "trust": "mine"})
-    inviter.api("POST", "/network/pair/answer", {"node_id": b_id, "accept": True, "trust": "mine"})
-    for node, other_id in ((inviter, b_id), (friend, a_id)):
-        node.wait_for(lambda: (p := _peer(node, other_id)) and p["online"], timeout=40,
-                      what="appairage terminé")
-    return a_id, b_id
-
-
 @pytest.fixture(scope="module")
 def two_machines(place):
     """A (sans embeddings locaux : son travail part ailleurs) et B, appairées par le relais."""
     a = _start(place, "a", "PC de la maison", ["--slots", "embed=0"])
     b = _start(place, "b", "PC du bureau")
     try:
-        a_id, b_id = _pair_by_invitation(a, b)
+        a_id, b_id = pair_by_invitation(a, b, trust="mine")    # sans réseau local
         yield a, b, a_id, b_id
     finally:
         a.stop()
