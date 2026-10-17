@@ -145,7 +145,12 @@ L'étape 2 de la recommandation : des images entières, unités indépendantes d
   chez un ami : la description peut être personnelle. L'image n'emporte pas sa
   description dans ses métadonnées.
 - **Une machine sans le modèle** laisse ses images en file pour celles qui l'ont
-  (`TaskSpec.here`). Sans aucune machine capable, la demande est refusée.
+  (`TaskSpec.here`), sans retenir le reste de sa file (indexation…) ni l'empêcher de
+  prêter sa carte. Sans aucune machine capable, la demande est refusée.
+- **Une image à la fois par machine** : sd-server les calcule l'une après l'autre, et une
+  image d'ici ne coupe pas celle d'une autre machine. Une image arrêtée pendant le
+  chargement du modèle est rendue à la file, pas comptée en échec. Une machine qui
+  calcule revérifie les réglages de l'ordre reçu, et refuse un ordre d'image d'un ami.
 - **Essai réel de bout en bout** (`tests/test_images_e2e.py`, variables
   `AIODOS_SDCPP_DIR` et `AIODOS_IMAGE_MODELS`) : deux nœuds sur ce PC, A sans
   stable-diffusion.cpp, B avec, qui prête sa puissance. A demande deux images en 512² :

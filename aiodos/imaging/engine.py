@@ -27,6 +27,7 @@ from aiodos import settings
 from aiodos.cluster.engine import NO_WINDOW, EngineError, Process, free_port
 from aiodos.imaging import catalog
 from aiodos.jobs import pacing
+from aiodos.jobs.registry import Interrupted
 from aiodos.services import ollama
 from aiodos.updates import engines, platforms
 
@@ -199,12 +200,21 @@ def acquire(model_id: str, stop=None, waiting=None) -> str:
             log.info("Carte graphique libérée pour les images : %s déchargé(s) d'Ollama",
                      ", ".join(freed))
         port = free_port()
-        process = Process(f"sd-server-{port}", Path(found["folder"]) / platforms.executable(SERVER),
+        # Un seul journal, réécrit à chaque lancement : sd-server est relancé souvent
+        process = Process("sd-server", Path(found["folder"]) / platforms.executable(SERVER),
                           arguments(model_id, port, device["name"] if device else None), port)
         log.info("Chargement de %s dans sd-server (%s)", model_id,
                  device["label"] if device else "processeur")
         began = time.monotonic()
-        process.start(LOAD_TIMEOUT, ready=lambda: _answers(port), stop=stop, waiting=waiting)
+        try:
+            process.start(LOAD_TIMEOUT, ready=lambda: _answers(port), stop=stop,
+                          waiting=waiting)
+        except EngineError:
+            if stop is not None and stop.is_set():
+                # Arrêté en route (conversation, utilisateur revenu, AIODOS qui s'arrête) :
+                # l'unité est rendue, elle n'a pas échoué
+                raise Interrupted() from None
+            raise
         log.info("%s prêt en %.1f s", model_id, time.monotonic() - began)
         _state.update(process=process, model=model_id, busy=1, used=time.monotonic())
         if _state["reaper"] is None or not _state["reaper"].is_alive():

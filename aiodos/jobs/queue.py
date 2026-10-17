@@ -39,39 +39,55 @@ def _portable(task) -> bool:
     return bool(spec and spec.portable)
 
 
-SCAN = 30         # unités examinées à chaque attribution (les premières de la file)
+def not_here(resources) -> tuple:
+    """(condition SQL, paramètres) qui écarte les unités que cette machine ne sait pas
+    calculer (TaskSpec.here : modèle d'images absent…) : elles restent en file pour une de
+    mes machines, sans retenir les autres. Jugé une fois par tâche et par modèle."""
+    tasks = registry.conditional_tasks()
+    resources = list(resources or [])
+    if not tasks or not resources:
+        return "", ()
+    rows = db.query(
+        f"""SELECT DISTINCT u.task, json_extract(u.payload, '$.model') AS model
+            FROM units u JOIN jobs j ON j.id = u.job_id
+            WHERE u.status = 'queued' AND j.status IN ('queued', 'running')
+              AND u.resource IN ({",".join("?" * len(resources))})
+              AND u.task IN ({",".join("?" * len(tasks))})""", (*resources, *tasks))
+    blocked = [f"{r['task']}|{r['model'] or ''}" for r in rows
+               if not registry.runnable_here(r["task"], r["model"])]
+    if not blocked:
+        return "", ()
+    return (" AND u.task || '|' || COALESCE(json_extract(u.payload, '$.model'), '') "
+            f"NOT IN ({','.join('?' * len(blocked))})", tuple(blocked))
 
 
 def claim_next(resources, node) -> dict | None:
-    """Réserve la prochaine unité exécutable sur l'une de ces ressources. Une unité que
-    cette machine ne sait pas calculer (TaskSpec.here : modèle d'images absent…) reste en
-    file pour une de mes machines, et la suivante passe."""
+    """Réserve la prochaine unité exécutable sur l'une de ces ressources (cf. not_here)."""
     if not resources:
         return None
     placeholders = ",".join("?" * len(resources))
-    rows = db.query(
+    skip, skipped = not_here(resources)
+    row = db.query_one(
         f"""SELECT u.id, u.job_id, u.task, u.resource, u.payload, u.attempts
             FROM units u JOIN jobs j ON j.id = u.job_id
             WHERE u.status = 'queued' AND j.status IN ('queued', 'running')
-              AND u.resource IN ({placeholders})
-            ORDER BY j.priority, j.created, j.id, u.id LIMIT ?""", (*resources, SCAN))
-    for row in rows:
-        unit = dict(row)
-        unit["payload"] = json.loads(unit["payload"])
-        if not registry.runnable_here(unit["task"], unit["payload"]):
-            continue
-        now = db.now()
-        with db.transaction() as c:
-            claimed = c.execute(
-                "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1 "
-                "WHERE id=? AND status=?", (RUNNING, now, node, unit["id"], QUEUED)).rowcount
-            if not claimed:
-                return None
-            c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
-                      "WHERE id=? AND status=?", (RUNNING, now, unit["job_id"], QUEUED))
-        unit["attempts"] += 1
-        return unit
-    return None
+              AND u.resource IN ({placeholders}){skip}
+            ORDER BY j.priority, j.created, j.id, u.id LIMIT 1""", (*resources, *skipped))
+    if row is None:
+        return None
+    now = db.now()
+    with db.transaction() as c:
+        claimed = c.execute(
+            "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1 "
+            "WHERE id=? AND status=?", (RUNNING, now, node, row["id"], QUEUED)).rowcount
+        if not claimed:
+            return None
+        c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
+                  "WHERE id=? AND status=?", (RUNNING, now, row["job_id"], QUEUED))
+    unit = dict(row)
+    unit["payload"] = json.loads(unit["payload"])
+    unit["attempts"] += 1
+    return unit
 
 
 def _complete_if_last(c, job_id) -> bool:

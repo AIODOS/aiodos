@@ -2,16 +2,23 @@
 
 sd-server range la demande dans sa file et la calcule ; on relit son état toutes les
 POLL_S secondes. Un arrêt (unité rendue, AIODOS qui s'arrête) annule le calcul là-bas.
+Une image à la fois sur cette machine (sd-server les calcule l'une après l'autre) : une
+image d'ici et une image pour une autre machine ne se gênent pas. Si sd-server manque de
+mémoire (Ollama a repris la carte entre-temps), il est relancé et l'image refaite, une fois.
 L'image n'emporte pas sa consigne dans ses métadonnées : AIODOS la garde à part, et une
 image partagée ne la dévoile pas.
 """
 import base64
+import logging
+import threading
 import time
 
 import requests
 
 from aiodos.imaging import catalog, engine
 from aiodos.jobs.registry import Interrupted
+
+log = logging.getLogger("aiodos.images")
 
 POLL_S = 0.5
 MAX_SECONDS = 1800                # une image ne prend jamais une demi-heure
@@ -28,6 +35,7 @@ class Shortage(ImageError):
 
 
 _SHORTAGE = ("no results", "memory", "capacity", "alloc")
+_turn = threading.Lock()          # une image à la fois sur cette machine
 
 
 def request_body(params: dict) -> dict:
@@ -72,7 +80,23 @@ def _cancel(base: str, job: str):
 
 def image(params: dict, stop=None, waiting=None) -> dict:
     """{"png": octets, "seconds": durée du calcul} pour une demande (modèle, consigne,
-    graine, taille, pas). Interrupted si `stop` est levé en route."""
+    graine, taille, pas). Interrupted si `stop` est levé en route, y compris en attendant
+    son tour."""
+    while not _turn.acquire(timeout=0.5):
+        if stop is not None and stop.is_set():
+            raise Interrupted()
+    try:
+        try:
+            return _once(params, stop, waiting)
+        except Shortage as exc:
+            log.info("%s : sd-server relancé avec la mémoire libre", exc)
+            engine.stop()
+            return _once(params, stop, waiting)
+    finally:
+        _turn.release()
+
+
+def _once(params: dict, stop=None, waiting=None) -> dict:
     base = engine.acquire(params["model"], stop=stop, waiting=waiting)
     began = time.monotonic()
     try:

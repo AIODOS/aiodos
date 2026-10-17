@@ -553,3 +553,111 @@ def test_the_profile_never_wakes_the_card(tmp_path, monkeypatch):
     assert ran == ["--version", "--list-devices"]
     settings.set_value("images_device", "CPU")                        # choisi dans les réglages
     assert engine.best_device(engine.devices())["name"] == "CPU"
+
+
+# ------------------------------------------------------------ relecture du 17/10
+def test_images_waiting_for_another_machine_hold_nothing_back(tiny_model, monkeypatch):
+    """32 images que cette machine ne sait pas calculer, en urgence, devant une unité
+    processeur : celle-ci passe quand même, et la carte reste prêtable aux autres."""
+    from aiodos.jobs import leases
+    from aiodos.jobs.registry import UnitSpec, register_job_kind, task
+    monkeypatch.setattr(engine, "folder", lambda: None)               # pas de moteur ici
+
+    @task("essai_cpu")
+    def run(payload):
+        return {}
+    register_job_kind("essai_cpu", lambda params: ("Essai", [UnitSpec("essai_cpu", "cpu")], {}))
+    for _ in range(2):
+        queue.create_job("generate_images",
+                         kind.normalize({"model": "essai", "prompt": "x", "count": 16}), 1)
+    queue.create_job("essai_cpu", {}, 3)
+    unit = queue.claim_next(["gpu", "cpu"], "local")
+    assert unit is not None and unit["task"] == "essai_cpu"
+    assert leases.local_demand(["gpu", "cpu"]) == set()             # rien d'autre en attente
+
+
+def test_a_machine_asking_for_work_sees_past_what_it_cannot_do(tiny_model):
+    """Une machine sans le modèle d'images reçoit l'unité qui suit les 250 images."""
+    from aiodos.jobs import leases
+    for _ in range(16):
+        queue.create_job("generate_images",
+                         kind.normalize({"model": "essai", "prompt": "x", "count": 16}), 1)
+    params = kind.normalize({"model": "essai", "prompt": "la bonne", "count": 1})
+    queue.create_job("generate_images", params, 2)
+    unit = leases.claim_remote(["gpu"], B, lambda u: u["payload"]["prompt"] == "la bonne")
+    assert unit is not None and unit["payload"]["prompt"] == "la bonne"
+
+
+def test_stopping_while_the_engine_loads_hands_the_unit_back(tiny_model, monkeypatch):
+    """Arrêtée pendant le chargement de sd-server (conversation, AIODOS qui s'arrête…),
+    l'unité est rendue (Interrupted), pas comptée en échec."""
+    from aiodos.cluster.engine import EngineError
+    ready()
+    monkeypatch.setattr(engine, "info", lambda: {"folder": str(tiny_model["folder"]),
+                                                 "version": "f0aac52"})
+    monkeypatch.setattr(engine, "devices", lambda max_age=0: [])
+    monkeypatch.setattr(engine.ollama, "unload_chat_models", lambda: [])
+
+    class Loading:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self, timeout, ready=None, stop=None, waiting=None):
+            raise EngineError("Chargement interrompu.")
+    monkeypatch.setattr(engine, "Process", Loading)
+    stop = threading.Event()
+    stop.set()
+    with pytest.raises(Interrupted):
+        engine.acquire("essai", stop=stop)
+    with pytest.raises(EngineError):                                  # sans arrêt : un échec
+        engine.acquire("essai", stop=threading.Event())
+
+
+def test_one_image_at_a_time_and_waiting_can_be_stopped(tiny_model, fake_sd):
+    fake = fake_sd(polls=None)                                        # la première ne finit pas
+    first_stop, second_stop = threading.Event(), threading.Event()
+    outcome = {}
+
+    def first():
+        try:
+            generate.image(_payload(), stop=first_stop)
+        except Interrupted:
+            outcome["first"] = "rendue"
+    runner = threading.Thread(target=first)
+    runner.start()
+    time.sleep(0.3)
+    threading.Timer(0.3, second_stop.set).start()
+    with pytest.raises(Interrupted):                                  # attendait son tour
+        generate.image(_payload(seed=43), stop=second_stop)
+    assert len(fake.bodies) == 1                                      # jamais envoyée
+    first_stop.set()
+    runner.join(5)
+    assert outcome == {"first": "rendue"}
+
+
+def test_an_image_order_is_checked_by_the_machine_that_computes_it(tiny_model, fake_sd):
+    fake_sd()
+    for wrong in ({"width": 4096}, {"steps": 1000}, {"prompt": ""}, {"model": "autre"}):
+        with pytest.raises(ValueError):
+            kind.compute_image(_payload(**wrong), None, {})
+    assert kind.compute_image(_payload(), None, {})["png"]
+
+
+def test_an_image_order_from_a_friend_is_refused(tiny_model, monkeypatch):
+    from aiodos.network import worker as worker_module
+    peers.save(FRIEND, "PC d'un ami", b"a" * 32, "127.0.0.1", 2, trust="friend")
+    sent = []
+
+    class Manager:
+        executor = None
+
+    w = worker_module.Worker.__new__(worker_module.Worker)
+    w.m = Manager()
+    w._gpu_rest_until = 0.0
+    monkeypatch.setattr(w, "_quiet", lambda a, action, **extra: sent.append((action, extra)),
+                        raising=False)
+    order = {"id": 1, "task": "generate_image", "resource": "gpu", "payload": _payload(),
+             "options": {}, "blob": None}
+    outcome = w._process(worker_module.Assignment(FRIEND, "PC d'un ami", order))
+    assert "réservée à mes machines" in outcome
+    assert sent and sent[0][0] == "work/fail"

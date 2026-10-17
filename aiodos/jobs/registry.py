@@ -45,9 +45,11 @@ class TaskSpec:
     # sample(payload, sortie, options), le contrôle par échantillon de ce qu'il a calculé
     shared_keys: tuple = ()
     sample: Optional[Callable] = None
-    # here(payload) -> bool : cette machine sait-elle calculer l'unité (moteur, modèle) ?
-    # Sinon elle attend en file qu'une de mes machines qui le sait la demande. None : oui
+    # here(modèle) -> bool : cette machine sait-elle calculer les unités de ce modèle (clé
+    # « model » du payload : moteur présent, fichiers complets) ? Sinon elles attendent en
+    # file qu'une de mes machines qui le sait les demande. None : toujours
     here: Optional[Callable] = None
+    mine_only: bool = False               # jamais calculée par un ami, ni pour un ami
 
     @property
     def portable(self) -> bool:
@@ -81,15 +83,22 @@ def task(name):
 
 
 def register_portable(name, compute, assimilate, file_key=None, options=None,
-                      requires=None, validate=None, shared_keys=(), sample=None, here=None):
+                      requires=None, validate=None, shared_keys=(), sample=None, here=None,
+                      mine_only=False):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
-                           tuple(shared_keys), sample, here)
+                           tuple(shared_keys), sample, here, mine_only)
 
 
-def runnable_here(task, payload) -> bool:
-    """L'exécuteur local peut-il prendre cette unité (cf. TaskSpec.here) ?"""
+def runnable_here(task, model) -> bool:
+    """L'exécuteur local peut-il prendre les unités de cette tâche et de ce modèle (cf.
+    TaskSpec.here) ?"""
     spec = TASKS.get(task)
-    return spec is None or spec.here is None or bool(spec.here(payload))
+    return spec is None or spec.here is None or bool(spec.here(model))
+
+
+def conditional_tasks() -> list:
+    """Tâches qui ne se calculent pas sur toutes les machines (TaskSpec.here)."""
+    return [name for name, spec in TASKS.items() if spec.here is not None]
 
 
 def run_local(name, payload, stop=None) -> dict:

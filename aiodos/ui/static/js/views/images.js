@@ -216,6 +216,10 @@ function waiting(job, params, away) {
 }
 
 // ----------------------------------------------------------------- galerie
+// L'adresse porte le nom du fichier : un numéro d'image réutilisé après une suppression
+// ne ressort pas l'ancienne image du cache du navigateur
+const imageUrl = img => `${fileUrl(`/images/${img.id}/file`)}&v=${encodeURIComponent(img.file)}`;
+
 function renderGrid() {
   const grid = $('#img-grid', root);
   $('#img-more', root).hidden = complete;
@@ -225,7 +229,7 @@ function renderGrid() {
   }
   grid.innerHTML = images.map(img => `
     <button class="img-tile" data-id="${img.id}" title="${esc(img.prompt)}">
-      <img loading="lazy" src="${fileUrl(`/images/${img.id}/file`)}" alt="${esc(img.prompt)}"
+      <img loading="lazy" src="${imageUrl(img)}" alt="${esc(img.prompt)}"
         style="aspect-ratio:${img.width}/${img.height}">
       <span class="img-tag">${esc(img.machine || 'cette machine')}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
     </button>`).join('');
@@ -239,13 +243,13 @@ function open(img) {
   const back = h(`
     <div class="modal-back img-view" role="dialog" aria-modal="true">
       <div class="img-view-box">
-        <img src="${fileUrl(`/images/${img.id}/file`)}" alt="${esc(img.prompt)}">
+        <img src="${imageUrl(img)}" alt="${esc(img.prompt)}">
         <div class="img-view-side">
           <div class="img-view-prompt">${esc(img.prompt)}</div>
           <div class="faint">${img.width} × ${img.height} · graine ${img.seed} · ${img.steps} pas<br>
             ${esc(img.machine || 'cette machine')}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''} · ${ago(img.created)}</div>
           <div class="img-view-actions">
-            <a class="btn sm" href="${fileUrl(`/images/${img.id}/file`)}" download="aiodos-${img.id}.png">${icon('file')}Enregistrer</a>
+            <a class="btn sm" href="${imageUrl(img)}" download="aiodos-${img.id}.png">${icon('file')}Enregistrer</a>
             <button class="btn sm" data-act="reuse">${icon('retry')}Reprendre</button>
             <button class="btn sm danger" data-act="delete">${icon('trash')}Supprimer</button>
             <button class="btn sm ghost" data-act="close">${icon('x')}Fermer</button>

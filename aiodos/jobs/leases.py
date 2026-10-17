@@ -16,7 +16,8 @@ from aiodos.jobs import queue
 from aiodos.jobs.models import FAILED, MAX_ATTEMPTS, QUEUED, RUNNING
 
 LEASE_S = 90          # durée d'un bail ; la machine qui calcule le renouvelle toutes les ~30 s
-SCAN = 30             # unités examinées par demande (les premières de la file)
+SCAN = 200            # unités examinées à la fois (les premières de la file)
+SCAN_MAX = 2000       # au plus, par demande : au-delà, la machine redemandera
 EXPIRED = "La machine qui calculait cette unité ne donne plus de nouvelles."
 
 
@@ -31,12 +32,23 @@ def claim_remote(resources, node, acceptable, lease_s=LEASE_S) -> dict | None:
     if not resources:
         return None
     placeholders = ",".join("?" * len(resources))
-    rows = db.query(
-        f"""SELECT u.id, u.job_id, u.task, u.resource, u.payload, u.attempts
-            FROM units u JOIN jobs j ON j.id = u.job_id
-            WHERE u.status = 'queued' AND u.local_only = 0
-              AND j.status IN ('queued', 'running') AND u.resource IN ({placeholders})
-            ORDER BY j.priority, j.created, j.id, u.id LIMIT ?""", (*resources, SCAN))
+    # Page par page : des unités que cette machine ne sait pas calculer (images sans le
+    # modèle…) ne cachent pas celles qui suivent
+    for offset in range(0, SCAN_MAX, SCAN):
+        rows = db.query(
+            f"""SELECT u.id, u.job_id, u.task, u.resource, u.payload, u.attempts
+                FROM units u JOIN jobs j ON j.id = u.job_id
+                WHERE u.status = 'queued' AND u.local_only = 0
+                  AND j.status IN ('queued', 'running') AND u.resource IN ({placeholders})
+                ORDER BY j.priority, j.created, j.id, u.id LIMIT ? OFFSET ?""",
+            (*resources, SCAN, offset))
+        unit = _first(rows, node, acceptable, lease_s)
+        if unit is not None or len(rows) < SCAN:
+            return unit
+    return None
+
+
+def _first(rows, node, acceptable, lease_s) -> dict | None:
     for row in rows:
         unit = _unit(row)
         if not acceptable(unit):
@@ -131,13 +143,15 @@ def expire(now=None) -> list:
 
 
 def local_demand(resources) -> set:
-    """Ressources pour lesquelles ce nœud a lui-même du travail en attente :
-    on ne les prête pas, son propre travail passe d'abord."""
+    """Ressources pour lesquelles ce nœud a lui-même du travail en attente, qu'il sait
+    calculer : on ne les prête pas, son propre travail passe d'abord. Des images qu'il
+    attend d'une autre machine ne l'empêchent pas de prêter sa carte."""
     resources = list(resources)
     if not resources:
         return set()
     placeholders = ",".join("?" * len(resources))
+    skip, skipped = queue.not_here(resources)
     return {r["resource"] for r in db.query(
         f"""SELECT DISTINCT u.resource FROM units u JOIN jobs j ON j.id = u.job_id
             WHERE u.status = 'queued' AND j.status IN ('queued', 'running')
-              AND u.resource IN ({placeholders})""", tuple(resources))}
+              AND u.resource IN ({placeholders}){skip}""", (*resources, *skipped))}

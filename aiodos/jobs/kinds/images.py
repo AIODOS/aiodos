@@ -3,13 +3,12 @@ graine, réglages → PNG). Elle se calcule ici, ou chez une de mes machines qui
 modèle, aux mêmes empreintes (network/work.py), puis l'image n'est gardée qu'ici
 (imaging/gallery.py).
 
-Jamais confiée à un ami : la consigne peut être personnelle, et une unité qui ne vient
-d'aucune bibliothèque partagée ne part pas chez un ami (network/work.py).
+Jamais confiée à un ami, ni calculée pour un ami (mine_only) : la consigne peut être
+personnelle. Une machine qui reçoit un ordre d'image en revérifie les réglages (checked).
 Le calcul suit la cadence du travail de fond (jobs/pacing.py) : il attend la fin d'une
 conversation servie par cette machine.
 """
 import base64
-import logging
 import secrets
 
 from aiodos import settings
@@ -17,8 +16,6 @@ from aiodos.imaging import catalog, gallery, generate
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import pacing
 from aiodos.jobs.registry import UnitSpec, register_job_kind, register_portable
-
-log = logging.getLogger("aiodos.images")
 
 MAX_COUNT = 16
 MAX_PROMPT = 2000
@@ -78,10 +75,10 @@ def split_generate(params):
     return f"Images : « {_short(params['prompt'])} »{many}", units, {"batch": params["batch"]}
 
 
-def runnable_here(payload) -> bool:
+def runnable_here(model) -> bool:
     """Sans stable-diffusion.cpp ou sans le modèle complet ici, l'image attend en file
     qu'une de mes machines qui les a la demande."""
-    return images_engine.folder() is not None and catalog.ready(payload["model"])
+    return images_engine.folder() is not None and catalog.ready(str(model or ""))
 
 
 def requires_image(unit, options) -> dict:
@@ -91,20 +88,22 @@ def requires_image(unit, options) -> dict:
     return {"images": {"model": model_id, "files": catalog.hashes(model_id)}}
 
 
+def checked(payload) -> dict:
+    """Les réglages d'une image reçue en ordre de calcul, revérifiés ici (mêmes bornes
+    qu'une demande faite ici) ; ValueError sinon."""
+    params = normalize({**payload, "count": 1})
+    if params["model"] != payload.get("model") or params["seed"] != int(payload["seed"]):
+        raise ValueError("ordre d'image incohérent")
+    return {**payload, "width": params["width"], "height": params["height"],
+            "steps": params["steps"], "cfg": params["cfg"], "negative": params["negative"]}
+
+
 def compute_image(payload, file, options, stop=None):
+    payload = checked(payload)
     # Une unité d'ici n'a pas de signal d'arrêt : AIODOS qui s'arrête interrompt le
     # chargement ou l'image (l'unité est rendue à la file, sans compter d'essai)
     halt = stop if stop is not None else pacing.stopping()
-
-    def make():
-        try:
-            return generate.image(payload, halt)
-        except generate.Shortage as exc:
-            # Mémoire de la carte prise entre-temps (Ollama…) : sd-server relancé, une fois
-            log.info("%s : sd-server relancé avec la mémoire libre", exc)
-            images_engine.stop()
-            return generate.image(payload, halt)
-    made = pacing.paced(make, stop)
+    made = pacing.paced(lambda: generate.image(payload, halt), stop)
     return {"png": base64.b64encode(made["png"]).decode("ascii"),
             "seconds": round(made["seconds"], 2),
             "machine": str(settings.get("node_name") or settings.machine_name())[:80]}
@@ -144,5 +143,6 @@ def finalize_images(job_id, params, units):
 
 
 register_portable("generate_image", compute_image, assimilate_image,
-                  requires=requires_image, validate=check_image, here=runnable_here)
+                  requires=requires_image, validate=check_image, here=runnable_here,
+                  mine_only=True)
 register_job_kind("generate_images", split_generate, finalize_images)

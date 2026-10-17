@@ -35,7 +35,7 @@ from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.models import GPU_BOUND
-from aiodos.network import client, peers, route, wire, work
+from aiodos.network import client, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
 from aiodos.node import identity, power, priority
@@ -345,6 +345,8 @@ class Worker:
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
                 raise RuntimeError(f"tâche « {a.order['task']} » inconnue sur cette machine")
+            if spec.mine_only and sharing.level(a.peer_id) != sharing.MINE:
+                raise RuntimeError("tâche réservée à mes machines")
             file = self._download(a, folder) if a.order.get("blob") else None
             output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
