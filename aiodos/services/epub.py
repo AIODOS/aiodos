@@ -60,12 +60,14 @@ def reading_order(z: zipfile.ZipFile) -> list:
     return order
 
 
-def read_text(path) -> str:
-    """Le texte du livre, chapitre après chapitre."""
+def read_text(path, pace=None) -> str:
+    """Le texte du livre, chapitre après chapitre ; pace(secondes) entre deux chapitres
+    (cadence du travail de fond, cf. extract.paced)."""
+    from aiodos.services.extract import paced
     parts, total = [], 0
     with zipfile.ZipFile(path) as z:
         present = set(z.namelist())
-        for name in reading_order(z):
+        for name in paced(reading_order(z), pace):
             if name not in present:
                 continue
             total += z.getinfo(name).file_size

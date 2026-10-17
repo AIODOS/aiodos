@@ -179,19 +179,142 @@ def _supply(monkeypatch, plugged=True, level=None, temperature=None, mobile=Fals
 
 
 def test_sharing_conditions(monkeypatch):
+    """« Seulement quand je n'utilise pas ce PC » : la règle de l'économiseur d'écran."""
     _supply(monkeypatch, plugged=True)
     monkeypatch.setattr(identity, "idle_seconds", lambda: 30.0)
     assert sharing_state()["state"] == "off"
-    settings.set_many({"share_enabled": True, "idle_minutes": 10})
+    settings.set_many({"share_enabled": True, "share_when_idle": True, "idle_minutes": 10})
     state = sharing_state()
     assert state["state"] == "busy" and "10 min" in state["detail"]
     monkeypatch.setattr(identity, "idle_seconds", lambda: 11 * 60.0)
     assert sharing_state()["active"]
     _supply(monkeypatch, plugged=False)
     assert sharing_state()["state"] == "battery"
-    settings.set_many({"share_on_ac_only": False, "share_when_idle": False})
-    monkeypatch.setattr(identity, "idle_seconds", lambda: 0.0)
+    settings.set_value("share_on_ac_only", False)        # inactif, et la batterie permise
     assert sharing_state()["active"]
+
+
+def test_lending_goes_on_while_the_pc_is_used_on_mains_only(monkeypatch):
+    """Décision du 17/10/2026 : par défaut, le prêt continue pendant l'utilisation, en
+    priorité basse, mais jamais sur batterie, même quand le partage y est permis."""
+    settings.set_many({"share_enabled": True, "idle_minutes": 10})
+    monkeypatch.setattr(identity, "idle_seconds", lambda: 5.0)       # quelqu'un s'en sert
+    _supply(monkeypatch, plugged=True)
+    state = sharing_state()
+    assert state["active"] and state["state"] == "in_use" and "priorité basse" in state["detail"]
+    _supply(monkeypatch, plugged=None)                  # alimentation inconnue : comme le secteur
+    assert sharing_state()["state"] == "in_use"
+    _supply(monkeypatch, plugged=False)
+    assert sharing_state()["state"] == "battery"
+    settings.set_value("share_on_ac_only", False)
+    state = sharing_state()
+    assert not state["active"] and state["state"] == "battery" and "utilisé" in state["detail"]
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)      # inactivité inconnue
+    assert not sharing_state()["active"]
+    monkeypatch.setattr(identity, "idle_seconds", lambda: 11 * 60.0)  # personne : comme avant
+    assert sharing_state()["state"] == "ready"
+
+
+def test_unknown_activity_on_mains_counts_as_use(monkeypatch):
+    """Linux, nœud sans écran : activité inconnue, donc les égards d'une utilisation (carte
+    graphique prêtée la moitié du temps). « Seulement quand je n'utilise pas ce PC » prête
+    alors sans retenue, faute de pouvoir mesurer une utilisation (règle d'avant)."""
+    settings.set_value("share_enabled", True)
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    _supply(monkeypatch, plugged=True)
+    state = sharing_state()
+    assert state["active"] and state["state"] == "in_use" and "pas mesurable" in state["detail"]
+    settings.set_value("share_when_idle", True)
+    assert sharing_state()["state"] == "ready"
+
+
+def test_idle_time_survives_the_tick_counter_overflow():
+    """GetTickCount : 32 bits sans signe, au-delà de 2^31 après 24,9 jours, à zéro après
+    49,7 jours. Avant la correction, le PC passait alors pour utilisé en permanence."""
+    assert identity.idle_from_ticks(10_000, 4_000) == 6.0
+    assert identity.idle_from_ticks(2**31 + 9_000, 2**31 - 1_000) == 10.0     # 24,9 jours
+    assert identity.idle_from_ticks(5_000, 2**32 - 4_096) == 9.096          # tour complet
+
+
+def test_real_idle_time_is_sane_on_windows(monkeypatch):
+    if not identity.sys.platform == "win32":
+        pytest.skip("Windows")
+    monkeypatch.delenv("AIODOS_SIMULATE_IDLE", raising=False)
+    idle = identity.idle_seconds()
+    assert idle is not None and 0 <= idle < 50 * 24 * 3600
+
+
+def test_machines_that_already_lend_keep_lending_only_when_idle():
+    """Migration 6 : le nouveau défaut (prêter pendant l'utilisation) ne vaut que pour les
+    nouvelles installations ; une machine où le partage a été réglé garde l'ancienne règle,
+    sauf choix explicite."""
+    import sqlite3
+
+    def base(rows):
+        db.close()
+        path = paths.db_path()
+        for suffix in ("", "-wal", "-shm"):
+            path.with_name(path.name + suffix).unlink(missing_ok=True)
+        db._initialized.discard(str(path))
+        conn = sqlite3.connect(path)
+        conn.executescript(db.SCHEMA)
+        for target in sorted(db.MIGRATIONS):
+            if target <= 5:
+                conn.executescript(db.MIGRATIONS[target])
+        conn.executemany("INSERT INTO settings(key, value) VALUES(?, ?)", rows)
+        conn.execute("PRAGMA user_version=5")
+        conn.commit()
+        conn.close()
+        return settings.get("share_when_idle")
+
+    assert base([("share_enabled", "true")]) is True
+    assert base([("share_enabled", "false")]) is True                     # réglé, puis coupé
+    assert base([("share_enabled", "true"), ("share_when_idle", "false")]) is False
+    assert base([]) is False                                              # jamais réglé
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 6
+
+
+def test_the_owner_is_credited_with_computing_not_waiting(setup, monkeypatch):
+    """Réciprocité : une pause sur batterie ou l'attente d'une conversation, pendant une
+    unité prêtée, ne compte pas comme du calcul donné."""
+    import time
+    from aiodos.jobs import pacing
+
+    def compute(payload, file, options, stop):
+        pacing._count_wait(time.monotonic() - 30)          # 30 s d'attente « pendant » l'unité
+        return {"pieces": ["texte"], "vectors": np.ones((1, 4), dtype=np.float32)}
+    _compute_with(monkeypatch, compute)
+    assert setup["lender"]._process(setup["assignment"]).startswith("faite")
+    ledger = {p["node_id"]: p for p in peers.list_peers()}
+    assert 0 <= ledger[OWNER]["given_s"] < 5                # pas 30 s
+
+
+def test_activity_can_be_simulated_for_tests_and_measurements(monkeypatch):
+    """Les tests ne dépendent pas de ce que fait l'utilisateur de la machine pendant
+    qu'ils tournent (conftest : inactif depuis un jour)."""
+    assert identity.idle_seconds() == 86400.0
+    monkeypatch.setenv("AIODOS_SIMULATE_IDLE", "5")
+    assert identity.idle_seconds() == 5.0
+    settings.set_value("share_enabled", True)
+    _supply(monkeypatch, plugged=True)
+    assert sharing_state()["state"] == "in_use"
+
+
+def test_while_the_pc_is_used_the_gpu_is_lent_half_the_time_at_most(setup):
+    lender = setup["lender"]
+    lender.state = {"active": True, "state": "in_use", "detail": ""}
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)          # unité « embed », 100 %
+    remaining = lender._gpu_rest_until - worker.time.monotonic()
+    assert 1.5 < remaining <= 2.0                                  # 2 s × 50 / 50
+    settings.set_value("share_max_gpu", 25)                        # plus strict : gardé
+    lender._gpu_rest_until = 0.0
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)
+    assert 5.5 < lender._gpu_rest_until - worker.time.monotonic() <= 6.0
+    lender.state = {"active": True, "state": "ready", "detail": ""}
+    settings.set_value("share_max_gpu", 100)
+    lender._gpu_rest_until = 0.0
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)           # personne : pas de pause
+    assert lender._gpu_rest_until == 0.0
 
 
 def test_a_pc_keeps_its_rules_whatever_its_battery(monkeypatch):

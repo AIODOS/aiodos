@@ -133,6 +133,9 @@ class NetworkManager:
     async def _stop(self):
         if self.worker:
             await self.worker.stop()
+        from aiodos.cluster import group, helper
+        await asyncio.to_thread(group.stop_all)            # cartes empruntées rendues
+        await asyncio.to_thread(helper.stop_all, self)     # cartes prêtées reprises
         if self._refresh_task:
             self._refresh_task.cancel()
         await self.internet.stop()

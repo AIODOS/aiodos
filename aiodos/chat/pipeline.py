@@ -13,6 +13,7 @@ import re
 
 from aiodos import settings
 from aiodos.knowledge import search
+from aiodos.cluster import group as cluster
 from aiodos.network import remote_models, remote_search, sharing
 from aiodos.services import cloud, ollama, web
 
@@ -65,14 +66,16 @@ def preflight(text: str, model: str) -> dict:
 
 def runs_here(model) -> bool:
     """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ?"""
-    return not cloud.provider_of(model) and not remote_models.parse(model)
+    return (not cloud.provider_of(model) and not remote_models.parse(model)
+            and not cluster.parse(model))
 
 
 def peers_allowed(model) -> bool:
     """Les passages trouvés chez mes machines et mes amis peuvent-ils servir à ce modèle ?
     Ils ne vont pas plus loin que mes machines : ni vers le cloud, ni vers la machine d'un
-    ami qui prête son modèle (le propriétaire les a ouverts à moi, pas à des tiers). Une
-    nouvelle façon de faire répondre ailleurs devra être ajoutée ici."""
+    ami qui prête son modèle (le propriétaire les a ouverts à moi, pas à des tiers). Un gros
+    modèle réparti tourne ici, avec les cartes de mes seules machines (cluster/group.py) :
+    il peut s'en servir. Une nouvelle façon de faire répondre ailleurs devra être ajoutée ici."""
     if cloud.provider_of(model):
         return False
     lent = remote_models.parse(model)
@@ -80,7 +83,8 @@ def peers_allowed(model) -> bool:
 
 
 def available_models() -> list:
-    """Modèles de conversation : locaux (Ollama), ceux de mes machines, puis cloud."""
+    """Modèles de conversation : locaux (Ollama), ceux de mes machines, les gros
+    modèles répartis entre elles, puis cloud."""
     models = []
     try:
         installed = ollama.list_models()
@@ -97,6 +101,10 @@ def available_models() -> list:
         models.extend(remote_models.available())
     except Exception as exc:
         log.warning("Modèles des machines appairées indisponibles : %s", exc)
+    try:
+        models.extend(cluster.available())             # gros modèles répartis
+    except Exception as exc:
+        log.warning("Modèles répartis indisponibles : %s", exc)
     for name, spec in cloud.PROVIDERS.items():
         models.append({"id": cloud.MODEL_PREFIX + name, "label": spec["label"],
                        "group": "cloud", "caps": [], "has_key": cloud.has_key(name)})
@@ -216,6 +224,8 @@ def generate(model, messages, think=True, stop=None):
         yield from cloud.chat_stream(provider, messages, stop=stop)
     elif remote_models.parse(model):
         yield from remote_models.chat_stream(model, messages, think, stop)
+    elif cluster.parse(model):
+        yield from cluster.chat_stream(model, messages, think, stop)
     else:
         yield from ollama.chat_stream(model, messages, think=None if think else False,
                                       stop=stop)

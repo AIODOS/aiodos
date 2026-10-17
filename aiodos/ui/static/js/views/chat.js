@@ -86,8 +86,9 @@ function vramTotal() {
 /** Libellé d'un modèle : « qwen3.6 · PC fixe » s'il est servi par une machine appairée. */
 export function modelLabel(id) {
   const m = state.models.find(x => x.id === id);
-  if (m) return m.peer ? `${m.label} · ${m.peer}` : m.label;
+  if (m) return m.peer ? `${m.label} · ${m.peer}` : m.group === 'cluster' ? `${m.label} · réparti` : m.label;
   if (id?.startsWith('peer:')) return `${id.split(':').slice(2).join(':')} · autre machine`;
+  if (id?.startsWith('reparti:')) return `${id.slice(8)} · réparti`;
   return id || '';
 }
 
@@ -96,6 +97,7 @@ function fillModels() {
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
   const cloud = state.models.filter(m => m.group === 'cloud');
+  const cluster = state.models.filter(m => m.group === 'cluster');
   const vram = vramTotal();
   el.model.innerHTML = '';
   const group = (label, models, text) => {
@@ -109,6 +111,8 @@ function fillModels() {
     `${m.label} · ${bytes(m.size)}${vram && m.size > vram * 0.92 ? ' · lent (dépasse la VRAM)' : ''}`);
   group('Sur mes machines · réponse calculée là-bas', remote, m =>
     `${m.label} · ${m.peer}${m.fits_vram === false ? ' · lent (dépasse sa VRAM)' : ''}`);
+  group('Réparti entre mes machines · cartes graphiques réunies', cluster, m =>
+    `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`);
   group('Cloud · validation avant envoi', cloud, m => `${m.label}${m.has_key ? '' : ' · clé manquante'}`);
   const ids = state.models.map(m => m.id);
   el.model.value = ids.includes(wanted) ? wanted : (local[0]?.id || remote[0]?.id || cloud[0]?.id || '');

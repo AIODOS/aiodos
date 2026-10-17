@@ -124,7 +124,7 @@ async function boot() {
   setInterval(() => {
     if (!state.models.some(m => m.group === 'local')) loadModels();
   }, 8000);
-  setInterval(loadNetwork, 30000);          // machines appairées qui apparaissent ou partent
+  setInterval(() => { if (!document.hidden) loadNetwork(); }, 30000);   // machines qui apparaissent ou partent
 }
 
 boot().catch(err => {

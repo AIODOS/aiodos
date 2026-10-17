@@ -18,7 +18,10 @@ read() renvoie un dict :
   level       charge de la batterie en %, None si inconnue (ou pas de batterie) ;
   temperature température de la batterie en °C, None si inconnue ;
   mobile      True sur un téléphone ou une tablette (Android) ;
-  source      d'où vient la mesure (windows, sysfs, termux-api) ou None.
+  source      d'où vient la mesure (windows, sysfs, termux-api, simulation) ou None.
+
+AIODOS_SIMULATE_POWER=battery (ou ac) fait comme si la machine était sur batterie (ou
+sur secteur), pour essayer ou mesurer sans débrancher (tools/bench_background.py).
 """
 import ctypes
 import json
@@ -34,6 +37,7 @@ from pathlib import Path
 from aiodos.node import android
 
 POWER_SUPPLY = Path("/sys/class/power_supply")
+SIMULATE_ENV = "AIODOS_SIMULATE_POWER"
 TERMUX_COMMAND = "termux-battery-status"
 TERMUX_TIMEOUT = 10    # sans l'application Termux:API, la commande ne répond jamais
 TERMUX_TTL = 30        # elle passe par une application Android : lente, gardée 30 s
@@ -50,6 +54,11 @@ def _status(plugged=None, level=None, temperature=None, mobile=False, source=Non
 
 
 def read() -> dict:
+    simulated = os.environ.get(SIMULATE_ENV, "").strip().lower()
+    if simulated in ("battery", "ac"):
+        on_ac = simulated == "ac"
+        return _status(on_ac, 100 if on_ac else 50, mobile=android.is_android(),
+                       source="simulation")
     if sys.platform == "win32":
         return _windows()
     return _linux(POWER_SUPPLY, android.is_android())

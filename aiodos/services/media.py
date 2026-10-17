@@ -2,6 +2,7 @@
 et audio/vidéo (transcription locale via faster-whisper)."""
 import base64
 import threading
+import time
 
 from aiodos.services import ollama
 
@@ -25,27 +26,39 @@ def vision_extract(path, model: str, mode: str = "both") -> str:
 
 _whisper = {}
 _whisper_lock = threading.Lock()
+WHISPER_THREADS = 4               # fils de calcul de faster-whisper par défaut (cpu_threads=0)
 
 
-def transcribe(path, model_name: str = "small", stop=None) -> str:
+def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=None) -> str:
     """Transcrit la parole d'un fichier audio ou vidéo (une à la fois : le
-    modèle Whisper occupe déjà tous les cœurs du processeur).
+    modèle Whisper occupe déjà plusieurs cœurs du processeur).
 
-    stop : threading.Event ; s'il est levé, la transcription s'arrête au segment
-    suivant (le texte partiel renvoyé doit alors être ignoré par l'appelant)."""
+    stop    : threading.Event ; s'il est levé, la transcription s'arrête au segment
+              suivant (le texte partiel renvoyé doit alors être ignoré par l'appelant) ;
+    threads : fils de calcul (None : WHISPER_THREADS) ; un autre nombre recharge le modèle ;
+    pace    : pace(secondes) après chaque segment, avec le temps qu'il a pris : la cadence
+              du travail de fond (jobs/pacing.py : pause sur batterie, attente du secteur)
+              passe avant le calcul du segment suivant."""
     with _whisper_lock:
-        model = _whisper.get(model_name)
+        key = (model_name, threads or 0)
+        model = _whisper.get(key)
         if model is None:
             from faster_whisper import WhisperModel
-            model = WhisperModel(model_name, device="cpu", compute_type="int8")
-            _whisper[model_name] = model
+            _whisper.clear()              # un seul modèle en mémoire (~500 Mo pour « small »)
+            model = WhisperModel(model_name, device="cpu", compute_type="int8",
+                                 cpu_threads=threads or 0)
+            _whisper[key] = model
         segments, info = model.transcribe(str(path), vad_filter=True)
         lines = []
+        began = time.monotonic()
         for segment in segments:          # générateur : le calcul avance segment par segment
             if stop is not None and stop.is_set():
                 break
             if segment.text.strip():
                 lines.append(segment.text.strip())
+            if pace is not None:
+                pace(time.monotonic() - began)
+                began = time.monotonic()
         text = "\n".join(lines)
     language = getattr(info, "language", "?")
     return f"[Transcription de {path.name} · langue : {language}]\n{text}" if text else ""

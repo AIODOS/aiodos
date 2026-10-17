@@ -7,7 +7,9 @@ jeton tiré au hasard à chaque lancement protège son API (passé par une varia
 d'environnement, jamais dans les journaux ni sur la ligne de commande). AIODOS lui donne
 la liste des machines appairées (liste blanche) et lui confie les requêtes qui ne
 passent pas par le réseau local (cf. route.py). Si AIODOS s'arrête, même brutalement,
-le compagnon s'arrête avec lui (il surveille son entrée standard).
+le compagnon s'arrête avec lui (il surveille son entrée standard). Il garde la priorité
+normale : il relaie aussi des conversations (modèles prêtés par Internet), et son
+processeur est négligeable (docs/arriere-plan.md § 2).
 """
 import json
 import logging
@@ -411,6 +413,19 @@ class Companion:
     def set_peers(self, entries: list) -> dict:
         """Remplace la liste blanche : [{"id", "relays", "addrs"}…]."""
         return self.api("PUT", "/net/v1/peers", {"peers": entries})
+
+    # Tunnels (gros modèles répartis) : un service TCP local de cette machine ouvert à des
+    # machines nommées, ou le service d'une autre machine joint par un port local.
+    def expose(self, services: list) -> dict:
+        """Remplace les services ouverts : [{"name", "port", "peers": [clé…]}…]."""
+        return self.api("PUT", "/net/v1/exposed", {"services": services})
+
+    def open_tunnel(self, net_id: str, name: str) -> int:
+        """Port local (127.0.0.1) relié au service `name` de la machine `net_id`."""
+        return int(self.api("POST", "/net/v1/tunnels", {"peer": net_id, "name": name})["port"])
+
+    def close_tunnel(self, port: int) -> None:
+        self.api("DELETE", f"/net/v1/tunnels/{int(port)}")
 
     def info(self) -> dict | None:
         """Clé et indices de cette machine, à donner aux machines appairées."""

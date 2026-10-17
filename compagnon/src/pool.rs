@@ -32,7 +32,7 @@ use n0_future::StreamExt;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::{ALPN, allowlist::Allowlist, close, inbound};
+use crate::{ALPN, allowlist::Allowlist, close, inbound, tunnel::Tunnels};
 
 /// Passage du ménage dans les connexions en double.
 const SWEEP_EVERY: Duration = Duration::from_secs(10);
@@ -153,6 +153,8 @@ pub struct Pool {
     /// Serveur réseau local d'AIODOS, destinataire des requêtes reçues.
     pub forward: SocketAddr,
     pub shutdown: CancellationToken,
+    /// Services ouverts à d'autres machines, et tunnels vers les leurs.
+    pub tunnels: Tunnels,
     dial_timeout: Duration,
     me: EndpointId,
     peers: Mutex<HashMap<EndpointId, PeerState>>,
@@ -173,6 +175,7 @@ impl Pool {
             allowlist,
             forward,
             shutdown,
+            tunnels: Tunnels::default(),
             dial_timeout,
             peers: Mutex::default(),
             dialing: Mutex::default(),

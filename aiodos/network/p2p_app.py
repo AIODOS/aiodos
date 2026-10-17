@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
+from aiodos.cluster import helper as cluster
 from aiodos.network import consult, envelope, lending, netinfo, peers, sharing, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
@@ -59,6 +60,7 @@ HANDLERS = {
     **consult.HANDLERS,           # recherche dans mes bibliothèques ouvertes : library/search
     **work.HANDLERS,              # travail confié : work/lease, work/blob, work/result…
     **updates.HANDLERS,           # versions signées : update/manifest, update/chunk
+    **cluster.HANDLERS,           # carte graphique prêtée : cluster/lend, keep, release
 }
 
 # Réponses en flux : fonction(manager, émetteur, contenu, stop) -> itérateur de morceaux.

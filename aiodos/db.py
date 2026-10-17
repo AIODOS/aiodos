@@ -85,12 +85,21 @@ MIGRATIONS = {
         used      REAL
     );
     """,
+    # Prêt pendant l'utilisation (17/10/2026) : share_when_idle passe à False par défaut.
+    # Une machine où le partage a déjà été réglé garde l'ancienne règle (« seulement quand
+    # je n'utilise pas ce PC »), celle que son utilisateur a acceptée, sauf s'il a choisi
+    # lui-même : le nouveau défaut ne vaut que pour les nouvelles installations.
+    6: """
+    INSERT INTO settings(key, value)
+    SELECT 'share_when_idle', 'true'
+    WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'share_enabled')
+      AND NOT EXISTS (SELECT 1 FROM settings WHERE key = 'share_when_idle');
+    """,
     # Bibliothèques consultables (recherche par les machines appairées, sans copie des
     # fichiers) : qui peut chercher dans chaque bibliothèque (« none » : personne, par
     # défaut ; « mine » : mes machines ; « friends » : mes machines et mes amis ;
     # « everyone » réservé aux inconnus de la phase 3), les dossiers et documents fermés
-    # d'une bibliothèque ouverte, et le journal des recherches reçues. (La 6 est celle du
-    # mode d'arrière-plan, branche claude/charming-wiles-bbba4f, fusionnée avant.)
+    # d'une bibliothèque ouverte, et le journal des recherches reçues.
     7: """
     ALTER TABLE collections ADD COLUMN open_to TEXT NOT NULL DEFAULT 'none';
     CREATE TABLE IF NOT EXISTS closed_parts (

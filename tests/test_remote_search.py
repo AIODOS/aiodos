@@ -190,6 +190,7 @@ def test_passages_of_others_go_neither_to_the_cloud_nor_to_a_friend_lent_model(a
     """Le propriétaire les a ouverts à cette machine, pas à des tiers."""
     assert pipeline.peers_allowed("qwen3.6:latest")                       # ce PC
     assert pipeline.peers_allowed(f"peer:{PORTABLE}:qwen3.6:latest")      # une de mes machines
+    assert pipeline.peers_allowed("reparti:qwen3.6:latest")               # ici, avec mes machines
     assert not pipeline.peers_allowed(f"peer:{LEA}:qwen3.6:latest")       # la machine d'une amie
     assert not pipeline.peers_allowed("peer:inconnue:qwen3.6:latest")
     assert not pipeline.peers_allowed("cloud:mistral")
