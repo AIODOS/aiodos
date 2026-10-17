@@ -114,11 +114,17 @@ carte : 161 jetons/s en lecture et 16,8 en écriture. Ollama place mieux ce mod�
 graphique, on tombe à 34 et 5,2 : **prêter un processeur et sa mémoire vive ne sert à
 rien, seules les cartes graphiques valent la peine d'être prêtées.**
 
-**M4, le tunnel chiffré (Iroh, comme le compagnon).** À travers un tunnel dumbpipe, la moitié
-du modèle chez le deuxième PC écrit 19,1 jetons/s, contre 35,0 en TCP direct ; tout chez
-lui, 17,9 contre 34,0. Le surcoût, environ 24 ms par mot, ressemble au passage par un relais
-de n0 plutôt qu'à une connexion directe : à remesurer avec le compagnon, relais coupés
-(`--internet-local`).
+**M4, le tunnel chiffré du compagnon.** Deux compagnons sur ce PC, relais coupés, en direct
+(chemin « direct », 0,1 à 1,1 ms) ; le serveur RPC n'est joint que par le tunnel :
+
+| Placement | TCP sans chiffrement | Tunnel du compagnon |
+|---|---|---|
+| Moitié ici, moitié sur la carte du 2e PC | 38,4 jetons/s écrits, 1 959 lus | 33,1 écrits, 1 824 lus |
+| Tout sur la carte du 2e PC | 38,2 écrits, 1 880 lus | 32,2 écrits, 1 286 lus |
+
+Le chiffrement et les deux compagnons coûtent environ 4 ms par mot écrit (14 à 16 %). Un
+premier essai avec dumbpipe donnait bien plus (19 jetons/s) : il passait sans doute par un
+relais de n0, pas en direct.
 
 ## 4. Ce qu'AIODOS fait maintenant (prototype du 17/10/2026)
 

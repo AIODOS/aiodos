@@ -324,5 +324,37 @@
   "lecture_ecart": 19.84,
   "ecriture_jetons_s": 17.88,
   "ecriture_ecart": 0.85
+ },
+ {
+  "nom": "9B dense, moitié GPU local, moitié GPU d'un 2e PC, TCP direct",
+  "options": "--rpc 127.0.0.1:50758 -dev Vulkan1/RPC0 -ngl 99 -ts 1/1",
+  "date": "2026-10-17 15:02",
+  "transport": "tcp",
+  "lecture_jetons_s": 1959.49,
+  "ecriture_jetons_s": 38.41
+ },
+ {
+  "nom": "9B dense, moitié GPU local, moitié GPU d'un 2e PC, tunnel du compagnon",
+  "options": "--rpc 127.0.0.1:64122 -dev Vulkan1/RPC0 -ngl 99 -ts 1/1",
+  "date": "2026-10-17 15:02",
+  "transport": "compagnon",
+  "lecture_jetons_s": 1824.18,
+  "ecriture_jetons_s": 33.14
+ },
+ {
+  "nom": "9B dense, tout sur le GPU d'un 2e PC, TCP direct",
+  "options": "--rpc 127.0.0.1:50758 -dev RPC0 -ngl 99",
+  "date": "2026-10-17 15:03",
+  "transport": "tcp",
+  "lecture_jetons_s": 1880.39,
+  "ecriture_jetons_s": 38.22
+ },
+ {
+  "nom": "9B dense, tout sur le GPU d'un 2e PC, tunnel du compagnon",
+  "options": "--rpc 127.0.0.1:64122 -dev RPC0 -ngl 99",
+  "date": "2026-10-17 15:04",
+  "transport": "compagnon",
+  "lecture_jetons_s": 1286.27,
+  "ecriture_jetons_s": 32.24
  }
 ]
