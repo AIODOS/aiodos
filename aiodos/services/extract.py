@@ -20,11 +20,10 @@ TEXT_EXT = {
 }
 DOC_EXT = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".rtf", ".epub",
            ".html", ".htm", ".odt"}
-# Module qu'il faut pour lire chaque document (cf. _extract_document). HTML et
-# OpenDocument se lisent avec Python seul, comme les fichiers texte.
+# Module qu'il faut pour lire chaque document (cf. _extract_document). HTML, EPUB
+# (services/epub.py) et OpenDocument se lisent avec Python seul, comme les fichiers texte.
 READER_MODULES = {".pdf": "pypdf", ".docx": "docx", ".pptx": "pptx",
-                  ".xlsx": "openpyxl", ".xlsm": "openpyxl", ".rtf": "striprtf",
-                  ".epub": "ebooklib"}
+                  ".xlsx": "openpyxl", ".xlsm": "openpyxl", ".rtf": "striprtf"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
              ".webp", ".heic"}
 MEDIA_EXT = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".opus",
@@ -128,13 +127,8 @@ def _extract_document(p: Path):
         from striprtf.striprtf import rtf_to_text
         return rtf_to_text(p.read_text(encoding="utf-8", errors="ignore"))
     if ext == ".epub":
-        import ebooklib
-        from ebooklib import epub
-        from aiodos.services.web import html_to_text
-        book = epub.read_epub(str(p))
-        return "\n".join(
-            html_to_text(item.get_content().decode("utf-8", "ignore"))[1]
-            for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT))
+        from aiodos.services import epub
+        return epub.read_text(p)
     if ext in (".html", ".htm"):
         from aiodos.services.web import html_to_text
         return html_to_text(p.read_text(encoding="utf-8", errors="ignore"))[1]
