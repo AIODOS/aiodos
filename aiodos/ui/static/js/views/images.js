@@ -233,6 +233,7 @@ function renderGrid() {
       onReuse: img => emit('chat:create', { kind: isVideo(img) ? 'video' : 'image', model: img.model,
         prompt: img.prompt, width: img.width, height: img.height, frames: img.frames, seed: img.seed }),
       onDeleted: img => { images = images.filter(i => i.id !== img.id); renderGrid(); },
+      onConversation: img => { emit('view:show', 'chat'); emit('chat:open', img.conversation_id); },
     });
     const video = t.querySelector('video');
     if (video) {                  // la vidéo s'anime au survol

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from aiodos import settings
+from aiodos.chat import conversations
 from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
@@ -106,10 +107,14 @@ async def generate(body: GenerateIn, request: Request):
 
 @router.get("")
 async def list_images(limit: int = 60, before: int | None = None, batch: str | None = None):
-    """La galerie, les plus récentes d'abord ; `batch` : les images d'une demande."""
-    rows = await asyncio.to_thread(
-        (lambda: gallery.batch(batch)) if batch else (lambda: gallery.list_images(limit, before)))
-    return [dict(row, path=str(gallery.path_of(row))) for row in rows]   # où est le fichier
+    """La galerie, les plus récentes d'abord ; `batch` : les images d'une demande. Chacune
+    dit où est son fichier, et la conversation où elle a été demandée, s'il y en a une."""
+    def listed():
+        rows = gallery.batch(batch) if batch else gallery.list_images(limit, before)
+        talks = conversations.by_batch(row["batch"] for row in rows)
+        return [dict(row, path=str(gallery.path_of(row)),
+                     conversation_id=talks.get(row["batch"])) for row in rows]
+    return await asyncio.to_thread(listed)
 
 
 @router.get("/{image_id}/file")

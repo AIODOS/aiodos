@@ -14,8 +14,9 @@ export const length = img => (img.frames && img.fps ? `${(img.frames / img.fps).
 // La fenêtre native d'AIODOS (pywebview) : « Enregistrer sous… » et « Ouvrir le dossier »
 export const desktop = () => !!window.pywebview?.api?.save_image;
 
-/** onReuse(img) : « Reprendre » (la description revient dans le message) ; onDeleted(img). */
-export function openMedia(img, { onReuse, onDeleted } = {}) {
+/** onReuse(img) : « Reprendre » (la description revient dans le message) ; onDeleted(img) ;
+ *  onConversation(img) : « Voir la conversation » où elle a été demandée. */
+export function openMedia(img, { onReuse, onDeleted, onConversation } = {}) {
   if (!img) return;
   const ext = isVideo(img) ? 'webm' : 'png';
   const media = isVideo(img)
@@ -37,6 +38,7 @@ export function openMedia(img, { onReuse, onDeleted } = {}) {
                  <button class="btn sm" data-act="folder">${icon('folder')}Ouvrir le dossier</button>`
               : `<a class="btn sm" href="${fileOf(img)}" download="aiodos-${img.id}.${ext}">${icon('file')}Enregistrer</a>`}
             ${onReuse ? `<button class="btn sm" data-act="reuse">${icon('retry')}Reprendre</button>` : ''}
+            ${onConversation && img.conversation_id ? `<button class="btn sm" data-act="talk">${icon('chat')}Voir la conversation</button>` : ''}
             <button class="btn sm danger" data-act="delete">${icon('trash')}Supprimer</button>
             <button class="btn sm ghost" data-act="close">${icon('x')}Fermer</button>
           </div>
@@ -56,6 +58,7 @@ export function openMedia(img, { onReuse, onDeleted } = {}) {
   });
   back.querySelector('[data-act="folder"]')?.addEventListener('click', () => window.pywebview.api.show_image_file(img.id));
   back.querySelector('[data-act="reuse"]')?.addEventListener('click', () => { close(); onReuse(img); });
+  back.querySelector('[data-act="talk"]')?.addEventListener('click', () => { close(); onConversation(img); });
   back.querySelector('[data-act="delete"]').onclick = async () => {
     const what = isVideo(img) ? 'cette vidéo' : 'cette image';
     if (!await confirmDanger(`Supprimer ${what} ?`, 'Le fichier est effacé de cette machine.')) return;

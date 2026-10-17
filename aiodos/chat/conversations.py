@@ -91,6 +91,19 @@ def last_media(conv_id) -> dict | None:
     return media if isinstance(media, dict) and media.get("prompt") else None
 
 
+def by_batch(batches) -> dict:
+    """{lot : conversation} des images et vidéos demandées dans une conversation (la
+    galerie mène à leur conversation)."""
+    batches = sorted({str(b) for b in batches if b})
+    if not batches:
+        return {}
+    marks = ",".join("?" * len(batches))
+    return {r["batch"]: r["conversation_id"] for r in db.query(
+        "SELECT json_extract(media, '$.batch') AS batch, conversation_id FROM messages "
+        f"WHERE media IS NOT NULL AND json_extract(media, '$.batch') IN ({marks})",
+        tuple(batches))}
+
+
 def cites_others(sources) -> bool:
     """La réponse s'appuie-t-elle sur des passages trouvés chez d'autres machines ?
     `sources` : la liste enregistrée avec le message, ou son texte JSON."""

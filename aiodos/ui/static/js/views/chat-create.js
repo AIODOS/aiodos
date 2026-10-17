@@ -15,7 +15,7 @@ const COUNTS = [1, 2, 4, 8];
 const KINDS = { image: { noun: 'image', label: 'Image', icon: 'image' },
   video: { noun: 'vidéo', label: 'Vidéo', icon: 'video' } };
 const PLACEHOLDER = { image: "Décris l'image à créer…", video: 'Décris la vidéo à créer…' };
-const HINT = 'Entrée pour créer · Maj+Entrée pour aller à la ligne · ✕ pour revenir à la conversation';
+const HINT = 'Entrée pour créer · Maj+Entrée pour aller à la ligne · Échap pour revenir à la conversation';
 
 let info = null;              // modèles d'images et de vidéos (GET /images/models)
 let mode = null;              // null, 'image' ou 'video' : le mode « Créer » du message
@@ -54,6 +54,9 @@ export function mountCreate(footer, input, grow) {
   field('frames').onchange = () => prefs.set(`images.frames.${field('model').value}`, Number(field('frames').value));
   field('count').onchange = () => prefs.set(`create.count.${mode}`, Number(field('count').value));
   ui.bar.querySelector('.create-seed').onclick = () => { delete preset.seed; fill(); };
+  input.addEventListener('keydown', e => {      // Échap : retour à la conversation
+    if (e.key === 'Escape' && mode) { e.preventDefault(); setMode(null); }
+  });
   on('images:changed', () => { if (mode) load(); });
   on('chat:create', p => { emit('view:show', 'chat'); setMode(p?.kind || 'image', p || {}); });
   on('jobs:changed', follow);
