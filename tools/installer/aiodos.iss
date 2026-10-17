@@ -1,6 +1,7 @@
 ; Installeur Windows d'AIODOS (Inno Setup 6). Construit par tools/build_installer.py, qui
 ; prépare les fichiers (Python embarqué, code, compagnon, moteurs) et passe :
-;   /DAppVersion=…  /DStage=…  /DOutDir=…  /DRepo=…
+;   /DAppVersion=…  /DStage=…  /DOutDir=…  /DRepo=…  /DIcon=… (icône des raccourcis, nommée
+;   d'après son contenu : Windows garde en cache l'icône d'un chemin déjà vu)
 ; Installation pour l'utilisateur seul, sans droits administrateur, dans
 ; %LOCALAPPDATA%\Programs\AIODOS ; les données vont dans %LOCALAPPDATA%\AIODOS
 ; (aiodos/paths.py, installation.json) et survivent à une nouvelle installation.
@@ -10,6 +11,9 @@
 #endif
 #ifndef AppVersion
   #define AppVersion "0.0.0"
+#endif
+#ifndef Icon
+  #define Icon "logo.ico"
 #endif
 #ifndef OutDir
   #define OutDir "dist"
@@ -33,7 +37,7 @@ PrivilegesRequired=lowest
 OutputDir={#OutDir}
 OutputBaseFilename=AIODOS-Setup-{#AppVersion}
 SetupIconFile={#Repo}\assets\logo.ico
-UninstallDisplayIcon={app}\app\assets\logo.ico
+UninstallDisplayIcon={app}\app\assets\{#Icon}
 UninstallDisplayName=AIODOS
 LicenseFile={#Repo}\LICENSE
 Compression=lzma2/max
@@ -80,8 +84,8 @@ Source: "{#Stage}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubd
 [Icons]
 ; Même identifiant d'application que la fenêtre (aiodos/__main__.py) : l'icône épinglée et
 ; la fenêtre ouverte ne font qu'une dans la barre des tâches
-Name: "{userprograms}\AIODOS"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-m aiodos"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\assets\logo.ico"; AppUserModelID: "Arkane.Aiodos"; Comment: "{cm:AppComment}"
-Name: "{userdesktop}\AIODOS"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-m aiodos"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\assets\logo.ico"; AppUserModelID: "Arkane.Aiodos"; Comment: "{cm:AppComment}"; Tasks: desktopicon
+Name: "{userprograms}\AIODOS"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-m aiodos"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\assets\{#Icon}"; AppUserModelID: "Arkane.Aiodos"; Comment: "{cm:AppComment}"
+Name: "{userdesktop}\AIODOS"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-m aiodos"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\assets\{#Icon}"; AppUserModelID: "Arkane.Aiodos"; Comment: "{cm:AppComment}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\runtime\pythonw.exe"; Parameters: "-m aiodos"; WorkingDir: "{app}\app"; Description: "{cm:LaunchProgram,AIODOS}"; Flags: nowait postinstall skipifsilent

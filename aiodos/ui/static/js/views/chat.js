@@ -19,7 +19,8 @@ export function mountChat(container) {
   const chat = h(`
     <div class="chat">
       <header class="chat-head">
-        <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="Conversations">${icon('menu')}</button>
+        <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="Afficher ou masquer les conversations">${icon('menu')}</button>
+        <button class="icon-btn chat-new-btn" id="chat-new-btn" title="Nouvelle conversation">${icon('plus')}</button>
         <div class="chat-title" id="chat-title" title="Cliquer pour renommer">Nouvelle conversation</div>
         <select class="select" id="model-select" title="Modèle utilisé pour répondre"></select>
         <select class="select" id="machine-select" hidden
@@ -51,16 +52,26 @@ export function mountChat(container) {
   };
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
-  // Écran étroit (téléphone) : la liste des conversations s'ouvre par-dessus, à la demande
-  // (☰, ou « Discussions » touché à nouveau dans la barre du bas)
+  // La liste des conversations, avec ☰ ou « Discussions » touché à nouveau dans la barre du
+  // bas : sur un écran étroit (téléphone), elle s'ouvre par-dessus ; sur un ordinateur, elle se
+  // replie pour laisser toute la place à la conversation (« + » en démarre alors une autre)
+  const phone = matchMedia('(max-width: 760px)');
   const showList = shown => {
     if (container.classList.contains('show-list') === shown) return;
     container.classList.toggle('show-list', shown);
     emit('chat:list-shown', shown);
   };
-  $('#chat-list-toggle').onclick = () => showList(true);
+  const collapse = folded => {
+    container.classList.toggle('list-collapsed', folded);
+    prefs.set('chatListCollapsed', folded);
+  };
+  collapse(!!prefs.get('chatListCollapsed', false));
+  const toggleList = () => (phone.matches ? showList(!container.classList.contains('show-list'))
+    : collapse(!container.classList.contains('list-collapsed')));
+  $('#chat-list-toggle').onclick = toggleList;
+  $('#chat-new-btn').onclick = () => emit('chat:new');
   on('chat:list', shown => showList(shown));
-  on('rail:again', view => { if (view === 'chat') showList(!container.classList.contains('show-list')); });
+  on('rail:again', view => { if (view === 'chat') toggleList(); });
   on('chat:open', () => showList(false));
   on('chat:new', () => showList(false));
   el.scroll.addEventListener('click', () => showList(false));

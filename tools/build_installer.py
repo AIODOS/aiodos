@@ -223,12 +223,22 @@ def iscc() -> Path:
                      "ou AIODOS_ISCC")
 
 
+def shortcut_icon(stage: Path) -> str:
+    """L'icône des raccourcis, sous un nom tiré de son contenu : Windows garde en cache
+    l'icône d'un raccourci d'après le chemin du fichier, si bien qu'un nouveau logo sous le
+    même nom laissait l'ancien dans la barre des tâches et le menu Démarrer."""
+    icon = stage / "app" / "assets" / "logo.ico"
+    named = icon.with_name(f"aiodos-{hashlib.sha256(icon.read_bytes()).hexdigest()[:10]}.ico")
+    shutil.copyfile(icon, named)
+    return named.name
+
+
 def compile_installer(stage: Path, number: str, out: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     script = ROOT / "tools" / "installer" / "aiodos.iss"
     done = subprocess.run([str(iscc()), "/Qp", f"/DAppVersion={number}",
                            f"/DStage={stage}", f"/DOutDir={out}", f"/DRepo={ROOT}",
-                           str(script)])
+                           f"/DIcon={shortcut_icon(stage)}", str(script)])
     if done.returncode != 0:
         raise BuildError(f"Inno Setup a échoué (code {done.returncode})")
     return out / f"AIODOS-Setup-{number}.exe"
