@@ -125,7 +125,11 @@ L'étape 2 de la recommandation : des images entières, unités indépendantes d
   précis) : le cœur en Q4_K (3,9 Go), l'encodeur de texte Qwen3-4B en Q4_K_M (2,5 Go) et
   le décodeur de Flux (0,3 Go), en tout 6,7 Go. Un bouton les télécharge
   (`imaging/download.py`) : reprise après une coupure, chaque fichier vérifié avant d'être
-  gardé dans `data/images/models/`.
+  gardé dans `data/images/models/`. Quand une de mes machines a déjà le modèle, un autre
+  bouton le copie depuis elle (`imaging/share.py`, action `images/file`, réservée à mes
+  machines) : par morceaux de 8 Mo sur le réseau local, 512 Ko par Internet, même
+  vérification. Mesure du 17/10/2026 entre deux nœuds de ce PC, chiffrement compris :
+  6,7 Go en 3 min 15 (34 Mo/s ; 27 Mo/s avec des morceaux de 2 Mo).
 - **Le moteur** (`imaging/engine.py`) : `sd-server` de stable-diffusion.cpp (master-973,
   Vulkan, 29 Mo), livré avec les versions signées comme llama.cpp
   (`tools/engine_release.py`, `updates/engines.py`). Un dossier choisi dans le réglage
@@ -173,11 +177,9 @@ images. Deux machines comme celle-ci font donc deux images en 35 s au lieu d'une
 **Suite** :
 
 1. Mesurer la version CUDA sur les cartes NVIDIA (sans doute plus rapide que Vulkan).
-2. Remplir les modèles d'une machine depuis une autre de mes machines, par le réseau
-   local, plutôt que depuis Hugging Face.
-3. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
+2. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
    de ggml (les versions publiées ne l'ont pas : pas de `ggml-rpc.dll` dans l'archive).
-4. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
+3. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
 
 ## Sources
 

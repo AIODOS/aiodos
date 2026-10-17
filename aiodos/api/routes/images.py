@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from aiodos.imaging import catalog, download, gallery
+from aiodos.imaging import catalog, download, gallery, share
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -18,6 +18,10 @@ from aiodos.jobs.models import URGENT
 from aiodos.network import peers, sharing
 
 router = APIRouter(prefix="/api/images")
+
+
+class DownloadIn(BaseModel):
+    source: str | None = None           # une de mes machines qui a le modèle ; vide : Hugging Face
 
 
 class GenerateIn(BaseModel):
@@ -53,7 +57,8 @@ def _models() -> dict:
         models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
                        "about": spec["about"], "steps": spec["steps"],
                        "negative": spec["negative"], **catalog.state(model_id),
-                       "helpers": others.get(model_id, [])})
+                       "helpers": others.get(model_id, []),
+                       "sources": share.sources(model_id)})
     return {"engine": {"found": found is not None,
                        "version": found["version"] if found else None,
                        "device": (images_engine.best_device(found["devices"]) or {}).get("label")
@@ -68,10 +73,11 @@ async def models():
 
 
 @router.post("/models/{model_id}/download")
-def start_download(model_id: str, request: Request):
+def start_download(model_id: str, request: Request, body: DownloadIn | None = None):
     bus = request.app.state.bus
     try:
-        return download.start(model_id, changed=lambda: bus.publish({"type": "images"}))
+        return download.start(model_id, changed=lambda: bus.publish({"type": "images"}),
+                              source=body.source if body else None)
     except catalog.ModelError as exc:
         raise HTTPException(404, str(exc))
     except download.DownloadError as exc:

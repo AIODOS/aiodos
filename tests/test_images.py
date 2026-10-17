@@ -473,3 +473,57 @@ def test_only_chat_models_leave_the_card(monkeypatch):
     monkeypatch.setattr(ollama.requests, "post", lambda url, json, timeout: sent.append(json))
     assert ollama.unload_chat_models() == ["qwen3:8b"]
     assert sent == [{"model": "qwen3:8b", "keep_alive": 0}]
+
+
+# ------------------------------------------------- copie depuis une de mes machines
+def test_model_files_are_served_to_my_machines_only(tiny_model):
+    from aiodos.imaging import share
+    from aiodos.network.client import PeerError
+    from aiodos.network.envelope import b64d
+    ready()
+    peers.save(B, "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    peers.save(FRIEND, "PC d'un ami", b"a" * 32, "127.0.0.1", 2, trust="friend")
+    spec = tiny_model["files"]["diffusion"]
+    reply = share.serve_file(None, B, {"sha256": spec["sha256"], "offset": 10, "size": 20})
+    assert b64d(reply["data"]) == tiny_model["contents"]["diffusion.gguf"][10:30]
+    with pytest.raises(PeerError, match="mes machines"):
+        share.serve_file(None, FRIEND, {"sha256": spec["sha256"]})
+    with pytest.raises(PeerError, match="indisponible"):              # pas dans le catalogue
+        share.serve_file(None, B, {"sha256": "0" * 64})
+    (tiny_model["folder"] / "diffusion.gguf").write_bytes(b"x" * spec["size"])   # abîmé
+    with pytest.raises(PeerError, match="indisponible"):
+        share.serve_file(None, B, {"sha256": spec["sha256"]})
+
+
+def test_a_model_is_copied_from_one_of_my_machines(tiny_model, tmp_path, monkeypatch):
+    """La machine B a le modèle ; on le copie chez nous par morceaux, empreintes vérifiées."""
+    from aiodos.imaging import share
+    ready()
+    source_folder, here = tiny_model["folder"], tmp_path / "ici"
+    here.mkdir()
+    peers.save(B, "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    monkeypatch.setattr(share, "CHUNK", 1000)
+    monkeypatch.setattr(share.route, "lan_first", lambda peer: True)
+    asked = []
+
+    def call(my_id, peer, action, payload, key=None, timeout=10):
+        """Ce que B répond (son dossier de modèles), le temps de la demande."""
+        asked.append(payload["offset"])
+        settings.set_value("images_models_dir", str(source_folder))
+        try:
+            return share.HANDLERS[action](None, B, payload)
+        finally:
+            settings.set_value("images_models_dir", str(here))
+    monkeypatch.setattr(share.client, "call", call)
+    monkeypatch.setattr(share.identity, "node_id", lambda: "machine-a")
+    settings.set_value("images_models_dir", str(here))
+    assert catalog.state("essai")["state"] == "missing"
+    state = download.start("essai", source=B)
+    assert state["source"] == "PC fixe"
+    wait_for(lambda: not download.progress()["running"])
+    assert download.progress()["error"] is None
+    assert catalog.state("essai", check=False)["state"] == "ready"
+    assert (here / "diffusion.gguf").read_bytes() == tiny_model["contents"]["diffusion.gguf"]
+    assert asked[:6] == [0, 1000, 2000, 3000, 4000, 0]                   # 5000 octets en 5 fois
+    with pytest.raises(download.DownloadError, match="des miennes"):
+        download.start("essai", source="inconnue")

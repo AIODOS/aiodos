@@ -96,7 +96,9 @@ function renderModels() {
       machine (Réglages → Images). ${anyHelper() ? 'Tes machines qui ont le modèle calculeront à sa place.'
       : 'Sans lui, seules tes machines qui ont le modèle peuvent calculer les images.'}</div></div>`;
   box.innerHTML = engine + info.models.map(modelCard).join('');
-  box.querySelectorAll('[data-download]').forEach(b => { b.onclick = () => download(b.dataset.download); });
+  box.querySelectorAll('[data-download]').forEach(b => {
+    b.onclick = () => download(b.dataset.download, b.dataset.source || null);
+  });
   box.querySelectorAll('[data-cancel]').forEach(b => { b.onclick = cancelDownload; });
 }
 
@@ -118,14 +120,20 @@ function modelCard(m) {
   if (dl?.running) {
     const pct = dl.total ? Math.floor(100 * dl.done / dl.total) : 0;
     action = `<div class="img-dl"><div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <span class="faint">${bytes(dl.done)} sur ${bytes(dl.total)} · ${bytes(dl.rate)}/s</span>
+      <span class="faint">${bytes(dl.done)} sur ${bytes(dl.total)} · ${bytes(dl.rate)}/s
+        · depuis ${esc(dl.source || 'Hugging Face')}</span>
       <button class="btn sm ghost" data-cancel>${icon('x')}Arrêter</button></div>`;
   } else if (m.state === 'checking') {
     action = '<span class="faint">Vérification des fichiers déjà présents…</span>';
   } else {
-    const label = m.state === 'bad' ? 'Retélécharger' : `Télécharger (${bytes(m.missing_bytes)})`;
-    action = `<button class="btn sm" data-download="${esc(m.id)}">${icon('cloud')}${label}</button>
-      ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}`;
+    const size = bytes(m.missing_bytes);
+    const copies = [...m.sources].sort((a, b) => b.near - a.near).map(s => `
+      <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}Copier
+        depuis ${esc(s.name)} (${s.near ? 'réseau local' : 'Internet'}, ${size})</button>`).join('');
+    const label = m.state === 'bad' ? 'Retélécharger' : `Télécharger depuis Hugging Face (${size})`;
+    action = `<div class="img-dl">${copies}
+      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon('cloud')}${label}</button>
+      ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}</div>`;
   }
   return `<div class="card img-model-card">
     <h2>${icon('image')}${esc(m.label)} <span class="pill">${esc(m.license)}</span></h2>
@@ -133,8 +141,8 @@ function modelCard(m) {
     ${helpers}${action}</div>`;
 }
 
-async function download(id) {
-  try { info.download = await post(`/images/models/${encodeURIComponent(id)}/download`); }
+async function download(id, source) {
+  try { info.download = await post(`/images/models/${encodeURIComponent(id)}/download`, { source }); }
   catch (err) { errorToast(err); return; }
   renderModels();
 }

@@ -176,10 +176,11 @@ def _cluster() -> dict:
 
 def _images() -> dict:
     """Images (imaging/) : version de stable-diffusion.cpp, modèles complets ici. Une de
-    mes machines voit ainsi qui peut calculer ses images."""
+    mes machines voit ainsi qui peut calculer ses images (moteur, modèle, prêt de
+    puissance), et à qui copier un modèle (le modèle suffit)."""
     found = images_engine.info()
     return {"engine": found["version"] if found else None,
-            "models": images_catalog.available() if found else [],
+            "models": images_catalog.available(),
             "shares": bool(settings.get("share_enabled"))}
 
 
