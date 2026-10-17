@@ -378,6 +378,17 @@ def test_a_transfer_cut_for_too_long_gives_up(setup, monkeypatch):
     assert "injoignable" in lender._process(a)
 
 
+def test_an_owner_reached_only_by_internet_is_asked_for_work(setup):
+    """Machine appairée sur invitation (étape 2.4) : pas d'adresse sur le réseau local,
+    seulement sa clé Internet. On lui demande du travail comme aux autres (essai de 2.7) ;
+    une machine qu'on ne sait joindre d'aucune façon, non."""
+    peers.save(OWNER, "PC portable", b"k" * 32, None, None)
+    peers.set_net(OWNER, "ab" * 32, {"relays": ["http://127.0.0.1:3340/"], "addrs": []})
+    peers.save("machine-c", "PC sans adresse", b"k" * 32, None, None)
+    asked = [p["node_id"] for p in setup["lender"]._candidates()]
+    assert OWNER in asked and "machine-c" not in asked
+
+
 def test_an_owner_reached_only_by_internet_sends_smaller_pieces(setup, monkeypatch):
     peers.save(OWNER, "PC portable", b"k" * 32, None, None)     # plus de réseau local
     monkeypatch.setattr(work, "INTERNET_CHUNK", 10)

@@ -30,7 +30,7 @@ use tracing::{debug, info, warn};
 use crate::{
     TOKEN_HEADER,
     allowlist::{self, Entry},
-    config::Config,
+    config::{Config, Relays},
     outbound,
     pool::Pool,
     reply::{self, Body},
@@ -97,7 +97,10 @@ async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
     }
     match (req.method(), path.as_str()) {
         (&Method::GET, "/net/v1/status") => reply::json(StatusCode::OK, status::snapshot(ctx)),
-        (&Method::GET, "/net/v1/ticket") => reply::json(StatusCode::OK, status::ticket(ctx)),
+        (&Method::GET, "/net/v1/ticket") => {
+            wait_for_relay(ctx).await;
+            reply::json(StatusCode::OK, status::ticket(ctx))
+        }
         (&Method::PUT, "/net/v1/peers") => set_peers(ctx, req).await,
         (&Method::POST, "/net/v1/shutdown") => {
             info!("Arrêt demandé par AIODOS");
@@ -105,6 +108,21 @@ async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
             reply::json(StatusCode::OK, json!({ "ok": true }))
         }
         _ => reply::detail(StatusCode::NOT_FOUND, "Chemin inconnu."),
+    }
+}
+
+/// Juste après le démarrage, Iroh n'a pas encore joint son relais : un ticket donné alors
+/// (invitation, réponse à une invitation) n'aurait que la clé, et sans annuaire (relais
+/// auto-hébergé sans ceux de n0) personne ne pourrait joindre cette machine. Le ticket
+/// attend donc le relais, mais pas au-delà de ce délai après le démarrage : ensuite, il
+/// répond aussitôt (relais qui refuse cette clé, pas de réseau). AIODOS attend 5 s une
+/// réponse de l'API locale.
+const TICKET_GRACE: Duration = Duration::from_secs(4);
+
+async fn wait_for_relay(ctx: &Ctx) {
+    let left = TICKET_GRACE.saturating_sub(ctx.started.elapsed());
+    if ctx.config.relays != Relays::Disabled && !left.is_zero() {
+        let _ = tokio::time::timeout(left, ctx.pool.endpoint.online()).await;
     }
 }
 

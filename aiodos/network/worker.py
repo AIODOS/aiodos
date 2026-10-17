@@ -248,8 +248,11 @@ class Worker:
         return sorted(free)
 
     def _candidates(self) -> list:
-        """Machines en ligne, celles qui ont le plus calculé pour moi d'abord."""
-        online = [p for p in peers.list_peers() if p["online"] and p.get("address")]
+        """Machines en ligne, joignables sur le réseau local ou par Internet (une machine
+        appairée sur invitation n'a qu'une clé Internet), celles qui ont le plus calculé
+        pour moi d'abord."""
+        online = [p for p in peers.list_peers()
+                  if p["online"] and (p.get("address") or p.get("net_id"))]
         online.sort(key=lambda p: p["received_s"] - p["given_s"], reverse=True)
         return online
 

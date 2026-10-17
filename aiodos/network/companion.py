@@ -164,7 +164,8 @@ class Companion:
 
     options : relays (liste : « n0 », « none », https://…), directory (« n0-dns,dht »,
     « none »…), bind (sockets UDP, ex. « 127.0.0.1:0 » pour les tests), portmap (bool),
-    data_dir (dossier de la clé ; défaut : celui d'AIODOS).
+    relay_only (bool, essais : par les relais seulement, jamais en direct), data_dir
+    (dossier de la clé ; défaut : celui d'AIODOS).
     """
 
     def __init__(self, forward: str, options: dict | None = None):
@@ -175,6 +176,7 @@ class Companion:
         self.directory = options.get("directory")
         self.bind = options.get("bind")
         self.portmap = bool(options.get("portmap", True))
+        self.relay_only = bool(options.get("relay_only"))
         self.process = None
         self.token = None
         self.id = None
@@ -216,6 +218,8 @@ class Companion:
             args += ["--bind", self.bind]
         if not self.portmap:
             args.append("--no-portmap")
+        if self.relay_only:
+            args.append("--relay-only")
         return args
 
     def start(self) -> bool:

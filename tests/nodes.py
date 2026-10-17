@@ -103,3 +103,27 @@ def pair(a: Node, b: Node, a_trusts="mine", b_trusts="mine"):
     a.wait_for(lambda: [p for p in a.api("GET", "/network")["peers"] if p["online"]],
                what="appairage côté A")
     return a_id, b_id
+
+
+def pair_by_invitation(inviter: Node, friend: Node, trust="friend"):
+    """Appairage sans réseau local (étape 2.4), par les compagnons (nœuds lancés avec
+    --internet-local) : invitation, réponse, puis le même code confirmé des deux côtés.
+    trust : ce que chacune est pour l'autre (« friend » : un ami, ou « mine »)."""
+    for node in (inviter, friend):
+        node.wait_for(lambda: node.api("GET", "/network/internet")["running"],
+                      what="compagnon prêt")
+    a_id, b_id = inviter.node_id, friend.node_id
+    invitation = inviter.api("POST", "/network/invitations")
+    reply = friend.api("POST", "/network/invitations/accept", {"code": invitation["code"]})
+    started = inviter.api("POST", f"/network/invitations/{invitation['id']}/reply",
+                          {"code": reply["reply"]})
+    pending = friend.wait_for(lambda: friend.api("GET", "/network")["pairing"],
+                              what="demande d'appairage reçue")
+    assert pending[0]["code"] == started["code"]
+    friend.api("POST", "/network/pair/answer", {"node_id": a_id, "accept": True, "trust": trust})
+    inviter.api("POST", "/network/pair/answer", {"node_id": b_id, "accept": True, "trust": trust})
+    for node, other_id in ((inviter, b_id), (friend, a_id)):
+        node.wait_for(lambda: [p for p in node.api("GET", "/network")["peers"]
+                               if p["node_id"] == other_id and p["online"]],
+                      timeout=40, what="appairage sur invitation")
+    return a_id, b_id

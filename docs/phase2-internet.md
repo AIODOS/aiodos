@@ -2,7 +2,8 @@
 
 > Étude du 16/10/2026. Ce document prépare des choix, dont plusieurs reviennent à
 > l'utilisateur (cf. [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)) ;
-> leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.2 faites).
+> leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.7 faites,
+> 2.3 en partie ; ce qui reste est noté à chaque étape).
 > Les faits sur les projets étudiés datent de ce jour et vieilliront vite : les
 > revérifier avant d'agir.
 
@@ -141,7 +142,7 @@ rendez-vous et de repli chiffré.
   corrigés). Android est géré en Rust, Kotlin et Node ; un binaire nu sous Termux
   demande des précautions de compilation (résolution DNS par JNI, restrictions
   netlink), que la recette Termux de dumbpipe applique déjà.
-- **Licence** : MIT OR Apache-2.0, compatible GPL-3.0. Point à surveiller :
+- **Licence** : MIT OR Apache-2.0, comme AIODOS. Point à surveiller :
   `webpki-roots` (CDLA-Permissive-2.0), licence dont la FSF ne parle pas.
 - **Sécurité** : pas d'audit tiers. En 2026, des failles corrigées vite : déni de
   service du relais avant authentification (1.0.2), trois avis côté client (1.1.0),
@@ -200,8 +201,8 @@ Kademlia, GossipSub, relais, perçage de NAT (DCUtR).
   illisible, ce qui est le cas sur Android (#3537, correctifs non fusionnés). UPnP et
   NAT-PMP ne marchent plus depuis Android 12. rust-libp2p a deux bugs ouverts sous
   Android (WebSocket, DNS).
-- **Licences** : MIT, Apache-2.0, BSD ; zeroconf (mDNS de py-libp2p) en LGPL-2.1+.
-  Toutes compatibles avec la GPL-3.0.
+- **Licences** : MIT, Apache-2.0, BSD ; zeroconf (mDNS de py-libp2p) en LGPL-2.1+,
+  utilisable par AIODOS (Apache-2.0) comme bibliothèque à part, sans copier son code.
 - **Sécurité** : aucun audit tiers public trouvé ; des avis réguliers, surtout des
   dénis de service (côté rust : gossipsub et yamux en mars 2026, libp2p-quic en
   septembre 2026 ; quic-go de 2023 à 2026). La DHT publique d'IPFS reste attaquable :
@@ -241,8 +242,8 @@ ouvertes par perçage de NAT.
   précompilés pour Windows x64 et Android arm64 ; Node 24 et 26 existent sous Termux
   (non testé avec hyperswarm).
 - **Licences** : MIT (hyperdht, hyperswarm, dht-rpc), Apache-2.0 (secret-stream,
-  blind-relay, Bare), ISC : compatibles avec la GPL-3.0, en gardant les fichiers
-  `NOTICE`. Holesail, un outil voisin, est en AGPL-3.0 : ne pas copier son code.
+  blind-relay, Bare), ISC : compatibles avec l'Apache-2.0 d'AIODOS, en gardant les
+  fichiers `NOTICE`. Holesail, un outil voisin, est en AGPL-3.0 : ne pas copier son code.
 - **Sécurité** : on peut filtrer par clé avant toute réponse (`firewall`), mais
   l'adresse que reçoit ce filtre peut être falsifiée. L'IP est échangée avec les pairs
   (la FAQ de Pear conseille un VPN). Aucun avis de sécurité publié, pas de politique de
@@ -322,8 +323,8 @@ serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de
   bibliothèque Python (i2plib) n'est plus maintenue depuis 2019. Yggdrasil : cf. § 2.6.
 - **Reticulum : exclu.** Depuis le 15/04/2025, sa licence (passée du MIT à une
   « Reticulum License ») interdit tout usage qui contribue à l'entraînement ou au
-  développement de modèles d'IA : incompatible avec la GPL-3.0, et vise directement un
-  projet comme AIODOS.
+  développement de modèles d'IA : ce n'est plus une licence libre, et elle vise
+  directement un projet comme AIODOS.
 
 ### 2.6 Pour comparaison : les réseaux privés virtuels type WireGuard
 
@@ -427,7 +428,7 @@ Ce que ça implique :
 
 ## 4. Recommandation
 
-**Iroh 1.x, utilisé par un petit programme compagnon en Rust (`aiodos-net`, GPL-3.0)
+**Iroh 1.x, utilisé par un petit programme compagnon en Rust (`aiodos-net`, Apache-2.0)
 que le nœud Python lance et pilote en local. Le protocole de travail `aiodos/1` passe
 dans ce tuyau presque sans changement. Relais et annuaire restent configurables, pour
 qu'aucun ne soit obligatoire.** C'est une recommandation technique : le choix des
@@ -806,7 +807,7 @@ heures.
 | **Q16** Relais | **Relais publics de n0 pour commencer**, remplaçables dans les réglages (relais du projet ou d'un membre du cercle plus tard). |
 | **Q16 bis** Annuaire | **Les deux** : DNS de n0 d'abord, DHT Mainline (pkarr) en secours. |
 
-**2.2 Le compagnon `aiodos-net`.** Programme Rust (GPL-3.0) sur Iroh 1.x, à version
+**2.2 Le compagnon `aiodos-net`.** Programme Rust (Apache-2.0) sur Iroh 1.x, à version
 épinglée : protocole `aiodos/2` (ALPN), liste blanche de clés, tunnels vers `p2p_app`,
 API locale de contrôle, relais et annuaire configurables, ouverture de port
 automatique. Compilé pour Windows x64 et Android arm64 (Termux). Côté Python, un
@@ -972,7 +973,7 @@ blanche de clés ou jeton).
 *Fini quand* : un relais auto-hébergé sert deux machines qui ne peuvent pas se joindre
 en direct.
 
-**En partie fait le 16/10/2026** :
+**Fait le 16/10/2026, essai conclu le 17/10/2026** :
 
 - **Réglages.** Réglages → Internet : relais (`n0`, ses propres adresses, ou `none`),
   annuaires (`n0-dns`, `dht`), ouverture de port sur la box, chemin préféré, et taille
@@ -987,10 +988,60 @@ en direct.
     machine » les donne) ou par un jeton ;
   - mode d'essai `--dev`.
 
-Reste l'essai qui conclut l'étape : un relais auto-hébergé qui sert deux machines
-privées de connexion directe. Pour qu'il prouve quelque chose, il faut pouvoir couper les
-connexions directes du compagnon (une option à ajouter côté Rust), ou faire l'essai entre
-deux vrais réseaux.
+**L'essai qui conclut l'étape** (17/10/2026, sur le PC principal) :
+
+- **Relais seulement.** Deux compagnons sur une même machine se joignent toujours en
+  direct. Le compagnon a donc une option réservée aux essais, `--relay-only` : Iroh n'y
+  a aucun transport IP, donc aucune socket UDP. Il n'y a ni perçage de NAT, ni adresse
+  directe annoncée, ni ouverture de port, dans un sens comme dans l'autre. C'est ainsi
+  qu'Iroh 1.3.0 coupe le direct dans ses propres essais. Un sélecteur de chemin maison
+  (API instable d'Iroh) n'aurait choisi que le chemin d'envoi d'une des deux machines.
+  Côté nœud, l'option correspondante est `--internet-relay-only <adresse du relais>`.
+- **Le relais.** `iroh-relay` 1.3.0, construit avec `cargo install iroh-relay --version
+  1.3.0 --features server --locked` (environ une minute), lancé en `--dev` (HTTP) avec le
+  fichier de réglages du guide et sa liste blanche de deux clés.
+- **L'essai automatique** (`tests/test_network_relay.py`, 33 s) :
+  - deux vrais nœuds qui ne se connaissent pas sur le réseau local s'appairent sur
+    invitation, par le relais ;
+  - ils se confient une indexation (3 notes en 2,6 s) ;
+  - la vue Réseau montre `relay` comme chemin de chaque machine appairée ;
+  - une troisième machine, absente de la liste blanche, est refusée par le relais. Même
+    invitée, et admise par les deux compagnons, elle reste injoignable ; rien n'atteint
+    même la poignée de main de l'autre compagnon.
+- **Côté Rust** (`compagnon/tests/relay_only.rs`, relais iroh-relay lancé dans l'essai) :
+  dix allers-retours restent par le relais ; une clé hors liste blanche est refusée. Un
+  contrôle montre que les mêmes machines, sans l'option, passent en direct : l'essai
+  verrait donc un chemin direct s'il y en avait un.
+- **Mesures** (une seule machine) : première requête par le relais en 20 ms, puis 1 à
+  4 ms.
+
+L'essai a fait apparaître quatre défauts, corrigés :
+- **L'exemple du guide ouvrait le relais à tous.** La liste blanche y suivait la section
+  `[tls]` : en TOML, elle appartenait alors à cette section, et `iroh-relay` l'ignorait
+  sans rien dire (vérifié : `AllowAll` au lieu d'`AllowlistAccess`). Le guide la place
+  désormais avant, et dit comment le vérifier.
+- **Une machine appairée sur invitation ne recevait jamais de travail.** La machine qui
+  prête ne demandait du travail qu'aux machines dont elle connaît l'adresse sur le réseau
+  local, comme en phase 1 (`worker.py`). Deux amis appairés à distance (2.4) ne se
+  seraient donc rien prêté. Elle demande désormais aussi aux machines qu'elle sait
+  joindre par Internet.
+- **Un ticket donné juste après le démarrage n'avait pas de relais.** Une invitation
+  acceptée dans la seconde où le compagnon démarre partait avec la seule clé ; sans
+  annuaire, l'autre machine ne pouvait pas la joindre. Le compagnon attend désormais son
+  relais avant de donner son ticket, 4 s au plus après le démarrage.
+- **Une machine refusée par le relais semblait prête.** La carte « Internet » le dit
+  maintenant : « le relais … refuse cette machine ».
+
+Le guide ([docs/relais.md](relais.md)) dit aussi ce que l'essai a appris d'autre :
+- `iroh-relay` ouvre ses statistiques sur le port 9090, sur toutes les interfaces ;
+- il est muet par défaut (`RUST_LOG=iroh_relay=info` pour voir les refus) ;
+- après l'ajout d'une clé, il faut le relancer, et la machine refusée réessaie seule ;
+- aucun annuaire n'est nécessaire entre machines appairées.
+
+Reste, hors de cette étape : le même essai entre deux vrais réseaux (2.8). La
+conversation avec un modèle prêté et la prévenance au désappairage marchent aussi avec
+une machine appairée sur invitation, qui n'a qu'une clé Internet (17/10/2026,
+`tests/test_network_chat.py`, `tests/test_network_invitation.py`).
 
 **2.8 Essai réel avec un ami**, puis documentation (README, ce document complété par
 les mesures).

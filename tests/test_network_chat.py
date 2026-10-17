@@ -4,13 +4,16 @@ B prête ses modèles ; A les voit dans son choix de modèles, sous l'identifian
 « peer:<B>:<modèle> », et la réponse arrive en flux chiffré. Quand B arrête de
 prêter, A reçoit un refus lisible. Il faut un Ollama local avec un modèle de
 conversation (sinon le test est ignoré) ; le plus petit installé est utilisé.
+Pour deux machines appairées sur invitation (étape 2.4), joignables seulement par
+Internet, il faut en plus le compagnon compilé.
 """
 import json
 
 import pytest
 import requests
 
-from tests.nodes import Node, pair
+from aiodos.network import companion
+from tests.nodes import Node, pair, pair_by_invitation
 
 OLLAMA = "http://127.0.0.1:11434"
 
@@ -78,3 +81,34 @@ def test_conversation_answered_by_a_model_of_the_paired_machine(two_nodes):
     b.api("PUT", "/settings", {"lend_models": False})
     refused = _chat(a, remote_id, "Encore ?")
     assert "ne prête pas" in (refused["error"] or "")
+
+
+@pytest.fixture
+def two_friends(tmp_path):
+    """Deux nœuds qui ne se connaissent pas sur le réseau local : leurs compagnons, en
+    essai local (--internet-local), sont leur seul chemin."""
+    a = Node(tmp_path / "a", "PC de Marc", ["--internet-local"]).start()
+    b = Node(tmp_path / "b", "PC de Léa", ["--internet-local"]).start()
+    yield a, b
+    a.stop()
+    b.stop()
+
+
+@pytest.mark.skipif(companion.find_binary() is None,
+                    reason="compagnon aiodos-net non compilé (voir compagnon/README.md)")
+def test_a_friend_paired_by_invitation_lends_a_model_by_internet(two_friends):
+    """A ne connaît de B que sa clé Internet, pas d'adresse sur le réseau local : le
+    modèle prêté par B répond quand même, par les compagnons."""
+    a, b = two_friends
+    # Avant l'appairage : le profil que B envoie à ce moment-là, gardé 5 s, le dit déjà
+    b.api("PUT", "/settings", {"lend_models": True})
+    _, b_id = pair_by_invitation(a, b)
+    peer = next(p for p in a.api("POST", f"/network/peers/{b_id}/refresh")["peers"]
+                if p["node_id"] == b_id)
+    assert peer["net_id"] and not peer["address"]
+    remote_id = f"peer:{b_id}:{MODEL}"
+    offered = {m["id"]: m for m in a.api("GET", "/models")}
+    assert offered[remote_id]["group"] == "remote" and offered[remote_id]["peer"] == "PC de Léa"
+
+    done = _chat(a, remote_id, "Réponds seulement par le mot : bonjour")
+    assert done["error"] is None and done["html"].strip()

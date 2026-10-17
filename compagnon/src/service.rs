@@ -62,11 +62,12 @@ pub async fn start(config: Config) -> Result<Running> {
     );
     let network_changes = Arc::new(AtomicU64::new(0));
     info!(
-        "Compagnon {} : clé {} ({}), relais {}, annuaire {}, API locale {listen}, vers {}",
+        "Compagnon {} : clé {} ({}), relais {}{}, annuaire {}, API locale {listen}, vers {}",
         env!("CARGO_PKG_VERSION"),
         endpoint.id().fmt_short(),
         if created { "nouvelle" } else { "existante" },
         config.relays.label(),
+        if config.relay_only { " seulement (essai : jamais en direct)" } else { "" },
         match config.directory.labels() {
             labels if labels.is_empty() => "aucun".to_string(),
             labels => labels.join(" + "),

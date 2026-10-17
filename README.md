@@ -210,6 +210,10 @@ python -m pytest tests
 
 ## Licence
 
-GPL-3.0 — voir [LICENSE](LICENSE).
+Apache-2.0 — voir [LICENSE](LICENSE) et [NOTICE](NOTICE). Chacun peut utiliser, modifier et
+redistribuer AIODOS, y compris dans un autre produit ou par une boutique d'applications, à
+condition de garder la licence et les mentions d'auteur, et de signaler les fichiers
+modifiés. Chaque contributeur accorde aussi ses brevets éventuels sur le code qu'il apporte.
+Les contributions sont acceptées sous cette même licence.
 
 [Ollama]: https://ollama.com

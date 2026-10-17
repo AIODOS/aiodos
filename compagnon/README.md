@@ -1,6 +1,6 @@
 # aiodos-net — le compagnon réseau d'AIODOS
 
-Petit programme Rust (GPL-3.0) qui relie **par Internet** les machines appairées
+Petit programme Rust (Apache-2.0) qui relie **par Internet** les machines appairées
 d'AIODOS, avec [Iroh](https://www.iroh.computer) 1.3.0 (version épinglée). C'est
 l'étape 2.2 de [docs/phase2-internet.md](../docs/phase2-internet.md). Le nœud Python le
 lance, le surveille et lui confie ses requêtes quand le réseau local ne répond pas ;
@@ -152,7 +152,9 @@ suivant ; quand tous ont échoué, la liste reprend du début. L'état du résea
 réglage `p2p_route` choisit le chemin vers les machines appairées : `auto` (réseau local
 s'il répond, Internet sinon), `lan` ou `internet` (pour essayer le compagnon seul).
 `--internet-local` lance un compagnon d'essai sans relais, sans annuaire et sans box
-(deux nœuds sur une même machine, comme dans les tests).
+(deux nœuds sur une même machine, comme dans les tests). `--internet-relay-only <URL>`
+lance un compagnon d'essai qui ne passe que par ce relais, jamais en direct (cf.
+[docs/relais.md](../docs/relais.md#essai-sur-une-seule-machine)).
 
 À la main :
 
@@ -170,6 +172,7 @@ aiodos-net --data-dir ..\data --listen 127.0.0.1:47800 --forward 127.0.0.1:47701
 | `--directory` | `n0-dns,dht` | annuaires : `n0-dns`, `dht`, ou `none` |
 | `--bind` | toutes les interfaces | sockets UDP d'Iroh (`127.0.0.1:0` pour un essai local) |
 | `--no-portmap` | — | pas d'ouverture de port automatique sur la box |
+| `--relay-only` | — | essais : relais seulement, jamais en direct (aucune socket UDP, ni ouverture de port) ; demande un relais et ne se combine pas avec `--bind` |
 | `--dial-timeout` | `20` | délai pour joindre une machine (secondes ; AIODOS attend 30 s au moins une réponse par Internet) |
 | `--supervised` | — | lancé par AIODOS : s'arrête quand son entrée standard se ferme |
 
@@ -190,9 +193,9 @@ Toutes les requêtes portent l'en-tête `X-Aiodos-Net-Token`.
 
 | Requête | Effet |
 |---|---|
-| `GET /net/v1/status` | clé publique, relais (connectés ou non), adresses, liste blanche, connexions refusées, changements de réseau, et pour chaque machine : connectée, chemin `direct` ou `relay`, adresse distante, latence (`rtt_ms`), sens de la connexion, compteurs |
+| `GET /net/v1/status` | clé publique, relais (connectés ou non, refus du relais : `denied`), relais seulement ou non, adresses, liste blanche, connexions refusées, changements de réseau, et pour chaque machine : connectée, chemin `direct` ou `relay`, adresse distante, latence (`rtt_ms`), sens de la connexion, compteurs |
 | `PUT /net/v1/peers` | remplace la liste blanche : `{"peers": [{"id": "<clé>", "addrs": ["ip:port"], "relays": ["https://…"]}, {"ticket": "endpoint…"}]}` ; les connexions des clés retirées sont fermées |
-| `GET /net/v1/ticket` | ticket Iroh à donner à une autre machine (clé, relais, adresses) ; il ne contient aucun secret et ne fait pas entrer dans la liste blanche à lui seul |
+| `GET /net/v1/ticket` | ticket Iroh à donner à une autre machine (clé, relais, adresses) ; il ne contient aucun secret et ne fait pas entrer dans la liste blanche à lui seul. Juste après le démarrage, il attend que le relais soit joint (4 s au plus après le démarrage) |
 | `POST /net/v1/shutdown` | arrêt propre |
 | `* /peer/<clé>/p2p/…` | requête relayée vers cette machine |
 
@@ -216,13 +219,17 @@ refusée ou retirée.
 ## Tests
 
 ```powershell
-cargo test                     # 15 tests unitaires + 8 tests à deux compagnons (relais coupés)
+cargo test                     # 16 tests unitaires, 8 tests à deux compagnons (relais coupés),
+                               # 3 par un relais lancé dans l'essai (tests/relay_only.rs)
 ```
 
 Côté Python (le compagnon doit être compilé, sinon ces tests sont ignorés) :
 `tests/test_companion.py` (compagnons lancés et surveillés par AIODOS),
 `tests/test_network_internet.py` (deux nœuds qui se partagent une indexation par leurs
 compagnons ; il faut Ollama et le modèle d'embedding),
+`tests/test_network_relay.py` (la même chose par un relais `iroh-relay` auto-hébergé,
+compagnons en relais seulement ; il faut aussi `iroh-relay`, cf.
+[docs/relais.md](../docs/relais.md)),
 `tests/test_updates_companion_end_to_end.py` (une version reçue va chercher son
 compagnon livré, le vérifie et le lance), et sans compagnon `tests/test_route.py`,
 `tests/test_netinfo.py`, `tests/test_updates_binaries.py` (choix du programme).
@@ -234,6 +241,7 @@ compagnon livré, le vérifie et le lance), et sans compagnon `tests/test_route.
 | Relais et annuaires coupés (tests) | quelques ms | quelques ms | direct, 127.0.0.1 |
 | Relais et DNS de n0, joint par la clé seule | 0,30 s | 10 à 30 ms | direct, IPv6 |
 | Relais de n0 et DHT Mainline seule, joint par la clé seule | 2,6 s | 20 à 30 ms | direct, IPv6 |
+| `iroh-relay --dev` sur la même machine, `--relay-only` (17/10) | 20 ms | 1 à 4 ms | relais |
 
 Reste à mesurer sur le terrain : le téléphone en 4G par le compagnon (le cas mesuré
 avec dumbpipe à l'étape 2.0), une machine derrière une autre box, et la tenue sur
