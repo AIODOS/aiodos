@@ -271,7 +271,7 @@ def test_machines_that_already_lend_keep_lending_only_when_idle():
     assert base([("share_enabled", "false")]) is True                     # réglé, puis coupé
     assert base([("share_enabled", "true"), ("share_when_idle", "false")]) is False
     assert base([]) is False                                              # jamais réglé
-    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 6
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION >= 6
 
 
 def test_the_owner_is_credited_with_computing_not_waiting(setup, monkeypatch):

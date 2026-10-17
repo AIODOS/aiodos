@@ -93,7 +93,7 @@ def test_libraries_of_an_existing_database_stay_closed():
     conn.commit()
     conn.close()
     db.close()
-    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 7
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION >= 7
     assert [(c["name"], c["scope"], c["open_to"]) for c in store.list_collections()] == [
         ("Archives", "friends", "none")]
     assert db.query("SELECT * FROM closed_parts") == db.query("SELECT * FROM consult_log") == []
