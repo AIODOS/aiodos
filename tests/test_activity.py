@@ -14,6 +14,11 @@ from tests.test_work_leases import B, C, _lease, owner  # noqa: F401  (owner : f
 MESSAGES = [{"role": "user", "content": "Bonjour"}]
 
 
+def _ledger(node_id):
+    peer = next(p for p in peers.list_peers() if p["node_id"] == node_id)
+    return peer["given_chats"], peer["received_chats"]
+
+
 @pytest.fixture(autouse=True)
 def fresh():
     activity._heard.clear()
@@ -105,8 +110,10 @@ def test_a_lent_model_counts_its_conversation_until_the_answer_ends(owner, monke
                                        "messages": MESSAGES}, None)
     assert next(answer) == {"content": "Bon"}
     assert _live()[C]["chats_for_it"] == 1
+    assert _ledger(C) == (0, 0)                      # comptée une fois la réponse finie
     assert list(answer) == [{"content": "jour"}]
     assert _live()[C]["chats_for_it"] == 0
+    assert _ledger(C) == (1, 0)                      # servie par cette machine, pour C
 
 
 def test_my_conversation_answered_by_a_machine_counts_until_its_end(owner, monkeypatch):
@@ -116,3 +123,13 @@ def test_my_conversation_answered_by_a_machine_counts_until_its_end(owner, monke
     assert _live()[B]["chats_for_me"] == 1
     assert list(answer) == []
     assert _live()[B]["chats_for_me"] == 0
+    assert _ledger(B) == (0, 1)                      # servie par B, pour cette machine
+
+
+def test_an_interrupted_answer_is_not_counted(owner, monkeypatch):
+    monkeypatch.setattr(client, "stream", lambda *a, **k: iter([{"content": "Sa"}, {"content": "lut"}]))
+    answer = remote_models.chat_stream(remote_models.model_id(B, "mistral:7b"), MESSAGES)
+    assert next(answer) == ("content", "Sa")
+    answer.close()                                   # arrêtée par l'utilisateur
+    assert _live()[B]["chats_for_me"] == 0
+    assert _ledger(B) == (0, 0)

@@ -15,7 +15,7 @@ from contextlib import contextmanager
 
 from aiodos import db, settings
 from aiodos.jobs.models import RUNNING
-from aiodos.network import route, sharing
+from aiodos.network import peers, route, sharing
 
 _lock = threading.Lock()
 _heard = {}                  # machine -> {"sharing": …, "rtt_ms": …, "at": …}
@@ -53,7 +53,8 @@ def forget(node_id: str):
 
 @contextmanager
 def chat(direction: str, node_id: str):
-    """Le temps d'une conversation servie pour cette machine (« for ») ou par elle (« by »)."""
+    """Le temps d'une conversation servie pour cette machine (« for ») ou par elle (« by ») ;
+    une réponse menée à son terme s'ajoute au compte des échanges (peers.account)."""
     with _lock:
         _chats[direction][node_id] += 1
     try:
@@ -63,6 +64,11 @@ def chat(direction: str, node_id: str):
             _chats[direction][node_id] -= 1
             if _chats[direction][node_id] <= 0:
                 del _chats[direction][node_id]
+    # Seulement sans erreur ni interruption (une exception ne passe pas par ici)
+    if direction == "for":
+        peers.account(node_id, given_chats=1)
+    else:
+        peers.account(node_id, received_chats=1)
 
 
 def _helping_me() -> dict:

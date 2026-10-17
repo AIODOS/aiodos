@@ -18,7 +18,9 @@ def list_peers() -> list:
                p.net_id, p.trust, p.set_aside_at, p.set_aside_reason,
                COALESCE(l.given_s, 0) AS given_s, COALESCE(l.received_s, 0) AS received_s,
                COALESCE(l.given_units, 0) AS given_units,
-               COALESCE(l.received_units, 0) AS received_units
+               COALESCE(l.received_units, 0) AS received_units,
+               COALESCE(l.given_chats, 0) AS given_chats,
+               COALESCE(l.received_chats, 0) AS received_chats
         FROM peers p LEFT JOIN ledger l ON l.node_id = p.node_id
         ORDER BY p.name COLLATE NOCASE""")
     now = db.now()
@@ -104,11 +106,16 @@ def net_list() -> list:
         "SELECT node_id, net_id, net_addrs FROM peers WHERE net_id IS NOT NULL ORDER BY node_id")]
 
 
-def account(node_id, given_s=0.0, received_s=0.0, given_units=0, received_units=0):
+def account(node_id, given_s=0.0, received_s=0.0, given_units=0, received_units=0,
+            given_chats=0, received_chats=0):
+    """Ce qui a été échangé avec cette machine : temps de calcul et unités, et conversations
+    servies par un modèle prêté (given : par cette machine-ci, pour elle)."""
     db.execute(
-        "INSERT INTO ledger(node_id, given_s, received_s, given_units, received_units) "
-        "VALUES(?, ?, ?, ?, ?) ON CONFLICT(node_id) DO UPDATE SET "
-        "given_s = given_s + excluded.given_s, received_s = received_s + excluded.received_s, "
+        "INSERT INTO ledger(node_id, given_s, received_s, given_units, received_units, "
+        "given_chats, received_chats) VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(node_id) DO UPDATE "
+        "SET given_s = given_s + excluded.given_s, received_s = received_s + excluded.received_s, "
         "given_units = given_units + excluded.given_units, "
-        "received_units = received_units + excluded.received_units",
-        (node_id, given_s, received_s, given_units, received_units))
+        "received_units = received_units + excluded.received_units, "
+        "given_chats = given_chats + excluded.given_chats, "
+        "received_chats = received_chats + excluded.received_chats",
+        (node_id, given_s, received_s, given_units, received_units, given_chats, received_chats))

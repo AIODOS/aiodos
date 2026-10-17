@@ -64,16 +64,26 @@ function now(peer) {
   return items.length ? items.join('') : `<span class="faint">${peer.online ? 'rien en ce moment' : '—'}</span>`;
 }
 
-// Le temps de calcul échangé depuis l'appairage, dans chaque sens
+// Échangé depuis l'appairage, dans chaque sens : le temps de calcul des tâches, puis les
+// conversations auxquelles un modèle prêté a répondu
 function exchanged(peer) {
-  const parts = [];
+  const compute = [];
   if (peer.received_s) {
-    parts.push(`<span title="${plural(peer.received_units, 'unité')} calculée(s) pour toi">reçu ${duration(peer.received_s)}</span>`);
+    compute.push(`<span title="${plural(peer.received_units, 'unité')} calculée(s) pour toi">reçu ${duration(peer.received_s)}</span>`);
   }
   if (peer.given_s) {
-    parts.push(`<span title="${plural(peer.given_units, 'unité')} calculée(s) pour elle">donné ${duration(peer.given_s)}</span>`);
+    compute.push(`<span title="${plural(peer.given_units, 'unité')} calculée(s) pour elle">donné ${duration(peer.given_s)}</span>`);
   }
-  return parts.length ? parts.join(' · ') : '<span class="faint">rien encore</span>';
+  const chats = [];
+  if (peer.received_chats) chats.push(`${peer.received_chats} pour toi`);
+  if (peer.given_chats) chats.push(`${peer.given_chats} pour elle`);
+  const lines = [];
+  if (compute.length) lines.push(compute.join(' · '));
+  if (chats.length) {
+    lines.push(`<span title="Réponses de ses modèles à tes conversations, et des tiens aux siennes">${
+      peer.received_chats + peer.given_chats > 1 ? 'conversations' : 'conversation'} : ${chats.join(' · ')}</span>`);
+  }
+  return lines.length ? lines.join('<br>') : '<span class="faint">rien encore</span>';
 }
 
 function summary(net) {
