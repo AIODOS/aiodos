@@ -184,7 +184,12 @@ function render() {
   const form = $('#settings-form', root);
   form.innerHTML = SECTIONS.map(sec => `
     <div class="card"><h2>${icon(sec.icon)}${esc(sec.title)}</h2>${sec.fields.map(field).join('')}</div>`).join('') +
-    `<div class="save-bar"><button class="btn primary" id="settings-save">${icon('check')}Enregistrer</button></div>`;
+    // N'apparaît qu'avec des modifications à enregistrer : toujours affichée, elle cachait
+    // le réglage du dessous en faisant défiler la page
+    `<div class="save-bar" hidden><div class="save-box"><span>Modifications non enregistrées</span>
+      <button class="btn ghost sm" id="settings-cancel">Annuler</button>
+      <button class="btn primary sm" id="settings-save">${icon('check')}Enregistrer</button></div></div>`;
+  const bar = $('.save-bar', form);
   form.querySelectorAll('[data-key]').forEach(input => {
     const key = input.dataset.key;
     const read = () => {
@@ -194,7 +199,7 @@ function render() {
       return input.value;
     };
     input.addEventListener(input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input',
-      () => { draft[key] = read(); });
+      () => { draft[key] = read(); bar.hidden = false; });
   });
   form.querySelectorAll('[data-clear]').forEach(b => {
     b.onclick = () => { draft[b.dataset.clear] = null; save(); };
@@ -203,6 +208,7 @@ function render() {
   bindGateway(form);
   renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
+  $('#settings-cancel', root).onclick = render;           // le formulaire revient aux réglages
 }
 
 async function save() {
