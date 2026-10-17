@@ -29,7 +29,7 @@ export function mountChat(container) {
           <button class="chip" data-flag="knowledge_enabled" title="Utiliser tes bibliothèques de connaissance">${icon('book')}Bibliothèques</button>
           <button class="chip" data-flag="peer_libraries_enabled" title="Chercher aussi dans les bibliothèques de mes machines et de mes amis (ta question part chez eux)">${icon('network')}Chez les autres</button>
           <button class="chip" data-flag="conversations_enabled" title="Se souvenir de tes autres conversations">${icon('memory')}Mémoire</button>
-          <button class="chip" data-flag="web_search_enabled" title="Chercher sur le web (validation avant chaque envoi)">${icon('globe')}Web</button>
+          <button class="chip" data-flag="web_search_enabled" title="Chercher sur le web quand ta question le demande (validation avant l'envoi, ou pour la session)">${icon('globe')}Web</button>
           <button class="chip" data-flag="think" title="Laisser le modèle réfléchir avant de répondre (plus lent, souvent meilleur)">${icon('think')}Réflexion</button>
         </div>
       </header>
@@ -71,6 +71,7 @@ export function mountChat(container) {
   $('#chat-list-toggle').onclick = toggleList;
   $('#chat-new-btn').onclick = () => emit('chat:new');
   on('chat:list', shown => showList(shown));
+  on('chat:fold', () => (phone.matches ? showList(false) : collapse(true)));   // bouton de la liste
   on('rail:again', view => { if (view === 'chat') toggleList(); });
   on('chat:open', () => showList(false));
   on('chat:new', () => showList(false));
@@ -285,15 +286,7 @@ function showWelcome() {
       <img src="/logo.png?v=serpents" alt="">
       <h1>Que fait-on aujourd'hui&nbsp;?</h1>
       <p>Tout tourne sur ta machine. Le web et le cloud ne servent qu'avec ton accord.</p>
-      <div class="suggestions">
-        <div class="suggestion" data-text="Écris une fonction Python qui ">${icon('code')}<b>Écrire du code</b><span>Une fonction, un script, une correction…</span></div>
-        <div class="suggestion" data-text="Qu'y a-t-il dans mes bibliothèques ? Résume leur contenu.">${icon('book')}<b>Interroger mes documents</b><span>Ce que contiennent tes bibliothèques</span></div>
-        <div class="suggestion" data-text="Cherche sur le web ">${icon('globe')}<b>Chercher sur le web</b><span>Avec validation avant l'envoi</span></div>
-      </div>
     </div>`);
-  welcome.querySelectorAll('.suggestion').forEach(s => {
-    s.onclick = () => { el.input.value = s.dataset.text; autoresize(); el.input.focus(); };
-  });
   el.list.append(welcome);
 }
 
@@ -466,9 +459,12 @@ function stop() {
 }
 
 // ------------------------------------------------------- envoi et validations
+// « Web » activé : la recherche part quand la question semble la demander (preflight), après
+// accord (ou pour la session) ; désactivé, elle est proposée pour ce message seulement
 async function confirmOutgoing(text, model, pre) {
-  let web = !!state.settings?.web_search_enabled;
-  if (!web && pre.web_intent) {
+  const allowed = !!state.settings?.web_search_enabled;
+  let web = false;
+  if (!allowed && pre.web_intent) {
     const r = await modal({
       title: 'Lancer une recherche web ?', iconName: 'globe',
       text: "Ta question semble demander une recherche sur le web, qui est désactivée. " +
@@ -476,7 +472,9 @@ async function confirmOutgoing(text, model, pre) {
       quote: text.slice(0, 300), confirm: 'Chercher sur le web', cancel: 'Répondre sans',
     });
     web = r.ok;
-  } else if (web && !session.webConsent) {
+  } else if (allowed && pre.web_intent && session.webConsent) {
+    web = true;
+  } else if (allowed && pre.web_intent) {
     const r = await modal({
       title: 'Envoyer cette recherche ?', iconName: 'globe',
       text: 'La requête ci-dessous va être envoyée à DuckDuckGo. Aucune autre donnée ne quitte ta machine.',

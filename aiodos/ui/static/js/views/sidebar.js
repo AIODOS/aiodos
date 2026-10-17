@@ -17,7 +17,10 @@ export function mountSidebar(container) {
           <button class="btn primary" id="new-chat">${icon('plus')}Nouvelle conversation</button>
           <button class="btn" id="new-folder" title="Nouveau dossier">${icon('folder-plus')}</button>
         </div>
-        <div class="search">${icon('search')}<input class="input" id="conv-search" placeholder="Rechercher une conversation"></div>
+        <div class="sidebar-head">
+          <div class="search">${icon('search')}<input class="input" id="conv-search" placeholder="Rechercher une conversation"></div>
+          <button class="icon-btn sidebar-fold" id="sidebar-fold" title="Replier la liste des conversations">${icon('chev-right')}</button>
+        </div>
       </div>
       <div class="tree" id="conv-tree"></div>
     </aside>`);
@@ -25,6 +28,7 @@ export function mountSidebar(container) {
   treeEl = $('#conv-tree', root);
   $('#new-chat', root).onclick = () => emit('chat:new');
   $('#new-folder', root).onclick = () => newFolder();
+  $('#sidebar-fold', root).onclick = () => emit('chat:fold');
   $('#conv-search', root).oninput = e => { filter = e.target.value.trim().toLowerCase(); render(); };
   dropTarget(treeEl, null);                      // déposer dans le vide = hors dossier
   on('conversations:changed', refresh);

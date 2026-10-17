@@ -128,7 +128,8 @@ async def generate(body: GenerateIn, request: Request):
 
 @router.get("")
 async def list_images(limit: int = 60, before: int | None = None):
-    return await asyncio.to_thread(gallery.list_images, limit, before)
+    rows = await asyncio.to_thread(gallery.list_images, limit, before)
+    return [dict(row, path=str(gallery.path_of(row))) for row in rows]   # où est le fichier
 
 
 @router.get("/{image_id}/file")

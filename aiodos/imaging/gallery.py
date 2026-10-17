@@ -1,22 +1,65 @@
 """Images et vidéos gardées : une ligne par image ou vidéo (table images), le PNG ou le
-WebM dans data/images/out/.
+WebM dans le dossier des créations : celui du réglage images_out_dir, sinon Images/AIODOS
+pour AIODOS installé sous Windows (là où on cherche ses images), data/images/out sinon.
+Un fichier créé avant un changement de dossier reste trouvé là où il a été écrit.
 
 Une demande de plusieurs images forme un lot (« batch ») : même consigne, graines qui se
 suivent. Chaque ligne dit aussi quelle machine l'a calculée, et en combien de temps.
 """
 import os
 import re
+import sys
 from pathlib import Path
 
-from aiodos import db, paths
+from aiodos import db, paths, settings
 from aiodos.imaging import catalog
 from aiodos.imaging.generate import png_size
 
 _SAFE = re.compile(r"[^0-9a-z]")
 
 
+def _pictures() -> Path | None:
+    """Le dossier Images de Windows, même déplacé (OneDrive…)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+    pictures = GUID(0x33E28130, 0x4E1E, 0x4676,
+                    (ctypes.c_ubyte * 8)(0x83, 0x5A, 0x98, 0x39, 0x5C, 0x3B, 0xC3, 0xBB))
+    found = ctypes.c_wchar_p()
+    try:
+        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(pictures), 0, None,
+                                                      ctypes.byref(found)) != 0:
+            return None
+        return Path(found.value)
+    except (AttributeError, OSError):
+        return None
+    finally:
+        if found.value is not None:
+            ctypes.windll.ole32.CoTaskMemFree(found)
+
+
+def _internal() -> Path:
+    return paths.data_dir() / "images" / "out"
+
+
+def default_dir() -> Path:
+    """Images/AIODOS pour AIODOS installé sous Windows ; data/images/out sinon."""
+    if paths.installed_data_dir() is not None:
+        pictures = _pictures()
+        if pictures is not None:
+            return pictures / "AIODOS"
+    return _internal()
+
+
 def out_dir() -> Path:
-    folder = paths.data_dir() / "images" / "out"
+    """Le dossier où vont les nouvelles images et vidéos."""
+    chosen = str(settings.get("images_out_dir") or "").strip()
+    folder = Path(os.path.expandvars(os.path.expanduser(chosen))) if chosen else default_dir()
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 
@@ -67,7 +110,14 @@ def list_images(limit: int = 60, before: int | None = None) -> list:
 
 
 def path_of(row: dict) -> Path:
-    return out_dir() / Path(row["file"]).name
+    """Le fichier d'une image : dans le dossier actuel, ou dans celui où elle a été écrite
+    avant un changement de dossier."""
+    name = Path(row["file"]).name
+    current = out_dir()
+    for folder in (current, default_dir(), _internal()):
+        if (folder / name).exists():
+            return folder / name
+    return current / name
 
 
 def delete(image_id: int) -> bool:

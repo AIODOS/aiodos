@@ -81,6 +81,9 @@ async function loadImages(more) {
   renderGrid();
 }
 
+// La fenêtre native d'AIODOS (pywebview) : « Enregistrer sous… » et « Ouvrir le dossier »
+const desktop = () => !!window.pywebview?.api?.save_image;
+
 // ------------------------------------------------------------------ modèles
 const modelOf = id => info?.models.find(m => m.id === id);
 const kindOf = id => modelOf(id)?.kind || 'image';
@@ -325,8 +328,12 @@ function open(img) {
           <div class="img-view-prompt">${esc(img.prompt)}</div>
           <div class="faint">${img.width} × ${img.height}${frames} · graine ${img.seed} · ${img.steps} pas<br>
             ${esc(img.machine || 'cette machine')}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''} · ${ago(img.created)}</div>
+          ${desktop() && img.path ? `<div class="faint img-path" title="${esc(img.path)}">${esc(img.path)}</div>` : ''}
           <div class="img-view-actions">
-            <a class="btn sm" href="${fileOf(img)}" download="aiodos-${img.id}.${ext}">${icon('file')}Enregistrer</a>
+            ${desktop()
+              ? `<button class="btn sm" data-act="save">${icon('file')}Enregistrer sous…</button>
+                 <button class="btn sm" data-act="folder">${icon('folder')}Ouvrir le dossier</button>`
+              : `<a class="btn sm" href="${fileOf(img)}" download="aiodos-${img.id}.${ext}">${icon('file')}Enregistrer</a>`}
             <button class="btn sm" data-act="reuse">${icon('retry')}Reprendre</button>
             <button class="btn sm danger" data-act="delete">${icon('trash')}Supprimer</button>
             <button class="btn sm ghost" data-act="close">${icon('x')}Fermer</button>
@@ -339,6 +346,13 @@ function open(img) {
   document.addEventListener('keydown', onKey, true);
   back.onclick = e => { if (e.target === back) close(); };
   back.querySelector('[data-act="close"]').onclick = close;
+  back.querySelector('[data-act="save"]')?.addEventListener('click', async () => {
+    try {
+      const where = await window.pywebview.api.save_image(img.id);
+      if (where) toast(`Enregistrée : ${where}`, 'ok', 6000);
+    } catch (err) { errorToast(err); }
+  });
+  back.querySelector('[data-act="folder"]')?.addEventListener('click', () => window.pywebview.api.show_image_file(img.id));
   back.querySelector('[data-act="reuse"]').onclick = () => {
     const select = $('#img-model', root);
     if ([...select.options].some(o => o.value === img.model)) { select.value = img.model; fillControls(); }

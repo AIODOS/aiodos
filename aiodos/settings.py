@@ -24,7 +24,7 @@ RAG_THRESHOLDS = {
 
 DEFAULTS = {
     # --- Conversation ---
-    "default_model": "",
+    "default_model": "qwen3.5:9b",
     "think": True,                    # laisser les modèles « réfléchir » (Qwen3…)
     "system_prompt": (
         "Tu es AIODOS, un assistant local qui aide à coder, à réfléchir et à "
@@ -39,10 +39,10 @@ DEFAULTS = {
     "embed_model": "embeddinggemma",  # choix mesuré : docs/embeddings.md
     "rag_min_score": 0.40,            # pertinence minimale d'un extrait (suit le modèle)
     "knowledge_enabled": True,
-    "conversations_enabled": False,   # mémoire inter-conversations
-    "peer_libraries_enabled": False,  # chercher aussi chez mes machines et mes amis (la question part)
+    "conversations_enabled": True,    # mémoire inter-conversations
+    "peer_libraries_enabled": True,   # chercher aussi chez mes machines et mes amis (la question part)
     # --- Web & cloud ---
-    "web_search_enabled": False,
+    "web_search_enabled": True,       # cherche quand la question le demande, après accord
     "web_results": 3,
     "cloud_confirm": True,
     "mistral_key": "",
@@ -93,6 +93,7 @@ DEFAULTS = {
     "images_models_dir": "",          # dossier des modèles d'images ; vide : data/images/models
     "images_device": "",              # carte qui calcule (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
+    "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
     "lend_images_friends": False,     # calculer les images de mes amis (jobs/kinds/images.py)
     "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---

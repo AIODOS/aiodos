@@ -334,6 +334,17 @@ def test_an_image_from_elsewhere_is_checked_then_kept_here(tiny_model):
     assert gallery.list_images() == []
 
 
+def test_new_images_go_to_the_chosen_folder_and_older_ones_stay_found(tiny_model, tmp_path):
+    made = {"png": base64.b64encode(png(256, 384)).decode()}
+    old = gallery.get(kind.assimilate_image(_payload(), made)["image_id"])
+    assert gallery.path_of(old).parent == gallery.default_dir()
+    chosen = tmp_path / "Mes créations"
+    settings.set_value("images_out_dir", str(chosen))
+    new = gallery.get(kind.assimilate_image(_payload(seed=43), made)["image_id"])
+    assert gallery.path_of(new).parent == chosen and gallery.path_of(new).is_file()
+    assert gallery.path_of(old).read_bytes() == png(256, 384)     # toujours là où elle a été écrite
+
+
 # -------------------------------------------------------------------- API
 @pytest.fixture
 def client():

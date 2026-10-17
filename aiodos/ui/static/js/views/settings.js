@@ -38,7 +38,8 @@ const SECTIONS = [
   ] },
   { title: 'Recherche web', icon: 'globe', fields: [
     { key: 'web_search_enabled', label: 'Recherche web activée par défaut', type: 'switch',
-      help: 'Une validation est toujours demandée avant d\'envoyer une requête.' },
+      help: 'AIODOS cherche quand ta question le demande (« cherche… », actualités, météo…). Une validation '
+        + 'est demandée avant d\'envoyer une requête, ou une fois pour la session.' },
     { key: 'web_results', label: 'Pages lues par recherche', type: 'number', min: 1, max: 8 },
   ] },
   { title: 'Cloud', icon: 'cloud', fields: [
@@ -93,6 +94,9 @@ const SECTIONS = [
       help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
         + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
         + 'téléchargé, sans prendre de place en plus sur le même disque.' },
+    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'text',
+      help: 'Vide : Images\\AIODOS (le dossier Images de Windows) pour AIODOS installé. Les images déjà créées '
+        + 'restent où elles sont et s’affichent toujours.' },
     { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
       help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
         + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },

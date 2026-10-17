@@ -12,6 +12,9 @@ demandé par le gestionnaire des tâches, ferme vraiment la fenêtre.
 import base64
 import html
 import logging
+import shutil
+import subprocess
+import sys
 
 import webview
 
@@ -44,6 +47,38 @@ class Bridge:
     def pick_folder(self):
         chosen = self._window.create_file_dialog(webview.FileDialog.FOLDER)
         return list(chosen or [])
+
+    # Images et vidéos créées : un lien « télécharger » ne fait rien dans la fenêtre native
+    def save_image(self, image_id):
+        """« Enregistrer sous… » : une copie, là où l'utilisateur le choisit."""
+        from aiodos.imaging import gallery
+        row = gallery.get(int(image_id))
+        if row is None:
+            return None
+        source = gallery.path_of(row)
+        chosen = self._window.create_file_dialog(
+            webview.FileDialog.SAVE, directory=str(source.parent), save_filename=source.name)
+        if not chosen:
+            return None
+        target = chosen if isinstance(chosen, str) else chosen[0]
+        try:
+            shutil.copyfile(source, target)
+        except shutil.SameFileError:              # le fichier lui-même : rien à copier
+            pass
+        return str(target)
+
+    def show_image_file(self, image_id):
+        """« Ouvrir le dossier » : l'Explorateur, le fichier sélectionné."""
+        from aiodos.imaging import gallery
+        row = gallery.get(int(image_id))
+        if row is None:
+            return False
+        path = gallery.path_of(row)
+        if sys.platform == "win32":
+            subprocess.Popen(f'explorer /select,"{path}"')
+        else:
+            subprocess.Popen(["xdg-open" if sys.platform != "darwin" else "open", str(path.parent)])
+        return True
 
 
 def close():

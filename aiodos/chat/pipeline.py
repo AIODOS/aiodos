@@ -31,7 +31,9 @@ log = logging.getLogger("aiodos.chat")
 WEB_INTENT = re.compile(
     r"(cherch\w*|recherch\w*|trouv\w*|google|navigu\w*|sur le web|sur internet|"
     r"en ligne|actualit[ée]s?\w*|site officiel|documentation (en ligne|web|à jour)|"
-    r"derni[èe]re?s? (version|nouvelle|info))", re.IGNORECASE)
+    r"derni[èe]re?s? (version|nouvelle|info)|m[ée]t[ée]o|qui a gagn\w*|en ce moment|"
+    r"cette semaine|\bnews\b|taux de change|cours (de l'action|du bitcoin|de bourse))",
+    re.IGNORECASE)
 
 _MANIFEST = ("Tu disposes d'une base de connaissance locale. Contenu disponible :\n\n{}\n\n"
              "Si l'utilisateur demande ce que tu « vois » ou ce que tu as en mémoire, "
@@ -58,6 +60,14 @@ _RULE_LOCAL = ("RAPPEL IMPORTANT : ici tu fonctionnes en local, SANS accès à I
                "N'invente JAMAIS d'URL ni de résultat de recherche, et ne prétends pas "
                "avoir cherché sur le web. Si on te demande des informations en ligne, "
                "réponds : « Active la recherche web puis repose ta question. »")
+# Web permis (puce « Web »), mais la question ne semblait pas le demander : pas de recherche
+_RULE_NOT_SEARCHED = ("RAPPEL IMPORTANT : pour ce message, aucune recherche web n'a été "
+                      "faite. N'invente JAMAIS d'URL ni de résultat de recherche, et ne "
+                      "prétends pas avoir cherché sur le web. Si la question demande des "
+                      "informations récentes ou en ligne, dis-le et propose : « Demande-moi "
+                      "de chercher, par exemple : cherche sur le web … »")
+_RULE_WEB_NOTHING = ("RAPPEL IMPORTANT : la recherche web n'a rien donné d'utilisable. "
+                     "N'invente JAMAIS d'URL ni de résultat de recherche.")
 
 
 def preflight(text: str, model: str) -> dict:
@@ -285,7 +295,9 @@ def build_messages(history, question, *, libraries, conversations, web_search,
     remote = _peer_context(question, sources, peers) if peers else []
     if remote:                            # à part, après les miens : jamais mêlés
         messages.append({"role": "system", "content": _RAG_PEERS.format("\n\n".join(remote))})
-    messages.append({"role": "system", "content": _RULE_WEB if web_ok else _RULE_LOCAL})
+    rule = (_RULE_WEB if web_ok else _RULE_WEB_NOTHING if web_search
+            else _RULE_NOT_SEARCHED if settings.get("web_search_enabled") else _RULE_LOCAL)
+    messages.append({"role": "system", "content": rule})
     messages.append({"role": "user", "content": question})
     return messages, sources
 

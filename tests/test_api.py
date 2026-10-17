@@ -98,10 +98,32 @@ def test_cloud_needs_key_and_confirmation(client):
 
 def test_preflight_detects_web_intent(client):
     for text, expected in (("Peux-tu chercher la doc de Seedance ?", True),
-                           ("rechercher en ligne", True), ("Quelle heure est-il ?", False)):
+                           ("rechercher en ligne", True), ("Quelle météo demain à Lyon ?", True),
+                           ("Qui a gagné le match hier soir ?", True),
+                           ("Quelle heure est-il ?", False), ("Bonjour !", False)):
         pre = client.post("/api/chat/preflight", json={"text": text, "model": "x"},
                           headers=AUTH).json()
         assert pre["web_intent"] is expected, text
+
+
+def test_the_last_rule_says_whether_the_web_was_searched(client, monkeypatch):
+    """« Web » activé ne cherche que si la question le demande : sans recherche, le modèle
+    ne doit ni inventer d'adresse ni renvoyer vers une option déjà activée."""
+    from aiodos import settings
+
+    def rule(web_allowed, searched=None):
+        settings.set_value("web_search_enabled", web_allowed)
+        web = None if searched is None else (searched, [])
+        messages, _ = pipeline.build_messages([], "Bonjour", libraries=False,
+                                              conversations=False,
+                                              web_search=searched is not None, web=web)
+        return messages[-2]["content"]
+
+    assert "aucune recherche web n'a été faite" in rule(True)
+    assert "Active la recherche web" in rule(False)
+    assert "n'a rien donné" in rule(True, searched=[])
+    assert rule(True, searched=["[Web : page — https://exemple.org]\ntexte"]).startswith(
+        "RAPPEL : les résultats web")
 
 
 def test_conversation_folders(client):
