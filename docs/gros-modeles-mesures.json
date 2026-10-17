@@ -1,0 +1,56 @@
+[
+ {
+  "nom": "PC seul, Ollama (GPU 8 Go + mémoire vive)",
+  "essais": 3,
+  "lecture_jetons": 601,
+  "lecture_jetons_s": 227.0,
+  "ecriture_jetons_s": 38.14,
+  "premier_mot_s": 2.65,
+  "date": "2026-10-17 13:06",
+  "moteur": "ollama",
+  "modele": "qwen3.6",
+  "memoire_go": 22.5,
+  "sur_gpu_go": 5.2
+ },
+ {
+  "nom": "Modèle dense 9B, tout sur le GPU",
+  "essais": 3,
+  "lecture_jetons": 601,
+  "lecture_jetons_s": 1766.0,
+  "ecriture_jetons_s": 33.02,
+  "premier_mot_s": 0.34,
+  "date": "2026-10-17 13:08",
+  "moteur": "ollama",
+  "modele": "qwen3.5:9b",
+  "memoire_go": 6.2,
+  "sur_gpu_go": 5.5
+ },
+ {
+  "nom": "Modèle dense 9B, moitié GPU, moitié mémoire vive",
+  "essais": 3,
+  "lecture_jetons": 601,
+  "lecture_jetons_s": 585.9,
+  "ecriture_jetons_s": 8.73,
+  "premier_mot_s": 1.03,
+  "date": "2026-10-17 13:10",
+  "moteur": "ollama",
+  "modele": "qwen3.5:9b",
+  "num_gpu": 16,
+  "memoire_go": 6.2,
+  "sur_gpu_go": 3.0
+ },
+ {
+  "nom": "Modèle dense 9B, tout en mémoire vive",
+  "essais": 3,
+  "lecture_jetons": 601,
+  "lecture_jetons_s": 36.1,
+  "ecriture_jetons_s": 6.78,
+  "premier_mot_s": 16.66,
+  "date": "2026-10-17 13:12",
+  "moteur": "ollama",
+  "modele": "qwen3.5:9b",
+  "num_gpu": 0,
+  "memoire_go": 6.2,
+  "sur_gpu_go": 0.0
+ }
+]
