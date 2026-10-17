@@ -4,11 +4,17 @@ import { $, h, esc } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
+import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
+import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 
 const SECTIONS = [
   { title: 'Conversation', icon: 'chat', fields: [
     { key: 'default_model', label: 'Modèle par défaut', type: 'model' },
+    { key: 'auto_route_friends', label: 'Mode automatique : faire aussi répondre les machines de mes amis', type: 'switch',
+      help: 'Sinon, seules cette machine et tes machines répondent d\'office ; celles de tes amis restent au choix, '
+        + 'à côté du modèle. Chez un ami, ta conversation passe par sa machine le temps de la réponse, avec les seuls '
+        + 'extraits des bibliothèques partagées avec tes amis.' },
     { key: 'think', label: 'Laisser les modèles réfléchir avant de répondre', type: 'switch',
       help: 'Qwen3 et compagnie : de meilleures réponses, mais plus lentes à démarrer.' },
     { key: 'system_prompt', label: 'Consignes générales données à l\'IA', type: 'textarea' },
@@ -71,6 +77,9 @@ const SECTIONS = [
         + 'la machine est libre. Si la nouvelle version ne démarre pas, la précédente reprend la main.' },
     { type: 'updates' },
   ] },
+  { title: 'Autres outils', icon: 'plug', fields: [
+    { type: 'gateway' },
+  ] },
   { title: 'Avancé', icon: 'settings', fields: [
     { key: 'ollama_url', label: 'Adresse d\'Ollama', type: 'text' },
   ] },
@@ -91,16 +100,21 @@ export function mountSettings(container) {
   const refresh = () => { if (state.view !== 'settings' || !Object.keys(draft).length) render(); };
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
-  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); } });
+  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); } });
   on('updates:loaded', () => {
     const box = root && $('#updates-status', root);
     if (box) { box.innerHTML = updatesStatus(); bindUpdates(box); }
+  });
+  on('gateway:loaded', () => {
+    const box = root && $('#gateway-box', root);
+    if (box) { box.innerHTML = gatewayCard(); bindGateway(box); }
   });
 }
 
 function field(f) {
   const s = state.settings;
   if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
+  if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
   if (f.type === 'switch') {
@@ -111,11 +125,10 @@ function field(f) {
   if (f.type === 'textarea') {
     control = `<textarea class="textarea" id="${id}" data-key="${f.key}" rows="4">${esc(s[f.key])}</textarea>`;
   } else if (f.type === 'select' || f.type === 'model') {
-    const options = f.type === 'model'
-      ? state.models.filter(m => m.group === 'local').map(m => [m.id, m.label])
-      : f.options;
+    const current = f.type === 'model' ? asDefault(s[f.key]) : s[f.key];
+    const options = f.type === 'model' ? modelOptions(current) : f.options;
     control = `<select class="select" id="${id}" data-key="${f.key}">${options.map(([v, l]) =>
-      `<option value="${esc(v)}" ${v === s[f.key] ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   } else if (f.type === 'secret') {
     const placeholder = s[`${f.key}_set`] ? `Clé enregistrée (${s[`${f.key}_hint`] || '••••'}) — laisser vide pour la garder` : 'Aucune clé';
     control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
@@ -130,6 +143,14 @@ function field(f) {
     control = `<input class="input" type="${type}" ${limits} id="${id}" data-key="${f.key}" value="${esc(s[f.key])}">`;
   }
   return `<div class="field"><label for="${id}">${esc(f.label)}</label>${control}${help}</div>`;
+}
+
+/** Modèles proposés par défaut : chacun une fois, en mode automatique (la machine qui
+ *  répond se choisit seule) ; le réglage actuel reste, même s'il désigne une machine. */
+function modelOptions(current) {
+  const options = catalog().map(e => [defaultChoice(e), e.name]);
+  if (current && !options.some(([v]) => v === current)) options.unshift([current, modelLabel(current)]);
+  return options;
 }
 
 function render() {
@@ -154,6 +175,7 @@ function render() {
     b.onclick = () => { draft[b.dataset.clear] = null; save(); };
   });
   bindUpdates(form);
+  bindGateway(form);
   $('#settings-save', root).onclick = save;
 }
 

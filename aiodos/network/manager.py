@@ -13,7 +13,7 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import client, invitations, peers, sharing
+from aiodos.network import client, invitations, peers, placement, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
@@ -224,6 +224,7 @@ class NetworkManager:
         except Exception:
             return              # hors ligne : « vue il y a … » le dira
         await asyncio.to_thread(peers.touch, peer["node_id"], None, None, reply.get("name"))
+        placement.note_load(peer["node_id"], reply.get("load"))   # si elle prête ses modèles
         if want_profile:
             self._last_profile[peer["node_id"]] = time.time()
             await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)

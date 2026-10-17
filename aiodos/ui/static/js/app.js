@@ -11,6 +11,7 @@ import { mountNode, loadNode } from './views/node.js';
 import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js';
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
+import { loadGateway } from './views/gateway.js';
 
 const VIEWS = ['chat', 'library', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -77,6 +78,7 @@ function onEvent(ev) {
     case 'settings': loadSettings(); break;
     case 'network': emit('network:changed'); break;
     case 'updates': loadUpdates(); break;
+    case 'gateway': if (state.view === 'settings') loadGateway(); break;
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
     case 'pair_result':
       toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`

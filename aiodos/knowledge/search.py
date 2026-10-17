@@ -43,19 +43,24 @@ def _matrix(collection_id, dim):
     return ids, matrix
 
 
-def allowed_collections(libraries: bool, conversations: bool) -> list:
+def allowed_collections(libraries: bool, conversations: bool, only=None) -> list:
+    """only : ensemble d'identifiants de bibliothèques auxquelles se limiter (None : toutes)."""
     out = []
     for r in db.query("SELECT id, name, enabled, system FROM collections"):
+        if only is not None and r["id"] not in only:
+            continue
         if (r["system"] and conversations) or (not r["system"] and libraries and r["enabled"]):
             out.append((r["id"], r["name"]))
     return out
 
 
-def search(vector, k=4, libraries=True, conversations=False, exclude_conversation=None) -> list:
+def search(vector, k=4, libraries=True, conversations=False, exclude_conversation=None,
+           only=None) -> list:
     """Les k passages les plus proches du vecteur, dans les sources autorisées.
 
     exclude_conversation : id d'une conversation dont la mémoire est ignorée
     (celle en cours : ses messages sont déjà dans l'historique envoyé au modèle).
+    only : bibliothèques auxquelles se limiter (cf. allowed_collections).
     """
     query = np.asarray(vector, dtype=np.float32)
     norm = float(np.linalg.norm(query))
@@ -63,7 +68,7 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
         return []
     query = query / norm
     candidates = []
-    for collection_id, _name in allowed_collections(libraries, conversations):
+    for collection_id, _name in allowed_collections(libraries, conversations, only):
         ids, matrix = _matrix(collection_id, query.shape[0])
         if not len(ids):
             continue
@@ -92,9 +97,9 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
     return hits
 
 
-def manifest(libraries=True, conversations=False, per_collection=25) -> str:
+def manifest(libraries=True, conversations=False, per_collection=25, only=None) -> str:
     """Sommaire de ce que l'IA possède : l'IA ne voit sinon que des extraits."""
-    allowed = allowed_collections(libraries, conversations)
+    allowed = allowed_collections(libraries, conversations, only)
     lines = []
     for collection_id, name in allowed:
         sources = [r["source"] for r in db.query(

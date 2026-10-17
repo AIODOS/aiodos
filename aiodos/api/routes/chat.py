@@ -3,6 +3,8 @@
 Le chat est la tâche interactive : il ne passe pas par la file, il démarre
 tout de suite et suspend les nouvelles unités GPU le temps de répondre (si le
 modèle tourne ici ; servi par une machine appairée, c'est elle qui suspend les siennes).
+En mode automatique (« auto:<modèle> »), la machine qui répond est choisie au moment
+d'envoyer (network/placement.py) ; l'événement « route » dit laquelle.
 La validation des envois sortants (web, cloud) est revérifiée ici : même si
 l'interface était contournée, rien ne part dans le cloud sans accord.
 """
@@ -20,6 +22,7 @@ from aiodos.api.events import sse
 from aiodos.chat import conversations, pipeline
 from aiodos.jobs import queue
 from aiodos.jobs.models import BACKGROUND
+from aiodos.network import placement
 from aiodos.services import cloud
 
 router = APIRouter(prefix="/api")
@@ -70,6 +73,10 @@ async def chat(body: ChatIn, request: Request):
 
     executor = request.app.state.executor
     bus = request.app.state.bus
+    try:                          # machines à essayer, la mieux placée d'abord
+        plan = await asyncio.to_thread(placement.plan, body.model, executor)
+    except placement.NoMachine as exc:
+        raise HTTPException(400, str(exc))
     conv_id = body.conversation_id
     if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
@@ -91,18 +98,31 @@ async def chat(body: ChatIn, request: Request):
         def put(item):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
-            messages, sources = pipeline.build_messages(
-                history, text, libraries=libraries, conversations=memory,
-                web_search=body.web, conversation_id=conv_id)
-            put(("sources", sources))
-            for kind, piece in pipeline.generate(body.model, messages, think, stop):
+            web = pipeline.web_context(text) if body.web else None
+            built = {}                    # messages selon la machine qui répond
+
+            def attempt(model):
+                level = placement.destination(model)
+                if level not in built:
+                    built[level] = pipeline.build_messages(
+                        history, text, libraries=libraries, conversations=memory,
+                        web_search=body.web, conversation_id=conv_id, destination=level,
+                        web=web)
+                messages, sources = built[level]
+                yield "sources", sources
+                yield from pipeline.generate(model, messages, think, stop)
+
+            for kind, piece in placement.run(plan, attempt, executor, stop):
+                if kind == "route":
+                    piece = {"model": piece, "machine": placement.machine_of(piece)}
                 put((kind, piece))
             put(("end", None))
         except Exception as exc:
             log.warning("Génération interrompue : %s", exc)
             put(("error", str(exc)))
 
-    state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None}
+    state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None,
+             "model": plan[0]}
 
     def save():
         """Enregistre la réponse (même partielle). Appelé une seule fois."""
@@ -116,7 +136,7 @@ async def chat(body: ChatIn, request: Request):
             return 0
         state["saved"] = conversations.add_message(
             conv_id, "assistant", content, state["thinking"] or None,
-            body.model, state["sources"])
+            state["model"], state["sources"], conversation_model=body.model)
         if memory:
             job_id = queue.create_job("index_conversation", {"conversation_id": conv_id},
                                       priority=BACKGROUND)
@@ -125,11 +145,9 @@ async def chat(body: ChatIn, request: Request):
         bus.publish({"type": "conversations"})
         return state["saved"]
 
-    local_gpu = pipeline.runs_here(body.model)
-
     async def events():
-        if local_gpu:
-            executor.interactive_begin()
+        # L'interactif d'abord : placement.run suspend les unités GPU de fond le temps
+        # de la réponse, si elle est calculée ici
         threading.Thread(target=worker, daemon=True, name="aiodos-chat").start()
         last_render = 0.0
         try:
@@ -137,7 +155,10 @@ async def chat(body: ChatIn, request: Request):
                        "user_message_id": user_message_id, "title": title})
             while True:
                 kind, data = await inbox.get()
-                if kind == "sources":
+                if kind == "route":
+                    state["model"] = data["model"]
+                    yield sse({"type": "route", **data})
+                elif kind == "sources":
                     state["sources"] = data
                     yield sse({"type": "sources", "sources": data})
                 elif kind == "thinking":
@@ -158,8 +179,6 @@ async def chat(body: ChatIn, request: Request):
                        "html": render.to_html(state["content"])})
         finally:
             stop.set()                    # client parti ou fin : on coupe le modèle
-            if local_gpu:
-                executor.interactive_end()
             if state["saved"] is None:    # interruption (bouton Stop)
                 save()
 

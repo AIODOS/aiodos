@@ -4,12 +4,14 @@ import { $, h, esc, bytes, duration } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
+import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 
 const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think'];
 let el = {};
 let busy = false;
 let controller = null;
+let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -18,6 +20,8 @@ export function mountChat(container) {
       <header class="chat-head">
         <div class="chat-title" id="chat-title" title="Cliquer pour renommer">Nouvelle conversation</div>
         <select class="select" id="model-select" title="Modèle utilisé pour répondre"></select>
+        <select class="select" id="machine-select" hidden
+          title="Machine qui répond. Automatique : cette machine si elle est libre, sinon la moins occupée de tes machines qui prêtent ce modèle."></select>
         <div class="chips">
           <button class="chip" data-flag="knowledge_enabled" title="Utiliser tes bibliothèques de connaissance">${icon('book')}Bibliothèques</button>
           <button class="chip" data-flag="conversations_enabled" title="Se souvenir de tes autres conversations">${icon('memory')}Mémoire</button>
@@ -37,12 +41,14 @@ export function mountChat(container) {
     </div>`);
   container.append(chat);
   el = {
-    title: $('#chat-title'), model: $('#model-select'), banner: $('#chat-banner'),
+    title: $('#chat-title'), model: $('#model-select'), machine: $('#machine-select'),
+    banner: $('#chat-banner'),
     scroll: $('#messages'), list: $('#messages-inner'), input: $('#composer'), send: $('#send'),
   };
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
   el.model.onchange = onModelChange;
+  el.machine.onchange = rememberModel;
   el.input.addEventListener('input', autoresize);
   el.input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
@@ -81,35 +87,35 @@ function vramTotal() {
   return Math.max(0, ...(state.node?.gpus || []).map(g => g.vram_total));
 }
 
-/** Libellé d'un modèle : « qwen3.6 · PC fixe » s'il est servi par une machine appairée. */
-export function modelLabel(id) {
-  const m = state.models.find(x => x.id === id);
-  if (m) return m.peer ? `${m.label} · ${m.peer}` : m.label;
-  if (id?.startsWith('peer:')) return `${id.split(':').slice(2).join(':')} · autre machine`;
-  return id || '';
+/** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
+ *  précise, ou un modèle du cloud. */
+function selectedModel() {
+  const value = el.model.value;
+  if (value.startsWith('cloud:')) return value;
+  const entry = entries.find(e => e.name === value);
+  return entry ? (el.machine.value || defaultChoice(entry)) : '';
 }
 
 function fillModels() {
-  const wanted = el.model.value || state.currentConversation?.model || state.settings?.default_model;
+  const wanted = selectedModel() || state.currentConversation?.model
+    || asDefault(state.settings?.default_model);
+  entries = catalog();
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
   const cloud = state.models.filter(m => m.group === 'cloud');
-  const vram = vramTotal();
   el.model.innerHTML = '';
-  const group = (label, models, text) => {
-    if (!models.length) return;
+  const group = (label, items) => {
+    if (!items.length) return;
     const g = document.createElement('optgroup');
     g.label = label;
-    models.forEach(m => g.append(new Option(text(m), m.id)));
+    items.forEach(([value, text]) => g.append(new Option(text, value)));
     el.model.append(g);
   };
-  group('Sur cette machine', local, m =>
-    `${m.label} · ${bytes(m.size)}${vram && m.size > vram * 0.92 ? ' · lent (dépasse la VRAM)' : ''}`);
-  group('Sur mes machines · réponse calculée là-bas', remote, m =>
-    `${m.label} · ${m.peer}${m.fits_vram === false ? ' · lent (dépasse sa VRAM)' : ''}`);
-  group('Cloud · validation avant envoi', cloud, m => `${m.label}${m.has_key ? '' : ' · clé manquante'}`);
-  const ids = state.models.map(m => m.id);
-  el.model.value = ids.includes(wanted) ? wanted : (local[0]?.id || remote[0]?.id || cloud[0]?.id || '');
+  // Chaque modèle une fois, même s'il est sur plusieurs machines : la machine se choisit à côté
+  group(remote.length ? 'Modèles · la machine qui répond se choisit seule' : 'Sur cette machine',
+    entries.map(e => [e.name, `${e.name} · ${bytes(e.size)}`]));
+  group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));
+  selectModel(wanted);
   el.banner.innerHTML = local.length ? '' : remote.length ? `
     <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ce PC : tes réponses seront
     calculées par tes machines appairées qui prêtent les leurs.</div></div>` : `
@@ -119,8 +125,39 @@ function fillModels() {
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
 }
 
-async function onModelChange() {
-  const id = el.model.value;
+/** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x », « cloud:… »). */
+function selectModel(id) {
+  const value = id?.startsWith('cloud:') ? id : modelName(id);
+  const values = [...el.model.options].map(o => o.value);
+  el.model.value = values.includes(value) ? value : (values[0] || '');
+  fillMachines(id);
+}
+
+/** Machines du modèle choisi : « Automatique », puis chacune pour la désigner (cachées
+ *  quand une seule machine a ce modèle). */
+function fillMachines(wanted) {
+  const entry = entries.find(e => e.name === el.model.value);
+  el.machine.innerHTML = '';
+  if (!entry) { el.machine.hidden = true; return; }
+  const vram = vramTotal();
+  if (entry.auto) el.machine.append(new Option('Automatique', entry.auto));
+  for (const m of entry.machines) {
+    const slow = m.local ? vram && m.size > vram * 0.92 : m.slow;
+    const hint = slow ? (m.local ? ' · lent (dépasse la VRAM)' : ' · lent (dépasse sa VRAM)') : '';
+    el.machine.append(new Option(`${m.label}${hint}`, m.id));
+  }
+  el.machine.hidden = entry.machines.length < 2;
+  const values = [...el.machine.options].map(o => o.value);
+  el.machine.value = values.includes(wanted) ? wanted : defaultChoice(entry);
+}
+
+function onModelChange() {
+  fillMachines(null);                     // mode automatique par défaut
+  rememberModel();
+}
+
+async function rememberModel() {
+  const id = selectedModel();
   if (id && !id.startsWith('cloud:')) {
     try { state.settings = await put('/settings', { default_model: id }); } catch { /* sans gravité */ }
   }
@@ -168,14 +205,15 @@ async function openConversation(id) {
   prefs.set('lastConversation', conv.id);
   setTitle(conv.title);
   el.list.innerHTML = '';
+  const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
     if (m.role === 'user') { appendUser(m.content); continue; }
-    const view = appendAssistant(m.model);
+    const view = appendAssistant(m.model, auto);
     if (m.thinking) view.restoreThinking(m.thinking);
     view.sources(m.sources);
     view.done(m.html);
   }
-  if (conv.model && [...el.model.options].some(o => o.value === conv.model)) el.model.value = conv.model;
+  if (conv.model) selectModel(conv.model);
   emit('chat:current');
   scrollBottom(true);
   el.input.focus();
@@ -206,9 +244,9 @@ function appendUser(text) {
   el.list.append(h(`<div class="msg user"><div class="bubble">${esc(text)}</div></div>`));
 }
 
-function appendAssistant(model) {
+function appendAssistant(model, here = false) {
   el.list.querySelector('.welcome')?.remove();
-  const label = modelLabel(model);
+  const label = modelLabel(model, here);
   const node = h(`
     <div class="msg assistant">
       <img class="avatar" src="/logo.png?v=aiodos" alt="">
@@ -254,6 +292,10 @@ function appendAssistant(model) {
     thinkTimer = null;
   };
   return {
+    route(ev) {                       // machine choisie (mode automatique) ou relève
+      node.querySelector('.model-tag').textContent =
+        `${modelName(ev.model)} · ${ev.machine || 'cette machine'}`;
+    },
     think(text) {
       stopWaiting();
       if (!thinkStart) {
@@ -410,7 +452,7 @@ async function send() {
   if (busy) return;
   const text = el.input.value.trim();
   if (!text) return;
-  const model = el.model.value;
+  const model = selectedModel();
   if (!model) {
     if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
     else toast('Les modèles se chargent, un instant…');
@@ -441,7 +483,8 @@ async function send() {
         }
         if (ev.title) { state.currentConversation.title = ev.title; setTitle(ev.title); }
         emit('chat:current');
-      } else if (ev.type === 'sources') view.sources(ev.sources);
+      } else if (ev.type === 'route') view.route(ev);
+      else if (ev.type === 'sources') view.sources(ev.sources);
       else if (ev.type === 'thinking') view.think(ev.text);
       else if (ev.type === 'render') view.render(ev.html);
       else if (ev.type === 'done') view.done(ev.html, ev.error);

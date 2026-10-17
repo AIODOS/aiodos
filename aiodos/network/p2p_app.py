@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
-from aiodos.network import envelope, lending, netinfo, peers, sharing, work
+from aiodos.network import envelope, lending, netinfo, peers, placement, sharing, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -28,11 +28,13 @@ PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par
 
 
 def _ping(manager, sender, payload):
-    return {"name": manager.name(), "time": time.time()}
+    # Charge de cette machine si elle prête ses modèles (mode automatique, placement.py)
+    return {"name": manager.name(), "time": time.time(), **placement.load_field(manager)}
 
 
 def _profile(manager, sender, payload):
-    return sharing.profile_for(sender, identity.profile())     # allégé pour un ami
+    profile = sharing.profile_for(sender, identity.profile())    # allégé pour un ami
+    return {**profile, **placement.load_field(manager)}
 
 
 def _unpair(manager, sender, payload):

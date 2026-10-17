@@ -32,6 +32,9 @@ DEFAULTS = {
         "Quand tu écris du code, utilise des blocs markdown avec le nom du langage."
     ),
     "ollama_url": "http://127.0.0.1:11434",
+    # Mode automatique (network/placement.py) : mes machines seulement, sauf si l'on
+    # accepte que la conversation passe aussi chez un ami le temps de la réponse
+    "auto_route_friends": False,
     # --- Connaissances ---
     "embed_model": "embeddinggemma",  # choix mesuré : docs/embeddings.md
     "rag_min_score": 0.40,            # pertinence minimale d'un extrait (suit le modèle)
@@ -76,6 +79,10 @@ DEFAULTS = {
     "share_max_gpu": 100,
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
+    # --- AIODOS ouvert aux autres outils (gateway/, docs/autres-outils.md) : API compatible
+    # OpenAI et Ollama, serveur MCP, sur 127.0.0.1 seulement ; désactivé par défaut ---
+    "gateway_enabled": False,
+    "gateway_port": 11435,            # fixe (celui d'Ollama + 1), réglable
 }
 
 

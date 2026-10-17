@@ -9,8 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from aiodos import paths, render
 from aiodos.api.events import EventBus
 from aiodos.api.security import Guard
-from aiodos.api.routes import (chat, conversations, jobs, knowledge, network, node, system,
-                               updates)
+from aiodos.api.routes import (chat, conversations, gateway, jobs, knowledge, network, node,
+                               system, updates)
+from aiodos.gateway.server import Gateway
 from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
 from aiodos.jobs.executor import Executor
 from aiodos.jobs.kinds import reindex
@@ -48,7 +49,10 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         await app.state.network.apply()          # ne démarre que si le réseau est activé
         app.state.updates = UpdateService(bus, executor, app.state.network, windowed)
         app.state.updates.start()
+        app.state.gateway = Gateway(app.state)    # autres outils : si l'accès est ouvert
+        await app.state.gateway.apply()
         yield
+        await app.state.gateway.shutdown()
         app.state.updates.stop()
         await app.state.network.shutdown()
         await executor.stop()
@@ -56,7 +60,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
     app = FastAPI(title="AIODOS", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
-    for module in (chat, conversations, knowledge, jobs, network, node, system, updates):
+    for module in (chat, conversations, gateway, knowledge, jobs, network, node, system,
+                   updates):
         app.include_router(module.router)
 
     css = render.pygments_css()
