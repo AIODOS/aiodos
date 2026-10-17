@@ -25,7 +25,7 @@ def data_dir(tmp_path, monkeypatch):
     db.close()
 
 
-def _bag_of_words(texts, model=None):
+def _bag_of_words(texts, model=None, timeout=None):
     """Embedding factice et déterministe : un sac de mots haché sur 64 dimensions."""
     vectors = []
     for text in texts:

@@ -18,6 +18,9 @@ const SECTIONS = [
     { key: 'knowledge_enabled', label: 'Utiliser les bibliothèques par défaut', type: 'switch' },
     { key: 'conversations_enabled', label: 'Mémoire entre les conversations', type: 'switch',
       help: 'L\'IA peut s\'appuyer sur tes autres conversations. Désactive-la pour des échanges isolés.' },
+    { key: 'peer_libraries_enabled', label: 'Chercher aussi chez mes machines et mes amis', type: 'switch',
+      help: 'Dans les bibliothèques qu\'ils t\'ouvrent (option « Chez les autres » de la conversation) : ta question '
+        + 'part chez eux, avec ton accord pour tes amis, et seuls les passages trouvés reviennent.' },
     { key: 'embed_model', label: 'Modèle d\'embedding', type: 'text',
       help: 'embeddinggemma conseillé (à installer : ollama pull embeddinggemma). Changer de modèle relance '
         + 'automatiquement la réindexation des bibliothèques et de la mémoire (voir Tâches).' },

@@ -51,34 +51,56 @@ def allowed_collections(libraries: bool, conversations: bool) -> list:
     return out
 
 
+def _unit(vector):
+    query = np.asarray(vector, dtype=np.float32)
+    norm = float(np.linalg.norm(query))
+    return query / norm if norm else None
+
+
+def _ranked(query, collection_ids, per_collection, exclude=None) -> list:
+    """(score, id de passage) des meilleurs passages de ces bibliothèques, du plus proche
+    au plus lointain. exclude(collection_id) : ids des passages à écarter avant le
+    classement (ils ne prennent alors la place d'aucun autre)."""
+    candidates = []
+    for collection_id in collection_ids:
+        ids, matrix = _matrix(collection_id, query.shape[0])
+        if not len(ids):
+            continue
+        scores = matrix @ query
+        banned = exclude(collection_id) if exclude else ()
+        if len(banned):
+            scores = np.where(np.isin(ids, np.asarray(banned, dtype=np.int64)), -np.inf, scores)
+        for i in np.argsort(-scores)[:per_collection]:
+            if np.isfinite(scores[i]):
+                candidates.append((float(scores[i]), int(ids[i])))
+    candidates.sort(reverse=True)
+    return candidates
+
+
+def _rows(candidates) -> dict:
+    if not candidates:
+        return {}
+    placeholders = ",".join("?" * len(candidates))
+    return {r["id"]: r for r in db.query(
+        f"""SELECT k.id, k.text, k.entry_id, e.source, e.kind, e.origin, e.collection_id,
+                   c.system, c.name AS collection
+            FROM chunks k JOIN entries e ON e.id = k.entry_id
+            JOIN collections c ON c.id = e.collection_id
+            WHERE k.id IN ({placeholders})""", tuple(cid for _, cid in candidates))}
+
+
 def search(vector, k=4, libraries=True, conversations=False, exclude_conversation=None) -> list:
     """Les k passages les plus proches du vecteur, dans les sources autorisées.
 
     exclude_conversation : id d'une conversation dont la mémoire est ignorée
     (celle en cours : ses messages sont déjà dans l'historique envoyé au modèle).
     """
-    query = np.asarray(vector, dtype=np.float32)
-    norm = float(np.linalg.norm(query))
-    if not norm:
+    query = _unit(vector)
+    if query is None:
         return []
-    query = query / norm
-    candidates = []
-    for collection_id, _name in allowed_collections(libraries, conversations):
-        ids, matrix = _matrix(collection_id, query.shape[0])
-        if not len(ids):
-            continue
-        scores = matrix @ query
-        for i in np.argsort(-scores)[:k * 3]:          # marge pour les exclusions
-            candidates.append((float(scores[i]), int(ids[i])))
-    candidates.sort(reverse=True)
-    if not candidates:
-        return []
-    placeholders = ",".join("?" * len(candidates))
-    rows = {r["id"]: r for r in db.query(
-        f"""SELECT k.id, k.text, e.source, e.kind, e.origin, c.system, c.name AS collection
-            FROM chunks k JOIN entries e ON e.id = k.entry_id
-            JOIN collections c ON c.id = e.collection_id
-            WHERE k.id IN ({placeholders})""", tuple(cid for _, cid in candidates))}
+    allowed = [cid for cid, _name in allowed_collections(libraries, conversations)]
+    candidates = _ranked(query, allowed, k * 3)          # marge pour les exclusions
+    rows = _rows(candidates)
     excluded = str(exclude_conversation) if exclude_conversation is not None else None
     hits = []
     for score, cid in candidates:
@@ -87,6 +109,28 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
             continue
         hits.append({"score": score, "text": row["text"], "source": row["source"],
                      "kind": row["kind"], "collection": row["collection"]})
+        if len(hits) == k:
+            break
+    return hits
+
+
+def search_in(vector, k, collection_ids, exclude=None) -> list:
+    """Les k passages les plus proches, dans ces bibliothèques seulement, sans ceux
+    qu'écarte exclude(collection_id) (cf. _ranked). Chaque passage dit d'où il vient
+    (entrée, bibliothèque), pour un dernier contrôle avant qu'il serve."""
+    query = _unit(vector)
+    if query is None or not collection_ids:
+        return []
+    candidates = _ranked(query, collection_ids, k, exclude)
+    rows = _rows(candidates)
+    hits = []
+    for score, cid in candidates:
+        row = rows.get(cid)
+        if row is None:
+            continue
+        hits.append({"score": score, "text": row["text"], "source": row["source"],
+                     "kind": row["kind"], "collection": row["collection"],
+                     "collection_id": row["collection_id"], "entry_id": row["entry_id"]})
         if len(hits) == k:
             break
     return hits

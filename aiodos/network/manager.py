@@ -13,7 +13,7 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import client, invitations, peers, sharing
+from aiodos.network import client, consult, invitations, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
@@ -278,9 +278,11 @@ class NetworkManager:
             for node_id, n in counts.items():
                 helping[node_id] = helping.get(node_id, 0) + n
         shared = sharing.sent_summary()
+        consulted = consult.summary()
         for peer in paired:
             peer["working_for_me"] = helping.get(peer["node_id"], 0)
             peer["shared"] = shared.get(peer["node_id"])         # parti chez cet ami
+            peer["consulted"] = consulted.get(peer["node_id"])   # ses recherches chez moi
         self.internet.annotate(paired)
         return {
             "enabled": self.enabled, "running": self.running, "error": self.error,

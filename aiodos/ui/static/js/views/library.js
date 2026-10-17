@@ -1,9 +1,12 @@
-// Bibliothèques : collections, arborescence du contenu, ajouts, mémoire.
+// Bibliothèques : collections, arborescence du contenu, ajouts, mémoire, ouverture à la
+// consultation (opening.js) et recherche chez les autres (consult.js).
 import { get, post, patch, del, pickFiles, pickFolder } from '../api.js';
 import { $, h, esc, debounce } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, prefs, emit } from '../state.js';
 import { ask, confirmDanger, menu, modal, toast, errorToast } from '../ui.js';
+import { mountConsult, refreshConsult } from './consult.js';
+import { closedControls, openBadge, openingMenu, setClosed } from './opening.js';
 
 const KIND_FILTERS = [['all', 'Tout'], ['file', 'Fichiers'], ['folder', 'Dossiers'], ['url', 'Web']];
 const IMAGE = /\.(jpe?g|png|gif|bmp|tiff?|webp|heic)$/i;
@@ -24,7 +27,8 @@ export function mountLibrary(container) {
       <div class="page-head">
         <div><h1>Bibliothèques</h1>
           <div class="sub">Tes documents, dossiers et pages web, indexés pour que l'IA s'en serve. Tout est enregistré
-          sur ce PC ; seul le calcul peut être confié à tes machines appairées.</div></div>
+          sur ce PC ; seul le calcul peut être confié à tes machines appairées, et une bibliothèque peut leur être
+          ouverte à la recherche (menu ⋯).</div></div>
         <div class="grow"></div>
         <button class="btn" id="lib-new">${icon('plus')}Nouvelle bibliothèque</button>
       </div>
@@ -37,9 +41,11 @@ export function mountLibrary(container) {
       </div>
     </div></div>`);
   container.append(root);
+  mountConsult($('.page-inner', root));
   $('#lib-new', root).onclick = createCollection;
   const reload = debounce(load, 600);
   on('knowledge:changed', reload);
+  on('network:changed', () => { if (state.view === 'library') refreshConsult(); });
   on('jobs:changed', () => { if (state.view === 'library') renderJobStrip(); });
   on('settings:loaded', renderMemory);
   on('view:shown', view => { if (view === 'library') load(); });
@@ -64,6 +70,7 @@ async function load() {
     renderContent();
   }
   renderMemory();
+  refreshConsult();
 }
 
 // ----------------------------------------------------------------- collections
@@ -77,6 +84,7 @@ function renderCollections() {
         <div class="name"><b>${esc(c.name)}</b><small>${c.entries} élément(s) · ${c.chunks} passages</small></div>
         ${c.local_only ? `<span class="local-only" title="Gardée sur ce PC : jamais confiée à une autre machine">${icon('lock')}</span>` : ''}
         ${c.share_friends && !c.local_only ? `<span class="local-only" title="Partagée avec tes amis : leurs machines peuvent la calculer, sous des noms de fichiers neutres">${icon('globe')}</span>` : ''}
+        ${openBadge(c)}
         <label class="switch" title="${c.enabled ? 'Utilisée dans les réponses' : 'Ignorée dans les réponses'}">
           <input type="checkbox" ${c.enabled ? 'checked' : ''}><span></span></label>
         <button class="icon-btn" title="Options">${icon('more')}</button>
@@ -101,6 +109,8 @@ function renderCollections() {
         ...SCOPES.filter(s => s.value !== scope).map(s => ({
           label: s.from?.[scope] || s.label, icon: s.icon, action: () => setScope(c, s.value) })),
         'sep',
+        ...openingMenu(c),
+        'sep',
         { label: 'Supprimer', icon: 'trash', danger: true, action: () => deleteCollection(c) },
       ]);
     };
@@ -123,7 +133,8 @@ async function createCollection() {
 // Où le calcul d'une bibliothèque peut partir (network/sharing.py, knowledge/store.set_scope)
 const SCOPES = [
   { value: 'local', label: 'Garder sur ce PC uniquement', icon: 'lock',
-    done: name => `« ${name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine.` },
+    done: name => `« ${name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine, `
+      + 'et aucune n\'y cherchera.' },
   { value: 'mine', label: 'Calculer aussi sur mes machines', icon: 'network',
     from: { friends: 'Ne plus partager avec mes amis' },
     done: name => `Le calcul de « ${name} » peut être confié à tes machines, pas à celles de tes amis.` },
@@ -238,22 +249,32 @@ function renderTree() {
   box.append(renderNode(top));
 }
 
+// Fermer (ou rouvrir) à la consultation la ligne d'un dossier ou d'un document
+function bindClosed(row, path, folder) {
+  const c = collections.find(x => x.id === selected);
+  row.querySelector('[data-part]')?.addEventListener('click', e =>
+    setClosed(c, path, folder, e.currentTarget.dataset.part === 'close'));
+}
+
 function renderNode(node) {
   const frag = document.createDocumentFragment();
+  const c = collections.find(x => x.id === selected);
   for (const [name, dir] of [...node.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr'))) {
     const open = openDirs.has(dir.path);
     const row = h(`
       <div class="k-row dir ${open ? 'open' : ''}">
         ${icon('chev-right', 'chev')}${icon('folder', 'kind-dir')}
         <span class="label">${esc(name)}</span><span class="faint">${countFiles(dir)}</span>
-        <button class="icon-btn danger" title="Retirer ce dossier de la bibliothèque">${icon('trash')}</button>
+        ${closedControls(c, dir.path, true)}
+        <button class="icon-btn danger" data-act="remove" title="Retirer ce dossier de la bibliothèque">${icon('trash')}</button>
       </div>`);
     row.onclick = e => {
       if (e.target.closest('.icon-btn')) return;
       open ? openDirs.delete(dir.path) : openDirs.add(dir.path);
       renderTree();
     };
-    row.querySelector('.icon-btn').onclick = () => removeFolder(dir.path, countFiles(dir));
+    row.querySelector('[data-act="remove"]').onclick = () => removeFolder(dir.path, countFiles(dir));
+    bindClosed(row, dir.path, true);
     frag.append(row);
     if (open) {
       const kids = h('<div class="k-children"></div>');
@@ -266,9 +287,11 @@ function renderNode(node) {
       <div class="k-row" title="${esc(entry.origin || entry.source)}">
         <span style="width:14px"></span>${fileIcon(entry)}
         <span class="label">${esc(name)}</span><span class="faint">${entry.chunks} passage(s)</span>
-        <button class="icon-btn danger" title="Retirer de la bibliothèque">${icon('trash')}</button>
+        ${closedControls(c, entry.source, false)}
+        <button class="icon-btn danger" data-act="remove" title="Retirer de la bibliothèque">${icon('trash')}</button>
       </div>`);
-    row.querySelector('.icon-btn').onclick = () => removeEntry(entry);
+    row.querySelector('[data-act="remove"]').onclick = () => removeEntry(entry);
+    bindClosed(row, entry.source, false);
     frag.append(row);
   }
   return frag;
