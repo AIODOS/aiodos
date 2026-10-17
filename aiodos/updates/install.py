@@ -22,6 +22,7 @@ import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
 
+from aiodos.node import priority
 from aiodos.updates import manifest as manifests
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import MARKER, Store, sha256_of
@@ -172,7 +173,7 @@ def smoke_test(folder: Path, expected: str):
             done = subprocess.run([interpreter(), "-c", SMOKE, str(folder)], cwd=folder,
                                   env=env, capture_output=True, text=True, encoding="utf-8",
                                   errors="replace", timeout=SMOKE_TIMEOUT,
-                                  creationflags=_NO_WINDOW)
+                                  creationflags=_NO_WINDOW | priority.CREATION_FLAGS)
         except subprocess.TimeoutExpired as exc:
             raise UpdateError("Le code de cette version met trop de temps à se charger.") from exc
         except OSError as exc:

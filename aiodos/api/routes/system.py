@@ -1,11 +1,11 @@
-"""Réglages, flux d'événements et ouverture de liens externes."""
+"""Réglages, flux d'événements, ouverture de liens externes, fenêtre à montrer."""
 import webbrowser
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from aiodos import settings
+from aiodos import instance, settings
 from aiodos.jobs.kinds import reindex
 
 router = APIRouter(prefix="/api")
@@ -43,6 +43,13 @@ def write_settings(values: dict, request: Request):
 async def events(request: Request):
     return StreamingResponse(request.app.state.bus.stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})
+
+
+@router.post("/window/show")
+def show_window():
+    """AIODOS relancé alors qu'il tourne déjà (fenêtre cachée dans la zone de
+    notification…) : la fenêtre de cette instance revient (cf. instance.wake_running)."""
+    return {"shown": instance.show_window()}
 
 
 @router.post("/open_url")

@@ -74,6 +74,9 @@ DEFAULTS = {
     "share_min_battery": 80,          # téléphone : charge minimale pour calculer (%)
     "share_max_temp": 40,             # téléphone : température maximale de la batterie (°C)
     "share_max_gpu": 100,
+    # --- Travail de fond (jobs/pacing.py, docs/arriere-plan.md) ---
+    "battery_mode": "eco",            # sur batterie : eco (ménagé) | pause | normal
+    "close_to_tray": True,            # Windows : fermer la fenêtre la cache (ui/tray.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
 }

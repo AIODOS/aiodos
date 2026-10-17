@@ -1,17 +1,23 @@
-"""Chaque test travaille dans une base neuve, sans Ollama ni réseau."""
+"""Chaque test travaille dans une base neuve, sans Ollama ni réseau, et sur secteur
+(simulé : sur batterie, le travail de fond ralentirait les tests, cf. jobs/pacing.py)."""
 import hashlib
 
 import numpy as np
 import pytest
 
 from aiodos import db
+from aiodos.jobs import pacing
 from aiodos.knowledge import search
+from aiodos.services import ollama
 
 
 @pytest.fixture(autouse=True)
 def data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AIODOS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AIODOS_SIMULATE_POWER", "ac")
     search.invalidate()
+    pacing.start()                     # ni conversation en cours, ni arrêt d'un test précédent
+    ollama.set_thread_limit(None)
     yield tmp_path
     db.close()
 

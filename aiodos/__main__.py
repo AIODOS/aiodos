@@ -113,8 +113,11 @@ def _serve(args) -> int:
     from aiodos.knowledge import store
 
     port = args.port or _free_port()
-    if not instance.acquire(port):
-        _alert("AIODOS est déjà ouvert sur cette machine.")
+    token = secrets.token_urlsafe(24)
+    if not instance.acquire(port, token):
+        # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
+        if args.headless or not instance.wake_running():
+            _alert("AIODOS est déjà ouvert sur cette machine.")
         return launcher.ALREADY_RUNNING
 
     try:
@@ -124,7 +127,6 @@ def _serve(args) -> int:
         if migrated:
             log.info("Import v1 : %s", migrated)
 
-        token = secrets.token_urlsafe(24)
         app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
             "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
             "discovery": not args.no_discovery,

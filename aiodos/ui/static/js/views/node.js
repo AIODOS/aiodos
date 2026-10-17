@@ -10,6 +10,7 @@ const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedd
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
 let root;
 let shareMobile = null;            // préférences dessinées pour un téléphone ?
+let trayRow = null;                // réglage de la zone de notification dessiné ?
 
 export function mountNode(container) {
   root = h(`
@@ -23,15 +24,18 @@ export function mountNode(container) {
         <div class="card" id="node-machine"></div>
         <div class="card" id="node-share"></div>
       </div>
+      <div class="card" id="node-background" style="margin-top:16px"></div>
       <div class="card" id="node-models" style="margin-top:16px"></div>
       <div class="card" id="node-network" style="margin-top:16px"></div>
     </div></div>`);
   container.append(root);
-  on('view:shown', view => { if (view === 'node') loadNode(); });
-  on('settings:loaded', renderShare);
+  on('view:shown', view => { if (view === 'node') { loadNode(); loadExecutor(); } });
+  on('settings:loaded', () => { renderShare(); renderBackground(); });
   on('network:loaded', () => { renderNetworkSummary(); renderShareStatus(); });
-  on('executor:changed', renderShareStatus);
-  setInterval(() => { if (state.view === 'node') { loadNode(); loadNetwork(); } }, 5000);
+  on('executor:changed', () => { renderShareStatus(); renderBackgroundStatus(); });
+  window.addEventListener('pywebviewready', renderBackground);
+  // Fenêtre cachée ou réduite : rien à rafraîchir (le profil lance nvidia-smi)
+  setInterval(() => { if (state.view === 'node' && !document.hidden) { loadNode(); loadNetwork(); } }, 5000);
 }
 
 export async function loadNode() {
@@ -96,6 +100,64 @@ function render() {
   // Les préférences ne sont reconstruites qu'à leur changement (settings:loaded) :
   // les redessiner toutes les 5 s fermerait une liste ouverte et perdrait un clic
   if (!$('#share-status', root) || shareMobile !== !!n.power?.mobile) renderShare();
+  if (!$('#background-status', root) || trayRow !== windowsWindow()) renderBackground();
+}
+
+// État de la file (dont la cadence du travail de fond), s'il n'est pas encore arrivé
+// par le flux d'événements
+async function loadExecutor() {
+  if (state.executor) return;
+  try {
+    state.executor = (await get('/jobs')).executor;
+    emit('executor:changed');
+  } catch (e) { /* nœud indisponible : on réessaiera */ }
+}
+
+// Travail de fond : priorité basse toujours, et sur batterie, selon le réglage
+function renderBackground() {
+  const box = root && $('#node-background', root);
+  if (!box || !state.settings) return;
+  const mode = state.settings.battery_mode || 'eco';
+  const options = [['eco', 'Ménager la batterie (conseillé)'], ['pause', 'Attendre le secteur'],
+    ['normal', 'Pleine vitesse']];
+  trayRow = windowsWindow();
+  box.innerHTML = `
+    <h2>${icon('cpu')}Travail de fond</h2>
+    <div id="background-status"></div>
+    <p class="hint">Indexations et calculs pour tes machines passent après toi : priorité basse et mode
+      efficacité du processeur, toujours. Pendant une conversation sur cette machine, le calcul sur la carte
+      graphique attend la fin de la réponse.</p>
+    <div class="setting-row"><div class="txt"><b>Sur batterie</b><small>Ménager : une tâche à la fois,
+      moins de fils de calcul, et des pauses (calcul la moitié du temps). Attendre : rien ne tourne en fond
+      avant le retour du secteur. Les conversations restent servies dans tous les cas.</small></div>
+      <select class="select" id="battery-mode" style="width:240px">${options.map(([v, l]) =>
+        `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',
+      "Il reste dans la zone de notification, près de l'horloge : le nœud continue de servir tes machines "
+      + "et d'avancer le travail de fond. Clic sur l'icône pour rouvrir, clic droit pour quitter.") : ''}`;
+  $('#battery-mode', box).onchange = e => save({ battery_mode: e.target.value });
+  box.querySelectorAll('input[data-key]').forEach(input => {
+    input.onchange = () => save({ [input.dataset.key]: input.checked });
+  });
+  renderBackgroundStatus();
+}
+
+// La fenêtre de Windows (pywebview) : la seule qui a une icône dans la zone de notification
+function windowsWindow() {
+  return !!window.pywebview && /^windows/i.test(state.node?.os || '');
+}
+
+function renderBackgroundStatus() {
+  const box = root && $('#background-status', root);
+  if (!box) return;
+  const p = state.executor?.pacing;
+  if (!p) { box.innerHTML = ''; return; }
+  const [cls, label, detail] = p.chatting
+    ? ['warn', 'Conversation en cours', 'Le calcul sur la carte graphique attend la fin de la réponse.']
+    : p.mode === 'pause' ? ['warn', 'En pause', p.detail]
+      : p.mode === 'eco' ? ['ok', 'Ménagé', p.detail] : ['ok', 'Pleine vitesse', p.detail];
+  box.innerHTML = `<div class="share-status"><span class="pill ${cls}">${label}</span>
+    <span class="muted">${esc(detail)}</span></div>`;
 }
 
 function renderNetworkSummary() {

@@ -10,7 +10,9 @@ cours s'arrêtent et sont rendues, comme l'économiseur d'écran de SETI@home ;
 une conversation sur ce PC fait de même pour celles qui occupent le GPU.
 
 Les fichiers reçus ne servent qu'au calcul : ils sont effacés aussitôt après,
-et rien n'est enregistré dans les bibliothèques de cette machine.
+et rien n'est enregistré dans les bibliothèques de cette machine. Le calcul se fait
+dans un thread de fond, à priorité abaissée, et suit la cadence du travail de fond
+(node/priority.py, jobs/pacing.py : sur batterie, si le partage y est permis).
 """
 import asyncio
 import hashlib
@@ -30,7 +32,7 @@ from aiodos.jobs.models import GPU_BOUND
 from aiodos.network import client, peers, route, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
-from aiodos.node import identity, power
+from aiodos.node import identity, power, priority
 from aiodos.services import extract
 
 log = logging.getLogger("aiodos.worker")
@@ -277,7 +279,7 @@ class Worker:
     async def _run(self, a: Assignment):
         renewer = asyncio.create_task(self._renew(a))
         try:
-            outcome = await asyncio.to_thread(self._process, a)
+            outcome = await priority.run(self._process, a)      # thread de fond
             log.info("Unité %s de « %s » (%s) : %s", a.order["id"], a.peer_name,
                      label_of(a.order), outcome)
         finally:

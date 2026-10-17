@@ -1,7 +1,10 @@
 """Une seule instance d'AIODOS à la fois par dossier de données.
 
 Deux nœuds sur la même base fonctionneraient (les réservations d'unités sont
-atomiques), mais deux fenêtres identiques prêteraient à confusion.
+atomiques), mais deux fenêtres identiques prêteraient à confusion. AIODOS relancé
+alors qu'il tourne déjà (fenêtre cachée dans la zone de notification…) demande à
+l'instance en place de montrer sa fenêtre (wake_running) : le verrou garde pour cela
+le port et le jeton de son API locale, comme le journal d'un nœud sans fenêtre.
 """
 import ctypes
 import json
@@ -12,6 +15,7 @@ from aiodos import paths
 
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _STILL_ACTIVE = 259
+_show = []                 # fonction qui montre la fenêtre de cette instance (ui/window.py)
 
 
 def _lock_file():
@@ -48,12 +52,45 @@ def running() -> bool:
         return False
 
 
-def acquire(port: int) -> bool:
+def acquire(port: int, token: str | None = None) -> bool:
     """Réserve l'instance. Faux si une autre instance vivante tient déjà le verrou."""
     if running():
         return False
-    _lock_file().write_text(json.dumps({"pid": os.getpid(), "port": port}), encoding="utf-8")
+    lock = {"pid": os.getpid(), "port": port}
+    if token:
+        lock["token"] = token
+    _lock_file().write_text(json.dumps(lock), encoding="utf-8")
     return True
+
+
+def on_show(fn):
+    """fn() -> bool montrera la fenêtre de cette instance (cf. show_window) ; None : aucune."""
+    _show[:] = [fn] if fn else []
+
+
+def show_window() -> bool:
+    """Montre la fenêtre de cette instance, s'il y en a une (appel de l'API locale)."""
+    return bool(_show and _show[0]())
+
+
+def wake_running(timeout: float = 5) -> bool:
+    """Demande à l'instance qui tient le verrou de montrer sa fenêtre. Vrai si c'est fait."""
+    try:
+        other = json.loads(_lock_file().read_text(encoding="utf-8"))
+        pid, port, token = int(other["pid"]), int(other["port"]), str(other["token"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if sys.platform == "win32":
+        # Elle a le droit de passer au premier plan : c'est ce lancement qui le lui donne
+        ctypes.windll.user32.AllowSetForegroundWindow(pid)
+    import requests
+    try:
+        reply = requests.post(f"http://127.0.0.1:{port}/api/window/show", timeout=timeout,
+                              headers={"X-Aiodos-Token": token},
+                              proxies={"http": None, "https": None})
+        return reply.ok and reply.json().get("shown") is True
+    except (requests.RequestException, ValueError):
+        return False
 
 
 def release():

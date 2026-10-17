@@ -4,6 +4,8 @@ Chaque fichier devient une unité autonome. Fichiers et pages web sont des
 tâches portables : le calcul (extraction du texte, découpage, embeddings) peut
 se faire sur une autre machine, l'enregistrement dans la bibliothèque se fait
 toujours ici. La mémoire des conversations, elle, ne quitte jamais ce nœud.
+Les appels aux modèles suivent la cadence du travail de fond (jobs/pacing.py) :
+ils attendent la fin d'une conversation, et se reposent sur batterie.
 """
 import json
 import os
@@ -14,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from aiodos import db, settings
+from aiodos.jobs import pacing
 from aiodos.jobs.registry import (Interrupted, SampleMismatch, UnitSpec, register_job_kind,
                                  register_portable, task)
 from aiodos.knowledge import chunking, store
@@ -110,16 +113,8 @@ def requires_index(unit, options) -> dict:
     return need
 
 
-EMBED_BATCH = 16
-
-
 def _embed(pieces, options, stop) -> dict:
-    vectors = []
-    for start in range(0, len(pieces), EMBED_BATCH):
-        if stop is not None and stop.is_set():
-            raise Interrupted()
-        vectors.extend(ollama.embed(pieces[start:start + EMBED_BATCH],
-                                    model=options["embed_model"]))
+    vectors = pacing.embed(pieces, model=options["embed_model"], stop=stop)
     return {"pieces": pieces, "vectors": np.asarray(vectors, dtype=np.float32)}
 
 
@@ -130,9 +125,11 @@ def compute_index_file(payload, file, options, stop=None):
     vision = transcribe = None
     if options.get("vision"):
         model, mode = options["vision"]["model"], options["vision"]["mode"]
-        vision = lambda p: media.vision_extract(p, model, mode)
+        vision = lambda p: pacing.paced(lambda: media.vision_extract(p, model, mode), stop)
     if options.get("whisper"):
-        transcribe = lambda p: media.transcribe(p, options["whisper"], stop=stop)
+        transcribe = lambda p: media.transcribe(
+            p, options["whisper"], stop=stop, threads=pacing.threads(media.WHISPER_THREADS),
+            rest=lambda seconds: pacing.rest(seconds, stop))
     text = extract.extract_text(path, vision=vision, transcribe=transcribe)
     if stop is not None and stop.is_set():
         raise Interrupted()
@@ -279,7 +276,7 @@ def run_index_conversation(payload):
         if rebuild:                       # plus aucun message : rien à garder en mémoire
             store.remove_by_origin(collection_id, str(conv_id))
         return {"chunks": 0}
-    vectors = ollama.embed([p for _, p in pieces])
+    vectors = pacing.embed([p for _, p in pieces])
     store.append_chunks(collection_id, f"{conv['title']} · #{conv_id}", "conversation",
                         str(conv_id), [(idx, text, vec)
                                        for (idx, text), vec in zip(pieces, vectors)],

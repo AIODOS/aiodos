@@ -79,6 +79,12 @@ Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --
 `--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
 `requirements-node.txt` suffit à l'installer (ni fenêtre, ni Whisper).
 
+**Le travail de fond passe après l'utilisateur** : indexations et calcul pour les autres
+machines tournent en priorité basse et en mode efficacité du processeur ; pendant une
+conversation, le calcul sur la carte graphique attend la fin de la réponse ; sur batterie,
+il est ménagé (une tâche à la fois, des pauses, moins de fils de calcul), ou attend le
+secteur, au choix. Mesures et détails : [docs/arriere-plan.md](docs/arriere-plan.md).
+
 **Un téléphone Android** peut aussi calculer, sous Termux : il ne prête sa puissance
 qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.
 Pas à pas : [docs/android.md](docs/android.md).
@@ -121,6 +127,11 @@ chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.
 - Nœud sans fenêtre (machine de calcul) : `python -m aiodos --headless`
   (affiche l'adresse locale à ouvrir dans un navigateur).
 
+Sous Windows, **fermer la fenêtre la cache seulement** : AIODOS reste dans la zone de
+notification, près de l'horloge, et le nœud continue de tourner. Clic sur l'icône (ou
+relancer AIODOS) : la fenêtre revient ; clic droit → « Quitter AIODOS » pour l'arrêter.
+Réglable dans « Cette machine » → « Travail de fond ».
+
 Au premier lancement, les données de la v1 (`legacy/data`) sont importées
 automatiquement : conversations, dossiers, bibliothèques et réglages.
 
@@ -150,6 +161,7 @@ aiodos/
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │   ├── queue.py       persistance, priorités, réessais, reprise
 │   ├── executor.py    exécution selon les ressources (GPU, embeddings, CPU, réseau)
+│   ├── pacing.py      cadence du travail de fond : conversations d'abord, batterie ménagée
 │   ├── leases.py      baux : unités confiées pour un temps limité à une autre machine
 │   ├── registry.py    tâches portables : calcul (n'importe où) / intégration (chez soi)
 │   └── kinds/         types de travaux (indexation, réindexation…)
@@ -167,14 +179,16 @@ aiodos/
 │   ├── internet.py    le compagnon vu du réseau : liste blanche, état par machine
 │   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
-│                      particularités d'Android (android.py)
+│                      priorité du travail de fond (priority.py), Android (android.py)
 ├── updates/           mises à jour signées : transmission entre machines, installation
 │                      à côté, lanceur avec retour en arrière (docs/mises-a-jour.md)
 ├── api/               API locale + flux d'événements (SSE)
-└── ui/                fenêtre native et interface web (HTML/CSS/JS, sans compilation)
+└── ui/                fenêtre native, icône de la zone de notification (tray.py),
+                       interface web (HTML/CSS/JS, sans compilation)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
 tests/                 tests automatisés (pytest)
-tools/                 publication des versions, outils de mesure (modèle d'embedding)
+tools/                 publication des versions, outils de mesure (modèle d'embedding,
+                       coût du travail de fond : bench_background.py)
 docs/                  notes de mesures et de choix techniques, téléphone Android
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```

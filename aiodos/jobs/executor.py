@@ -1,8 +1,10 @@
 """Exécuteur local : vide la file en respectant les ressources de la machine.
 
-Tourne dans la boucle asyncio du nœud ; chaque unité s'exécute dans un thread
-(les tâches sont bloquantes : réseau, fichiers, modèles). Pendant une
-conversation, aucune nouvelle unité GPU ne démarre : l'interactif d'abord.
+Tourne dans la boucle asyncio du nœud ; chaque unité s'exécute dans un thread de
+fond, à priorité abaissée (node/priority.py : les tâches sont bloquantes : réseau,
+fichiers, modèles). Pendant une conversation, aucune nouvelle unité GPU ne démarre,
+et celles en cours attendent entre deux lots : l'interactif d'abord. Sur batterie,
+moins d'unités à la fois, ou aucune, selon le réglage (jobs/pacing.py).
 
 Les ressources sont partagées avec le calcul fait ici pour d'autres machines
 (begin_remote / end_remote, cf. network.worker) ; l'exécuteur surveille aussi
@@ -10,12 +12,14 @@ les baux des unités que ce nœud a confiées ailleurs (cf. jobs.leases).
 """
 import asyncio
 import logging
+import threading
 import time
 
 import requests
 
-from aiodos.jobs import leases, queue, registry
+from aiodos.jobs import leases, pacing, queue, registry
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from aiodos.node import priority
 from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.executor")
@@ -43,6 +47,9 @@ class Executor:
         self.busy = {name: 0 for name in self.slots}
         self.remote = {}                  # unités calculées ici pour d'autres machines
         self.interactive = 0
+        # Conversations commencées et finies depuis des fils différents (chat local,
+        # modèle prêté) : sans verrou, le compte et l'attente du travail de fond dériveraient
+        self._interactive_lock = threading.Lock()
         self._loop = None
         self._wake = None
         self._task = None
@@ -54,10 +61,13 @@ class Executor:
     async def start(self):
         self._loop = asyncio.get_running_loop()
         self._wake = asyncio.Event()
+        pacing.start()
         await asyncio.to_thread(queue.recover)
+        await asyncio.to_thread(pacing.refresh, True)
         self._task = asyncio.create_task(self._run(), name="aiodos-executor")
 
     async def stop(self):
+        pacing.shutdown()              # les lots en attente s'arrêtent : rien ne retient l'arrêt
         if self._task:
             self._task.cancel()
 
@@ -68,25 +78,37 @@ class Executor:
 
     # ----------------------------------------------------- priorité interactive
     def interactive_begin(self):
-        self.interactive += 1
+        with self._interactive_lock:
+            self.interactive += 1
+            pacing.set_interactive(self.interactive)
         self._publish_status()
 
     def interactive_end(self):
-        self.interactive = max(0, self.interactive - 1)
+        with self._interactive_lock:
+            self.interactive = max(0, self.interactive - 1)
+            pacing.set_interactive(self.interactive)
         self._publish_status()
         self.wake()
 
     # ------------------------------------------------------------------ boucle
     def free_resources(self) -> set:
         now = time.monotonic()
-        return {name for name, n in self.slots.items()
+        return {name for name, n in pacing.slots(self.slots).items()
                 if self.busy[name] < n and self.cooldown.get(name, 0) <= now
                 and not (self.interactive and name in GPU_BOUND)}
+
+    async def _pace(self):
+        """Alimentation et réglage relus hors de la boucle ; l'interface prévenue d'un
+        passage sur batterie ou sur secteur."""
+        before = pacing.current()
+        if await asyncio.to_thread(pacing.refresh) != before:
+            self._publish_status()
 
     async def _run(self):
         last_lease_check = 0.0
         while True:
             try:
+                await self._pace()
                 await self._fill()
                 if time.monotonic() - last_lease_check > LEASE_CHECK_EVERY:
                     last_lease_check = time.monotonic()
@@ -115,9 +137,12 @@ class Executor:
     async def _execute(self, unit):
         started = time.perf_counter()
         try:
-            result = await asyncio.to_thread(registry.run_local, unit["task"], unit["payload"])
+            result = await priority.run(registry.run_local, unit["task"], unit["payload"])
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {}, time.perf_counter() - started)
+        except registry.Interrupted:         # arrêt d'AIODOS pendant une attente : rien n'a échoué
+            await asyncio.to_thread(queue.release_unit, unit["id"])
+            job_id, finished = unit["job_id"], False
         except Exception as exc:
             if engine_down(exc):
                 log.info("Ollama injoignable : unité %s remise en file, nouvel essai dans %s s",
@@ -180,9 +205,9 @@ class Executor:
         now = time.monotonic()
         waiting = {name: round(until - now) for name, until in self.cooldown.items()
                    if until > now}
-        return {"slots": self.slots, "busy": dict(self.busy),
-                "interactive": self.interactive, "waiting": waiting,
-                "remote": list(self.remote.values())}
+        return {"slots": pacing.slots(self.slots), "configured": self.slots,
+                "busy": dict(self.busy), "interactive": self.interactive, "waiting": waiting,
+                "remote": list(self.remote.values()), "pacing": pacing.describe()}
 
     def _publish_status(self):
         self.publish({"type": "executor", **self.status()})

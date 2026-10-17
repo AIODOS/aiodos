@@ -15,7 +15,7 @@ import time
 import uuid
 
 from aiodos import __version__, db, settings
-from aiodos.node import android, power
+from aiodos.node import android, power, priority
 from aiodos.services import ollama
 from aiodos.updates.store import Store
 
@@ -83,7 +83,8 @@ def gpus() -> list:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5, creationflags=_NO_WINDOW).stdout
+            capture_output=True, text=True, timeout=5,
+            creationflags=_NO_WINDOW | priority.CREATION_FLAGS).stdout
     except (OSError, subprocess.SubprocessError):
         return []
     result = []
