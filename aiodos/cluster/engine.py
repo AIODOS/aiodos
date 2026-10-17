@@ -22,6 +22,7 @@ import requests
 
 from aiodos import paths, settings
 from aiodos.cluster import delivery
+from aiodos.updates import engines
 from aiodos.node import children
 
 log = logging.getLogger("aiodos.cluster")
@@ -45,12 +46,12 @@ class EngineError(Exception):
 
 def folder() -> Path | None:
     """Dossier de llama.cpp s'il contient les deux programmes, sinon None : celui du
-    réglage, sinon celui livré avec les versions (delivery.py), sinon un llama.cpp posé à la
-    main dans data/engines/llama.cpp."""
+    réglage, sinon celui livré avec les versions (delivery.py) ou joint par l'installeur,
+    sinon un llama.cpp posé à la main dans data/engines/llama.cpp."""
     configured = str(settings.get("llamacpp_dir") or "").strip()
     if configured:
         return Path(configured) if delivery.complete(Path(configured)) else None
-    delivered = delivery.find()
+    delivered = delivery.find() or engines.bundled(engines.LLAMA)
     if delivered is not None:
         return delivered
     manual = delivery.root()

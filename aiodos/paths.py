@@ -9,13 +9,26 @@ ASSETS_DIR = APP_ROOT / "assets"
 LOGO_PNG = ASSETS_DIR / "logo.png"
 LOGO_ICO = ASSETS_DIR / "logo.ico"
 LEGACY_DATA_DIR = APP_ROOT / "legacy" / "data"
+# Posé par l'installeur Windows (tools/build_installer.py) à côté du code installé : les
+# données vont alors dans le dossier de l'utilisateur, pas à côté du code, que
+# l'installeur remplace à chaque nouvelle version
+INSTALLED_MARK = APP_ROOT / "installation.json"
+
+
+def installed_data_dir() -> Path | None:
+    """%LOCALAPPDATA%\\AIODOS\\data pour une copie posée par l'installeur, sinon None."""
+    if not INSTALLED_MARK.is_file():
+        return None
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(Path.home(), "AppData", "Local")
+    return Path(base) / "AIODOS" / "data"
 
 
 def data_dir() -> Path:
-    """Dossier des données (surchargeable par AIODOS_DATA_DIR, utile pour les tests ;
-    COEUR_DATA_DIR, l'ancien nom, reste compris)."""
+    """Dossier des données : AIODOS_DATA_DIR (essais, --data-dir, versions lancées par le
+    lanceur des mises à jour ; COEUR_DATA_DIR, l'ancien nom, reste compris), sinon celui de
+    l'utilisateur pour une copie installée, sinon data/ à côté du code."""
     d = Path(os.environ.get("AIODOS_DATA_DIR") or os.environ.get("COEUR_DATA_DIR")
-             or (APP_ROOT / "data"))
+             or installed_data_dir() or (APP_ROOT / "data"))
     d.mkdir(parents=True, exist_ok=True)
     return d
 

@@ -12,3 +12,7 @@ __pycache__/
 # Réglages locaux de Claude Code (autorisations, chemins propres à cette machine)
 .claude/settings.local.json
 .claude/launch.json
+
+# Construction de l'installeur Windows (tools/build_installer.py)
+build/
+dist/

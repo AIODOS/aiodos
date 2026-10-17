@@ -58,11 +58,12 @@ def complete(folder: Path) -> bool:
 
 def folder() -> Path | None:
     """Dossier de stable-diffusion.cpp s'il contient sd-server, sinon None : celui du
-    réglage, sinon celui livré avec les versions, sinon un dossier posé à la main."""
+    réglage, sinon celui livré avec les versions ou joint par l'installeur, sinon un
+    dossier posé à la main."""
     configured = str(settings.get("sdcpp_dir") or "").strip()
     if configured:
         return Path(configured) if complete(Path(configured)) else None
-    delivered = engines.find(engines.IMAGES)
+    delivered = engines.find(engines.IMAGES) or engines.bundled(engines.IMAGES)
     if delivered is not None:
         return delivered
     manual = root()

@@ -47,6 +47,18 @@ def complete(folder: Path, engine: str) -> bool:
     return all((folder / platforms.executable(p)).is_file() for p in PROGRAMS[engine])
 
 
+def bundled(engine: str) -> Path | None:
+    """Le moteur joint par l'installeur Windows à côté du code installé (engines/<moteur>/,
+    tools/build_installer.py) : celui de cette version, sinon celui de la version d'origine
+    quand le lanceur des mises à jour en lance une plus récente (AIODOS_BASE_DIR)."""
+    for root in (paths.APP_ROOT, os.environ.get("AIODOS_BASE_DIR")):
+        if root:
+            folder = Path(root) / "engines" / engine
+            if complete(folder, engine):
+                return folder
+    return None
+
+
 def find(engine: str, store: Store | None = None) -> Path | None:
     """Dossier du moteur livré, déplié s'il le faut ; None si aucune version gardée ici ne
     le livre pour cette plateforme. Résultat gardé FIND_TTL secondes."""
