@@ -1,0 +1,1964 @@
+[
+ {
+  "label": "avant (65821f0), secteur",
+  "code": "C:\\Users\\22eme\\AppData\\Local\\Temp\\claude\\C---22eme-ARKANE-PROJETS-AIODOS--claude-worktrees-charming-wiles-bbba4f\\3a2c88c0-ce4b-4097-88b7-11dbb97f3950\\scratchpad\\avant",
+  "revision": null,
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 10:44:23",
+  "index": {
+   "duration_s": 132.3,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 58.9
+  },
+  "idle": {
+   "samples": 22,
+   "system": 7.282,
+   "cores_P": 12.636,
+   "cores_E": 1.93,
+   "aiodos": 0.003,
+   "ollama": 0.045,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.003,
+   "threads_lowered_count": 0,
+   "gpu_util": 8.042,
+   "gpu_watts": 19.982,
+   "api_ms_median": 2.593,
+   "api_ms_p95": 2.892,
+   "api_ms_max": 16.5
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 11.532,
+   "cores_P": 18.97,
+   "cores_E": 4.11,
+   "aiodos": 0.028,
+   "ollama": 0.942,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.023,
+   "threads_lowered_count": 0,
+   "gpu_util": 82.308,
+   "gpu_watts": 58.086,
+   "api_ms_median": 2.431,
+   "api_ms_p95": 16.611,
+   "api_ms_max": 16.6
+  },
+  "indexing_alone": {
+   "samples": 181,
+   "system": 20.524,
+   "cores_P": 28.092,
+   "cores_E": 12.947,
+   "aiodos": 0.064,
+   "ollama": 1.182,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.065,
+   "threads_lowered_count": 0,
+   "gpu_util": 37.286,
+   "gpu_watts": 39.745,
+   "api_ms_median": 3.718,
+   "api_ms_p95": 11.714,
+   "api_ms_max": 37.5
+  },
+  "indexing_chat": {
+   "samples": 37,
+   "system": 17.881,
+   "cores_P": 25.903,
+   "cores_E": 9.867,
+   "aiodos": 0.068,
+   "ollama": 1.366,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.058,
+   "threads_lowered_count": 0,
+   "gpu_util": 88.271,
+   "gpu_watts": 68.681,
+   "api_ms_median": 6.73,
+   "api_ms_p95": 14.732,
+   "api_ms_max": 18.4
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.368,
+    "total_s": 3.319,
+    "chars": 603,
+    "chars_per_s": 204.4,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.193,
+    "total_s": 3.233,
+    "chars": 571,
+    "chars_per_s": 187.9,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.097,
+    "total_s": 3.471,
+    "chars": 580,
+    "chars_per_s": 171.9,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.521,
+    "total_s": 4.605,
+    "chars": 652,
+    "chars_per_s": 159.7,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.128,
+    "total_s": 2.556,
+    "chars": 447,
+    "chars_per_s": 184.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.554,
+    "total_s": 4.493,
+    "chars": 633,
+    "chars_per_s": 160.7,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.121,
+    "total_s": 4.739,
+    "chars": 504,
+    "chars_per_s": 109.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.789,
+    "total_s": 4.951,
+    "chars": 711,
+    "chars_per_s": 170.8,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.368,
+    "chars_per_s_median": 204.4
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.193,
+    "chars_per_s_median": 187.9
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.121,
+    "chars_per_s_median": 171.9
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.554,
+    "chars_per_s_median": 160.7
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, secteur",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "3be7c6e",
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 10:47:07",
+  "index": {
+   "duration_s": 118.0,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 66.0
+  },
+  "idle": {
+   "samples": 20,
+   "system": 11.03,
+   "cores_P": 16.599,
+   "cores_E": 5.443,
+   "aiodos": 0.004,
+   "ollama": 0.038,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.004,
+   "threads_lowered_count": 2,
+   "gpu_util": 4.217,
+   "gpu_watts": 17.014,
+   "api_ms_median": 2.629,
+   "api_ms_p95": 17.129,
+   "api_ms_max": 18.3
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 18.411,
+   "cores_P": 26.59,
+   "cores_E": 10.122,
+   "aiodos": 0.002,
+   "ollama": 0.905,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.0,
+   "threads_lowered_count": 2,
+   "gpu_util": 87.75,
+   "gpu_watts": 63.32,
+   "api_ms_median": 3.228,
+   "api_ms_p95": 18.377,
+   "api_ms_max": 18.4
+  },
+  "indexing_alone": {
+   "samples": 167,
+   "system": 19.322,
+   "cores_P": 26.547,
+   "cores_E": 12.095,
+   "aiodos": 0.137,
+   "ollama": 1.278,
+   "threads_lowered": 0.117,
+   "threads_normal": 0.019,
+   "threads_lowered_count": 4,
+   "gpu_util": 40.974,
+   "gpu_watts": 46.951,
+   "api_ms_median": 3.56,
+   "api_ms_p95": 9.942,
+   "api_ms_max": 25.1
+  },
+  "indexing_chat": {
+   "samples": 35,
+   "system": 14.33,
+   "cores_P": 23.293,
+   "cores_E": 5.311,
+   "aiodos": 0.053,
+   "ollama": 1.141,
+   "threads_lowered": 0.021,
+   "threads_normal": 0.031,
+   "threads_lowered_count": 4,
+   "gpu_util": 89.763,
+   "gpu_watts": 76.052,
+   "api_ms_median": 3.135,
+   "api_ms_p95": 4.863,
+   "api_ms_max": 18.6
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.329,
+    "total_s": 3.613,
+    "chars": 613,
+    "chars_per_s": 186.7,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.143,
+    "total_s": 2.584,
+    "chars": 439,
+    "chars_per_s": 179.9,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.089,
+    "total_s": 3.684,
+    "chars": 594,
+    "chars_per_s": 165.2,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.44,
+    "total_s": 3.332,
+    "chars": 580,
+    "chars_per_s": 200.5,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.093,
+    "total_s": 3.055,
+    "chars": 539,
+    "chars_per_s": 182.0,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.51,
+    "total_s": 3.662,
+    "chars": 624,
+    "chars_per_s": 198.0,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.101,
+    "total_s": 2.827,
+    "chars": 451,
+    "chars_per_s": 165.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.447,
+    "total_s": 2.974,
+    "chars": 455,
+    "chars_per_s": 180.1,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.329,
+    "chars_per_s_median": 186.7
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.143,
+    "chars_per_s_median": 179.9
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.093,
+    "chars_per_s_median": 165.5
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.447,
+    "chars_per_s_median": 198.0
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, batterie simulée (ménager)",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "3be7c6e",
+  "simulation": "battery",
+  "settings": {},
+  "slots": null,
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 10:49:30",
+  "index": {
+   "duration_s": 263.2,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 29.6
+  },
+  "idle": {
+   "samples": 22,
+   "system": 6.753,
+   "cores_P": 11.927,
+   "cores_E": 1.553,
+   "aiodos": 0.001,
+   "ollama": 0.07,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.0,
+   "threads_lowered_count": 2,
+   "gpu_util": 0.391,
+   "gpu_watts": 16.206,
+   "api_ms_median": 2.738,
+   "api_ms_p95": 18.492,
+   "api_ms_max": 19.3
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 9.584,
+   "cores_P": 17.25,
+   "cores_E": 1.939,
+   "aiodos": 0.015,
+   "ollama": 0.916,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.01,
+   "threads_lowered_count": 2,
+   "gpu_util": 84.308,
+   "gpu_watts": 71.345,
+   "api_ms_median": 2.889,
+   "api_ms_p95": 4.486,
+   "api_ms_max": 4.5
+  },
+  "indexing_alone": {
+   "samples": 434,
+   "system": 13.101,
+   "cores_P": 17.791,
+   "cores_E": 8.412,
+   "aiodos": 0.055,
+   "ollama": 0.477,
+   "threads_lowered": 0.044,
+   "threads_normal": 0.01,
+   "threads_lowered_count": 3,
+   "gpu_util": 20.661,
+   "gpu_watts": 22.391,
+   "api_ms_median": 2.847,
+   "api_ms_p95": 7.299,
+   "api_ms_max": 20.5
+  },
+  "indexing_chat": {
+   "samples": 32,
+   "system": 13.019,
+   "cores_P": 21.589,
+   "cores_E": 4.439,
+   "aiodos": 0.03,
+   "ollama": 0.951,
+   "threads_lowered": 0.007,
+   "threads_normal": 0.021,
+   "threads_lowered_count": 3,
+   "gpu_util": 85.892,
+   "gpu_watts": 71.141,
+   "api_ms_median": 2.97,
+   "api_ms_p95": 4.035,
+   "api_ms_max": 4.9
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.37,
+    "total_s": 3.229,
+    "chars": 539,
+    "chars_per_s": 188.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.113,
+    "total_s": 3.039,
+    "chars": 563,
+    "chars_per_s": 192.5,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.065,
+    "total_s": 3.071,
+    "chars": 519,
+    "chars_per_s": 172.7,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.203,
+    "total_s": 3.295,
+    "chars": 563,
+    "chars_per_s": 182.1,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.087,
+    "total_s": 2.617,
+    "chars": 444,
+    "chars_per_s": 175.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.212,
+    "total_s": 3.387,
+    "chars": 605,
+    "chars_per_s": 190.5,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.087,
+    "total_s": 3.035,
+    "chars": 519,
+    "chars_per_s": 176.0,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.244,
+    "total_s": 2.985,
+    "chars": 506,
+    "chars_per_s": 184.6,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.37,
+    "chars_per_s_median": 188.5
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.113,
+    "chars_per_s_median": 192.5
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.087,
+    "chars_per_s_median": 175.5
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.212,
+    "chars_per_s_median": 184.6
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "avant (65821f0), secteur",
+  "code": "C:\\Users\\22eme\\AppData\\Local\\Temp\\claude\\C---22eme-ARKANE-PROJETS-AIODOS--claude-worktrees-charming-wiles-bbba4f\\3a2c88c0-ce4b-4097-88b7-11dbb97f3950\\scratchpad\\avant",
+  "revision": null,
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": [
+   "asyncio",
+   "email",
+   "xml",
+   "unittest",
+   "multiprocessing",
+   "importlib",
+   "http",
+   "logging",
+   "urllib",
+   "html",
+   "concurrent",
+   "json",
+   "re",
+   "zipfile",
+   "pathlib",
+   "idlelib",
+   "tkinter"
+  ],
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:07:42",
+  "index": {
+   "duration_s": 109.8,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 70.9
+  },
+  "idle": {
+   "samples": 21,
+   "system": 12.765,
+   "cores_P": 12.609,
+   "cores_E": 12.875,
+   "aiodos": 0.005,
+   "ollama": 0.046,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.005,
+   "threads_lowered_count": 0,
+   "gpu_util": 4.217,
+   "gpu_watts": 18.289,
+   "api_ms_median": 2.442,
+   "api_ms_p95": 4.104,
+   "api_ms_max": 17.2
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 10.432,
+   "cores_P": 14.639,
+   "cores_E": 6.221,
+   "aiodos": 0.018,
+   "ollama": 0.943,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.018,
+   "threads_lowered_count": 0,
+   "gpu_util": 88.667,
+   "gpu_watts": 71.379,
+   "api_ms_median": 2.479,
+   "api_ms_p95": 17.165,
+   "api_ms_max": 17.2
+  },
+  "indexing_alone": {
+   "samples": 153,
+   "system": 17.703,
+   "cores_P": 21.045,
+   "cores_E": 14.336,
+   "aiodos": 0.064,
+   "ollama": 1.281,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.064,
+   "threads_lowered_count": 0,
+   "gpu_util": 44.517,
+   "gpu_watts": 47.361,
+   "api_ms_median": 3.401,
+   "api_ms_p95": 6.951,
+   "api_ms_max": 18.0
+  },
+  "indexing_chat": {
+   "samples": 41,
+   "system": 12.668,
+   "cores_P": 18.247,
+   "cores_E": 7.114,
+   "aiodos": 0.034,
+   "ollama": 1.357,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.03,
+   "threads_lowered_count": 0,
+   "gpu_util": 90.889,
+   "gpu_watts": 70.479,
+   "api_ms_median": 2.7,
+   "api_ms_p95": 5.273,
+   "api_ms_max": 17.2
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.068,
+    "total_s": 3.075,
+    "chars": 499,
+    "chars_per_s": 166.0,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.196,
+    "total_s": 2.865,
+    "chars": 464,
+    "chars_per_s": 173.9,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.092,
+    "total_s": 3.074,
+    "chars": 573,
+    "chars_per_s": 192.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.498,
+    "total_s": 4.456,
+    "chars": 681,
+    "chars_per_s": 172.1,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.088,
+    "total_s": 3.297,
+    "chars": 511,
+    "chars_per_s": 159.3,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.443,
+    "total_s": 5.524,
+    "chars": 517,
+    "chars_per_s": 101.8,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.079,
+    "total_s": 2.91,
+    "chars": 517,
+    "chars_per_s": 182.6,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.69,
+    "total_s": 4.224,
+    "chars": 630,
+    "chars_per_s": 178.3,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.068,
+    "chars_per_s_median": 166.0
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.196,
+    "chars_per_s_median": 173.9
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.088,
+    "chars_per_s_median": 182.6
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.498,
+    "chars_per_s_median": 172.1
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, secteur",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "236f85a",
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": [
+   "asyncio",
+   "email",
+   "xml",
+   "unittest",
+   "multiprocessing",
+   "importlib",
+   "http",
+   "logging",
+   "urllib",
+   "html",
+   "concurrent",
+   "json",
+   "re",
+   "zipfile",
+   "pathlib",
+   "idlelib",
+   "tkinter"
+  ],
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:10:02",
+  "index": {
+   "duration_s": 114.2,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 68.2
+  },
+  "idle": {
+   "samples": 22,
+   "system": 3.87,
+   "cores_P": 6.829,
+   "cores_E": 0.901,
+   "aiodos": 0.009,
+   "ollama": 0.054,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.008,
+   "threads_lowered_count": 2,
+   "gpu_util": 4.636,
+   "gpu_watts": 13.889,
+   "api_ms_median": 3.23,
+   "api_ms_p95": 16.526,
+   "api_ms_max": 20.2
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 6.873,
+   "cores_P": 12.564,
+   "cores_E": 1.209,
+   "aiodos": 0.013,
+   "ollama": 0.936,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.013,
+   "threads_lowered_count": 2,
+   "gpu_util": 85.308,
+   "gpu_watts": 72.112,
+   "api_ms_median": 2.883,
+   "api_ms_p95": 17.324,
+   "api_ms_max": 17.3
+  },
+  "indexing_alone": {
+   "samples": 167,
+   "system": 15.305,
+   "cores_P": 19.481,
+   "cores_E": 11.127,
+   "aiodos": 0.126,
+   "ollama": 1.262,
+   "threads_lowered": 0.105,
+   "threads_normal": 0.02,
+   "threads_lowered_count": 4,
+   "gpu_util": 41.005,
+   "gpu_watts": 47.781,
+   "api_ms_median": 3.74,
+   "api_ms_p95": 9.932,
+   "api_ms_max": 20.1
+  },
+  "indexing_chat": {
+   "samples": 35,
+   "system": 10.225,
+   "cores_P": 15.238,
+   "cores_E": 5.223,
+   "aiodos": 0.038,
+   "ollama": 1.103,
+   "threads_lowered": 0.013,
+   "threads_normal": 0.024,
+   "threads_lowered_count": 4,
+   "gpu_util": 86.8,
+   "gpu_watts": 72.829,
+   "api_ms_median": 2.747,
+   "api_ms_p95": 3.448,
+   "api_ms_max": 13.4
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.379,
+    "total_s": 3.248,
+    "chars": 536,
+    "chars_per_s": 186.8,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.124,
+    "total_s": 2.922,
+    "chars": 536,
+    "chars_per_s": 191.6,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.094,
+    "total_s": 3.124,
+    "chars": 557,
+    "chars_per_s": 183.9,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.47,
+    "total_s": 3.608,
+    "chars": 590,
+    "chars_per_s": 188.0,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.12,
+    "total_s": 2.783,
+    "chars": 480,
+    "chars_per_s": 180.2,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.401,
+    "total_s": 3.519,
+    "chars": 578,
+    "chars_per_s": 185.4,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.087,
+    "total_s": 3.19,
+    "chars": 557,
+    "chars_per_s": 179.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.446,
+    "total_s": 3.626,
+    "chars": 578,
+    "chars_per_s": 181.8,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.379,
+    "chars_per_s_median": 186.8
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.124,
+    "chars_per_s_median": 191.6
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.094,
+    "chars_per_s_median": 180.2
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.446,
+    "chars_per_s_median": 185.4
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, batterie simulée (ménager)",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "236f85a",
+  "simulation": "battery",
+  "settings": {},
+  "slots": null,
+  "corpus": [
+   "asyncio",
+   "email",
+   "xml",
+   "unittest",
+   "multiprocessing",
+   "importlib",
+   "http",
+   "logging",
+   "urllib",
+   "html",
+   "concurrent",
+   "json",
+   "re",
+   "zipfile",
+   "pathlib",
+   "idlelib",
+   "tkinter"
+  ],
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:12:21",
+  "index": {
+   "duration_s": 645.3,
+   "files": 348,
+   "failed": 0,
+   "skipped": 16,
+   "chunks": 7787,
+   "chunks_per_s": 12.1
+  },
+  "idle": {
+   "samples": 22,
+   "system": 1.876,
+   "cores_P": 2.987,
+   "cores_E": 0.756,
+   "aiodos": 0.012,
+   "ollama": 0.06,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.01,
+   "threads_lowered_count": 2,
+   "gpu_util": 5.391,
+   "gpu_watts": 14.337,
+   "api_ms_median": 6.262,
+   "api_ms_p95": 7.539,
+   "api_ms_max": 7.6
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 5.385,
+   "cores_P": 9.265,
+   "cores_E": 1.512,
+   "aiodos": 0.01,
+   "ollama": 0.931,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.01,
+   "threads_lowered_count": 2,
+   "gpu_util": 90.083,
+   "gpu_watts": 75.136,
+   "api_ms_median": 2.359,
+   "api_ms_p95": 19.567,
+   "api_ms_max": 19.6
+  },
+  "indexing_alone": {
+   "samples": 1128,
+   "system": 10.589,
+   "cores_P": 9.73,
+   "cores_E": 11.443,
+   "aiodos": 0.025,
+   "ollama": 0.532,
+   "threads_lowered": 0.017,
+   "threads_normal": 0.008,
+   "threads_lowered_count": 3,
+   "gpu_util": 16.77,
+   "gpu_watts": 11.068,
+   "api_ms_median": 2.563,
+   "api_ms_p95": 4.037,
+   "api_ms_max": 20.6
+  },
+  "indexing_chat": {
+   "samples": 34,
+   "system": 6.896,
+   "cores_P": 10.476,
+   "cores_E": 3.314,
+   "aiodos": 0.023,
+   "ollama": 0.92,
+   "threads_lowered": 0.007,
+   "threads_normal": 0.012,
+   "threads_lowered_count": 2,
+   "gpu_util": 84.5,
+   "gpu_watts": 69.818,
+   "api_ms_median": 2.351,
+   "api_ms_p95": 17.2,
+   "api_ms_max": 17.3
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.417,
+    "total_s": 3.119,
+    "chars": 521,
+    "chars_per_s": 192.8,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.122,
+    "total_s": 3.07,
+    "chars": 556,
+    "chars_per_s": 188.6,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.059,
+    "total_s": 2.533,
+    "chars": 492,
+    "chars_per_s": 198.9,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.221,
+    "total_s": 3.374,
+    "chars": 591,
+    "chars_per_s": 187.4,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.067,
+    "total_s": 3.571,
+    "chars": 699,
+    "chars_per_s": 199.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.205,
+    "total_s": 2.801,
+    "chars": 444,
+    "chars_per_s": 171.1,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.143,
+    "total_s": 2.877,
+    "chars": 454,
+    "chars_per_s": 166.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.237,
+    "total_s": 3.209,
+    "chars": 547,
+    "chars_per_s": 184.0,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.417,
+    "chars_per_s_median": 192.8
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.122,
+    "chars_per_s_median": 188.6
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.067,
+    "chars_per_s_median": 198.9
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.221,
+    "chars_per_s_median": 184.0
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "avant (65821f0), gros fichiers",
+  "code": "C:\\Users\\22eme\\AppData\\Local\\Temp\\claude\\C---22eme-ARKANE-PROJETS-AIODOS--claude-worktrees-charming-wiles-bbba4f\\3a2c88c0-ce4b-4097-88b7-11dbb97f3950\\scratchpad\\avant",
+  "revision": null,
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": "3 gros fichiers",
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:23:32",
+  "index": {
+   "duration_s": 323.5,
+   "files": 3,
+   "failed": 0,
+   "skipped": 0,
+   "chunks": 7127,
+   "chunks_per_s": 22.0
+  },
+  "idle": {
+   "samples": 22,
+   "system": 4.061,
+   "cores_P": 6.2,
+   "cores_E": 1.915,
+   "aiodos": 0.007,
+   "ollama": 0.069,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.006,
+   "threads_lowered_count": 0,
+   "gpu_util": 3.913,
+   "gpu_watts": 13.998,
+   "api_ms_median": 2.551,
+   "api_ms_p95": 3.834,
+   "api_ms_max": 17.4
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 7.655,
+   "cores_P": 7.377,
+   "cores_E": 7.931,
+   "aiodos": 0.008,
+   "ollama": 0.87,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.008,
+   "threads_lowered_count": 0,
+   "gpu_util": 83.417,
+   "gpu_watts": 69.907,
+   "api_ms_median": 2.342,
+   "api_ms_p95": 18.219,
+   "api_ms_max": 18.2
+  },
+  "indexing_alone": {
+   "samples": 529,
+   "system": 13.752,
+   "cores_P": 12.075,
+   "cores_E": 15.429,
+   "aiodos": 0.015,
+   "ollama": 1.177,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.015,
+   "threads_lowered_count": 0,
+   "gpu_util": 28.594,
+   "gpu_watts": 12.244,
+   "api_ms_median": 2.742,
+   "api_ms_p95": 3.851,
+   "api_ms_max": 41.8
+  },
+  "indexing_chat": {
+   "samples": 55,
+   "system": 16.112,
+   "cores_P": 11.356,
+   "cores_E": 20.82,
+   "aiodos": 0.019,
+   "ollama": 2.076,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.019,
+   "threads_lowered_count": 0,
+   "gpu_util": 80.917,
+   "gpu_watts": 61.948,
+   "api_ms_median": 2.635,
+   "api_ms_p95": 4.175,
+   "api_ms_max": 18.1
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.421,
+    "total_s": 3.19,
+    "chars": 474,
+    "chars_per_s": 171.2,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.244,
+    "total_s": 3.02,
+    "chars": 462,
+    "chars_per_s": 166.4,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.151,
+    "total_s": 4.176,
+    "chars": 460,
+    "chars_per_s": 114.3,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.467,
+    "total_s": 5.235,
+    "chars": 434,
+    "chars_per_s": 115.2,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.137,
+    "total_s": 4.234,
+    "chars": 503,
+    "chars_per_s": 122.8,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.514,
+    "total_s": 6.358,
+    "chars": 564,
+    "chars_per_s": 116.4,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.153,
+    "total_s": 4.445,
+    "chars": 521,
+    "chars_per_s": 121.4,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.966,
+    "total_s": 6.147,
+    "chars": 592,
+    "chars_per_s": 114.3,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.421,
+    "chars_per_s_median": 171.2
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.244,
+    "chars_per_s_median": 166.4
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.151,
+    "chars_per_s_median": 121.4
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 1.467,
+    "chars_per_s_median": 115.2
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, gros fichiers",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "236f85a",
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": "3 gros fichiers",
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:29:22",
+  "index": {
+   "duration_s": 351.4,
+   "files": 3,
+   "failed": 0,
+   "skipped": 0,
+   "chunks": 7127,
+   "chunks_per_s": 20.3
+  },
+  "idle": {
+   "samples": 22,
+   "system": 5.226,
+   "cores_P": 7.699,
+   "cores_E": 2.738,
+   "aiodos": 0.005,
+   "ollama": 0.052,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.005,
+   "threads_lowered_count": 2,
+   "gpu_util": 3.708,
+   "gpu_watts": 13.174,
+   "api_ms_median": 2.939,
+   "api_ms_p95": 4.277,
+   "api_ms_max": 18.9
+  },
+  "idle_chat": {
+   "samples": 18,
+   "system": 8.639,
+   "cores_P": 7.574,
+   "cores_E": 9.732,
+   "aiodos": 0.019,
+   "ollama": 0.972,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.017,
+   "threads_lowered_count": 2,
+   "gpu_util": 85.6,
+   "gpu_watts": 75.383,
+   "api_ms_median": 2.683,
+   "api_ms_p95": 18.124,
+   "api_ms_max": 18.1
+  },
+  "indexing_alone": {
+   "samples": 585,
+   "system": 13.602,
+   "cores_P": 11.029,
+   "cores_E": 16.172,
+   "aiodos": 0.031,
+   "ollama": 1.173,
+   "threads_lowered": 0.024,
+   "threads_normal": 0.007,
+   "threads_lowered_count": 3,
+   "gpu_util": 28.895,
+   "gpu_watts": 12.231,
+   "api_ms_median": 2.941,
+   "api_ms_p95": 5.343,
+   "api_ms_max": 162.6
+  },
+  "indexing_chat": {
+   "samples": 44,
+   "system": 11.3,
+   "cores_P": 9.396,
+   "cores_E": 13.202,
+   "aiodos": 0.035,
+   "ollama": 1.206,
+   "threads_lowered": 0.006,
+   "threads_normal": 0.026,
+   "threads_lowered_count": 3,
+   "gpu_util": 73.184,
+   "gpu_watts": 54.749,
+   "api_ms_median": 2.93,
+   "api_ms_p95": 4.482,
+   "api_ms_max": 18.3
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.404,
+    "total_s": 7.022,
+    "chars": 1056,
+    "chars_per_s": 159.6,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.212,
+    "total_s": 3.078,
+    "chars": 507,
+    "chars_per_s": 176.9,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.148,
+    "total_s": 2.988,
+    "chars": 469,
+    "chars_per_s": 165.2,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.347,
+    "total_s": 4.848,
+    "chars": 601,
+    "chars_per_s": 171.7,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.165,
+    "total_s": 4.292,
+    "chars": 623,
+    "chars_per_s": 151.0,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.29,
+    "total_s": 4.065,
+    "chars": 448,
+    "chars_per_s": 161.4,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.174,
+    "total_s": 3.525,
+    "chars": 501,
+    "chars_per_s": 149.5,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.231,
+    "total_s": 4.548,
+    "chars": 567,
+    "chars_per_s": 170.9,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.404,
+    "chars_per_s_median": 159.6
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.212,
+    "chars_per_s_median": 176.9
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.165,
+    "chars_per_s_median": 151.0
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 1.29,
+    "chars_per_s_median": 170.9
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "avant (65821f0), gros fichiers",
+  "code": "C:\\Users\\22eme\\AppData\\Local\\Temp\\claude\\C---22eme-ARKANE-PROJETS-AIODOS--claude-worktrees-charming-wiles-bbba4f\\3a2c88c0-ce4b-4097-88b7-11dbb97f3950\\scratchpad\\avant",
+  "revision": null,
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": "3 gros fichiers",
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:35:43",
+  "index": {
+   "duration_s": 319.2,
+   "files": 3,
+   "failed": 0,
+   "skipped": 0,
+   "chunks": 0,
+   "chunks_per_s": 0.0,
+   "chunks_note": "résumé lu avant sa finalisation (outil corrigé depuis) : 7127 passages, comme les autres mesures"
+  },
+  "idle": {
+   "samples": 21,
+   "system": 4.658,
+   "cores_P": 5.994,
+   "cores_E": 3.305,
+   "aiodos": 0.005,
+   "ollama": 0.054,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.005,
+   "threads_lowered_count": 0,
+   "gpu_util": 7.542,
+   "gpu_watts": 16.683,
+   "api_ms_median": 2.937,
+   "api_ms_p95": 18.684,
+   "api_ms_max": 19.2
+  },
+  "idle_chat": {
+   "samples": 12,
+   "system": 11.197,
+   "cores_P": 8.496,
+   "cores_E": 13.88,
+   "aiodos": 0.025,
+   "ollama": 0.92,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.02,
+   "threads_lowered_count": 0,
+   "gpu_util": 90.667,
+   "gpu_watts": 77.589,
+   "api_ms_median": 2.79,
+   "api_ms_p95": 17.064,
+   "api_ms_max": 17.1
+  },
+  "indexing_alone": {
+   "samples": 523,
+   "system": 13.822,
+   "cores_P": 11.082,
+   "cores_E": 16.563,
+   "aiodos": 0.013,
+   "ollama": 1.187,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.014,
+   "threads_lowered_count": 0,
+   "gpu_util": 32.507,
+   "gpu_watts": 12.703,
+   "api_ms_median": 2.852,
+   "api_ms_p95": 4.647,
+   "api_ms_max": 18.3
+  },
+  "indexing_chat": {
+   "samples": 50,
+   "system": 15.662,
+   "cores_P": 9.452,
+   "cores_E": 21.858,
+   "aiodos": 0.027,
+   "ollama": 2.081,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.026,
+   "threads_lowered_count": 0,
+   "gpu_util": 83.386,
+   "gpu_watts": 57.785,
+   "api_ms_median": 2.802,
+   "api_ms_p95": 4.352,
+   "api_ms_max": 17.8
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.416,
+    "total_s": 2.932,
+    "chars": 438,
+    "chars_per_s": 174.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.206,
+    "total_s": 3.497,
+    "chars": 555,
+    "chars_per_s": 168.6,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.147,
+    "total_s": 4.709,
+    "chars": 554,
+    "chars_per_s": 121.4,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.972,
+    "total_s": 4.692,
+    "chars": 404,
+    "chars_per_s": 108.6,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.158,
+    "total_s": 3.305,
+    "chars": 374,
+    "chars_per_s": 118.8,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.346,
+    "total_s": 5.901,
+    "chars": 503,
+    "chars_per_s": 110.4,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.168,
+    "total_s": 3.962,
+    "chars": 439,
+    "chars_per_s": 115.7,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.063,
+    "total_s": 5.711,
+    "chars": 532,
+    "chars_per_s": 114.5,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.416,
+    "chars_per_s_median": 174.1
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.206,
+    "chars_per_s_median": 168.6
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.158,
+    "chars_per_s_median": 118.8
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 1.063,
+    "chars_per_s_median": 110.4
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ },
+ {
+  "label": "après, gros fichiers",
+  "code": "C:\\_22eme ARKANE\\PROJETS\\AIODOS\\.claude\\worktrees\\charming-wiles-bbba4f",
+  "revision": "236f85a",
+  "simulation": null,
+  "settings": {},
+  "slots": null,
+  "corpus": "3 gros fichiers",
+  "machine": {
+   "cpu": "Intel(R) Core(TM) i9-14900HX",
+   "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+   "ollama": "0.40.5",
+   "power": {
+    "plugged": true,
+    "level": 100,
+    "temperature": null,
+    "mobile": false,
+    "source": "windows"
+   }
+  },
+  "chat_model": "qwen2.5:7b",
+  "at": "2026-10-17 12:41:29",
+  "index": {
+   "duration_s": 343.0,
+   "files": 3,
+   "failed": 0,
+   "skipped": 0,
+   "chunks": 7127,
+   "chunks_per_s": 20.8
+  },
+  "idle": {
+   "samples": 22,
+   "system": 2.8,
+   "cores_P": 4.402,
+   "cores_E": 1.209,
+   "aiodos": 0.007,
+   "ollama": 0.062,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.005,
+   "threads_lowered_count": 2,
+   "gpu_util": 0.0,
+   "gpu_watts": 11.692,
+   "api_ms_median": 3.088,
+   "api_ms_p95": 4.265,
+   "api_ms_max": 4.6
+  },
+  "idle_chat": {
+   "samples": 11,
+   "system": 7.037,
+   "cores_P": 4.523,
+   "cores_E": 9.508,
+   "aiodos": 0.018,
+   "ollama": 0.93,
+   "threads_lowered": 0.0,
+   "threads_normal": 0.01,
+   "threads_lowered_count": 2,
+   "gpu_util": 75.917,
+   "gpu_watts": 67.797,
+   "api_ms_median": 2.385,
+   "api_ms_p95": 18.437,
+   "api_ms_max": 18.4
+  },
+  "indexing_alone": {
+   "samples": 566,
+   "system": 14.385,
+   "cores_P": 11.418,
+   "cores_E": 17.351,
+   "aiodos": 0.03,
+   "ollama": 1.181,
+   "threads_lowered": 0.023,
+   "threads_normal": 0.007,
+   "threads_lowered_count": 3,
+   "gpu_util": 32.33,
+   "gpu_watts": 12.353,
+   "api_ms_median": 2.966,
+   "api_ms_p95": 5.065,
+   "api_ms_max": 233.7
+  },
+  "indexing_chat": {
+   "samples": 45,
+   "system": 13.614,
+   "cores_P": 12.552,
+   "cores_E": 14.681,
+   "aiodos": 0.028,
+   "ollama": 1.214,
+   "threads_lowered": 0.006,
+   "threads_normal": 0.021,
+   "threads_lowered_count": 3,
+   "gpu_util": 77.83,
+   "gpu_watts": 57.521,
+   "api_ms_median": 2.898,
+   "api_ms_p95": 4.537,
+   "api_ms_max": 5.8
+  },
+  "chats_idle": [
+   {
+    "libraries": false,
+    "ttft_s": 0.456,
+    "total_s": 3.128,
+    "chars": 478,
+    "chars_per_s": 178.9,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 0.192,
+    "total_s": 2.932,
+    "chars": 506,
+    "chars_per_s": 184.7,
+    "error": null
+   }
+  ],
+  "chats_indexing": [
+   {
+    "libraries": false,
+    "ttft_s": 0.16,
+    "total_s": 3.264,
+    "chars": 475,
+    "chars_per_s": 153.0,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.333,
+    "total_s": 3.69,
+    "chars": 398,
+    "chars_per_s": 168.9,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.161,
+    "total_s": 4.176,
+    "chars": 675,
+    "chars_per_s": 168.1,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.278,
+    "total_s": 4.583,
+    "chars": 545,
+    "chars_per_s": 164.9,
+    "error": null
+   },
+   {
+    "libraries": false,
+    "ttft_s": 0.171,
+    "total_s": 3.887,
+    "chars": 573,
+    "chars_per_s": 154.2,
+    "error": null
+   },
+   {
+    "libraries": true,
+    "ttft_s": 1.32,
+    "total_s": 4.844,
+    "chars": 552,
+    "chars_per_s": 156.6,
+    "error": null
+   }
+  ],
+  "chat_idle_summary": {
+   "sans_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.456,
+    "chars_per_s_median": 178.9
+   },
+   "avec_bibliotheques": {
+    "n": 1,
+    "ttft_s_median": 0.192,
+    "chars_per_s_median": 184.7
+   }
+  },
+  "chat_indexing_summary": {
+   "sans_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 0.161,
+    "chars_per_s_median": 154.2
+   },
+   "avec_bibliotheques": {
+    "n": 3,
+    "ttft_s_median": 1.32,
+    "chars_per_s_median": 164.9
+   }
+  },
+  "ollama_models_seen": [
+   "embeddinggemma:latest",
+   "qwen2.5:7b"
+  ]
+ }
+]

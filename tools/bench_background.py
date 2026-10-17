@@ -322,7 +322,10 @@ def wait_job(node: Node, job_id: int, timeout: float) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         job = next((j for j in node.api("GET", "/api/jobs")["jobs"] if j["id"] == job_id), None)
-        if job and job["status"] in ("done", "failed", "cancelled"):
+        # Le résumé (passages…) s'écrit juste après la fin de la dernière unité
+        if job and job["status"] in ("failed", "cancelled"):
+            return job
+        if job and job["status"] == "done" and "chunks" in (job.get("result") or {}):
             return job
         time.sleep(1)
     node.api("POST", f"/api/jobs/{job_id}/cancel")
