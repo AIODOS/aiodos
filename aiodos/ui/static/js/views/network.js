@@ -13,7 +13,7 @@ export function mountNetwork(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head"><div><h1>Réseau</h1>
         <div class="sub">Fais travailler tes machines ensemble, et celles de tes amis : chacune peut prêter sa
-        puissance aux autres, à la façon de SETI@home. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
+        puissance de calcul aux autres. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
       <div class="card" id="net-state"></div>
       <div class="card" id="net-internet" style="margin-top:16px"></div>
       <div class="card" id="net-peers" style="margin-top:16px"></div>

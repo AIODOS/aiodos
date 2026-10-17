@@ -15,8 +15,7 @@ export function mountConsult(container) {
       <h2>${icon('search')}Chercher chez mes machines et mes amis</h2>
       <p class="hint" id="consult-where">…</p>
       <div class="toolbar" style="margin-bottom:0">
-        <input class="input" id="consult-q" placeholder="Ta question, ex. : quand la fusée lunaire décolle-t-elle ?"
-          style="flex:1;min-width:240px">
+        <input class="input" id="consult-q" placeholder="Ta question, ex. : quand la fusée lunaire décolle-t-elle ?">
         <button class="btn primary" id="consult-go">${icon('search')}Chercher</button>
       </div>
       <div id="consult-results"></div>

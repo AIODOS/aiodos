@@ -6,8 +6,8 @@
 
 Atelier d'IA **100 % local** : chat, code et documents avec des modèles open source
 (Mistral, Qwen…) via [Ollama], sur ta machine. **Plusieurs machines peuvent
-travailler ensemble**, à la façon de SETI@home : chaque gros travail est découpé en
-unités indépendantes, que tes PC appairés se partagent sur le réseau local.
+travailler ensemble** : chaque gros travail est découpé en petites unités
+indépendantes, que tes PC appairés se partagent sur le réseau local.
 
 > **Local par défaut, distribué à la demande.** Rien ne quitte la machine sans
 > action explicite : le web et le cloud sont optionnels et validés avant chaque envoi.
@@ -48,8 +48,8 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
    Pendant que tu te sers du PC, le calcul prêté continue en priorité basse, jamais sur
    batterie, la carte graphique la moitié du temps au plus ; une conversation passe
    devant : le GPU lui revient. « Seulement quand je n'utilise pas ce PC » le réserve aux
-   moments d'inactivité (10 minutes par défaut), comme l'économiseur d'écran de
-   SETI@home : dès que l'utilisateur revient, les unités en cours sont rendues.
+   moments d'inactivité (10 minutes par défaut), comme un économiseur d'écran : dès
+   que l'utilisateur revient, les unités en cours sont rendues.
 
 Comment le travail circule :
 

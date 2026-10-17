@@ -92,7 +92,8 @@ function render() {
   $('#node-models', root).innerHTML = `
     <h2>${icon('layers')}Modèles installés</h2>
     <p class="hint">Un modèle qui dépasse la VRAM tourne en partie sur le processeur, beaucoup plus lentement.
-      En phase 1, il pourra être servi par une autre machine de ton réseau qui a la mémoire nécessaire.</p>
+      Une de tes machines qui a la mémoire nécessaire peut alors répondre à sa place, ou plusieurs peuvent
+      se le partager.</p>
     ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
       <tbody>${rows}</tbody></table>` : '<div class="empty">Aucun modèle (Ollama ne répond pas ?)</div>'}`;
 
@@ -131,7 +132,7 @@ function renderBackground() {
       ressource (carte graphique, processeur…), moins de fils de calcul, et des pauses (calcul la moitié du
       temps). Attendre : rien ne tourne en fond avant le retour du secteur. Les conversations restent servies
       dans tous les cas.</small></div>
-      <select class="select" id="battery-mode" style="width:240px">${options.map(([v, l]) =>
+      <select class="select wide" id="battery-mode">${options.map(([v, l]) =>
         `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',
       "Il reste dans la zone de notification, près de l'horloge : le nœud continue de servir tes machines "
@@ -216,16 +217,16 @@ function renderShare() {
   const mobile = shareMobile = !!state.node?.power?.mobile;
   const device = mobile ? 'ce téléphone' : 'ce PC';
   const idleRows = `
-    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens. Désactivé, ce PC prête aussi pendant que tu l'utilises : en priorité basse, jamais sur batterie, la carte graphique la moitié du temps au plus, et tes conversations passent devant.")}
+    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme un économiseur d'écran : le travail s'arrête dès que tu reviens. Désactivé, ce PC prête aussi pendant que tu l'utilises : en priorité basse, jamais sur batterie, la carte graphique la moitié du temps au plus, et tes conversations passent devant.")}
     <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Sans clavier ni souris pendant ce temps, ce PC est considéré comme libre : le prêt n'est plus retenu (avec le réglage ci-dessus, il ne commence qu'à ce moment).</small></div>
-      <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
+      <select class="select short" data-num="idle_minutes">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
   const phoneRows = `
     <div class="setting-row"><div class="txt"><b>Batterie minimale</b><small>Pour commencer à calculer (ensuite, pause 5 % plus bas) : en dessous, le téléphone se recharge d'abord.</small></div>
-      <select class="select" data-num="share_min_battery" style="width:140px">${[50, 60, 70, 80, 90].map(p =>
+      <select class="select short" data-num="share_min_battery">${[50, 60, 70, 80, 90].map(p =>
         `<option value="${p}" ${p === s.share_min_battery ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>
     <div class="setting-row"><div class="txt"><b>Température maximale de la batterie</b><small>Au-delà, pause jusqu'à ce qu'elle ait perdu 3 °C.</small></div>
-      <select class="select" data-num="share_max_temp" style="width:140px">${[35, 38, 40, 42].map(t =>
+      <select class="select short" data-num="share_max_temp">${[35, 38, 40, 42].map(t =>
         `<option value="${t}" ${t === s.share_max_temp ? 'selected' : ''}>${t} °C</option>`).join('')}</select></div>`;
   box.innerHTML = `
     <h2>${icon('bolt')}Partage de puissance</h2>
@@ -241,7 +242,7 @@ function renderShare() {
     <div class="setting-row"><div class="txt"><b>${mobile ? 'Calcul prêté au maximum' : 'GPU prêté au maximum'}</b><small>${mobile
       ? 'En dessous de 100 %, ce téléphone fait des pauses entre deux unités : il chauffe moins.'
       : 'Part du temps de la carte graphique : en dessous de 100 %, ce PC fait des pauses entre deux unités.'}</small></div>
-      <select class="select" data-num="share_max_gpu" style="width:140px">${[25, 50, 75, 100].map(p =>
+      <select class="select short" data-num="share_max_gpu">${[25, 50, 75, 100].map(p =>
         `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>`;
   box.querySelectorAll('input[data-key]').forEach(input => {
     input.onchange = () => save({ [input.dataset.key]: input.checked });

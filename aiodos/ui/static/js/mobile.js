@@ -1,0 +1,52 @@
+// Téléphone (écran étroit) : la barre de navigation en bas, avec « Plus » pour les vues moins
+// courantes ; le bouton Retour d'Android ; la barre cachée tant que le clavier est ouvert.
+import { $ } from './dom.js';
+import { state, on, emit } from './state.js';
+import { menu } from './ui.js';
+
+const MORE = [['library', 'Bibliothèques'], ['node', 'Cette machine'], ['settings', 'Réglages']];
+const phone = matchMedia('(max-width: 760px)');
+let listShown = false;          // liste des conversations ouverte par-dessus
+let leaving = false;            // retour demandé par l'interface, pas par le bouton Retour
+
+export function mountMobile() {
+  const more = $('#rail-more');
+  more.onclick = () => menu(more, MORE.map(([view, label]) => (
+    { label, icon: view, action: () => emit('view:show', view) })));
+  on('view:shown', view => {
+    more.classList.toggle('active', MORE.some(([v]) => v === view));
+    sync();
+  });
+  on('chat:list-shown', shown => { listShown = shown; sync(); });
+  addEventListener('popstate', () => {
+    if (leaving) { leaving = false; return; }
+    if (state.view !== 'chat') emit('view:show', 'chat');
+    if (listShown) emit('chat:list', false);
+  });
+  watchKeyboard();
+}
+
+// L'écran d'accueil est la conversation. Ailleurs (une autre vue, la liste ouverte), une
+// entrée d'historique : le bouton Retour d'Android (WebView.goBack) y ramène.
+function sync() {
+  const away = state.view !== 'chat' || listShown;
+  const pushed = history.state?.aiodos === 'away';
+  if (away && !pushed && phone.matches) {
+    history.pushState({ aiodos: 'away' }, '');
+  } else if (!away && pushed) {
+    leaving = true;
+    history.back();
+  }
+}
+
+// Clavier ouvert : la page rétrécit nettement (même largeur). La barre du bas laisse alors la
+// place au message, même si le clavier se ferme sans que le champ perde le focus.
+function watchKeyboard() {
+  let width = innerWidth;
+  let tallest = innerHeight;
+  addEventListener('resize', () => {
+    if (innerWidth !== width) { width = innerWidth; tallest = innerHeight; }   // rotation
+    tallest = Math.max(tallest, innerHeight);
+    document.body.classList.toggle('keyboard', innerHeight < tallest * 0.75);
+  });
+}

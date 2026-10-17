@@ -52,11 +52,18 @@ export function mountChat(container) {
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
   // Écran étroit (téléphone) : la liste des conversations s'ouvre par-dessus, à la demande
-  $('#chat-list-toggle').onclick = () => container.classList.toggle('show-list');
-  const hideList = () => container.classList.remove('show-list');
-  on('chat:open', hideList);
-  on('chat:new', hideList);
-  el.scroll.addEventListener('click', hideList);
+  // (☰, ou « Discussions » touché à nouveau dans la barre du bas)
+  const showList = shown => {
+    if (container.classList.contains('show-list') === shown) return;
+    container.classList.toggle('show-list', shown);
+    emit('chat:list-shown', shown);
+  };
+  $('#chat-list-toggle').onclick = () => showList(true);
+  on('chat:list', shown => showList(shown));
+  on('rail:again', view => { if (view === 'chat') showList(!container.classList.contains('show-list')); });
+  on('chat:open', () => showList(false));
+  on('chat:new', () => showList(false));
+  el.scroll.addEventListener('click', () => showList(false));
   el.model.onchange = onModelChange;
   on('cluster:changed', showPreparation);
   el.machine.onchange = rememberModel;
@@ -265,7 +272,7 @@ function showWelcome() {
   const welcome = h(`
     <div class="welcome">
       <img src="/logo.png?v=aiodos" alt="">
-      <h1>Que fait-on aujourd'hui ?</h1>
+      <h1>Que fait-on aujourd'hui&nbsp;?</h1>
       <p>Tout tourne sur ta machine. Le web et le cloud ne servent qu'avec ton accord.</p>
       <div class="suggestions">
         <div class="suggestion" data-text="Écris une fonction Python qui ">${icon('code')}<b>Écrire du code</b><span>Une fonction, un script, une correction…</span></div>

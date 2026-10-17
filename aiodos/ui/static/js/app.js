@@ -13,6 +13,7 @@ import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
+import { mountMobile } from './mobile.js';
 
 const VIEWS = ['chat', 'library', 'images', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -20,7 +21,7 @@ const ACTIVE = ['queued', 'running', 'paused'];
 function show(view) {
   if (!VIEWS.includes(view)) view = 'chat';
   $$('.view').forEach(v => { v.hidden = v.id !== `view-${view}`; });
-  $$('.rail-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.rail-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   state.view = view;
   prefs.set('view', view);
   emit('view:shown', view);
@@ -107,7 +108,15 @@ async function boot() {
   mountNode($('#view-node'));
   mountNetwork($('#view-network'));
   mountSettings($('#view-settings'));
-  $$('.rail-btn').forEach(b => { b.onclick = () => show(b.dataset.view); });
+  // Toucher à nouveau la vue ouverte : au téléphone, « Discussions » ouvre ou ferme la liste
+  $$('.rail-btn[data-view]').forEach(b => {
+    b.onclick = () => {
+      const again = state.view === b.dataset.view;
+      show(b.dataset.view);
+      if (again) emit('rail:again', b.dataset.view);
+    };
+  });
+  mountMobile();
   on('view:show', show);
   on('models:reload', loadModels);
   // Les modèles prêtés par mes machines apparaissent et disparaissent avec elles

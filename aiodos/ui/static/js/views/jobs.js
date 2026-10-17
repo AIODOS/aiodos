@@ -24,8 +24,8 @@ export function mountJobs(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head">
         <div><h1>Tâches</h1>
-          <div class="sub">Les gros travaux sont découpés en unités indépendantes traitées en arrière-plan,
-          comme SETI@home : ici, ou sur tes machines appairées qui prêtent leur puissance.</div></div>
+          <div class="sub">Les gros travaux sont découpés en petites unités indépendantes, traitées en
+          arrière-plan : ici, ou sur tes machines appairées qui prêtent leur puissance.</div></div>
         <div class="grow"></div>
         <button class="btn" id="jobs-clear">${icon('trash')}Nettoyer les terminées</button>
       </div>
