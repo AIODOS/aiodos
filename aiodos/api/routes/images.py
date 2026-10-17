@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from aiodos.imaging import catalog, download, gallery, share
+from aiodos.imaging import catalog, download, gallery, local_copies, share
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -63,7 +63,8 @@ def _models() -> dict:
                        "notice": spec.get("notice"),
                        "negative": spec["negative"], **catalog.state(model_id),
                        "helpers": others.get(model_id, []),
-                       "sources": share.sources(model_id)})
+                       "sources": share.sources(model_id),
+                       "local": local_copies.available(model_id)})   # déjà sur ce PC
     return {"engine": {"found": found is not None,
                        "version": found["version"] if found else None,
                        "device": (images_engine.best_device(images_engine.devices())

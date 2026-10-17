@@ -159,13 +159,21 @@ function modelCard(m) {
   } else if (m.state === 'checking') {
     action = '<span class="faint">Vérification des fichiers déjà présents…</span>';
   } else {
-    const size = bytes(m.missing_bytes);
-    const copies = [...m.sources].sort((a, b) => b.near - a.near).map(s => `
+    // Fichiers identiques déjà sur ce PC (ComfyUI, PANDORA…) : repris d'abord, sans téléchargement
+    const local = m.local || [];
+    const localBytes = local.reduce((n, f) => n + f.size, 0);
+    const rest = Math.max(0, m.missing_bytes - localBytes);
+    const size = bytes(rest);
+    const here = local.length ? `<div class="faint">${bytes(localBytes)} déjà sur ce PC
+      (${esc([...new Set(local.map(f => f.from))].join(', '))}) : repris sans
+      ${local.length > 1 ? 'les' : 'le'} retélécharger, après vérification.</div>` : '';
+    const copies = rest ? [...m.sources].sort((a, b) => b.near - a.near).map(s => `
       <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}Copier
-        depuis ${esc(s.name)} (${s.near ? 'réseau local' : 'Internet'}, ${size})</button>`).join('');
-    const label = m.state === 'bad' ? 'Retélécharger' : `Télécharger depuis Hugging Face (${size})`;
-    action = `<div class="img-dl">${copies}
-      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon('cloud')}${label}</button>
+        depuis ${esc(s.name)} (${s.near ? 'réseau local' : 'Internet'}, ${size})</button>`).join('') : '';
+    const label = !rest ? `Reprendre depuis ce PC (${bytes(localBytes)})`
+      : m.state === 'bad' ? 'Retélécharger' : `Télécharger depuis Hugging Face (${size})`;
+    action = `${here}<div class="img-dl">${copies}
+      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon(rest ? 'cloud' : 'check')}${label}</button>
       ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}</div>`;
   }
   return `<div class="card img-model-card">

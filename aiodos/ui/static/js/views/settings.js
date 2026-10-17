@@ -89,6 +89,10 @@ const SECTIONS = [
         + 'livré avec les mises à jour, comme llama.cpp).' },
     { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'text',
       help: 'Vide : data/images/models. Les modèles se téléchargent depuis la vue Images.' },
+    { key: 'images_other_dirs', label: 'Autres dossiers de modèles sur ce PC', type: 'textarea',
+      help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
+        + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
+        + 'téléchargé, sans prendre de place en plus sur le même disque.' },
     { key: 'images_device', label: 'Carte qui calcule les images', type: 'text',
       help: 'Vide : la meilleure carte graphique (jamais celle intégrée au processeur s\'il y en a une autre). '
         + 'Sinon son nom (« Vulkan1 », « CUDA0 »), ou « CPU ».' },

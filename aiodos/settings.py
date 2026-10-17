@@ -92,6 +92,7 @@ DEFAULTS = {
     "sdcpp_dir": "",                  # dossier de stable-diffusion.cpp ; vide : data/engines
     "images_models_dir": "",          # dossier des modèles d'images ; vide : data/images/models
     "images_device": "",              # carte qui calcule (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
+    "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
     # --- AIODOS ouvert aux autres outils (gateway/, docs/autres-outils.md) : API compatible

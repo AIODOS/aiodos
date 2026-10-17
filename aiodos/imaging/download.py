@@ -15,7 +15,7 @@ import time
 
 import requests
 
-from aiodos.imaging import catalog, share
+from aiodos.imaging import catalog, local_copies, share
 from aiodos.network.client import PeerError
 
 log = logging.getLogger("aiodos.images")
@@ -124,6 +124,15 @@ def _fetch(spec: dict, folder, machine=None, cache_file=None):
             _advance(spec["size"])
             return
         target.unlink()
+    # Le même fichier ailleurs sur ce PC (ComfyUI, PANDORA…) : repris, pas retéléchargé
+    origin = local_copies.bring(spec, target, _stop)
+    if _stop.is_set():
+        raise Cancelled()
+    if origin:
+        log.info("%s repris de %s, sur ce PC", spec["name"], origin)
+        catalog.record(target, spec["sha256"], cache_file)
+        _advance(spec["size"])
+        return
     part = target.with_name(target.name + ".part")
     for attempt in range(ATTEMPTS):
         try:
