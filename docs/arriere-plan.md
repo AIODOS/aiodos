@@ -10,7 +10,7 @@ processeurs logiques ; RTX 4070 Laptop 8 Go ; Windows 11 ; Ollama 0.40.5).
 | Quoi | Comment | Où |
 |---|---|---|
 | Le travail de fond passe après l'utilisateur | threads de fond en priorité « inférieure à la normale », EcoQoS, mémoire de priorité inférieure (Windows) ; nice 10 (Linux, Android) | `aiodos/node/priority.py` |
-| Programmes lancés par AIODOS | compagnon `aiodos-net`, `nvidia-smi`, essai d'une nouvelle version : classe « inférieure à la normale » dès leur création ; compagnon en EcoQoS | `priority.CREATION_FLAGS`, `priority.lower_process` |
+| Programmes lancés par AIODOS | `nvidia-smi` : classe « inférieure à la normale » dès sa création ; le compagnon `aiodos-net` et l'essai d'une nouvelle version gardent la priorité normale (§ 2) | `priority.CREATION_FLAGS` |
 | Une conversation passe devant | pendant une réponse servie par cette machine, le calcul sur la carte graphique attend entre deux lots | `aiodos/jobs/pacing.py` (`wait_turn`) |
 | Batterie ménagée | réglage « Sur batterie » : ménager (par défaut), attendre le secteur, ou pleine vitesse | `pacing.py`, vue « Cette machine » |
 | Ollama | `num_thread` seulement sur batterie, et seulement si le modèle d'embedding tourne sur le processeur | `aiodos/services/ollama.py` |
@@ -81,21 +81,22 @@ Vérifié dans la documentation de Microsoft (pages de `SetThreadPriority`,
 - **Tout AIODOS en EcoQoS** : l'interface et les conversations passent par le même
   processus ; elles ralentiraient aussi. Windows le fait déjà de lui-même quand la fenêtre
   est réduite ou cachée (QoS « Low » sur batterie).
-- **`PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION`** pour le compagnon : ses minuteries
-  servent au protocole QUIC.
+- **Le compagnon en priorité basse** : il relaie aussi des conversations (modèles prêtés
+  par Internet), et il n'occupe presque pas le processeur. Il garde la priorité normale.
+- **L'essai d'une nouvelle version en priorité basse** : sur un PC très chargé, il pouvait
+  dépasser son délai (300 s), et la version était alors refusée 24 h. Il garde aussi la
+  priorité normale.
 - **La priorité d'Ollama** : ce n'est pas un programme d'AIODOS (il est lancé par
   l'application d'Ollama) ; on n'y touche pas.
 
 Ce qui est abaissé : un groupe de threads réservé au travail de fond (« aiodos-fond »), qui
-exécute les unités de la file et le calcul fait pour d'autres machines (`priority.run`), et
-le service des mises à jour. Les threads de l'interface et des conversations restent
-normaux. Un groupe à part, parce que sous Linux un thread qui a pris nice 10 ne peut plus
+exécute les unités de la file et le calcul fait pour d'autres machines (`priority.run`).
+Les threads de l'interface, des conversations et des mises à jour restent normaux. Un groupe à part, parce que sous Linux un thread qui a pris nice 10 ne peut plus
 revenir en arrière sans droits particuliers.
 
 Linux et Android : **nice 10** (la priorité « background » d'Android), thread par thread
 (sous Linux, le nice est propre à chaque thread et se transmet aux threads qu'il crée).
-Pour le compagnon, chaque thread du programme (`/proc/<pid>/task`), au lancement puis une
-fois prêt. macOS : rien (le nice y vaut pour tout le processus).
+macOS : rien (le nice y vaut pour tout le processus).
 
 Vérifié : les tests relisent l'état par l'API de Windows (`GetThreadPriority`,
 `GetThreadInformation`, `GetPriorityClass`, `GetProcessInformation`) ; pendant les mesures,
@@ -132,13 +133,15 @@ Réglage « Sur batterie » (vue « Cette machine », carte « Travail de fond �
   du temps processeur » de BOINC ; pause d'une minute au plus) ; moitié moins de fils de
   calcul pour Whisper (2 au lieu de 4), et pour Ollama quand le modèle d'embedding tourne
   sur le processeur (§ 5).
-- **Attendre le secteur** (`pause`) : rien ne démarre ; une unité en cours attend au lot
-  suivant ; une unité calculée pour une autre machine lui est rendue.
+- **Attendre le secteur** (`pause`) : rien ne démarre ; une unité en cours s'arrête au lot
+  suivant, ou entre deux pages d'un document, deux segments d'une transcription
+  (`pacing.step`) ; une unité calculée pour une autre machine lui est rendue.
 - **Pleine vitesse** (`normal`) : comme sur secteur.
 
 Les conversations sont servies dans tous les cas. Sur batterie veut dire « sur batterie
 selon Windows » (`GetSystemPowerStatus`), `/sys/class/power_supply` ou Termux:API ; une
-alimentation inconnue compte comme le secteur. Pour essayer sans débrancher :
+alimentation inconnue compte comme le secteur sur un PC, comme la batterie sur un
+téléphone. Pour essayer sans débrancher :
 `AIODOS_SIMULATE_POWER=battery` (ou `ac`) dans l'environnement du nœud.
 
 Mesuré (§ 7, batterie simulée, « ménager ») : pendant l'indexation, la carte graphique tire
@@ -217,9 +220,18 @@ D'où la règle (`worker.sharing_state`, `worker._rest_gpu`) :
 - téléphones : rien ne change (ils ne calculent qu'en charge, assez chargés et pas trop
   chauds).
 
-Ce changement vaut pour toutes les machines qui prêtent déjà leur puissance (réglage
-« Prêter ma puissance » activé) et qui n'ont jamais touché à « Seulement quand je
-n'utilise pas ce PC » : elles se mettent à prêter aussi pendant l'utilisation.
+Une machine où le partage était déjà réglé avant cette version garde l'ancienne règle :
+la migration 6 y enregistre « Seulement quand je n'utilise pas ce PC », la règle que son
+utilisateur avait acceptée, chez un ami comme chez soi. Le nouveau défaut ne vaut que pour
+les nouvelles installations ; chacun peut le changer dans la vue « Cette machine ».
+
+Le temps de calcul compté pour la réciprocité ne comprend plus les attentes (conversation,
+pauses sur batterie) : seulement le calcul.
+
+L'inactivité se lit avec `GetLastInputInfo` et `GetTickCount`, un compteur de
+millisecondes sur 32 bits sans signe. La différence se calcule modulo 2^32 : sinon, après
+24,9 jours de fonctionnement (fréquent avec le démarrage rapide de Windows), le PC passait
+pour utilisé en permanence.
 
 Pour les essais : `AIODOS_SIMULATE_IDLE=secondes` remplace la mesure de l'inactivité
 (clavier, souris). Les tests la fixent à un jour, comme ils fixent le secteur : sans cela,
@@ -234,8 +246,9 @@ charge déjà pour la fenêtre) :
 - fermer la fenêtre (croix, Alt+F4) la **cache** : le nœud continue de servir les machines
   appairées et d'avancer la file ; la première fois, une bulle l'explique ;
 - clic sur l'icône, ou **relancer AIODOS** : la fenêtre revient (le second lancement le
-  demande à l'instance en place par son API locale ; le verrou `instance.json` garde pour
-  cela le port et le jeton, comme le journal d'un nœud sans fenêtre) ;
+  demande à l'instance en place, `POST /instance/show` ; le verrou `instance.json` garde
+  pour cela le port et une clé propre à cette demande, qui ne donne accès à rien d'autre :
+  le jeton de l'API n'y est pas écrit) ;
 - clic droit → « Quitter AIODOS » : arrêt complet ;
 - l'arrêt de Windows ou le gestionnaire des tâches ferment vraiment ;
 - réglage « Garder AIODOS ouvert quand je ferme la fenêtre » (clé `close_to_tray`,
