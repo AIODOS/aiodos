@@ -238,6 +238,12 @@ def start():
         _state.update(at=0.0, regime=AC)
 
 
+def stopping() -> threading.Event:
+    """Levé quand AIODOS s'arrête : un calcul long d'une unité d'ici (qui n'a pas d'autre
+    signal d'arrêt) s'interrompt dessus."""
+    return _stopping
+
+
 def shutdown():
     """Arrêt d'AIODOS : les lots en attente ou en pause s'arrêtent (Interrupted)."""
     _stopping.set()

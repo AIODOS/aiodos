@@ -61,8 +61,8 @@ def _models() -> dict:
                        "sources": share.sources(model_id)})
     return {"engine": {"found": found is not None,
                        "version": found["version"] if found else None,
-                       "device": (images_engine.best_device(found["devices"]) or {}).get("label")
-                       if found else None,
+                       "device": (images_engine.best_device(images_engine.devices())
+                                  or {}).get("label") if found else None,
                        "loaded": images_engine.loaded()},
             "models": models, "download": download.progress()}
 

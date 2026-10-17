@@ -527,3 +527,29 @@ def test_a_model_is_copied_from_one_of_my_machines(tiny_model, tmp_path, monkeyp
     assert asked[:6] == [0, 1000, 2000, 3000, 4000, 0]                   # 5000 octets en 5 fois
     with pytest.raises(download.DownloadError, match="des miennes"):
         download.start("essai", source="inconnue")
+
+
+def test_the_profile_never_wakes_the_card(tmp_path, monkeypatch):
+    """Le profil lit souvent la version : « --version » seulement, une fois par programme ;
+    « --list-devices » (qui charge les pilotes) n'est lu que pour choisir la carte."""
+    from aiodos.updates import platforms
+    folder = tmp_path / "sd"
+    folder.mkdir()
+    (folder / platforms.executable("sd-server")).write_bytes(b"MZ")
+    settings.set_value("sdcpp_dir", str(folder))
+    ran = []
+
+    def run(program, *args):
+        ran.append(args[0])
+        return ("stable-diffusion.cpp version unknown, commit f0aac52" if args[0] == "--version"
+                else "Vulkan0\tIntel(R) UHD Graphics\nVulkan1\tNVIDIA GeForce RTX 4070\nCPU\tIntel")
+    monkeypatch.setattr(engine, "_run", run)
+    for _ in range(3):
+        assert engine.info()["version"] == "f0aac52"
+        assert engine.capabilities()["engine"] == "f0aac52"
+    assert ran == ["--version"]
+    assert engine.best_device(engine.devices())["name"] == "Vulkan1"   # pas l'intégrée
+    engine.devices()
+    assert ran == ["--version", "--list-devices"]
+    settings.set_value("images_device", "CPU")                        # choisi dans les réglages
+    assert engine.best_device(engine.devices())["name"] == "CPU"

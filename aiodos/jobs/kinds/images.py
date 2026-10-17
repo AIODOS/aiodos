@@ -92,14 +92,18 @@ def requires_image(unit, options) -> dict:
 
 
 def compute_image(payload, file, options, stop=None):
+    # Une unité d'ici n'a pas de signal d'arrêt : AIODOS qui s'arrête interrompt le
+    # chargement ou l'image (l'unité est rendue à la file, sans compter d'essai)
+    halt = stop if stop is not None else pacing.stopping()
+
     def make():
         try:
-            return generate.image(payload, stop)
+            return generate.image(payload, halt)
         except generate.Shortage as exc:
             # Mémoire de la carte prise entre-temps (Ollama…) : sd-server relancé, une fois
             log.info("%s : sd-server relancé avec la mémoire libre", exc)
             images_engine.stop()
-            return generate.image(payload, stop)
+            return generate.image(payload, halt)
     made = pacing.paced(make, stop)
     return {"png": base64.b64encode(made["png"]).decode("ascii"),
             "seconds": round(made["seconds"], 2),

@@ -198,14 +198,21 @@ function onJobs() {
         <span class="img-job-text">« ${esc(p.prompt || '')} »</span>
         <button class="icon-btn danger" data-stop="${j.id}" title="Annuler">${icon('x')}</button></div>
       <div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <div class="faint">${j.status === 'queued' && !away.length ? 'En attente d\'une carte graphique libre'
-        : 'En cours'}${where}</div></div>`;
+      <div class="faint">${waiting(j, p, away)}${where}</div></div>`;
   }).join('');
   $('#img-pending', root).querySelectorAll('[data-stop]').forEach(b => {
     b.onclick = async () => {
       try { await post(`/jobs/${b.dataset.stop}/cancel`); } catch (err) { errorToast(err); }
     };
   });
+}
+
+function waiting(job, params, away) {
+  if (job.status !== 'queued' || away.length) return 'En cours';
+  const model = info?.models.find(m => m.id === params.model);
+  const here = info?.engine.found && model?.state === 'ready';
+  return here ? 'En attente d\'une carte graphique libre'
+    : 'En attente d\'une de tes machines qui a le modèle et prête sa puissance';
 }
 
 // ----------------------------------------------------------------- galerie

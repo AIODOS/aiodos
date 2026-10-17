@@ -35,13 +35,14 @@ log = logging.getLogger("aiodos.images")
 SERVER = "sd-server"
 IDLE_S = 90                       # sd-server arrêté 1 min 30 après la dernière image
 LOAD_TIMEOUT = 600                # premier chargement : plusieurs Go lus sur le disque
-INFO_TTL = 300
+DEVICES_TTL = 1800                # --list-devices réveille la carte d'un portable : rare
 _COMMIT = re.compile(r"commit\s+([0-9a-f]{6,40})", re.I)
 _DEVICE = re.compile(r"^(\S+)\t(.+)$")
 _INTEGRATED = re.compile(r"(?i)\b(UHD|Iris|Radeon\(TM\) Graphics|Graphics Controller)\b")
 NO_PROXY = {"http": None, "https": None}
 
-_info = {"at": 0.0, "key": None, "value": None}
+_versions = {}                    # (programme, date) -> version : lue une fois par programme
+_devices = {"at": 0.0, "key": None, "value": []}
 _lock = threading.Lock()          # un lancement à la fois
 _state = {"process": None, "model": None, "busy": 0, "used": 0.0, "reaper": None}
 
@@ -105,22 +106,44 @@ def _run(program: Path, *args) -> str:
     return (done.stdout or "") + (done.stderr or "")
 
 
-def info(max_age=INFO_TTL) -> dict | None:
-    """{"folder", "version", "devices"} du moteur de cette machine, ou None s'il manque."""
+def info() -> dict | None:
+    """{"folder", "version"} du moteur de cette machine, ou None s'il manque. Le profil de
+    la machine la demande souvent : « --version » ne charge aucun pilote (la carte d'un
+    portable reste en veille), et n'est lu qu'une fois par programme."""
     where = folder()
     if where is None:
         return None
-    if _info["key"] == str(where) and time.monotonic() - _info["at"] < max_age:
-        return _info["value"]
     program = where / platforms.executable(SERVER)
     try:
-        version = parse_version(_run(program, "--version"))
-        devices = parse_devices(_run(program, "--list-devices"))
-    except EngineError as exc:
-        log.warning("stable-diffusion.cpp illisible dans %s : %s", where, exc)
+        key = (str(program), program.stat().st_mtime_ns)
+    except OSError:
         return None
-    value = {"folder": str(where), "version": version, "devices": devices} if version else None
-    _info.update(at=time.monotonic(), key=str(where), value=value)
+    if key not in _versions:
+        try:
+            _versions[key] = parse_version(_run(program, "--version"))
+        except EngineError as exc:
+            log.warning("stable-diffusion.cpp illisible dans %s : %s", where, exc)
+            return None
+    version = _versions[key]
+    return {"folder": str(where), "version": version} if version else None
+
+
+def devices(max_age=DEVICES_TTL) -> list:
+    """Appareils de calcul vus par stable-diffusion.cpp. « --list-devices » charge les
+    pilotes (et réveille la carte graphique d'un portable) : lu au plus toutes les 30 min,
+    quand il faut choisir la carte (lancement, vue Images)."""
+    found = info()
+    if found is None:
+        return []
+    if _devices["key"] == found["folder"] and time.monotonic() - _devices["at"] < max_age:
+        return _devices["value"]
+    try:
+        value = parse_devices(_run(Path(found["folder"]) / platforms.executable(SERVER),
+                                   "--list-devices"))
+    except EngineError as exc:
+        log.warning("Appareils de stable-diffusion.cpp illisibles : %s", exc)
+        return []
+    _devices.update(at=time.monotonic(), key=found["folder"], value=value)
     return value
 
 
@@ -170,7 +193,7 @@ def acquire(model_id: str, stop=None, waiting=None) -> str:
         if found is None:
             raise EngineError("stable-diffusion.cpp n'est pas installé sur cette machine "
                               "(réglage « Dossier de stable-diffusion.cpp »).")
-        device = best_device(found["devices"])
+        device = best_device(devices())
         freed = ollama.unload_chat_models()       # la carte aux images, le temps du lot
         if freed:
             log.info("Carte graphique libérée pour les images : %s déchargé(s) d'Ollama",
