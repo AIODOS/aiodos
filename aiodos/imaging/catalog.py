@@ -26,7 +26,12 @@ HF = "https://huggingface.co/{repo}/resolve/{commit}/{path}"
 
 # Option de sd-server pour chaque partie d'un modèle
 FLAGS = {"diffusion": "--diffusion-model", "llm": "--llm", "vae": "--vae", "model": "--model",
-         "t5xxl": "--t5xxl", "clip_l": "--clip_l"}
+         "t5xxl": "--t5xxl", "clip_l": "--clip_l", "audio_vae": "--audio-vae"}
+
+# Chaque modèle dit aussi ce qu'il sait faire : formats proposés (sizes), côtés en multiples
+# de « multiple » entre les bornes « side », pixels au plus ; pour une vidéo, la cadence
+# (fps) et les nombres d'images permis, « frame_step » × k + « frame_base » (durations :
+# ceux proposés)
 
 MODELS = {
     # Licences vérifiées le 17/10/2026 : Apache-2.0 pour les trois fichiers
@@ -56,9 +61,108 @@ MODELS = {
                                  path="split_files/vae/ae.safetensors")},
         },
         # Modèle distillé : 8 pas, sans guidage (la consigne négative n'a pas d'effet)
-        "steps": 8, "cfg": 1.0, "negative": False,
+        "kind": "image", "steps": 8, "cfg": 1.0, "negative": False,
+        "sizes": [[1024, 1024, "Carré · 1024 × 1024"], [768, 1344, "Portrait · 768 × 1344"],
+                  [1344, 768, "Paysage · 1344 × 768"], [512, 512, "Rapide · 512 × 512"]],
+        "multiple": 64, "side": [256, 2048], "max_pixels": 1536 * 1536,
+    },
+    # Licences vérifiées le 17/10/2026 : Apache-2.0 pour les trois fichiers
+    "wan2.1-t2v-1.3b": {
+        "label": "Wan 2.1 · vidéo",
+        "license": "Apache-2.0",
+        "about": "Alibaba, texte vers vidéo, 1,3 milliard de paramètres, 480p à 16 images "
+                 "par seconde : le modèle vidéo qui tient dans une carte de 8 Go.",
+        "files": {
+            "diffusion": {
+                "name": "wan2.1_t2v_1.3B_fp16.safetensors", "size": 2838303560,
+                "sha256": "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5",
+                "url": HF.format(repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+                                 commit="123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+                                 path="split_files/diffusion_models/"
+                                      "wan2.1_t2v_1.3B_fp16.safetensors")},
+            "t5xxl": {
+                "name": "umt5-xxl-encoder-Q5_K_M.gguf", "size": 4145878880,
+                "sha256": "eaea358bb438c5d211721a4feecc162000e3636e9cb96f51e216f1f44ebd12ce",
+                "url": HF.format(repo="city96/umt5-xxl-encoder-gguf",
+                                 commit="b535255bee98c2b0a59ea7c0ae2dcd0c6657b3b7",
+                                 path="umt5-xxl-encoder-Q5_K_M.gguf")},
+            "vae": {
+                "name": "wan_2.1_vae.safetensors", "size": 253815318,
+                "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b",
+                "url": HF.format(repo="Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+                                 commit="123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+                                 path="split_files/vae/wan_2.1_vae.safetensors")},
+        },
+        # Réglages de l'exemple de stable-diffusion.cpp (docs/wan.md) ; la consigne
+        # négative habituelle de Wan, en chinois, quand l'utilisateur n'en donne pas
+        "kind": "video", "steps": 20, "cfg": 6.0, "negative": True, "fps": 16,
+        "flow_shift": 3.0, "sampler": "euler",
+        "sizes": [[832, 480, "Paysage · 832 × 480"], [480, 832, "Portrait · 480 × 832"],
+                  [624, 624, "Carré · 624 × 624"]],
+        "multiple": 16, "side": [256, 1280], "max_pixels": 1024 * 576,
+        "frame_step": 4, "frame_base": 1, "max_frames": 161, "default_frames": 33,
+        "durations": [[17, "1 s"], [33, "2 s"], [49, "3 s"], [81, "5 s"]],
+        "default_negative": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，"
+                            "整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，"
+                            "画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，"
+                            "静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+    },
+    # MiniMax H3 : vidéo ET son. Décision de l'utilisateur (17/10/2026), comme dans PANDORA
+    # (core/h3_local.py) : AIODOS le propose, affiche sa licence, demande une confirmation
+    # avant le téléchargement, et laisse chacun juge. Fichiers et réglages : ceux de
+    # stable-diffusion.cpp (docs/minimax_h3.md), en version allégée pour une machine à 32 Go
+    # de mémoire vive. Pas encore essayé ici (30 Go à télécharger).
+    "minimax-h3": {
+        "label": "MiniMax H3 · vidéo et son",
+        "license": "MiniMax H3 Community License",
+        "notice": "Les poids MiniMax H3 sont publiés sous la « MiniMax H3 Community License », "
+                  "qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les "
+                  "États-Unis : y faire tourner le modèle, ou en utiliser les sorties, n'est "
+                  "pas autorisé sans accord écrit de MiniMax. AIODOS ne distribue ni les poids "
+                  "ni leurs sorties : il les télécharge depuis Hugging Face à ta demande. Les "
+                  "installer et les utiliser relève de ta seule responsabilité.",
+        "about": "MiniMax, vidéo avec sa bande son, 24 images par seconde. Lourd : un encodeur "
+                 "Qwen3-VL-32B, plusieurs minutes par vidéo sur une carte de 8 Go.",
+        "files": {
+            "diffusion": {
+                "name": "minimax_h3_fl2va_pruned-Q4_K_M.gguf", "size": 11420663904,
+                "sha256": "dd948e08ad0ba3c71bd42f368e283dd82e790f5122a63b276e22a3e0283d0c10",
+                "url": HF.format(repo="leejet/MiniMax-H3-GGUF",
+                                 commit="d9c4c6312b4728a68a15a35626d84775a6523783",
+                                 path="minimax_h3_fl2va_pruned-Q4_K_M.gguf")},
+            "llm": {
+                "name": "qwen3vl_32b_minimax_h3-Q2_K_M.gguf", "size": 13102161024,
+                "sha256": "a8ccadccd57ef34c838ffb8a7da8368bb554721b2760274a1d3b0df63960b997",
+                "url": HF.format(repo="leejet/MiniMax-H3-GGUF",
+                                 commit="d9c4c6312b4728a68a15a35626d84775a6523783",
+                                 path="qwen3vl_32b_minimax_h3-Q2_K_M.gguf")},
+            "vae": {
+                "name": "minimax_h3_video_vae_fp16.safetensors", "size": 5207808496,
+                "sha256": "7c1f131492e7eddacaac9069a61b81bdd39de5cc96561e677c5eab1cdce5e522",
+                "url": HF.format(repo="Comfy-Org/MiniMax-H3",
+                                 commit="e5eb578a89295337b8ff433a035929ce0279e0b6",
+                                 path="vae/minimax_h3_video_vae_fp16.safetensors")},
+            "audio_vae": {
+                "name": "minimax_h3_audio_vae_fp32.safetensors", "size": 605254808,
+                "sha256": "8e505d95dd1561d47abd43d4238fd40d9bb1ae9e147ed0a4cba778d76ae4db48",
+                "url": HF.format(repo="Comfy-Org/MiniMax-H3",
+                                 commit="e5eb578a89295337b8ff433a035929ce0279e0b6",
+                                 path="vae/minimax_h3_audio_vae_fp32.safetensors")},
+        },
+        # Sans guidage (cfg 1, comme les exemples) ; bruit tiré sur le processeur (--rng cpu)
+        "kind": "video", "steps": 20, "cfg": 1.0, "negative": False, "fps": 24,
+        "server_args": ["--rng", "cpu"],
+        "sizes": [[864, 480, "Paysage · 864 × 480"], [480, 864, "Portrait · 480 × 864"],
+                  [640, 640, "Carré · 640 × 640"], [1344, 768, "Paysage HD · 1344 × 768"]],
+        "multiple": 32, "side": [256, 1344], "max_pixels": 1344 * 768,
+        "frame_step": 17, "frame_base": 5, "max_frames": 260, "default_frames": 56,
+        "durations": [[22, "0,9 s"], [56, "2,3 s"], [73, "3 s"], [124, "5,2 s"]],
     },
 }
+
+
+def is_video(model_id: str) -> bool:
+    return MODELS.get(model_id, {}).get("kind") == "video"
 
 _lock = threading.Lock()
 _checking = set()                 # fichiers dont l'empreinte se calcule en ce moment

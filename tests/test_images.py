@@ -27,6 +27,10 @@ AUTH = {"X-Aiodos-Token": TOKEN}
 B, FRIEND = "machine-b", "machine-ami"
 
 
+# Une vidéo WebM minimale : en-tête EBML, type de document « webm »
+WEBM = bytes.fromhex("1a45dfa39f42868101428284") + b"webm" + bytes(64)
+
+
 def png(width, height, color=(40, 90, 200)) -> bytes:
     """PNG minimal (une couleur), sans dépendance."""
     raw = b"".join(b"\x00" + bytes(color) * width for _ in range(height))
@@ -55,7 +59,9 @@ def tiny_model(tmp_path, monkeypatch):
                        "url": f"http://127.0.0.1:9/{name}"}
     monkeypatch.setitem(catalog.MODELS, "essai", {
         "label": "Essai", "license": "Apache-2.0", "about": "Pour les essais.", "files": files,
-        "steps": 4, "cfg": 1.0, "negative": True})
+        "kind": "image", "steps": 4, "cfg": 1.0, "negative": True,
+        "sizes": [[1024, 1024, "Carré"]], "multiple": 64, "side": [256, 2048],
+        "max_pixels": 1536 * 1536})
     settings.set_value("images_models_dir", str(folder))
     return {"folder": folder, "files": files, "contents": contents}
 
@@ -214,6 +220,10 @@ class FakeSD:
                     return self._send(200, {"status": "generating"})
                 if fake.fail:
                     return self._send(200, {"status": "failed", "error": {"message": fake.fail}})
+                if job.get("frames"):
+                    return self._send(200, {"status": "completed", "result": {
+                        "output_format": "webm", "mime_type": "video/webm", "fps": 16,
+                        "frame_count": job["frames"], "b64_json": base64.b64encode(WEBM).decode()}})
                 image = base64.b64encode(png(job["w"], job["h"])).decode()
                 return self._send(200, {"status": "completed", "result": {
                     "output_format": "png", "images": [{"index": 0, "b64_json": image}]}})
@@ -228,8 +238,9 @@ class FakeSD:
                     return self._send(200, {"status": "cancelled"})
                 fake.bodies.append(data)
                 job_id = f"job_{len(fake.jobs) + 1}"
-                fake.jobs[job_id] = {"seen": 0, "cancelled": False,
-                                     "w": data["width"], "h": data["height"]}
+                fake.jobs[job_id] = {"seen": 0, "cancelled": False, "path": self.path,
+                                     "w": data["width"], "h": data["height"],
+                                     "frames": data.get("video_frames")}
                 return self._send(202, {"id": job_id, "status": "queued"})
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -661,3 +672,62 @@ def test_an_image_order_from_a_friend_is_refused(tiny_model, monkeypatch):
     outcome = w._process(worker_module.Assignment(FRIEND, "PC d'un ami", order))
     assert "réservée à mes machines" in outcome
     assert sent and sent[0][0] == "work/fail"
+
+
+# --------------------------------------------------------------------- vidéos
+@pytest.fixture
+def tiny_video(tiny_model, monkeypatch):
+    """Le modèle « essai » devenu un modèle vidéo à la façon de Wan (4n + 1 images)."""
+    spec = dict(catalog.MODELS["essai"], kind="video", cfg=6.0, fps=16, flow_shift=3.0,
+                sampler="euler", default_negative="flou", sizes=[[832, 480, "Paysage"]],
+                multiple=16, side=[256, 1280], max_pixels=1024 * 576, frame_step=4,
+                frame_base=1, max_frames=161, default_frames=33, durations=[[33, "2 s"]])
+    monkeypatch.setitem(catalog.MODELS, "video", spec)
+    return spec
+
+
+def test_a_video_request_follows_the_rules_of_its_model(tiny_video):
+    params = kind.normalize({"model": "video", "prompt": "un renard dans la neige"})
+    assert (params["width"], params["height"], params["frames"]) == (832, 480, 33)
+    assert kind.normalize({"model": "video", "prompt": "x", "frames": 81})["frames"] == 81
+    for wrong, message in (({"frames": 34}, r"4 × k \+ 1"), ({"width": 830}, "multiples de 16"),
+                           ({"width": 1280, "height": 720}, "trop grande")):
+        with pytest.raises(ValueError, match=message):
+            kind.normalize({"model": "video", "prompt": "x", **wrong})
+    title, units, _ = kind.split_generate(kind.normalize(
+        {"model": "video", "prompt": "un renard", "count": 2}))
+    assert title.startswith("Vidéos : ") and {u.payload["frames"] for u in units} == {33}
+    # H3 : 17 k + 5 images, côtés en multiples de 32
+    h3 = catalog.MODELS["minimax-h3"]
+    assert kind.normalize({"model": "minimax-h3", "prompt": "x"})["frames"] == 56
+    with pytest.raises(ValueError, match="17 × k"):
+        kind.normalize({"model": "minimax-h3", "prompt": "x", "frames": 57})
+    assert h3["notice"] and "Union européenne" in h3["notice"]
+
+
+def test_a_video_is_made_checked_and_kept(tiny_video, fake_sd):
+    fake = fake_sd()
+    payload = {**_payload(model="video", width=832, height=480), "frames": 33, "negative": ""}
+    output = kind.compute_image(payload, None, {})
+    assert fake.jobs["job_1"]["path"].endswith("/vid_gen")
+    body = fake.bodies[0]
+    assert body["video_frames"] == 33 and body["fps"] == 16 and body["output_format"] == "webm"
+    assert body["negative_prompt"] == "flou"                        # consigne négative du modèle
+    assert body["sample_params"]["flow_shift"] == 3.0
+    assert output["frames"] == 33 and output["fps"] == 16
+    kind.check_image(payload, output)
+    with pytest.raises(ValueError, match="WebM"):
+        kind.check_image(payload, {"webm": base64.b64encode(png(8, 8)).decode()})
+    row = gallery.get(kind.assimilate_image(payload, output)["image_id"])
+    assert row["media"] == "video" and row["frames"] == 33 and row["fps"] == 16
+    assert row["file"].endswith(".webm") and gallery.path_of(row).read_bytes() == WEBM
+
+
+def test_the_api_serves_a_video_as_webm(tiny_video, client):
+    payload = {**_payload(model="video", width=832, height=480), "frames": 33}
+    row = gallery.add(payload, WEBM, machine="PC fixe", seconds=60.0, frames=33, fps=16)
+    reply = client.get(f"/api/images/{row['id']}/file?t={TOKEN}")
+    assert reply.status_code == 200 and reply.headers["content-type"] == "video/webm"
+    models = {m["id"]: m for m in client.get("/api/images/models", headers=AUTH).json()["models"]}
+    assert models["wan2.1-t2v-1.3b"]["kind"] == "video" and models["wan2.1-t2v-1.3b"]["durations"]
+    assert models["minimax-h3"]["notice"]

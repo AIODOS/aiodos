@@ -64,8 +64,9 @@ function onJob(job) {
   const finished = before && ACTIVE.includes(before) && !ACTIVE.includes(job.status);
   if (finished && job.kind === 'generate_images') {
     const n = job.result?.images ?? job.done;
+    const noun = job.params?.frames ? 'vidéo' : 'image';
     if (state.view !== 'images') {
-      toast(`${job.title} : ${n} image${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} (vue Images).`,
+      toast(`${job.title} : ${n} ${noun}${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} (vue Images et vidéos).`,
         job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
     }
   } else if (finished && job.kind !== 'index_conversation') {

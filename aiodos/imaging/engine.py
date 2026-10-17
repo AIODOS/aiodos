@@ -174,6 +174,7 @@ def arguments(model_id: str, port: int, device: str | None) -> list:
     args = ["--listen-ip", "127.0.0.1", "--listen-port", str(port), "--log-level", "info"]
     for part, path in catalog.files(model_id).items():
         args += [catalog.FLAGS[part], str(path)]
+    args += list(catalog.model(model_id).get("server_args") or [])
     if device:
         args += ["--backend", device]
     return args

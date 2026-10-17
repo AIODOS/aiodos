@@ -183,12 +183,63 @@ images. Deux machines comme celle-ci font donc deux images en 22 s au lieu d'une
 Vérifié le 17/10/2026 : mistral:7b chargé dans Ollama (4,7 Go de carte), une image
 demandée : AIODOS l'a déchargé, sd-server s'est chargé en 1,5 s, l'image a pris 22 s.
 
+**Vulkan ou CUDA ?** Mesure du 17/10/2026, même PC, même modèle, PC au repos (version
+CUDA 12 de master-973, 343 Mo, plus 563 Mo de bibliothèques CUDA) :
+
+| | Vulkan (livrée, 29 Mo) | CUDA (900 Mo) |
+|---|---|---|
+| 1024 × 1024, 8 pas | 20,2 à 20,6 s | 19,1 à 19,5 s (−5 %) |
+| 512 × 512 | 6,2 s | 4,6 s |
+
+La version Vulkan reste celle livrée avec les mises à jour : elle sert toutes les cartes,
+et CUDA ne gagne presque rien en 1024². Sur une carte NVIDIA, on peut choisir CUDA à la
+main (réglage « Dossier de stable-diffusion.cpp »).
+
+## 7. La vidéo (17/10/2026)
+
+Même chemin que les images : une vidéo demandée est une unité de la file, calculée ici ou
+par une de mes machines qui a le modèle, et gardée ici seulement. Le moteur est le même
+`sd-server` (API `vid_gen`) ; la vidéo sort en WebM, que l'interface lit telle quelle.
+
+- **Wan 2.1 T2V 1,3B** (Apache-2.0) : le cœur en fp16 (2,8 Go), l'encodeur UMT5-XXL en
+  Q5_K_M (4,1 Go), le décodeur (0,25 Go), en tout 7,2 Go. Réglages de l'exemple de
+  stable-diffusion.cpp : 20 pas, guidage 6, `flow_shift` 3, euler, la consigne négative
+  habituelle de Wan quand l'utilisateur n'en donne pas. 16 images par seconde, des durées
+  en 4n + 1 images (1, 2, 3 ou 5 s), en 832 × 480, 480 × 832 ou 624 × 624.
+- **MiniMax H3** (vidéo et son, 24 images par seconde) : proposé à la demande de
+  l'utilisateur, comme dans PANDORA (`core/h3_local.py`). Sa licence exclut l'Union
+  européenne, le Royaume-Uni, la Corée du Sud et les États-Unis : la fiche du modèle
+  l'affiche, et le téléchargement demande de l'avoir lue. Chacun en prend la
+  responsabilité ; AIODOS ne distribue ni les poids ni les sorties. Fichiers allégés pour
+  une machine à 32 Go de mémoire vive : cœur réduit en Q4_K_M (11,4 Go), encodeur
+  Qwen3-VL-32B en Q2_K_M (13,1 Go), décodeurs vidéo (5,2 Go) et son (0,6 Go). Réglages de
+  stable-diffusion.cpp (`docs/minimax_h3.md`) : guidage 1, bruit tiré sur le processeur,
+  17k + 5 images, côtés en multiples de 32. **Pas encore essayé ici** (30 Go à
+  télécharger).
+- **Les règles de chaque modèle** (formats, durées, cadence, bornes) sont dans le
+  catalogue (`imaging/catalog.py`) ; la demande est vérifiée d'après elles, ici et sur la
+  machine qui calcule.
+- **PANDORA** (du même auteur) parle déjà à ce serveur pour son moteur H3 local : même
+  protocole (`vid_gen`, `jobs`), même résultat WebM, qu'il convertit en MP4 avec ffmpeg.
+  AIODOS reprend ce protocole et ces contraintes, sans copier de code (PANDORA est sous
+  GPL-3.0, AIODOS sous Apache-2.0). Pour l'intégration future, PANDORA pourra confier
+  ses vidéos à AIODOS, qui les répartira entre les machines.
+
+**Mesure** (RTX 4070 Laptop, Vulkan, Wan 2.1 1,3B, 832 × 480, 33 images = 2 s, 20 pas) :
+3 min 42 la première fois, dont l'encodage du texte (13 s, sur le processeur), 20 pas de
+6 à 7 s (2 min 12), le décodage et la compilation des shaders (1 min 17). Le WebM pèse
+2 Mo. Le placement automatique garde le cœur sur la carte (2,7 Go) et met l'encodeur et
+le décodeur en mémoire vive. Quatre vidéos se calculent donc quatre fois plus vite sur
+quatre machines : c'est là que la répartition paie le plus.
+
+La version CUDA n'aide pas non plus pour la vidéo : 3 min 34 au lieu de 3 min 42, avec des
+pas plus lents (8,5 s) et un décodage à court de mémoire, refait par tuiles.
+
 **Suite** :
 
-1. Mesurer la version CUDA sur les cartes NVIDIA (sans doute plus rapide que Vulkan).
-2. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
+1. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
    de ggml (les versions publiées ne l'ont pas : pas de `ggml-rpc.dll` dans l'archive).
-3. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
+2. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
 
 ## Sources
 

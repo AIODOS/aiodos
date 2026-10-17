@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -138,6 +138,12 @@ MIGRATIONS = {
         created  REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_images_batch ON images(batch);
+    """,
+    # Vidéos dans la même galerie (Wan 2.1) : genre, nombre d'images, cadence
+    9: """
+    ALTER TABLE images ADD COLUMN media TEXT NOT NULL DEFAULT 'image';
+    ALTER TABLE images ADD COLUMN frames INTEGER;
+    ALTER TABLE images ADD COLUMN fps INTEGER;
     """,
 }
 

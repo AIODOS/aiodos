@@ -1,4 +1,5 @@
-"""Images gardées : une ligne par image (table images), le PNG dans data/images/out/.
+"""Images et vidéos gardées : une ligne par image ou vidéo (table images), le PNG ou le
+WebM dans data/images/out/.
 
 Une demande de plusieurs images forme un lot (« batch ») : même consigne, graines qui se
 suivent. Chaque ligne dit aussi quelle machine l'a calculée, et en combien de temps.
@@ -8,6 +9,7 @@ import re
 from pathlib import Path
 
 from aiodos import db, paths
+from aiodos.imaging import catalog
 from aiodos.imaging.generate import png_size
 
 _SAFE = re.compile(r"[^0-9a-z]")
@@ -19,23 +21,32 @@ def out_dir() -> Path:
     return folder
 
 
-def add(payload: dict, png: bytes, machine: str = "", seconds: float | None = None) -> dict:
-    """Garde l'image calculée pour une unité (fichier, puis ligne en base)."""
-    width, height = png_size(png)
+def add(payload: dict, data: bytes, machine: str = "", seconds: float | None = None,
+        frames: int | None = None, fps: int | None = None) -> dict:
+    """Garde l'image (PNG) ou la vidéo (WebM) calculée pour une unité : fichier, puis ligne
+    en base."""
+    video = catalog.is_video(payload["model"])
+    if video:
+        width, height, ext = int(payload["width"]), int(payload["height"]), "webm"
+    else:
+        (width, height), ext = png_size(data), "png"
     batch = _SAFE.sub("", str(payload.get("batch") or "lot").lower())[:32] or "lot"
-    name = f"{batch}-{int(payload.get('index') or 0):02d}-{int(payload['seed'])}.png"
+    name = f"{batch}-{int(payload.get('index') or 0):02d}-{int(payload['seed'])}.{ext}"
     target = out_dir() / name
     part = target.with_name(target.name + ".part")
-    part.write_bytes(png)
+    part.write_bytes(data)
     os.replace(part, target)
     with db.transaction() as c:
         image_id = c.execute(
             "INSERT INTO images(batch, model, prompt, negative, seed, width, height, steps, "
-            "cfg, file, machine, seconds, created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "cfg, file, machine, seconds, created, media, frames, fps) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (batch, payload["model"], payload["prompt"], payload.get("negative") or "",
              int(payload["seed"]), width, height, int(payload.get("steps") or 0),
              float(payload.get("cfg") or 0), name, machine or None,
-             round(seconds, 2) if seconds is not None else None, db.now())).lastrowid
+             round(seconds, 2) if seconds is not None else None, db.now(),
+             "video" if video else "image", frames if video else None,
+             fps if video else None)).lastrowid
     return get(image_id)
 
 

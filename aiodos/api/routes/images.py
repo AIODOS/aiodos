@@ -28,11 +28,12 @@ class GenerateIn(BaseModel):
     model: str
     prompt: str
     negative: str = ""
-    width: int = 1024
-    height: int = 1024
+    width: int | None = None            # vide : 1024 × 1024 (images), 832 × 480 (vidéos)
+    height: int | None = None
     count: int = 1
     seed: int | None = None
     steps: int | None = None
+    frames: int | None = None           # vidéos : nombre d'images (4n + 1), 33 par défaut
 
 
 def helpers() -> dict:
@@ -56,6 +57,10 @@ def _models() -> dict:
     for model_id, spec in catalog.MODELS.items():
         models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
                        "about": spec["about"], "steps": spec["steps"],
+                       "kind": spec.get("kind", "image"), "fps": spec.get("fps"),
+                       "sizes": spec["sizes"], "durations": spec.get("durations") or [],
+                       "default_frames": spec.get("default_frames"),
+                       "notice": spec.get("notice"),
                        "negative": spec["negative"], **catalog.state(model_id),
                        "helpers": others.get(model_id, []),
                        "sources": share.sources(model_id)})
@@ -119,7 +124,8 @@ def image_file(image_id: int):
     row = gallery.get(image_id)
     if row is None or not gallery.path_of(row).is_file():
         raise HTTPException(404, "Image introuvable.")
-    return FileResponse(gallery.path_of(row), media_type="image/png",
+    video = gallery.path_of(row).suffix == ".webm"
+    return FileResponse(gallery.path_of(row), media_type="video/webm" if video else "image/png",
                         headers={"Cache-Control": "private, max-age=86400"})
 
 

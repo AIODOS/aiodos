@@ -73,3 +73,40 @@ def test_my_other_machine_makes_the_images(machines):
                          params={"t": a.token}, timeout=30)
     assert generate.png_size(image.content) == (512, 512)
     assert b.api("GET", "/images") == []              # B n'a rien gardé
+
+
+VIDEO = "wan2.1-t2v-1.3b"
+
+
+def _video_complete() -> bool:
+    return bool(MODELS) and all(
+        (Path(MODELS) / f["name"]).is_file()
+        and (Path(MODELS) / f["name"]).stat().st_size == f["size"]
+        for f in catalog.MODELS[VIDEO]["files"].values())
+
+
+@pytest.mark.skipif(not _video_complete(), reason="il faut aussi les fichiers de Wan 2.1")
+def test_my_other_machine_makes_the_video(machines):
+    """Une vidéo courte (1 s, petite taille) : calculée par B, gardée par A, en WebM."""
+    a, b = machines
+    _, b_id = pair(a, b)
+    b.wait_for(lambda: next(m for m in b.api("GET", "/images/models")["models"]
+                            if m["id"] == VIDEO)["state"] == "ready",
+               timeout=180, what="fichiers de Wan vérifiés chez B")
+
+    def helpers():
+        a.api("POST", f"/network/peers/{b_id}/refresh")
+        return next(m for m in a.api("GET", "/images/models")["models"]
+                    if m["id"] == VIDEO)["helpers"]
+    a.wait_for(helpers, timeout=60, what="B proposée pour la vidéo")
+    job = a.api("POST", "/images/generate",
+                {"model": VIDEO, "prompt": "A paper boat drifting on a calm lake",
+                 "width": 512, "height": 288, "frames": 17, "steps": 10, "seed": 3})
+    assert job["here"] is False
+    rows = a.wait_for(lambda: (found := a.api("GET", "/images")) and found,
+                      timeout=900, what="vidéo calculée par B")
+    assert rows[0]["media"] == "video" and rows[0]["machine"] == "PC fixe"
+    assert rows[0]["frames"] == 17 and rows[0]["fps"] == 16
+    video = requests.get(f"http://127.0.0.1:{a.port}/api/images/{rows[0]['id']}/file",
+                         params={"t": a.token}, timeout=30)
+    assert video.headers["content-type"] == "video/webm" and generate.is_webm(video.content)

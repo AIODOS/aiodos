@@ -1,7 +1,7 @@
-"""Travail « images » : chaque image demandée est une unité indépendante (modèle, consigne,
-graine, réglages → PNG). Elle se calcule ici, ou chez une de mes machines qui a le même
-modèle, aux mêmes empreintes (network/work.py), puis l'image n'est gardée qu'ici
-(imaging/gallery.py).
+"""Travail « images » : chaque image ou vidéo demandée est une unité indépendante (modèle,
+consigne, graine, réglages → PNG ou WebM). Elle se calcule ici, ou chez une de mes
+machines qui a le même modèle, aux mêmes empreintes (network/work.py), puis n'est gardée
+qu'ici (imaging/gallery.py).
 
 Jamais confiée à un ami, ni calculée pour un ami (mine_only) : la consigne peut être
 personnelle. Une machine qui reçoit un ordre d'image en revérifie les réglages (checked).
@@ -20,9 +20,8 @@ from aiodos.jobs.registry import UnitSpec, register_job_kind, register_portable
 MAX_COUNT = 16
 MAX_PROMPT = 2000
 MAX_PNG = 32 * 1024 ** 2
-SIDE = (256, 2048)                # côtés : multiples de 64 entre ces bornes
-MAX_PIXELS = 1536 * 1536
-SEED_SPACE = 2 ** 31
+MAX_WEBM = 512 * 1024 ** 2
+SEED_SPACE = 2 ** 31              # tailles, durées : règles de chaque modèle (catalog.py)
 
 
 def normalize(params: dict) -> dict:
@@ -32,32 +31,46 @@ def normalize(params: dict) -> dict:
     if model_id not in catalog.MODELS:
         raise ValueError("Modèle d'images inconnu.")
     spec = catalog.model(model_id)
+    video = catalog.is_video(model_id)
+    what = "vidéo" if video else "image"
     prompt = str(params.get("prompt") or "").strip()
     if not prompt:
-        raise ValueError("Décris l'image à créer.")
+        raise ValueError(f"Décris la {what} à créer.")
     if len(prompt) > MAX_PROMPT:
         raise ValueError(f"Description trop longue ({MAX_PROMPT} caractères au plus).")
+    default_w, default_h = spec["sizes"][0][:2]
     try:
-        width, height = int(params.get("width") or 1024), int(params.get("height") or 1024)
+        width = int(params.get("width") or default_w)
+        height = int(params.get("height") or default_h)
         count = int(params.get("count") or 1)
         steps = int(params.get("steps") or spec["steps"])
+        frames = int(params.get("frames") or spec["default_frames"]) if video else None
         seed = params.get("seed")
         seed = secrets.randbelow(SEED_SPACE) if seed in (None, "") else int(seed) % SEED_SPACE
     except (TypeError, ValueError) as exc:
-        raise ValueError("Taille, nombre, pas ou graine invalides.") from exc
+        raise ValueError("Taille, nombre, durée, pas ou graine invalides.") from exc
+    multiple, (low, high) = spec["multiple"], spec["side"]
     for side in (width, height):
-        if side % 64 or not SIDE[0] <= side <= SIDE[1]:
-            raise ValueError(f"Côtés en multiples de 64, de {SIDE[0]} à {SIDE[1]} pixels.")
-    if width * height > MAX_PIXELS:
-        raise ValueError("Image trop grande (1536 × 1536 pixels au plus).")
+        if side % multiple or not low <= side <= high:
+            raise ValueError(f"Côtés en multiples de {multiple}, de {low} à {high} pixels.")
+    if width * height > spec["max_pixels"]:
+        raise ValueError(f"{what.capitalize()} trop grande pour ce modèle.")
+    if video:
+        step, base = spec["frame_step"], spec["frame_base"]
+        if not base <= frames <= spec["max_frames"] or (frames - base) % step:
+            raise ValueError(f"Durée : de {base} à {spec['max_frames']} images, en "
+                             f"{step} × k + {base}.")
     if not 1 <= count <= MAX_COUNT:
-        raise ValueError(f"De 1 à {MAX_COUNT} images à la fois.")
+        raise ValueError(f"De 1 à {MAX_COUNT} {what}s à la fois.")
     if not 1 <= steps <= 100:
         raise ValueError("De 1 à 100 pas.")
     negative = str(params.get("negative") or "").strip()[:MAX_PROMPT] if spec["negative"] else ""
-    return {"model": model_id, "prompt": prompt, "negative": negative, "width": width,
-            "height": height, "steps": steps, "cfg": spec["cfg"], "seed": seed,
-            "count": count, "batch": secrets.token_hex(6)}
+    found = {"model": model_id, "prompt": prompt, "negative": negative, "width": width,
+             "height": height, "steps": steps, "cfg": spec["cfg"], "seed": seed,
+             "count": count, "batch": secrets.token_hex(6)}
+    if video:
+        found["frames"] = frames
+    return found
 
 
 def _short(text: str, n: int = 50) -> str:
@@ -67,12 +80,13 @@ def _short(text: str, n: int = 50) -> str:
 
 def split_generate(params):
     common = {k: params[k] for k in ("model", "prompt", "negative", "width", "height",
-                                     "steps", "cfg", "batch")}
+                                     "steps", "cfg", "batch", "frames") if k in params}
     units = [UnitSpec("generate_image", "gpu",
                       {**common, "seed": (params["seed"] + i) % SEED_SPACE, "index": i})
              for i in range(params["count"])]
     many = f" ×{params['count']}" if params["count"] > 1 else ""
-    return f"Images : « {_short(params['prompt'])} »{many}", units, {"batch": params["batch"]}
+    what = "Vidéos" if catalog.is_video(params["model"]) else "Images"
+    return f"{what} : « {_short(params['prompt'])} »{many}", units, {"batch": params["batch"]}
 
 
 def runnable_here(model) -> bool:
@@ -94,8 +108,11 @@ def checked(payload) -> dict:
     params = normalize({**payload, "count": 1})
     if params["model"] != payload.get("model") or params["seed"] != int(payload["seed"]):
         raise ValueError("ordre d'image incohérent")
-    return {**payload, "width": params["width"], "height": params["height"],
-            "steps": params["steps"], "cfg": params["cfg"], "negative": params["negative"]}
+    found = {**payload, "width": params["width"], "height": params["height"],
+             "steps": params["steps"], "cfg": params["cfg"], "negative": params["negative"]}
+    if "frames" in params:
+        found["frames"] = params["frames"]
+    return found
 
 
 def compute_image(payload, file, options, stop=None):
@@ -103,20 +120,32 @@ def compute_image(payload, file, options, stop=None):
     # Une unité d'ici n'a pas de signal d'arrêt : AIODOS qui s'arrête interrompt le
     # chargement ou l'image (l'unité est rendue à la file, sans compter d'essai)
     halt = stop if stop is not None else pacing.stopping()
+    machine = str(settings.get("node_name") or settings.machine_name())[:80]
+    if catalog.is_video(payload["model"]):
+        made = pacing.paced(lambda: generate.video(payload, halt), stop)
+        return {"webm": base64.b64encode(made["webm"]).decode("ascii"),
+                "frames": made["frames"], "fps": made["fps"],
+                "seconds": round(made["seconds"], 2), "machine": machine}
     made = pacing.paced(lambda: generate.image(payload, halt), stop)
     return {"png": base64.b64encode(made["png"]).decode("ascii"),
-            "seconds": round(made["seconds"], 2),
-            "machine": str(settings.get("node_name") or settings.machine_name())[:80]}
+            "seconds": round(made["seconds"], 2), "machine": machine}
 
 
 def _decoded(payload, output) -> bytes:
+    """Le PNG ou le WebM d'une sortie, contrôlé (signature, poids, taille d'une image)."""
+    video = catalog.is_video(payload["model"])
+    what = "vidéo" if video else "image"
     try:
-        data = base64.b64decode(str(output.get("png") or ""), validate=True)
+        data = base64.b64decode(str(output.get("webm" if video else "png") or ""),
+                                validate=True)
     except ValueError as exc:
-        raise ValueError("image illisible") from exc
-    if len(data) > MAX_PNG:
-        raise ValueError("image trop lourde")
-    if generate.png_size(data) != (payload["width"], payload["height"]):
+        raise ValueError(f"{what} illisible") from exc
+    if len(data) > (MAX_WEBM if video else MAX_PNG):
+        raise ValueError(f"{what} trop lourde")
+    if video:
+        if not generate.is_webm(data):
+            raise ValueError("ce n'est pas une vidéo WebM")
+    elif generate.png_size(data) != (payload["width"], payload["height"]):
         raise ValueError("image d'une autre taille que celle demandée")
     return data
 
@@ -132,8 +161,17 @@ def assimilate_image(payload, output):
     except (TypeError, ValueError):
         seconds = None
     row = gallery.add(payload, _decoded(payload, output),
-                      machine=str(output.get("machine") or "")[:80], seconds=seconds)
+                      machine=str(output.get("machine") or "")[:80], seconds=seconds,
+                      frames=_small_int(output.get("frames")), fps=_small_int(output.get("fps")))
     return {"image_id": row["id"], "seed": row["seed"], "machine": row["machine"]}
+
+
+def _small_int(value) -> int | None:
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return value if 0 < value < 100000 else None
 
 
 def finalize_images(job_id, params, units):

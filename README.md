@@ -149,13 +149,17 @@ ensuite, chaque machine garde les poids en cache.
 Mesures, choix et limites : [docs/gros-modeles.md](docs/gros-modeles.md) ; images et
 vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 
-**Créer des images, à plusieurs machines** (vue Images) : on décrit l'image, et chacune
-devient une unité de la file, calculée ici ou par mes machines qui ont le même modèle et
-prêtent leur puissance ; l'image revient et n'est gardée qu'ici. Le moteur est
+**Créer des images et des vidéos, à plusieurs machines** (vue Images et vidéos) : on décrit
+l'image ou la vidéo, et chacune devient une unité de la file, calculée ici ou par mes
+machines qui ont le même modèle et prêtent leur puissance ; elle revient et n'est gardée
+qu'ici. Le moteur est
 [stable-diffusion.cpp], livré avec les mises à jour, et le modèle Z-Image Turbo
 (Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis la vue,
 ou copié d'une de mes machines qui l'a déjà, sans Internet. Sur une
-RTX 4070 de portable : 22 s par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
+RTX 4070 de portable : 22 s par image en 1024 × 1024. Pour la vidéo, Wan 2.1 (Apache-2.0,
+7,2 Go) : 2 s de vidéo en 480p en moins de 4 minutes ; MiniMax H3 (vidéo et son) est aussi
+proposé, sa licence affichée (elle exclut notamment l'Union européenne : à chacun d'en
+juger). Rien de tout cela ne part jamais chez un ami. Détails et mesures :
 [docs/generation-repartie.md](docs/generation-repartie.md).
 
 ## Installation
