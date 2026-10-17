@@ -56,6 +56,7 @@ La liste des modèles (`/v1/models`, `/api/tags`) donne :
 | `qwen3.5:9b` (le nom seul) | **choix automatique** : cette machine si elle a le modèle et qu'elle est libre (sauf s'il n'y tient pas en mémoire vidéo alors qu'une autre machine libre l'y fait tenir), sinon la moins occupée de tes machines qui le prêtent |
 | `peer:<machine>:qwen3.5:9b` | cette machine appairée précisément (une des tiennes, ou celle d'un ami qui te prête ses modèles) |
 | `local:qwen3.5:9b` | cette machine seulement (accepté, pas listé) |
+| `reparti:qwen3.6` | un gros modèle réparti entre tes machines ([gros-modeles.md](gros-modeles.md)), tel quel |
 
 Les machines d'un ami ne répondent d'office que si tu l'acceptes (Réglages → Conversation,
 « faire aussi répondre les machines de mes amis »). Les modèles du cloud ne passent pas par

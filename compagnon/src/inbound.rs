@@ -4,7 +4,8 @@
 //! La clé de l'appelant, authentifiée par la poignée de main TLS, est ajoutée dans
 //! l'en-tête `X-Aiodos-Peer` : AIODOS la compare à l'émetteur de l'enveloppe scellée,
 //! et sait que la requête vient du compagnon (l'adresse qu'il voit, 127.0.0.1, n'est
-//! alors pas celle de la machine). Seule l'API `/p2p/…` passe.
+//! alors pas celle de la machine). Seule l'API `/p2p/…` passe, et les tunnels vers les
+//! services qu'AIODOS a ouverts à cette machine (`/p2p/v1/tunnel/…`, cf. tunnel.rs).
 
 use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
 
@@ -28,6 +29,7 @@ use crate::{
     pool::{Pool, Tracked},
     reply::{self, Body, BoxError},
     stream_io::QuicIo,
+    tunnel,
 };
 
 /// Poignée de main d'une connexion entrante : au-delà, abandon.
@@ -106,7 +108,7 @@ async fn serve_stream(pool: Arc<Pool>, peer: EndpointId, io: QuicIo) {
         .keep_alive(false)
         .timer(TokioTimer::new())
         .header_read_timeout(HEADER_TIMEOUT);
-    if let Err(err) = builder.serve_connection(TokioIo::new(io), service).await {
+    if let Err(err) = builder.serve_connection(TokioIo::new(io), service).with_upgrades().await {
         debug!("échange avec {} interrompu : {err}", peer.fmt_short());
     }
 }
@@ -114,6 +116,9 @@ async fn serve_stream(pool: Arc<Pool>, peer: EndpointId, io: QuicIo) {
 /// Relaie une requête reçue vers le serveur réseau local d'AIODOS.
 async fn forward(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> Response<Body> {
     pool.count_in(peer);
+    if req.uri().path().starts_with(tunnel::PATH_PREFIX) {
+        return tunnel::accept(pool, peer, req).await;
+    }
     if !req.uri().path().starts_with("/p2p/") {
         return reply::detail(StatusCode::NOT_FOUND, "Chemin inconnu.");
     }

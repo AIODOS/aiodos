@@ -15,6 +15,12 @@ _caps_lock = threading.Lock()
 # redemandée par chaque vue qui s'ouvre en même temps.
 _models_cache = {"at": 0.0, "models": None}
 MODELS_TTL = 10
+# Fils de calcul demandés pour les embeddings sur batterie (cf. jobs/pacing.py), seulement
+# si le modèle tourne sur le processeur : sur la carte graphique, num_thread ne change ni
+# le débit ni la charge (mesuré), et chaque valeur différente fait recharger le modèle.
+# D'où une seule valeur à la fois pour tous les embeddings, conversations comprises.
+_threads = {"limit": None, "cpu": set(), "checked": {}}
+LOADED_TTL = 30
 
 
 def base() -> str:
@@ -134,14 +140,48 @@ def chat_stream(model, messages, think=None, stop=None, options=None, stats=Fals
                 break
 
 
+def set_thread_limit(limit):
+    """Fils de calcul pour les embeddings d'un modèle sur le processeur (None : le choix
+    d'Ollama). Appelé par jobs/pacing.py quand l'alimentation change."""
+    _threads["limit"] = limit
+
+
+def _full_name(model: str) -> str:
+    return model if ":" in model else f"{model}:latest"
+
+
+def _on_cpu(model: str) -> bool:
+    """Le modèle tourne-t-il (en partie) sur le processeur ? D'après /api/ps, relu au
+    plus toutes les LOADED_TTL s. Un modèle vu sur le processeur le reste tant qu'on ne
+    l'a pas revu chargé ailleurs : déchargé puis rechargé, il le serait sans num_thread."""
+    name, now = _full_name(model), time.monotonic()
+    if now - _threads["checked"].get(name, 0.0) > LOADED_TTL:
+        _threads["checked"][name] = now
+        for m in loaded_models():
+            if _full_name(m["name"]) == name:
+                if m["size_vram"] < m["size"]:
+                    _threads["cpu"].add(name)
+                else:
+                    _threads["cpu"].discard(name)
+    return name in _threads["cpu"]
+
+
+def embed_options(model: str) -> dict:
+    limit = _threads["limit"]
+    return {"num_thread": int(limit)} if limit and _on_cpu(model) else {}
+
+
 def embed(texts, model=None) -> list:
     """Vecteurs d'embedding d'une liste de textes (envoyés par lots)."""
     model = model or settings.get("embed_model")
     vectors = []
     for start in range(0, len(texts), 16):
         batch = texts[start:start + 16]
-        r = requests.post(base() + "/api/embed",
-                          json={"model": model, "input": batch}, timeout=180)
+        body = {"model": model, "input": batch}
+        options = embed_options(model)
+        if options:
+            body["options"] = options
+        r = requests.post(base() + "/api/embed", json=body, timeout=180)
         if r.status_code >= 400:
             raise RuntimeError(_error_text(r))
         vectors.extend(r.json().get("embeddings") or [])

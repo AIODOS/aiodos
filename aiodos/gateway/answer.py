@@ -16,6 +16,7 @@ import threading
 
 import requests
 
+from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
 from aiodos.network import placement, remote_models
 from aiodos.network.client import PeerError
@@ -46,7 +47,8 @@ class Upstream(Exception):
 
 
 def is_local(model) -> bool:
-    return not remote_models.parse(model)
+    """Un modèle de l'Ollama de cette machine (ni prêté, ni réparti)."""
+    return not (remote_models.parse(model) or cluster.parse(model))
 
 
 def plan(model_id, executor, *, local_only=False, prefer_local=False) -> list:
@@ -161,10 +163,14 @@ def error_text(content: bytes, status: int) -> str:
 
 
 def remote(model, messages, think, options, stop):
-    """Conversation en texte calculée par une machine appairée : (genre, texte), puis
-    ("stats", …) si elle sait le dire."""
-    yield from remote_models.chat_stream(model, messages, think, stop, options=options,
-                                         stats=True)
+    """Conversation en texte calculée ailleurs que par l'Ollama d'ici : une machine
+    appairée, qui donne ensuite ("stats", …) si elle sait le dire, ou un gros modèle
+    réparti entre mes machines."""
+    if cluster.parse(model):
+        yield from cluster.chat_stream(model, messages, think, stop)
+    else:
+        yield from remote_models.chat_stream(model, messages, think, stop, options=options,
+                                             stats=True)
 
 
 def run(models: list, attempt, executor):

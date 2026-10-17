@@ -32,7 +32,10 @@ class Revalidated(StaticFiles):
 
 
 def create_app(token: str, hosts: set, network_options: dict | None = None,
-               slots: dict | None = None, windowed: bool = False) -> FastAPI:
+               slots: dict | None = None, windowed: bool = False,
+               show_key: str | None = None) -> FastAPI:
+    """show_key : clé qui permet à AIODOS relancé de faire revenir la fenêtre de cette
+    instance (POST /instance/show, cf. instance.wake_running) ; None : aucune."""
     bus = EventBus()
 
     @asynccontextmanager
@@ -60,9 +63,11 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
     app = FastAPI(title="AIODOS", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
+    app.state.show_key = show_key
     for module in (chat, conversations, gateway, knowledge, jobs, network, node, system,
                    updates):
         app.include_router(module.router)
+    app.include_router(system.window_router)
 
     css = render.pygments_css()
 

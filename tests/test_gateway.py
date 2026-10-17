@@ -582,3 +582,30 @@ def test_remote_models_report_the_lender(gateway, lender):
     reply = gateway.post("/api/chat", {"model": LENT, "stream": False,
                                        "messages": [{"role": "user", "content": "Salut"}]})
     assert reply.json()["message"]["content"] == "Bonjour de PC fixe"
+
+
+def test_large_models_split_between_my_machines(gateway, monkeypatch):
+    """Un gros modèle réparti (« reparti:… », cluster/group.py) est proposé tel quel et
+    répond par son groupe, au format de chaque API ; pas d'embeddings avec lui."""
+    from aiodos.cluster import group as cluster
+    monkeypatch.setattr(cluster, "available", lambda: [
+        {"id": "reparti:qwen3.6", "label": "qwen3.6", "group": "cluster",
+         "machines": ["PC fixe"], "complete": True, "size": 22}])
+    asked = []
+
+    def fake_group(model, messages, think=True, stop=None):
+        asked.append((model, messages))
+        yield "content", "Réponse du groupe"
+    monkeypatch.setattr(cluster, "chat_stream", fake_group)
+    listed = {m["id"]: m for m in gateway.get("/v1/models").json()["data"]}
+    assert listed["reparti:qwen3.6"]["owned_by"] == "réparti"
+    reply = gateway.post("/v1/chat/completions", {"model": "reparti:qwen3.6", "messages": [
+        {"role": "user", "content": "Salut"}]})
+    assert reply.json()["choices"][0]["message"]["content"] == "Réponse du groupe"
+    assert asked == [("reparti:qwen3.6", [{"role": "user", "content": "Salut"}])]
+    lines = [json.loads(l) for l in gateway.post("/api/chat", {
+        "model": "reparti:qwen3.6", "messages": [{"role": "user", "content": "Salut"}]}
+    ).text.splitlines() if l]
+    assert "".join(l["message"]["content"] for l in lines) == "Réponse du groupe"
+    assert gateway.post("/v1/embeddings", {"model": "reparti:qwen3.6",
+                                           "input": "x"}).status_code == 400

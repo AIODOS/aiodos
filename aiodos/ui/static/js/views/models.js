@@ -4,6 +4,7 @@
 import { state } from '../state.js';
 
 export const AUTO = 'auto:';
+const CLUSTER = 'reparti:';
 
 /** [{ name, size, auto: identifiant automatique ou null, machines: [{ id, label, slow }] }] */
 export function catalog() {
@@ -31,10 +32,12 @@ export function catalog() {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 }
 
-/** Nom du modèle désigné par un identifiant : « auto:x », « peer:<machine>:x » ou « x ». */
+/** Nom du modèle désigné par un identifiant : « auto:x », « peer:<machine>:x »,
+ *  « reparti:x » (gros modèle réparti entre mes machines) ou « x ». */
 export function modelName(id) {
   if (!id) return '';
   if (id.startsWith(AUTO)) return id.slice(AUTO.length);
+  if (id.startsWith(CLUSTER)) return id.slice(CLUSTER.length);
   if (id.startsWith('peer:')) return id.split(':').slice(2).join(':');
   return id;
 }
@@ -48,9 +51,11 @@ export function modelLabel(id, here = false) {
   const m = state.models.find(x => x.id === id);
   if (m) {
     if (m.peer) return `${m.label} · ${m.peer}`;
+    if (m.group === 'cluster') return `${m.label} · réparti`;
     return here && m.group === 'local' ? `${m.label} · cette machine` : m.label;
   }
   if (id?.startsWith('peer:')) return `${modelName(id)} · autre machine`;
+  if (id?.startsWith(CLUSTER)) return `${modelName(id)} · réparti`;
   return here && id && !id.startsWith('cloud:') ? `${id} · cette machine` : (id || '');
 }
 
@@ -62,5 +67,5 @@ export function defaultChoice(entry) {
 /** Modèle par défaut réglé avant le mode automatique : le nom seul y désignait le modèle,
  *  pas la machine ; il vaut désormais « automatique ». */
 export function asDefault(id) {
-  return id && !/^(auto|peer|cloud):/.test(id) ? AUTO + id : id;
+  return id && !/^(auto|peer|cloud|reparti):/.test(id) ? AUTO + id : id;
 }

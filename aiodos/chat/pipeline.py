@@ -15,6 +15,7 @@ import logging
 import re
 
 from aiodos import settings
+from aiodos.cluster import group as cluster
 from aiodos.knowledge import search, store
 from aiodos.network import placement, remote_models
 from aiodos.services import cloud, ollama, web
@@ -61,14 +62,15 @@ def preflight(text: str, model: str) -> dict:
 
 def runs_here(model) -> bool:
     """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ? Pour le mode
-    automatique, on ne le sait qu'une fois la machine choisie (placement.run)."""
+    automatique, on ne le sait qu'une fois la machine choisie (placement.run) ; un gros
+    modèle réparti ne tourne pas seulement ici."""
     return not (cloud.provider_of(model) or remote_models.parse(model)
-                or placement.parse(model))
+                or placement.parse(model) or cluster.parse(model))
 
 
 def available_models() -> list:
     """Modèles de conversation : en mode automatique (une fois chacun), locaux (Ollama),
-    ceux de mes machines, puis cloud."""
+    ceux de mes machines, les gros modèles répartis entre elles, puis cloud."""
     models = []
     try:
         installed = ollama.list_models()
@@ -85,6 +87,10 @@ def available_models() -> list:
         models.extend(remote_models.available())
     except Exception as exc:
         log.warning("Modèles des machines appairées indisponibles : %s", exc)
+    try:
+        models.extend(cluster.available())             # gros modèles répartis
+    except Exception as exc:
+        log.warning("Modèles répartis indisponibles : %s", exc)
     models[:0] = placement.auto_entries(models)
     for name, spec in cloud.PROVIDERS.items():
         models.append({"id": cloud.MODEL_PREFIX + name, "label": spec["label"],
@@ -204,6 +210,8 @@ def generate(model, messages, think=True, stop=None):
         yield from cloud.chat_stream(provider, messages, stop=stop)
     elif remote_models.parse(model):
         yield from remote_models.chat_stream(model, messages, think, stop)
+    elif cluster.parse(model):
+        yield from cluster.chat_stream(model, messages, think, stop)
     else:
         yield from ollama.chat_stream(model, messages, think=None if think else False,
                                       stop=stop)

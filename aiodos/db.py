@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -84,6 +84,16 @@ MIGRATIONS = {
         net_addrs TEXT,
         used      REAL
     );
+    """,
+    # Prêt pendant l'utilisation (17/10/2026) : share_when_idle passe à False par défaut.
+    # Une machine où le partage a déjà été réglé garde l'ancienne règle (« seulement quand
+    # je n'utilise pas ce PC »), celle que son utilisateur a acceptée, sauf s'il a choisi
+    # lui-même : le nouveau défaut ne vaut que pour les nouvelles installations.
+    6: """
+    INSERT INTO settings(key, value)
+    SELECT 'share_when_idle', 'true'
+    WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'share_enabled')
+      AND NOT EXISTS (SELECT 1 FROM settings WHERE key = 'share_when_idle');
     """,
 }
 

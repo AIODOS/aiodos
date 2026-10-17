@@ -5,6 +5,7 @@ qui peut faire quoi : VRAM, modèles installés, machine inactive ou sur secteur
 L'alimentation (secteur, batterie, température) est lue par node/power.py.
 """
 import ctypes
+import functools
 import json
 import os
 import platform
@@ -15,7 +16,8 @@ import time
 import uuid
 
 from aiodos import __version__, db, settings
-from aiodos.node import android, power
+from aiodos.cluster import engine
+from aiodos.node import android, power, priority
 from aiodos.services import ollama
 from aiodos.updates.store import Store
 
@@ -83,7 +85,8 @@ def gpus() -> list:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.used,utilization.gpu",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5, creationflags=_NO_WINDOW).stdout
+            capture_output=True, text=True, timeout=5,
+            creationflags=_NO_WINDOW | priority.CREATION_FLAGS).stdout
     except (OSError, subprocess.SubprocessError):
         return []
     result = []
@@ -96,8 +99,19 @@ def gpus() -> list:
     return result
 
 
+SIMULATE_IDLE_ENV = "AIODOS_SIMULATE_IDLE"
+
+
 def idle_seconds():
-    """Temps depuis la dernière action clavier/souris (base du mode « économiseur »)."""
+    """Temps depuis la dernière action clavier/souris (base du mode « économiseur »).
+    AIODOS_SIMULATE_IDLE=secondes le remplace : essais et tests, qui ne doivent pas
+    dépendre de ce que fait l'utilisateur de la machine pendant qu'ils tournent."""
+    simulated = os.environ.get(SIMULATE_IDLE_ENV, "").strip()
+    if simulated:
+        try:
+            return max(0.0, float(simulated))
+        except ValueError:
+            pass
     if sys.platform != "win32":
         return None
 
@@ -105,9 +119,29 @@ def idle_seconds():
         _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_ulong)]
     info = LastInput()
     info.cbSize = ctypes.sizeof(LastInput)
-    if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
-        return max(0, (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000)
+    user32, kernel32 = _input_api()
+    if user32.GetLastInputInfo(ctypes.byref(info)):
+        return idle_from_ticks(kernel32.GetTickCount(), info.dwTime)
     return None
+
+
+def idle_from_ticks(now: int, last_input: int) -> float:
+    """Secondes entre deux instants de GetTickCount, un compteur de millisecondes sur
+    32 bits sans signe : il dépasse 2^31 après 24,9 jours de fonctionnement et repart de
+    zéro après 49,7. La différence se calcule donc modulo 2^32."""
+    return ((now - last_input) & 0xFFFFFFFF) / 1000
+
+
+@functools.lru_cache(maxsize=1)
+def _input_api():
+    """user32 et kernel32 avec des types exacts : sans restype, ctypes lirait GetTickCount
+    comme un entier signé, négatif au-delà de 24,9 jours (le PC passerait pour utilisé)."""
+    from ctypes import wintypes
+    user32, kernel32 = ctypes.WinDLL("user32"), ctypes.WinDLL("kernel32")
+    kernel32.GetTickCount.restype = wintypes.DWORD
+    user32.GetLastInputInfo.argtypes = [ctypes.c_void_p]
+    user32.GetLastInputInfo.restype = wintypes.BOOL
+    return user32, kernel32
 
 
 def _models(vram_total) -> list:
@@ -122,6 +156,20 @@ def _models(vram_total) -> list:
         m["fits_vram"] = bool(vram_total) and m["size"] <= vram_total * 0.92
         m["loaded"] = m["name"] in loaded
     return models
+
+
+def _cluster() -> dict:
+    """Carte graphique prêtée à mes machines pour les gros modèles répartis
+    (cluster/helper.py) : version de llama.cpp, mémoire libre de la carte prêtée. Rien
+    n'est demandé à llama.cpp tant que le prêt est coupé."""
+    if not settings.get("lend_gpu"):
+        return {"lends": False}
+    found = engine.info()
+    best = engine.lent_device(found["devices"]) if found else None
+    return {"lends": bool(settings.get("lend_gpu") and best),
+            "version": found["version"] if found else None,
+            "device": best["label"] if best else None,
+            "free_mib": best["free_mib"] if best else 0}
 
 
 def _updates() -> dict:
@@ -153,6 +201,7 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
+        "cluster": _cluster(),                   # gros modèles répartis (cluster/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
     }
     with _cache_lock:

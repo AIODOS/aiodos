@@ -10,6 +10,7 @@ const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedd
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
 let root;
 let shareMobile = null;            // préférences dessinées pour un téléphone ?
+let trayRow = null;                // réglage de la zone de notification dessiné ?
 
 export function mountNode(container) {
   root = h(`
@@ -23,15 +24,18 @@ export function mountNode(container) {
         <div class="card" id="node-machine"></div>
         <div class="card" id="node-share"></div>
       </div>
+      <div class="card" id="node-background" style="margin-top:16px"></div>
       <div class="card" id="node-models" style="margin-top:16px"></div>
       <div class="card" id="node-network" style="margin-top:16px"></div>
     </div></div>`);
   container.append(root);
-  on('view:shown', view => { if (view === 'node') loadNode(); });
-  on('settings:loaded', renderShare);
+  on('view:shown', view => { if (view === 'node') { loadNode(); loadExecutor(); } });
+  on('settings:loaded', () => { renderShare(); renderBackground(); });
   on('network:loaded', () => { renderNetworkSummary(); renderShareStatus(); });
-  on('executor:changed', renderShareStatus);
-  setInterval(() => { if (state.view === 'node') { loadNode(); loadNetwork(); } }, 5000);
+  on('executor:changed', () => { renderShareStatus(); renderBackgroundStatus(); });
+  window.addEventListener('pywebviewready', renderBackground);
+  // Fenêtre cachée ou réduite : rien à rafraîchir (le profil lance nvidia-smi)
+  setInterval(() => { if (state.view === 'node' && !document.hidden) { loadNode(); loadNetwork(); } }, 5000);
 }
 
 export async function loadNode() {
@@ -96,6 +100,65 @@ function render() {
   // Les préférences ne sont reconstruites qu'à leur changement (settings:loaded) :
   // les redessiner toutes les 5 s fermerait une liste ouverte et perdrait un clic
   if (!$('#share-status', root) || shareMobile !== !!n.power?.mobile) renderShare();
+  if (!$('#background-status', root) || trayRow !== windowsWindow()) renderBackground();
+}
+
+// État de la file (dont la cadence du travail de fond), s'il n'est pas encore arrivé
+// par le flux d'événements
+async function loadExecutor() {
+  if (state.executor) return;
+  try {
+    state.executor = (await get('/jobs')).executor;
+    emit('executor:changed');
+  } catch (e) { /* nœud indisponible : on réessaiera */ }
+}
+
+// Travail de fond : priorité basse toujours, et sur batterie, selon le réglage
+function renderBackground() {
+  const box = root && $('#node-background', root);
+  if (!box || !state.settings) return;
+  const mode = state.settings.battery_mode || 'eco';
+  const options = [['eco', 'Ménager la batterie (conseillé)'], ['pause', 'Attendre le secteur'],
+    ['normal', 'Pleine vitesse']];
+  trayRow = windowsWindow();
+  box.innerHTML = `
+    <h2>${icon('cpu')}Travail de fond</h2>
+    <div id="background-status"></div>
+    <p class="hint">Indexations et calculs pour tes machines passent après toi : priorité basse, toujours
+      (et sous Windows, mode efficacité du processeur). Pendant une conversation sur cette machine, le calcul
+      sur la carte graphique attend la fin de la réponse.</p>
+    <div class="setting-row"><div class="txt"><b>Sur batterie</b><small>Ménager : une unité à la fois par
+      ressource (carte graphique, processeur…), moins de fils de calcul, et des pauses (calcul la moitié du
+      temps). Attendre : rien ne tourne en fond avant le retour du secteur. Les conversations restent servies
+      dans tous les cas.</small></div>
+      <select class="select" id="battery-mode" style="width:240px">${options.map(([v, l]) =>
+        `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',
+      "Il reste dans la zone de notification, près de l'horloge : le nœud continue de servir tes machines "
+      + "et d'avancer le travail de fond. Clic sur l'icône pour rouvrir, clic droit pour quitter.") : ''}`;
+  $('#battery-mode', box).onchange = e => save({ battery_mode: e.target.value });
+  box.querySelectorAll('input[data-key]').forEach(input => {
+    input.onchange = () => save({ [input.dataset.key]: input.checked });
+  });
+  renderBackgroundStatus();
+}
+
+// La fenêtre de Windows (pywebview) : la seule qui a une icône dans la zone de notification
+function windowsWindow() {
+  return !!window.pywebview && /^windows/i.test(state.node?.os || '');
+}
+
+function renderBackgroundStatus() {
+  const box = root && $('#background-status', root);
+  if (!box) return;
+  const p = state.executor?.pacing;
+  if (!p) { box.innerHTML = ''; return; }
+  const [cls, label, detail] = p.chatting
+    ? ['warn', 'Conversation en cours', 'Le calcul sur la carte graphique attend la fin de la réponse.']
+    : p.mode === 'pause' ? ['warn', 'En pause', p.detail]
+      : p.mode === 'eco' ? ['ok', 'Ménagé', p.detail] : ['ok', 'Pleine vitesse', p.detail];
+  box.innerHTML = `<div class="share-status"><span class="pill ${cls}">${label}</span>
+    <span class="muted">${esc(detail)}</span></div>`;
 }
 
 function renderNetworkSummary() {
@@ -153,8 +216,8 @@ function renderShare() {
   const mobile = shareMobile = !!state.node?.power?.mobile;
   const device = mobile ? 'ce téléphone' : 'ce PC';
   const idleRows = `
-    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens.")}
-    <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Avant de commencer à prêter de la puissance.</small></div>
+    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens. Désactivé, ce PC prête aussi pendant que tu l'utilises : en priorité basse, jamais sur batterie, la carte graphique la moitié du temps au plus, et tes conversations passent devant.")}
+    <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Sans clavier ni souris pendant ce temps, ce PC est considéré comme libre : le prêt n'est plus retenu (avec le réglage ci-dessus, il ne commence qu'à ce moment).</small></div>
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
   const phoneRows = `
@@ -170,6 +233,7 @@ function renderShare() {
     ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', `Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ${device}. Les résultats sont enregistrés ici.`)}
     ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', `${mobile ? 'Ce téléphone' : 'Ce PC'} calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.`)}
     ${shareRow('lend_models', 'Prêter mes modèles pour leurs conversations', `Elles pourront faire répondre leurs conversations par les modèles de ${device}. Le texte passe ici, chiffré, le temps de la réponse, sans être enregistré ; ton travail de fond se met en pause pendant ce temps.`)}
+    ${mobile ? '' : shareRow('lend_gpu', 'Prêter ma carte graphique pour les gros modèles', "Un modèle trop gros pour une seule machine est découpé entre mes machines : celle-ci en garde une tranche le temps d'une conversation, par un tunnel chiffré du compagnon. Seulement pour mes machines, jamais pour un ami ; il faut llama.cpp de la même version des deux côtés.")}
     ${mobile ? '' : idleRows}
     ${shareRow('share_on_ac_only', mobile ? 'Seulement en charge' : 'Seulement sur secteur',
       mobile ? "Jamais sur batterie. L'inactivité d'un téléphone n'est pas mesurable : c'est la charge qui compte." : 'Jamais sur batterie.')}

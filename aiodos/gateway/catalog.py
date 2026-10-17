@@ -4,7 +4,8 @@
   automatique, network/placement.py), parmi cette machine et mes machines qui le prêtent ;
 - « peer:<machine>:qwen3.5:9b » : une machine appairée précise, une des miennes ou celle
   d'un ami qui me prête ses modèles (network/remote_models.py) ;
-- « local:qwen3.5:9b » : cette machine seulement (accepté, pas listé).
+- « local:qwen3.5:9b » : cette machine seulement (accepté, pas listé) ;
+- « reparti:qwen3.6 » : un gros modèle réparti entre mes machines (cluster/group.py).
 Les modèles du cloud n'y figurent pas : leur envoi se valide dans l'interface, message par
 message. Les modèles d'embedding ne servent que sur cette machine.
 """
@@ -14,6 +15,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from aiodos.cluster import group as cluster
 from aiodos.network import placement, remote_models
 from aiodos.services import cloud, ollama
 
@@ -36,7 +38,7 @@ def internal(model_id) -> str:
         raise UnknownModel("Modèle manquant.")
     if name.startswith(cloud.MODEL_PREFIX):
         raise UnknownModel(f"Les modèles du cloud ne passent pas par la passerelle : « {name} ».")
-    if remote_models.parse(name) or placement.parse(name):
+    if remote_models.parse(name) or placement.parse(name) or cluster.parse(name):
         return name
     if name.startswith(LOCAL):
         if not name[len(LOCAL):]:
@@ -48,9 +50,9 @@ def internal(model_id) -> str:
 def local_name(model_id) -> str:
     """Modèle de cette machine désigné par un outil (embeddings : jamais ailleurs)."""
     model = internal(model_id)
-    if remote_models.parse(model):
+    if remote_models.parse(model) or cluster.parse(model):
         raise UnknownModel("Les embeddings ne se calculent que sur cette machine : "
-                           f"« {model_id} » est le modèle d'une autre machine.")
+                           f"« {model_id} » n'est pas un modèle d'Ollama d'ici.")
     return placement.parse(model) or model
 
 
@@ -99,6 +101,14 @@ def entries() -> list:
             out.append(_remote_entry(m, m["label"], None))
     for m in remote:                      # chaque machine qui le prête, nommément
         out.append(_remote_entry(m, m["id"], m["peer"]))
+    try:
+        offers = cluster.available()      # gros modèles répartis entre mes machines
+    except Exception:
+        offers = []
+    for m in offers:
+        out.append({"id": m["id"], "name": m["label"], "machine": "réparti", "remote": True,
+                    "size": m.get("size", 0), "digest": "", "details": _remote_details({}),
+                    "capabilities": ["completion"], "modified_at": now_iso()})
     return out
 
 

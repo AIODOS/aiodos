@@ -311,3 +311,18 @@ def test_an_automatic_conversation_says_which_machine_answered(monkeypatch, fake
         lender("fixe", "PC fixe", MODEL, lends=False)      # plus personne : refus lisible
         refused = ui.post("/api/chat", headers=AUTH, json={"text": "Encore", "model": AUTO})
         assert refused.status_code == 400 and "Aucune machine" in refused.json()["detail"]
+
+
+def test_a_large_model_split_between_my_machines_passes_as_it_is(monkeypatch):
+    """« reparti:<modèle> » (cluster/group.py) : choisi tel quel, jamais en mode automatique,
+    et sans pause du travail de fond (il ne tourne pas seulement ici, cf. runs_here)."""
+    local_models(monkeypatch)
+    executor = Executor()
+    assert placement.plan("reparti:qwen3.6", executor) == ["reparti:qwen3.6"]
+    assert not pipeline.runs_here("reparti:qwen3.6")
+    assert placement.destination("reparti:qwen3.6") is None     # le texte reste ici
+
+    def attempt(model):
+        yield "content", str(executor.interactive)
+    assert list(placement.run(["reparti:qwen3.6"], attempt, executor))[-1] == ("content", "0")
+    assert placement.machine_of("reparti:qwen3.6") == "réparti entre mes machines"

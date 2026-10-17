@@ -17,7 +17,8 @@ Seules mes machines servent en mode automatique : celles d'un ami seulement si l
 réglage auto_route_friends le permet, car la conversation passe chez lui le temps de
 la réponse. Une machine mise de côté après un contrôle échoué n'est jamais choisie
 d'office. Le choix d'une machine précise (« peer:<machine>:<modèle> », ou le nom seul
-pour cette machine) reste possible et passe tel quel.
+pour cette machine) reste possible et passe tel quel, comme un gros modèle réparti entre
+mes machines (« reparti:<modèle> », cluster/group.py).
 
 Tant qu'aucun mot de la réponse n'est arrivé, une machine qui échoue (injoignable, ne
 prête plus, Ollama arrêté…) cède la place à la suivante (run).
@@ -34,6 +35,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from aiodos import settings
+from aiodos.cluster import group as cluster
 from aiodos.jobs import queue
 from aiodos.network import peers, remote_models
 from aiodos.node import identity
@@ -225,6 +227,8 @@ def plan(model, executor=None) -> list:
 
 def machine_of(model) -> str | None:
     """Nom de la machine qui répond avec cet identifiant concret (None : cette machine)."""
+    if cluster.parse(model):
+        return "réparti entre mes machines"
     parsed = remote_models.parse(model)
     if not parsed:
         return None
@@ -245,9 +249,12 @@ def destination(model) -> str | None:
 @contextmanager
 def _occupy(model, executor):
     """Pendant une réponse : ici, les unités GPU de fond attendent (l'interactif
-    d'abord) ; ailleurs, la conversation compte dans la charge de cette machine."""
+    d'abord) ; ailleurs, la conversation compte dans la charge de cette machine. Un gros
+    modèle réparti, qui ne tourne pas seulement ici, garde la règle de chat.py avant le
+    mode automatique (pipeline.runs_here) : pas de pause."""
     parsed = remote_models.parse(model)
-    local = executor is not None and not parsed and not str(model).startswith("cloud:")
+    local = (executor is not None and not parsed and not str(model).startswith("cloud:")
+             and not cluster.parse(model))
     if local:
         executor.interactive_begin()
     elif parsed:

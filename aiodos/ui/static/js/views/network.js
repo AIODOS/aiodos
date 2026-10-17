@@ -22,7 +22,7 @@ export function mountNetwork(container) {
   container.append(root);
   on('network:changed', loadNetwork);
   on('view:shown', view => { if (view === 'network') loadNetwork(); });
-  setInterval(() => { if (state.view === 'network') loadNetwork(); }, 5000);
+  setInterval(() => { if (state.view === 'network' && !document.hidden) loadNetwork(); }, 5000);
 }
 
 export async function loadNetwork() {

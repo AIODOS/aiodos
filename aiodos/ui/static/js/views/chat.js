@@ -88,10 +88,10 @@ function vramTotal() {
 }
 
 /** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
- *  précise, ou un modèle du cloud. */
+ *  précise, un gros modèle réparti, ou un modèle du cloud. */
 function selectedModel() {
   const value = el.model.value;
-  if (value.startsWith('cloud:')) return value;
+  if (/^(cloud|reparti):/.test(value)) return value;
   const entry = entries.find(e => e.name === value);
   return entry ? (el.machine.value || defaultChoice(entry)) : '';
 }
@@ -103,6 +103,7 @@ function fillModels() {
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
   const cloud = state.models.filter(m => m.group === 'cloud');
+  const cluster = state.models.filter(m => m.group === 'cluster');
   el.model.innerHTML = '';
   const group = (label, items) => {
     if (!items.length) return;
@@ -114,6 +115,8 @@ function fillModels() {
   // Chaque modèle une fois, même s'il est sur plusieurs machines : la machine se choisit à côté
   group(remote.length ? 'Modèles · la machine qui répond se choisit seule' : 'Sur cette machine',
     entries.map(e => [e.name, `${e.name} · ${bytes(e.size)}`]));
+  group('Réparti entre mes machines · cartes graphiques réunies', cluster.map(m => [m.id,
+    `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`]));
   group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));
   selectModel(wanted);
   el.banner.innerHTML = local.length ? '' : remote.length ? `
@@ -125,9 +128,10 @@ function fillModels() {
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
 }
 
-/** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x », « cloud:… »). */
+/** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,
+ *  « reparti:x », « cloud:… »). */
 function selectModel(id) {
-  const value = id?.startsWith('cloud:') ? id : modelName(id);
+  const value = /^(cloud|reparti):/.test(id || '') ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
   // Sans choix connu : un modèle de cette machine d'abord
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
