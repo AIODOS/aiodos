@@ -112,6 +112,66 @@ L'encodeur UMT5-XXL de Wan pèse 11,4 Go en 16 bits, 6,0 en Q8, 3,7 en Q4.
 5. **Écarté** : le parallélisme à l'intérieur du cœur (Linux, NVLink), et fusionner du code
    GPL ou AGPL.
 
+## 6. Ce qu'AIODOS fait maintenant (17/10/2026)
+
+L'étape 2 de la recommandation : des images entières, unités indépendantes de la file.
+
+- **Vue Images** (`aiodos/ui/static/js/views/images.js`). On décrit l'image, on choisit le
+  format (carré 1024², portrait, paysage, rapide 512²), le nombre (1 à 16) et, si l'on
+  veut, la graine. La galerie montre chaque image avec la machine qui l'a calculée et le
+  temps pris. « Reprendre » remet la description et la graine dans le formulaire.
+- **Le modèle** : Z-Image Turbo (Apache-2.0), en trois fichiers épinglés dans
+  `aiodos/imaging/catalog.py` (taille, empreinte SHA-256, adresse Hugging Face à un commit
+  précis) : le cœur en Q4_K (3,9 Go), l'encodeur de texte Qwen3-4B en Q4_K_M (2,5 Go) et
+  le décodeur de Flux (0,3 Go), en tout 6,7 Go. Un bouton les télécharge
+  (`imaging/download.py`) : reprise après une coupure, chaque fichier vérifié avant d'être
+  gardé dans `data/images/models/`.
+- **Le moteur** (`imaging/engine.py`) : `sd-server` de stable-diffusion.cpp (master-973,
+  Vulkan), cherché dans le réglage « Dossier de stable-diffusion.cpp », sinon dans
+  `data/engines/stable-diffusion.cpp`. Il reste chargé entre deux images et s'arrête
+  1 min 30 après la dernière. Il calcule sur la meilleure carte : jamais celle intégrée au
+  processeur quand il y en a une autre (sur ce PC, Vulkan0 est la carte Intel).
+- **Une image = une unité** (`jobs/kinds/images.py`) : modèle, description, graine,
+  taille et pas. Les graines d'une demande se suivent. Une de mes machines qui a le
+  même modèle, aux mêmes empreintes, et qui prête sa puissance, en calcule sa part
+  (`network/work.py`). Le PNG revient, il est contrôlé (signature, taille demandée), puis
+  gardé ici seulement (`imaging/gallery.py`, table `images`). Une unité ne part jamais
+  chez un ami : la description peut être personnelle. L'image n'emporte pas sa
+  description dans ses métadonnées.
+- **Une machine sans le modèle** laisse ses images en file pour celles qui l'ont
+  (`TaskSpec.here`). Sans aucune machine capable, la demande est refusée.
+- **La carte graphique partagée avec Ollama.** Essai du 17/10/2026 : Ollama gardait deux
+  modèles chargés (7,7 Go sur 8 avec sd-server), et la première image a échoué faute de
+  mémoire. Désormais :
+  - avant de charger le modèle d'images, AIODOS décharge de la carte les modèles de
+    conversation d'Ollama (les modèles d'embedding restent) ;
+  - si sd-server manque quand même de mémoire, il est relancé (nouveau plan de
+    placement) et l'image refaite une fois ;
+  - une conversation qui commence ici reprend la carte : sd-server inoccupé s'arrête
+    aussitôt, et une image en cours finit d'abord.
+
+**Mesures** (RTX 4070 Laptop 8 Go, Vulkan, Z-Image Turbo Q4_K, 8 pas) :
+
+| | 1024 × 1024 | 512 × 512 |
+|---|---|---|
+| Chargement du modèle | 3 à 7 s | |
+| Première image après l'installation | 2 min 16 (compilation des shaders Vulkan : 70 s au premier pas, 26 s au décodage) | |
+| Image suivante | 35 s (3,7 s par pas, décodage 3,8 s) | 12 s |
+| Carte partagée avec Ollama | | 47 s |
+
+Le placement automatique de sd-server garde le cœur sur la carte (3,7 Go) et met
+l'encodeur de texte et le décodeur en mémoire vive : 2,8 Go de carte occupés entre deux
+images. Deux machines comme celle-ci font donc deux images en 35 s au lieu d'une.
+
+**Suite** :
+
+1. Livrer stable-diffusion.cpp avec les versions signées, comme llama.cpp.
+2. Mesurer la version CUDA sur les cartes NVIDIA (sans doute plus rapide que Vulkan).
+3. Remplir les modèles d'une machine depuis une autre de mes machines, par le réseau
+   local, plutôt que depuis Hugging Face.
+4. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
+   de ggml (les versions publiées ne l'ont pas : pas de `ggml-rpc.dll` dans l'archive).
+
 ## Sources
 
 - stable-diffusion.cpp : [dépôt](https://github.com/leejet/stable-diffusion.cpp),

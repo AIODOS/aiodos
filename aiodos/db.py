@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -118,6 +118,26 @@ MIGRATIONS = {
         refused   TEXT
     );
     CREATE INDEX IF NOT EXISTS ix_consult_log_node ON consult_log(node_id, at);
+    """,
+    # Images générées (imaging/gallery.py) : une ligne par image, le PNG dans data/images/out
+    8: """
+    CREATE TABLE IF NOT EXISTS images (
+        id       INTEGER PRIMARY KEY,
+        batch    TEXT NOT NULL,
+        model    TEXT NOT NULL,
+        prompt   TEXT NOT NULL,
+        negative TEXT NOT NULL DEFAULT '',
+        seed     INTEGER NOT NULL,
+        width    INTEGER NOT NULL,
+        height   INTEGER NOT NULL,
+        steps    INTEGER NOT NULL,
+        cfg      REAL NOT NULL,
+        file     TEXT NOT NULL,
+        machine  TEXT,
+        seconds  REAL,
+        created  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_images_batch ON images(batch);
     """,
 }
 

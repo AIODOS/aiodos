@@ -17,6 +17,8 @@ import uuid
 
 from aiodos import __version__, db, settings
 from aiodos.cluster import engine
+from aiodos.imaging import catalog as images_catalog
+from aiodos.imaging import engine as images_engine
 from aiodos.node import android, power, priority
 from aiodos.services import ollama
 from aiodos.updates.store import Store
@@ -172,6 +174,15 @@ def _cluster() -> dict:
             "free_mib": best["free_mib"] if best else 0}
 
 
+def _images() -> dict:
+    """Images (imaging/) : version de stable-diffusion.cpp, modèles complets ici. Une de
+    mes machines voit ainsi qui peut calculer ses images."""
+    found = images_engine.info()
+    return {"engine": found["version"] if found else None,
+            "models": images_catalog.available() if found else [],
+            "shares": bool(settings.get("share_enabled"))}
+
+
 def _updates() -> dict:
     """offer : la version la plus récente que cette machine transmet (une machine 2.0.x
     ne lit que cette clé) ; files : les fichiers qu'elle a de chaque paquet, compagnons
@@ -202,6 +213,7 @@ def profile(max_age=5.0) -> dict:
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
         "cluster": _cluster(),                   # gros modèles répartis (cluster/)
+        "images": _images(),                     # images réparties (imaging/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
     }
     with _cache_lock:

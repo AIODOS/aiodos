@@ -39,32 +39,39 @@ def _portable(task) -> bool:
     return bool(spec and spec.portable)
 
 
+SCAN = 30         # unités examinées à chaque attribution (les premières de la file)
+
+
 def claim_next(resources, node) -> dict | None:
-    """Réserve la prochaine unité exécutable sur l'une de ces ressources."""
+    """Réserve la prochaine unité exécutable sur l'une de ces ressources. Une unité que
+    cette machine ne sait pas calculer (TaskSpec.here : modèle d'images absent…) reste en
+    file pour une de mes machines, et la suivante passe."""
     if not resources:
         return None
     placeholders = ",".join("?" * len(resources))
-    row = db.query_one(
+    rows = db.query(
         f"""SELECT u.id, u.job_id, u.task, u.resource, u.payload, u.attempts
             FROM units u JOIN jobs j ON j.id = u.job_id
             WHERE u.status = 'queued' AND j.status IN ('queued', 'running')
               AND u.resource IN ({placeholders})
-            ORDER BY j.priority, j.created, j.id, u.id LIMIT 1""", tuple(resources))
-    if row is None:
-        return None
-    now = db.now()
-    with db.transaction() as c:
-        claimed = c.execute(
-            "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1 "
-            "WHERE id=? AND status=?", (RUNNING, now, node, row["id"], QUEUED)).rowcount
-        if not claimed:
-            return None
-        c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
-                  "WHERE id=? AND status=?", (RUNNING, now, row["job_id"], QUEUED))
-    unit = dict(row)
-    unit["payload"] = json.loads(unit["payload"])
-    unit["attempts"] += 1
-    return unit
+            ORDER BY j.priority, j.created, j.id, u.id LIMIT ?""", (*resources, SCAN))
+    for row in rows:
+        unit = dict(row)
+        unit["payload"] = json.loads(unit["payload"])
+        if not registry.runnable_here(unit["task"], unit["payload"]):
+            continue
+        now = db.now()
+        with db.transaction() as c:
+            claimed = c.execute(
+                "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1 "
+                "WHERE id=? AND status=?", (RUNNING, now, node, unit["id"], QUEUED)).rowcount
+            if not claimed:
+                return None
+            c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
+                      "WHERE id=? AND status=?", (RUNNING, now, unit["job_id"], QUEUED))
+        unit["attempts"] += 1
+        return unit
+    return None
 
 
 def _complete_if_last(c, job_id) -> bool:

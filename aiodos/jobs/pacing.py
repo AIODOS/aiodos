@@ -114,10 +114,24 @@ def threads(default: int) -> int | None:
 
 
 # ----------------------------------------------------------- conversations
+_chat_listeners = []
+
+
+def on_chat(callback):
+    """callback() est appelé, dans un fil à part, quand une conversation commence ici
+    (moteur d'images qui rend la carte graphique, cf. imaging/engine.py)."""
+    _chat_listeners.append(callback)
+
+
 def set_interactive(count: int):
     """Nombre de conversations servies ici en ce moment (cf. Executor.interactive_begin)."""
     if count > 0:
+        began = _idle.is_set()
         _idle.clear()
+        if began:
+            for callback in list(_chat_listeners):
+                threading.Thread(target=callback, daemon=True,
+                                 name="aiodos-conversation-commence").start()
     else:
         _idle.set()
 

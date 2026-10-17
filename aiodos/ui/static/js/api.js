@@ -32,6 +32,9 @@ export async function api(method, path, body) {
   return res.json();
 }
 
+// Fichier de l'API pour une balise <img> ou un lien (pas d'en-tête possible : jeton en paramètre)
+export const fileUrl = path => `/api${path}?t=${encodeURIComponent(token)}`;
+
 export const get = path => api('GET', path);
 export const post = (path, body = {}) => api('POST', path, body);
 export const put = (path, body) => api('PUT', path, body);

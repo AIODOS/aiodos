@@ -72,6 +72,23 @@ def loaded_models() -> list:
         return []
 
 
+def unload_chat_models() -> list:
+    """Décharge de la carte graphique les modèles de conversation (keep_alive 0) : sa
+    mémoire va à un autre moteur (images). Les modèles d'embedding, petits, restent pour
+    l'indexation ; la prochaine conversation recharge son modèle. → noms déchargés."""
+    names = []
+    for m in loaded_models():
+        if not m["size_vram"] or "completion" not in capabilities(m["name"]):
+            continue
+        try:
+            requests.post(base() + "/api/generate", json={"model": m["name"], "keep_alive": 0},
+                          timeout=15)
+            names.append(m["name"])
+        except requests.RequestException:
+            pass
+    return names
+
+
 def capabilities(model: str) -> list:
     """Capacités déclarées par Ollama : completion, vision, thinking, tools, embedding…"""
     with _caps_lock:

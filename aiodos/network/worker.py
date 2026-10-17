@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aiodos import __version__, paths, settings
+from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.models import GPU_BOUND
@@ -266,7 +267,8 @@ class Worker:
             caps = {"work_api": work.WORK_API, "version": __version__,
                     "models": work.local_models(),
                     "whisper": importlib.util.find_spec("faster_whisper") is not None,
-                    "readers": extract.readable_documents()}
+                    "readers": extract.readable_documents(),
+                    "images": images_engine.capabilities()}
             self._caps = (time.monotonic(), caps)
         return caps
 

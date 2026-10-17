@@ -7,13 +7,14 @@ import { toast } from './ui.js';
 import { mountChat } from './views/chat.js';
 import { mountLibrary } from './views/library.js';
 import { mountJobs, loadJobs } from './views/jobs.js';
+import { mountImages } from './views/images.js';
 import { mountNode, loadNode } from './views/node.js';
 import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js';
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
 
-const VIEWS = ['chat', 'library', 'jobs', 'node', 'network', 'settings'];
+const VIEWS = ['chat', 'library', 'images', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
 
 function show(view) {
@@ -61,7 +62,13 @@ function onJob(job) {
     toast('Nouveau modèle d\'embedding : réindexation des connaissances lancée (voir Tâches).', 'info', 6000);
   }
   const finished = before && ACTIVE.includes(before) && !ACTIVE.includes(job.status);
-  if (finished && job.kind !== 'index_conversation') {
+  if (finished && job.kind === 'generate_images') {
+    const n = job.result?.images ?? job.done;
+    if (state.view !== 'images') {
+      toast(`${job.title} : ${n} image${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} (vue Images).`,
+        job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
+    }
+  } else if (finished && job.kind !== 'index_conversation') {
     const kind = job.status === 'done' && !job.failed ? 'ok' : job.status === 'cancelled' ? 'info' : 'err';
     const detail = job.result?.indexed !== undefined ? ` : ${job.result.indexed} élément(s) indexé(s)` : '';
     toast(`${job.title}${detail}`, kind, 6000);
@@ -79,6 +86,7 @@ function onEvent(ev) {
     case 'network': emit('network:changed'); break;
     case 'updates': loadUpdates(); break;
     case 'gateway': if (state.view === 'settings') loadGateway(); break;
+    case 'images': emit('images:changed'); break;
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
     case 'pair_result':
       toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`
@@ -92,6 +100,7 @@ async function boot() {
   hydrateIcons();
   mountChat($('#view-chat'));
   mountLibrary($('#view-library'));
+  mountImages($('#view-images'));
   mountJobs($('#view-jobs'));
   mountNode($('#view-node'));
   mountNetwork($('#view-network'));

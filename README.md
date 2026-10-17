@@ -148,6 +148,14 @@ place (cartes demandées, chargement) ; ensuite, chaque machine garde les poids 
 Mesures, choix et limites : [docs/gros-modeles.md](docs/gros-modeles.md) ; images et
 vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 
+**Créer des images, à plusieurs machines** (vue Images) : on décrit l'image, et chacune
+devient une unité de la file, calculée ici ou par mes machines qui ont le même modèle et
+prêtent leur puissance ; l'image revient et n'est gardée qu'ici. Le moteur est
+[stable-diffusion.cpp], le modèle Z-Image Turbo (Apache-2.0, 6,7 Go à télécharger depuis
+la vue, chaque fichier vérifié par son empreinte). Sur une RTX 4070 de portable : 35 s
+par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
+[docs/generation-repartie.md](docs/generation-repartie.md).
+
 ## Installation
 
 1. Installer [Ollama] et quelques modèles, par exemple :
@@ -208,6 +216,8 @@ aiodos/
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
 │                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses
+├── imaging/           images réparties : modèles épinglés (catalog.py), téléchargement,
+│                      sd-server (engine.py), une image (generate.py), galerie
 ├── cluster/           gros modèles répartis entre mes machines (llama.cpp RPC) :
 │                      découpage (plan.py), carte prêtée (helper.py), groupe (group.py),
 │                      moteur livré avec les versions (delivery.py), docs/gros-modeles.md
@@ -225,7 +235,7 @@ aiodos/
 │   ├── pacing.py      cadence du travail de fond : conversations d'abord, batterie ménagée
 │   ├── leases.py      baux : unités confiées pour un temps limité à une autre machine
 │   ├── registry.py    tâches portables : calcul (n'importe où) / intégration (chez soi)
-│   └── kinds/         types de travaux (indexation, réindexation…)
+│   └── kinds/         types de travaux (indexation, réindexation, images…)
 ├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
 │   ├── pairing.py     appairage par code à 6 chiffres (X25519 → HKDF)
@@ -292,3 +302,4 @@ Les contributions sont acceptées sous cette même licence.
 
 [Ollama]: https://ollama.com
 [llama.cpp]: https://github.com/ggml-org/llama.cpp
+[stable-diffusion.cpp]: https://github.com/leejet/stable-diffusion.cpp

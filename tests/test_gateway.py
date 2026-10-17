@@ -678,6 +678,7 @@ def slow_lender(monkeypatch):
     peers.set_profile(PEER, {"lends_models": True, "ollama": {"models": [
         {"name": LENT, "caps": ["completion"], "size": 7}]}})
     stopped = threading.Event()
+    stopped.spoke = threading.Event()     # un premier mot est parti
 
     def fake_stream(my_id, peer, action, payload, stop=None, **kw):
         finished = False
@@ -687,6 +688,7 @@ def slow_lender(monkeypatch):
                     return
                 time.sleep(0.5)
                 yield {"content": word}
+                stopped.spoke.set()
             finished = True
         finally:
             if not finished:
@@ -711,8 +713,9 @@ def test_mcp_cancelled_notification_stops_the_conversation(gateway, slow_lender)
         gateway, "tools/call", {"name": "converser", "arguments": {
             "message": "Compte", "modele": LENT}}, headers=version, message_id=41).json()))
     call.start()
-    import time
-    time.sleep(1.2)                                   # quelques mots sont partis
+    # Quelques mots sont partis (le choix de la machine peut prendre plus d'une seconde :
+    # nvidia-smi met 1,5 s à réveiller la carte d'un portable en veille)
+    assert slow_lender.spoke.wait(15)
     cancel = _rpc(gateway, "notifications/cancelled", {"requestId": 41, "reason": "assez"},
                   headers=version, message_id=None)
     assert cancel.status_code == 202

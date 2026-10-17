@@ -66,6 +66,14 @@ def can_serve(need: dict, caps: dict, mine: dict) -> bool:
     readers = caps.get("readers")
     if need.get("format") and isinstance(readers, list) and need["format"] not in readers:
         return False
+    images = need.get("images")
+    if images:
+        # Une image : stable-diffusion.cpp là-bas, et tous les fichiers du modèle aux mêmes
+        # empreintes (jobs/kinds/images.py)
+        theirs_images = caps.get("images") or {}
+        if (not theirs_images.get("engine")
+                or not set(images["files"]) <= set(theirs_images.get("files") or [])):
+            return False
     return True
 
 
@@ -97,15 +105,6 @@ def lease(manager, sender, payload):
     if caps.get("work_api") != WORK_API:
         return {"unit": None, "retry_after": 600,
                 "reason": "Versions d'AIODOS différentes : mets à jour les deux machines."}
-    mine = local_models()
-    if not mine:
-        # Sans Ollama ici, impossible de vérifier que l'autre machine a exactement le
-        # même modèle : rien n'est confié. On le dit plutôt que de refuser en silence
-        # (essai du 16/10/2026 : Ollama arrêté après un redémarrage du PC).
-        log.warning("Ollama ne répond pas : aucune unité confiée à %s", _peer_name(sender))
-        return {"unit": None, "retry_after": 30,
-                "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible d'y "
-                          "vérifier le modèle d'embedding, rien n'est confié."}
     aside = sharing.set_aside_reason(sender)
     if aside:
         return {"unit": None, "retry_after": 600,
@@ -116,6 +115,8 @@ def lease(manager, sender, payload):
     local_only = store.local_only_ids()
     max_blob = _max_blob(sender)
     options = {}
+    # Modèles d'Ollama d'ici, lus au premier besoin : une image n'en demande aucun
+    ollama = {"models": None}
 
     def acceptable(unit):
         spec = registry.TASKS.get(unit["task"])
@@ -126,18 +127,42 @@ def lease(manager, sender, payload):
             return False
         if unit["task"] not in options:
             options[unit["task"]] = spec.options() if spec.options else {}
-        if spec.requires and not can_serve(spec.requires(unit, options[unit["task"]]), caps, mine):
-            return False
-        if spec.file_key:
-            try:
-                return os.path.getsize(unit["payload"][spec.file_key]) <= max_blob
-            except OSError:
-                return False      # fichier disparu : l'exécution locale le signalera
-        return True
+        if not spec.requires:
+            return _fits(unit, spec, max_blob)
+        need = spec.requires(unit, options[unit["task"]])
+        if need.get("embed") or need.get("vision"):
+            if ollama["models"] is None:
+                ollama["models"] = local_models()
+            if not ollama["models"]:
+                return False
+        return can_serve(need, caps, ollama["models"] or {}) and _fits(unit, spec, max_blob)
 
     unit = leases.claim_remote(payload.get("resources"), sender, acceptable)
     if unit is None:
+        if ollama["models"] == {}:
+            # Sans Ollama ici, impossible de vérifier que l'autre machine a exactement le
+            # même modèle : rien n'est confié. On le dit plutôt que de refuser en silence
+            # (essai du 16/10/2026 : Ollama arrêté après un redémarrage du PC).
+            log.warning("Ollama ne répond pas : aucune unité confiée à %s", _peer_name(sender))
+            return {"unit": None, "retry_after": 30,
+                    "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible "
+                              "d'y vérifier le modèle d'embedding, rien n'est confié."}
         return {"unit": None, "retry_after": NOTHING_RETRY}
+    return _order(manager, sender, unit, options, friend)
+
+
+def _fits(unit, spec, max_blob) -> bool:
+    """Le fichier de l'unité (s'il y en a un) n'est pas trop gros pour cette machine."""
+    if spec.file_key:
+        try:
+            return os.path.getsize(unit["payload"][spec.file_key]) <= max_blob
+        except OSError:
+            return False          # fichier disparu : l'exécution locale le signalera
+    return True
+
+
+def _order(manager, sender, unit, options, friend) -> dict:
+    """L'ordre de calcul envoyé à la machine qui a obtenu l'unité."""
     spec = registry.TASKS[unit["task"]]
     order = {"id": unit["id"], "task": unit["task"], "resource": unit["resource"],
              "payload": {k: v for k, v in unit["payload"].items() if k != spec.file_key},

@@ -88,6 +88,10 @@ DEFAULTS = {
     "lend_gpu": False,                # prêter ma carte graphique à mes machines (llama.cpp RPC)
     "lend_gpu_device": "",            # carte prêtée (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "llamacpp_dir": "",               # dossier de llama.cpp ; vide : celui livré avec les versions
+    # --- Images réparties entre mes machines (imaging/, docs/generation-repartie.md) ---
+    "sdcpp_dir": "",                  # dossier de stable-diffusion.cpp ; vide : data/engines
+    "images_models_dir": "",          # dossier des modèles d'images ; vide : data/images/models
+    "images_device": "",              # carte qui calcule (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
     # --- AIODOS ouvert aux autres outils (gateway/, docs/autres-outils.md) : API compatible

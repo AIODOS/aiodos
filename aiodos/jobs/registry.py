@@ -45,6 +45,9 @@ class TaskSpec:
     # sample(payload, sortie, options), le contrôle par échantillon de ce qu'il a calculé
     shared_keys: tuple = ()
     sample: Optional[Callable] = None
+    # here(payload) -> bool : cette machine sait-elle calculer l'unité (moteur, modèle) ?
+    # Sinon elle attend en file qu'une de mes machines qui le sait la demande. None : oui
+    here: Optional[Callable] = None
 
     @property
     def portable(self) -> bool:
@@ -78,9 +81,15 @@ def task(name):
 
 
 def register_portable(name, compute, assimilate, file_key=None, options=None,
-                      requires=None, validate=None, shared_keys=(), sample=None):
+                      requires=None, validate=None, shared_keys=(), sample=None, here=None):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
-                           tuple(shared_keys), sample)
+                           tuple(shared_keys), sample, here)
+
+
+def runnable_here(task, payload) -> bool:
+    """L'exécuteur local peut-il prendre cette unité (cf. TaskSpec.here) ?"""
+    spec = TASKS.get(task)
+    return spec is None or spec.here is None or bool(spec.here(payload))
 
 
 def run_local(name, payload, stop=None) -> dict:
