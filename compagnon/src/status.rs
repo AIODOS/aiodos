@@ -59,6 +59,7 @@ pub fn snapshot(ctx: &Ctx) -> Value {
         "network_changes": ctx.network_changes.load(Ordering::SeqCst),
         "uptime_s": ctx.started.elapsed().as_secs(),
         "peers": ctx.pool.snapshot().into_iter().map(|v| peer(ctx, v)).collect::<Vec<_>>(),
+        "tunnels": ctx.pool.tunnels.snapshot(),
     })
 }
 

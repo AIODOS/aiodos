@@ -15,6 +15,7 @@ import time
 import uuid
 
 from aiodos import __version__, db, settings
+from aiodos.cluster import engine
 from aiodos.node import android, power
 from aiodos.services import ollama
 from aiodos.updates.store import Store
@@ -124,6 +125,20 @@ def _models(vram_total) -> list:
     return models
 
 
+def _cluster() -> dict:
+    """Carte graphique prêtée à mes machines pour les gros modèles répartis
+    (cluster/helper.py) : version de llama.cpp, mémoire libre de la carte prêtée. Rien
+    n'est demandé à llama.cpp tant que le prêt est coupé."""
+    if not settings.get("lend_gpu"):
+        return {"lends": False}
+    found = engine.info()
+    best = engine.lent_device(found["devices"]) if found else None
+    return {"lends": bool(settings.get("lend_gpu") and best),
+            "version": found["version"] if found else None,
+            "device": best["label"] if best else None,
+            "free_mib": best["free_mib"] if best else 0}
+
+
 def _updates() -> dict:
     """offer : la version la plus récente que cette machine transmet (une machine 2.0.x
     ne lit que cette clé) ; files : les fichiers qu'elle a de chaque paquet, compagnons
@@ -153,6 +168,7 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
+        "cluster": _cluster(),                   # gros modèles répartis (cluster/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
     }
     with _cache_lock:

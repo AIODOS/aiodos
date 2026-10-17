@@ -412,6 +412,19 @@ class Companion:
         """Remplace la liste blanche : [{"id", "relays", "addrs"}…]."""
         return self.api("PUT", "/net/v1/peers", {"peers": entries})
 
+    # Tunnels (gros modèles répartis) : un service TCP local de cette machine ouvert à des
+    # machines nommées, ou le service d'une autre machine joint par un port local.
+    def expose(self, services: list) -> dict:
+        """Remplace les services ouverts : [{"name", "port", "peers": [clé…]}…]."""
+        return self.api("PUT", "/net/v1/exposed", {"services": services})
+
+    def open_tunnel(self, net_id: str, name: str) -> int:
+        """Port local (127.0.0.1) relié au service `name` de la machine `net_id`."""
+        return int(self.api("POST", "/net/v1/tunnels", {"peer": net_id, "name": name})["port"])
+
+    def close_tunnel(self, port: int) -> None:
+        self.api("DELETE", f"/net/v1/tunnels/{int(port)}")
+
     def info(self) -> dict | None:
         """Clé et indices de cette machine, à donner aux machines appairées."""
         with self._lock:

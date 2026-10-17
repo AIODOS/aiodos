@@ -47,52 +47,109 @@ Les couches en chaîne conviennent le mieux à des machines ordinaires et diffé
 des autres. Découper chaque couche demande un réseau que des amis n'ont pas entre eux. Pour
 les images et la vidéo, les composants et les unités indépendantes se complètent.
 
-## 3. Recommandation : llama.cpp RPC, piloté par AIODOS
+## 3. Les mesures de la répartition (17/10/2026)
 
-llama.cpp est le moteur qu'Ollama utilise déjà : Ollama lance `lib/ollama/llama-server.exe`.
-Il est sous licence MIT. Son mode RPC (`ggml-rpc-server`, protocole 3.0.0) prête les cartes
-graphiques d'une machine à une autre. Chaque machine garde une partie des poids et du cache,
-au prorata de sa mémoire libre. Il marche sous Windows, Linux, macOS et Android, avec CUDA,
-Vulkan, Metal ou le processeur seul. Les fichiers d'Ollama sont au format GGUF (qwen3.6 :
-architecture `qwen35moe`) : llama.cpp devrait les lire tels quels, M1 le vérifiera. Le
-`llama-server` fourni avec Ollama connaît l'option `--rpc`, mais il n'a pas le module RPC
-(`ggml-rpc`). Il faut donc la version officielle de llama.cpp.
+Le moteur est llama.cpp b11707 (version Vulkan) ; Ollama le lance déjà, sous licence MIT.
+Son mode RPC (`ggml-rpc-server`, protocole 3.0.0) prête les cartes graphiques d'une machine
+à une autre. Le `llama-server` fourni avec Ollama connaît l'option `--rpc`, mais il n'a pas
+le module RPC : il faut la version officielle. Elle lit les fichiers GGUF d'Ollama tels
+quels (qwen3.5:9b, qwen3.6). La deuxième machine est simulée sur le même PC : un
+`ggml-rpc-server` prête la carte (la même RTX 4070), et le relais de
+`tools/bench_repartition.py` ajoute le délai et plafonne le débit. Le relais est vérifié :
+5 ms demandées en donnent 6, 20 ms en donnent 21. Les mesures sont faites avec `llama-bench`
+(512 jetons lus, 128 écrits, 3 essais), sur qwen3.5:9b (dense, 5,2 Go). Les résultats bruts
+sont dans `docs/gros-modeles-mesures.json`.
 
-Ce que llama.cpp ne fait pas, et qu'AIODOS apporterait :
+**M1, le PC seul avec llama.cpp :**
 
-- **La sécurité.** Le serveur RPC n'a ni mot de passe ni chiffrement. Sa documentation
-  prévient : jamais sur un réseau ouvert. AIODOS le lancerait seulement sur 127.0.0.1, et le
-  joindrait par un tunnel chiffré du compagnon (clé de la machine, liste blanche), en local
-  comme par Internet. Au début, ce serait seulement entre **mes machines** : un ami
-  malveillant pourrait exploiter une faille de ce serveur, encore au stade du prototype.
-- **Le choix des machines et du découpage**, selon la mémoire libre, la vitesse et la
-  latence mesurée.
-- **La même version partout.** llama.cpp serait livré avec les mises à jour signées, comme
-  le compagnon. La version Vulkan marche sur toutes les cartes et pèse 30 Mo. La version
-  CUDA est plus rapide sur NVIDIA, pour environ 600 Mo.
-- **Les poids.** Ils sont envoyés une fois, puis gardés en cache par chaque machine (`-c`).
-  AIODOS pourrait remplir ce cache à l'avance, par le réseau local.
-- **Les pannes.** Si une machine part, la conversation repart sur un modèle qui tient sur
-  une seule machine.
+| Placement | Lecture (jetons/s) | Écriture (jetons/s) |
+|---|---|---|
+| Tout sur la carte | 2 174 | 42,7 |
+| Moitié sur la carte, moitié en mémoire vive | 638 | 7,4 |
+| Tout en mémoire vive | 38 | 7,0 |
 
-Le reste ne change pas : la file de travail, les unités, la confiance à deux niveaux. Le
-modèle réparti devient un modèle de plus dans le choix de la conversation, comme les
-modèles « Sur mes machines ».
+llama.cpp écrit plus vite qu'Ollama sur la carte (42,7 jetons/s contre 33,0).
 
-## 4. Mesures prévues
+**M2 et M3, la moitié du modèle sur la carte d'un deuxième PC :**
 
-- **M0** : le PC seul, par Ollama. Fait (§ 1).
-- **M1** : llama.cpp seul sur le PC, même fichier. Il s'agit de le comparer à Ollama et de
-  vérifier que le fichier d'Ollama se lit.
-- **M2** : llama.cpp et `ggml-rpc-server` sur le même PC, une deuxième machine simulée. On
-  mesure le coût du protocole.
-- **M3** : M2 à travers le relais de `bench_repartition.py`, avec 1, 5, 20 et 50 ms
-  d'aller-retour et un débit plafonné à 40 Mbit/s. On voit jusqu'où la chaîne reste utile :
-  Wi-Fi, Internet proche, Internet lointain. Le relais est vérifié : 5 ms demandées en
-  donnent 6, 20 ms en donnent 21.
-- **M4** : M2 à travers le compagnon (Iroh), pour mesurer le coût du chiffrement.
-- **M5** : une vraie deuxième machine, d'abord un téléphone en Wi-Fi, puis le PC d'un ami
-  (essai 2.8).
+| Aller-retour entre les deux PC | Lecture (jetons/s) | Écriture (jetons/s) |
+|---|---|---|
+| 0 ms (même PC) | 1 648 | 37,9 |
+| 1 ms (réseau local filaire) | 2 013 | 35,3 |
+| 5 ms (bon Wi-Fi) | 1 996 | 31,4 |
+| 20 ms (Internet proche) | 1 939 | 21,4 |
+| 50 ms (Internet lointain) | 1 674 | 12,0 |
+| Tout le modèle sur la carte du deuxième PC, 0 ms | 1 795 | 38,2 |
+| Tout le modèle sur la carte du deuxième PC, 20 ms | 1 331 | 15,4 |
+
+Ce qu'on en tire :
+
+- **Le protocole coûte peu** : 11 % sur le même PC.
+- **Chaque machine de plus coûte environ un aller-retour par mot écrit.** À 20 ms, il faut
+  47 ms par mot au lieu de 26. La lecture d'un texte, faite par paquets, ne souffre presque
+  pas du délai.
+- **Même par Internet, la carte d'un ami vaut mieux que la mémoire vive.** À 50 ms, le
+  modèle coupé en deux écrit encore 12 jetons/s ; le PC seul, avec la moitié du modèle en
+  mémoire vive, en écrit 7,4.
+
+**M3 bis, l'ordre des machines et le débit.** Le dernier étage du modèle note les 248 000
+mots du vocabulaire de Qwen : environ 1 Mo par mot écrit. Si c'est la deuxième machine qui
+le calcule, ce mégaoctet traverse le réseau à chaque mot. Mesures à 20 ms, poids déjà en
+cache chez la deuxième machine :
+
+| Ordre | Sans plafond | 40 Mbit/s | 10 Mbit/s |
+|---|---|---|---|
+| Le 2e PC calcule la fin | MESURE_LOCAL_0 | MESURE_LOCAL_40 | MESURE_LOCAL_10 |
+| La fin reste sur la machine qui pose la question | MESURE_DISTANT_0 | MESURE_DISTANT_40 | MESURE_DISTANT_10 |
+
+(jetons écrits par seconde)
+
+**Mélange d'experts.** qwen3.6 avec llama.cpp, experts en mémoire vive et le reste sur la
+carte : 161 jetons/s en lecture et 16,8 en écriture. Ollama place mieux ce modèle sur ce PC
+(227 et 38,1). Avec la moitié des couches confiée au processeur d'un deuxième PC sans carte
+graphique, on tombe à 34 et 5,2 : **prêter un processeur et sa mémoire vive ne sert à
+rien, seules les cartes graphiques valent la peine d'être prêtées.**
+
+**M4, le tunnel chiffré (Iroh, comme le compagnon) :** MESURE_IROH
+
+## 4. Ce qu'AIODOS fait maintenant (prototype du 17/10/2026)
+
+- **Le compagnon ouvre des tunnels** (`compagnon/src/tunnel.rs`). Une machine expose un
+  service TCP local à des machines nommées (`PUT /net/v1/exposed`). L'autre machine ouvre
+  un port local qui la relie à ce service (`POST /net/v1/tunnels`), à travers la connexion
+  QUIC déjà gardée entre elles : chiffrée, authentifiée par les clés, directe quand c'est
+  possible. Le serveur RPC n'écoute que sur 127.0.0.1.
+- **La machine qui prête sa carte** (`aiodos/cluster/helper.py`) répond aux actions
+  `cluster/lend`, `cluster/keep` et `cluster/release`. Il faut :
+  - que la demande vienne de **mes machines**, jamais d'un ami ;
+  - que le réglage « Prêter ma carte graphique pour les gros modèles » soit activé (vue
+    Nœud, coupé par défaut) ;
+  - la même version de llama.cpp des deux côtés.
+
+  Elle lance alors `ggml-rpc-server` avec sa meilleure carte, ou celle du réglage « Carte
+  prêtée », et garde les poids reçus en cache (`data/cluster/cache`). Elle reprend sa
+  carte quand la machine qui l'emprunte la rend, se tait depuis 90 s, ou quand le réglage
+  est coupé. Pendant le prêt, ses unités de fond laissent la place.
+- **La machine qui pose la question** (`aiodos/cluster/group.py`) propose « réparti » dans le
+  choix du modèle, pour les modèles d'Ollama trop gros pour sa carte quand mes machines en
+  ligne prêtent la leur. `plan.py` choisit le moins de machines possible, les plus grandes
+  cartes d'abord ; elles gardent les premières couches, et la carte d'ici garde les
+  dernières et le dernier étage. Au premier message, AIODOS demande les cartes, ouvre les
+  tunnels et lance `llama-server` sur le fichier d'Ollama. Le groupe reste prêt 10 minutes
+  après la dernière réponse.
+- **Le moteur** (`aiodos/cluster/engine.py`) cherche llama.cpp dans le réglage « Dossier de
+  llama.cpp », sinon dans `data/engines/llama.cpp`.
+
+## 5. Suite
+
+1. **Livrer llama.cpp avec les mises à jour signées**, comme le compagnon : version Vulkan
+   pour Windows (30 Mo), construction Android par le NDK. Jusque-là, il faut le dossier à
+   la main.
+2. **Remplir le cache d'une machine par le réseau local**, avant le premier usage :
+   aujourd'hui, les poids passent par le tunnel à la première conversation.
+3. **Essai réel à deux PC** (M5), puis avec un ami, quand le serveur RPC de llama.cpp sera
+   sorti du stade du prototype.
+4. **Images et vidéo** : répartir par composants (encodeur de texte, cœur, décodeur).
 
 ## Sources
 
