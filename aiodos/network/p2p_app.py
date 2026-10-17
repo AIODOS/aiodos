@@ -120,7 +120,7 @@ def create_p2p_app(manager) -> FastAPI:
             raise HTTPException(404, "Action inconnue.")
         sender = str(body.get("from") or "")
         peer = await asyncio.to_thread(peers.get, sender)
-        if not peer:
+        if not peer or not peer["key"]:
             raise HTTPException(403, "Machine non appairée.")
         _check_transport(peer, request)
         try:

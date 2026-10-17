@@ -98,12 +98,20 @@ def pair_start_via(peer: dict, payload: dict, timeout=TIMEOUT) -> dict:
     return _json(_send(peer, "/p2p/v1/pair/start", payload, timeout, pairing=True))
 
 
+def _key(peer: dict) -> bytes:
+    """La clé de la paire ; illisible ici (node/vault.py) : il faut appairer de nouveau."""
+    if not peer.get("key"):
+        raise PeerError(f"Clé de « {peer.get('name') or peer['node_id']} » illisible sur cette "
+                        "machine : appaire-la de nouveau.")
+    return peer["key"]
+
+
 def call(my_id, peer: dict, action: str, payload: dict, key: bytes = None,
          timeout=TIMEOUT) -> dict:
     """Requête scellée vers une machine appairée (ou en cours d'appairage via key : alors
     par le réseau local seulement)."""
     pairing = key is not None
-    key = key or peer["key"]
+    key = key or _key(peer)
     env = envelope.wrap(key, action, my_id, peer["node_id"], payload)
     response = _send(peer, f"/p2p/v1/{action}", env, timeout, pairing=pairing)
     try:
@@ -118,7 +126,7 @@ def stream(my_id, peer: dict, action: str, payload: dict, stop=None, connect_tim
     """Requête scellée dont la réponse arrive en flux (une conversation…) : génère
     les morceaux un à un. stop (threading.Event) coupe la connexion, ce qui arrête
     le calcul chez l'autre machine. Flux tronqué ou altéré : PeerError."""
-    key = peer["key"]
+    key = _key(peer)
     env = envelope.wrap(key, action, my_id, peer["node_id"], payload)
     response = _send(peer, f"/p2p/v1/stream/{action}", env,
                      (connect_timeout, read_timeout), stream=True)

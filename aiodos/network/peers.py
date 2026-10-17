@@ -4,10 +4,16 @@ Le compte (ledger) mesure le temps de calcul donné à chaque machine et reçu
 d'elle : c'est la base de la règle de réciprocité (qui prête plus est servi plus vite).
 Chaque machine a un niveau de confiance, « mine » (mes machines) ou « friend » (un ami),
 et peut être mise de côté après un contrôle échoué (cf. sharing.py).
+
+La clé de chaque paire est gardée protégée sous Windows (node/vault.py, DPAPI).
 """
 import json
+import logging
 
 from aiodos import db
+from aiodos.node import vault
+
+log = logging.getLogger("aiodos.network")
 
 ONLINE_WINDOW = 45          # vue il y a moins de 45 s = en ligne
 
@@ -30,8 +36,19 @@ def list_peers() -> list:
 
 
 def get(node_id) -> dict | None:
+    """La machine appairée, avec la clé de la paire en clair (None si elle est illisible
+    ici : base venue d'un autre compte ; il faut alors appairer de nouveau)."""
     row = db.query_one("SELECT * FROM peers WHERE node_id=?", (node_id,))
-    return dict(row) if row else None
+    if row is None:
+        return None
+    peer = dict(row)
+    try:
+        peer["key"] = vault.unprotect(peer["key"])
+    except vault.Unreadable as exc:
+        log.warning("Clé de la paire avec « %s » illisible ici (%s) : à appairer de nouveau",
+                    peer["name"], exc)
+        peer["key"] = None
+    return peer
 
 
 def save(node_id, name, key: bytes, address, port, trust: str = "mine"):
@@ -43,7 +60,23 @@ def save(node_id, name, key: bytes, address, port, trust: str = "mine"):
         "key=excluded.key, address=excluded.address, port=excluded.port, "
         "paired_at=excluded.paired_at, last_seen=excluded.last_seen, trust=excluded.trust, "
         "set_aside_at=NULL, set_aside_reason=NULL",
-        (node_id, name, key, address, port, db.now(), db.now(), trust))
+        (node_id, name, vault.protect(key), address, port, db.now(), db.now(), trust))
+
+
+def protect_keys() -> int:
+    """Protège les clés enregistrées avant DPAPI (vérifiées avant d'être remplacées).
+    → nombre de clés protégées."""
+    done = 0
+    for row in db.query("SELECT node_id, key FROM peers"):
+        clear = bytes(row["key"] or b"")
+        if not clear or vault.is_protected(clear):
+            continue
+        sealed = vault.protect(clear)
+        if sealed == clear or not vault.verify(sealed, clear):
+            continue
+        done += db.execute("UPDATE peers SET key=? WHERE node_id=? AND key=?",
+                           (sealed, row["node_id"], row["key"])).rowcount
+    return done
 
 
 def remove(node_id):

@@ -898,6 +898,18 @@ Ce que 2.3 prévoyait est en grande partie assuré par le compagnon :
 Il reste à protéger les clés (DPAPI sous Windows) et à lier le code à 6 chiffres aux clés
 des compagnons.
 
+**Fait le 18/10/2026** (`aiodos/node/vault.py`) : sous Windows, la clé de chaque paire et
+les clés d'API du cloud sont chiffrées par DPAPI pour le compte de l'utilisateur, avec une
+entropie propre à AIODOS. La base copiée sur une autre machine, ou lue depuis un autre
+compte, ne les livre pas : la machine appairée est alors à appairer de nouveau (message
+clair), la clé d'API à saisir de nouveau. Les clés enregistrées avant sont protégées une
+minute après le démarrage, une fois la version en bonne santé : si une nouvelle version
+s'arrêtait au démarrage, la précédente, relancée par les mises à jour, saurait encore les
+lire. Chaque clé protégée est relue par DPAPI avant de remplacer l'ancienne. Sous Linux et
+Android, rien ne change (fichiers de l'utilisateur seul). Restent : la clé du compagnon
+(fichier `aiodos-net.key`, lu par le compagnon en Rust) et le code à 6 chiffres lié aux
+clés des compagnons.
+
 **2.5 Politique de partage** (selon les réponses de 2.1) : niveaux de confiance,
 portée des bibliothèques, métadonnées réduites (nom de fichier neutre, profil allégé),
 plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.

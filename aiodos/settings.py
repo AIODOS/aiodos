@@ -4,10 +4,13 @@ Les clés API ne sortent jamais en clair vers l'interface : public_view() les
 remplace par un indicateur « renseignée » et les 4 derniers caractères.
 """
 import json
+import logging
 import socket
 
 from aiodos import db
-from aiodos.node import android
+from aiodos.node import android, vault
+
+log = logging.getLogger("aiodos")
 
 SECRET_KEYS = {"mistral_key", "qwen_key"}
 
@@ -139,7 +142,17 @@ def get(key):
         if key == "rag_min_score":
             return rag_threshold(get("embed_model"))
         return DEFAULTS.get(key)
-    return _decode(row["value"])
+    value = _decode(row["value"])
+    return _open(key, value) if key in SECRET_KEYS else value
+
+
+def _open(key, value):
+    """Une clé d'API protégée (node/vault.py), en clair ; illisible ici : à saisir de nouveau."""
+    try:
+        return vault.unprotect_text(value)
+    except vault.Unreadable as exc:
+        log.warning("Réglage %s illisible ici (%s) : à saisir de nouveau", key, exc)
+        return ""
 
 
 def get_all() -> dict:
@@ -148,7 +161,8 @@ def get_all() -> dict:
     stored = set()
     for row in db.query("SELECT key, value FROM settings"):
         if row["key"] in DEFAULTS:
-            values[row["key"]] = _decode(row["value"])
+            value = _decode(row["value"])
+            values[row["key"]] = _open(row["key"], value) if row["key"] in SECRET_KEYS else value
             stored.add(row["key"])
     if "rag_min_score" not in stored:
         values["rag_min_score"] = rag_threshold(values["embed_model"])
@@ -181,11 +195,27 @@ def set_many(values: dict):
                 elif not str(value).strip():
                     continue
                 else:
-                    value = str(value).strip()
+                    value = vault.protect_text(str(value).strip())
             conn.execute(
                 "INSERT INTO settings(key, value) VALUES(?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, json.dumps(value, ensure_ascii=False)))
+
+
+def protect_secrets() -> int:
+    """Protège les clés d'API enregistrées avant DPAPI. → nombre de clés protégées."""
+    done = 0
+    for key in sorted(SECRET_KEYS):
+        row = db.query_one("SELECT value FROM settings WHERE key=?", (key,))
+        clear = _decode(row["value"]) if row else None
+        if not isinstance(clear, str) or not clear or vault.is_protected(clear):
+            continue
+        sealed = vault.protect_text(clear)
+        if sealed == clear or not vault.verify_text(sealed, clear):
+            continue
+        done += db.execute("UPDATE settings SET value=? WHERE key=? AND value=?",
+                           (json.dumps(sealed), key, row["value"])).rowcount
+    return done
 
 
 def public_view() -> dict:

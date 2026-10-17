@@ -189,6 +189,7 @@ class _Node:
             if not self.server.started:
                 raise NodeError("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
             launcher.confirm_when_healthy(self.alive)
+            _protect_secrets_later(self.alive)
             url = f"http://127.0.0.1:{port}/?t={self.token}"
             log.info("AIODOS %s prêt sur le port %s", __version__, port)
             if args.ui_file:
@@ -217,6 +218,26 @@ class _Node:
             self.thread.join(timeout=30 if restart.requested() else 5)
         if self.ui_file is not None:
             self.ui_file.unlink(missing_ok=True)
+
+
+def _protect_secrets_later(alive, delay=60):
+    """Les clés enregistrées avant leur protection (node/vault.py) sont protégées une fois
+    cette version en bonne santé : une version précédente, relancée par les mises à jour
+    si celle-ci s'arrêtait au démarrage, sait encore les lire jusque-là."""
+    def run():
+        time.sleep(delay)
+        if not alive():
+            return
+        try:
+            from aiodos import settings
+            from aiodos.network import peers
+            done = peers.protect_keys() + settings.protect_secrets()
+            if done:
+                log.info("%s clé(s) protégée(s) sur le disque (DPAPI)", done)
+        except Exception as exc:
+            log.warning("Protection des clés impossible : %s", exc)
+
+    threading.Thread(target=run, daemon=True, name="aiodos-coffre").start()
 
 
 def _serve(args) -> int:
