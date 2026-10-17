@@ -5,7 +5,7 @@ prête. Ils apparaissent dans le choix du modèle sous « Sur mes machines » ;
 choisir l'un d'eux fait répondre la conversation par cette machine, en flux
 chiffré (cf. lending.py chez elle). Identifiant : « peer:<machine>:<modèle> ».
 """
-from aiodos.network import client, peers
+from aiodos.network import activity, client, peers
 from aiodos.network.client import PeerError
 from aiodos.node import identity
 
@@ -75,9 +75,10 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
         payload["options"] = options
     if stats:
         payload["stats"] = True
-    for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop):
-        for kind in ("thinking", "content"):
-            if frame.get(kind):
-                yield kind, frame[kind]
-        if stats and isinstance(frame.get("stats"), dict):
-            yield "stats", frame["stats"]
+    with activity.chat("by", node_id):               # « répond à ta conversation »
+        for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop):
+            for kind in ("thinking", "content"):
+                if frame.get(kind):
+                    yield kind, frame[kind]
+            if stats and isinstance(frame.get("stats"), dict):
+                yield "stats", frame["stats"]

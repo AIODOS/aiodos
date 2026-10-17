@@ -50,6 +50,13 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
    devant : le GPU lui revient. « Seulement quand je n'utilise pas ce PC » le réserve aux
    moments d'inactivité (10 minutes par défaut), comme un économiseur d'écran : dès
    que l'utilisateur revient, les unités en cours sont rendues.
+4. **Voir qui est là** (vue Réseau, « Machines connectées » ; nombre de machines en
+   ligne à droite de la barre du bas) : comme la liste des pairs d'un client BitTorrent,
+   chaque machine appairée avec son chemin (réseau local, Internet en direct ou par un
+   relais) et son temps de réponse, ce qu'elle prête (sa puissance, en pause ou non,
+   ses modèles, sa carte graphique), ce qu'elle calcule pour toi et toi pour elle en ce
+   moment, et le temps de calcul échangé. Un ami voit seulement si ton partage est
+   activé, pas ton activité.
 
 Comment le travail circule :
 

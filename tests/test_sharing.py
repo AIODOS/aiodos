@@ -116,13 +116,16 @@ def test_a_friend_sees_a_reduced_profile(owner, monkeypatch):
             "updates": {"offer": "2.0.1", "files": {}},
             "ollama": {"version": "0.40", "models": [{"name": "mistral:7b"}]}}
     monkeypatch.setattr(p2p_app.identity, "profile", lambda: dict(full))
-    # une de mes machines : tout, et ce qui lui est ouvert à la consultation (rien ici)
-    assert p2p_app._profile(None, C, {}) == dict(full, consult={"open": 0})
+    # une de mes machines : tout, ce qui lui est ouvert à la consultation (rien ici), et
+    # l'état du partage de puissance, avec sa raison (activity.py)
+    assert p2p_app._profile(None, C, {}) == dict(
+        full, consult={"open": 0}, sharing={"enabled": False, "active": False, "detail": ""})
     peers.set_trust(B, sharing.FRIEND)
     seen = p2p_app._profile(None, B, {})
     assert set(seen) == {"node_id", "name", "version", "lends_models", "updates", "ollama",
-                         "consult"}
+                         "consult", "sharing"}
     assert seen["ollama"] == {"models": []}                           # rien ne lui est prêté
+    assert seen["sharing"] == {"enabled": False}         # pas l'activité de cette machine
     full["lends_models"] = True
     assert p2p_app._profile(None, B, {})["ollama"]["models"] == [{"name": "mistral:7b"}]
 

@@ -13,7 +13,7 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import client, consult, invitations, peers, placement, sharing
+from aiodos.network import activity, client, consult, invitations, peers, placement, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
@@ -221,13 +221,17 @@ class NetworkManager:
         if not full or not (full.get("address") or full.get("net_id")):
             return
         want_profile = time.time() - self._last_profile.get(peer["node_id"], 0) > PROFILE_EVERY
+        started = time.monotonic()
         try:
             reply = await asyncio.to_thread(
                 client.call, self.node_id, full, "profile" if want_profile else "ping", {})
         except Exception:
             return              # hors ligne : « vue il y a … » le dira
+        # Temps de réponse : celui d'un ping (un profil se calcule, nvidia-smi compris)
+        elapsed_ms = None if want_profile else 1000 * (time.monotonic() - started)
         await asyncio.to_thread(peers.touch, peer["node_id"], None, None, reply.get("name"))
         placement.note_load(peer["node_id"], reply.get("load"))   # si elle prête ses modèles
+        activity.note(peer["node_id"], reply, elapsed_ms)         # son partage, en direct
         if want_profile:
             self._last_profile[peer["node_id"]] = time.time()
             await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)
@@ -263,6 +267,7 @@ class NetworkManager:
                 pass
         await asyncio.to_thread(peers.remove, node_id)
         self.internet.forget(node_id)
+        activity.forget(node_id)
         await self.internet.sync()                        # retirée de la liste blanche
         self.changed()
 
@@ -285,6 +290,8 @@ class NetworkManager:
             peer["shared"] = shared.get(peer["node_id"])         # parti chez cet ami
             peer["consulted"] = consulted.get(peer["node_id"])   # ses recherches chez moi
         self.internet.annotate(paired)
+        working = self.worker.snapshot() if self.worker and self.running else None
+        activity.annotate(paired, (working or {}).get("working"))   # en direct (activity.py)
         return {
             "enabled": self.enabled, "running": self.running, "error": self.error,
             "node_id": self.node_id, "name": self.name(), "port": self.p2p_port,
@@ -295,7 +302,7 @@ class NetworkManager:
             "invitations": invitations.snapshot(),
             "internet": self.internet.snapshot(),
             "offload": bool(settings.get("offload_enabled")),
-            "sharing": self.worker.snapshot() if self.worker and self.running else None,
+            "sharing": working,
         }
 
     def publish(self, event: dict):

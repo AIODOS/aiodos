@@ -4,6 +4,7 @@ import { $, h, esc, ago, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
+import { renderConnected } from './connected.js';
 
 let root;
 let lastJson = '';
@@ -14,7 +15,8 @@ export function mountNetwork(container) {
       <div class="page-head"><div><h1>Réseau</h1>
         <div class="sub">Fais travailler tes machines ensemble, et celles de tes amis : chacune peut prêter sa
         puissance de calcul aux autres. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
-      <div class="card" id="net-state"></div>
+      <div class="card" id="net-live" hidden></div>
+      <div class="card" id="net-state" style="margin-top:16px"></div>
       <div class="card" id="net-internet" style="margin-top:16px"></div>
       <div class="card" id="net-peers" style="margin-top:16px"></div>
       <div class="card" id="net-visible" style="margin-top:16px"></div>
@@ -38,6 +40,8 @@ export async function loadNetwork() {
 function render() {
   const net = state.network;
   if (!root || !net) return;
+  renderConnected($('#net-live', root), net);
+  $('#net-state', root).style.marginTop = net.enabled ? '16px' : '0';
   renderState(net);
   renderInternet(net);
   renderPeers(net);

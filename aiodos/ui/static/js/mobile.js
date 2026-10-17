@@ -1,5 +1,5 @@
-// Téléphone (écran étroit) : la barre de navigation en bas, avec « Plus » pour les vues moins
-// courantes ; le bouton Retour d'Android ; la barre cachée tant que le clavier est ouvert.
+// Téléphone (écran étroit) : « Plus » dans la barre du bas pour les vues moins courantes ; le
+// bouton Retour d'Android ; la barre cachée tant que le clavier est ouvert.
 import { $ } from './dom.js';
 import { state, on, emit } from './state.js';
 import { menu } from './ui.js';
@@ -39,9 +39,10 @@ function sync() {
   }
 }
 
-// Clavier ouvert : la page rétrécit nettement (même largeur). La barre du bas laisse alors la
-// place au message, même si le clavier se ferme sans que le champ perde le focus.
+// Clavier ouvert (écran tactile) : la page rétrécit nettement, à largeur égale. La barre du bas
+// laisse alors la place au message, même si le clavier se ferme sans que le champ perde le focus.
 function watchKeyboard() {
+  if (!matchMedia('(hover: none)').matches) return;     // souris : une fenêtre qu'on redimensionne
   let width = innerWidth;
   let tallest = innerHeight;
   addEventListener('resize', () => {

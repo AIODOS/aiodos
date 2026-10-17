@@ -10,10 +10,12 @@
 </head>
 <body>
   <div class="app">
-    <!-- Sur un écran étroit (téléphone), la barre passe en bas : les vues moins courantes
+    <!-- La barre de navigation, en bas : le logo, les vues, et les machines en ligne
+         (js/views/connected.js) ; sur un écran étroit (téléphone), les vues moins courantes
          vont sous « Plus » (js/mobile.js) -->
     <nav class="rail" aria-label="Navigation principale">
       <img class="rail-logo" src="/logo.png?v=aiodos" alt="AIODOS">
+      <div class="rail-views">
       <button class="rail-btn" data-view="chat" title="Conversations"><span data-icon="chat"></span><span class="rail-label">Discussions</span></button>
       <button class="rail-btn" data-view="library" title="Bibliothèques"><span data-icon="library"></span><span class="rail-label">Bibliothèques</span></button>
       <button class="rail-btn" data-view="images" title="Images et vidéos"><span data-icon="image"></span><span class="rail-label">Images</span></button>
@@ -21,10 +23,11 @@
         <span data-icon="jobs"></span><span class="rail-label">Tâches</span><span class="rail-badge" id="jobs-badge" hidden></span>
       </button>
       <button class="rail-btn" data-view="node" title="Cette machine"><span data-icon="node"></span><span class="rail-label">Cette machine</span></button>
-      <button class="rail-btn" data-view="network" title="Réseau"><span data-icon="network"></span><span class="rail-label">Réseau</span></button>
-      <div class="rail-spacer"></div>
+      <button class="rail-btn" data-view="network" title="Réseau"><span data-icon="network"></span><span class="rail-label">Réseau</span><span class="rail-dot" id="net-dot" hidden></span></button>
       <button class="rail-btn" data-view="settings" title="Réglages"><span data-icon="settings"></span><span class="rail-label">Réglages</span></button>
       <button class="rail-btn rail-more" id="rail-more" title="Plus"><span data-icon="more"></span><span class="rail-label">Plus</span></button>
+      </div>
+      <button class="rail-status" id="rail-status" hidden></button>
     </nav>
     <main>
       <section class="view" id="view-chat" hidden></section>

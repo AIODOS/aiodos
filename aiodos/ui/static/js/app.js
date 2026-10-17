@@ -13,6 +13,7 @@ import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
+import { mountRailStatus } from './views/connected.js';
 import { mountMobile } from './mobile.js';
 import { frenchSpacing } from './typo.js';
 
@@ -119,6 +120,7 @@ async function boot() {
     };
   });
   mountMobile();
+  mountRailStatus();
   on('view:show', show);
   on('models:reload', loadModels);
   // Les modèles prêtés par mes machines apparaissent et disparaissent avec elles
