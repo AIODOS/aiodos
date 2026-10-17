@@ -186,6 +186,18 @@ def make_app(stage: Path, commit: str, number: str):
          "data": "%LOCALAPPDATA%\\AIODOS\\data"}, indent=1), encoding="utf-8")
 
 
+def precompile(stage: Path):
+    """Le code d'AIODOS compilé d'avance, par le Python embarqué : le premier lancement n'a
+    plus à le faire, ce qui se sentait sur un PC modeste. Bytecode vérifié par l'empreinte de
+    sa source, pas par sa date : un fichier remplacé est recompilé quand même."""
+    python = stage / "runtime" / "python.exe"
+    done = subprocess.run([str(python), "-m", "compileall", "-q", "-j", "0",
+                           "--invalidation-mode", "checked-hash", str(stage / "app" / "aiodos")],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if done.returncode != 0:
+        raise BuildError(f"compilation du code : {(done.stderr or done.stdout).strip()[:1000]}")
+
+
 def add_companion(stage: Path, commit: str, number: str, given: Path | None):
     target = stage / "app" / "compagnon" / "target" / "release" / "aiodos-net.exe"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -270,6 +282,7 @@ def main(argv=None) -> int:
         print(f"AIODOS {number} (commit {commit[:10]}) : Python {PYTHON['version']}…", flush=True)
         make_runtime(stage, fetch_python())
         make_app(stage, commit, number)
+        precompile(stage)
         if not args.no_companion:
             add_companion(stage, commit, number,
                           Path(args.companion) if args.companion else None)

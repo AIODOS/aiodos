@@ -60,6 +60,10 @@ fr.OllamaTask=Télécharger et installer Ollama, le moteur des conversations (de
 en.OllamaTask=Download and install Ollama, the chat engine (from ollama.com, about 1 GB)
 fr.OllamaFailed=Ollama n'a pas pu être téléchargé. Tu pourras l'installer plus tard depuis https://ollama.com/download : AIODOS s'en servira dès qu'il tournera.
 en.OllamaFailed=Ollama could not be downloaded. You can install it later from https://ollama.com/download: AIODOS will use it as soon as it runs.
+fr.OllamaInstalling=Installation d'Ollama, le moteur des conversations : une à deux minutes. Sa fenêtre s'ouvrira ensuite d'elle-même ; AIODOS s'en sert tout seul, tu n'as rien à y faire.
+en.OllamaInstalling=Installing Ollama, the chat engine: one or two minutes. Its window will then open by itself; AIODOS uses it on its own, nothing to do there.
+fr.FinishedLabel=AIODOS est installé. Sa fenêtre s'ouvre dans quelques secondes si la case ci-dessous reste cochée ; le premier démarrage est un peu plus long.
+en.FinishedLabel=AIODOS is installed. Its window opens in a few seconds if the box below stays checked; the first start takes a little longer.
 fr.NoWebView2=Le moteur d'affichage WebView2 de Microsoft semble absent : la fenêtre d'AIODOS en a besoin. Il est livré avec Windows 11 et les Windows 10 à jour ; sinon : https://go.microsoft.com/fwlink/p/?LinkId=2124703
 en.NoWebView2=Microsoft's WebView2 runtime seems to be missing: the AIODOS window needs it. It ships with Windows 11 and up-to-date Windows 10; otherwise: https://go.microsoft.com/fwlink/p/?LinkId=2124703
 fr.DeleteData=Supprimer aussi tes données AIODOS (conversations, bibliothèques, réglages, images, modèles téléchargés) ?
@@ -116,6 +120,12 @@ begin
   Result := Result and (Version <> '') and (Version <> '0.0.0.0');
 end;
 
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+    WizardForm.FinishedLabel.Caption := CustomMessage('FinishedLabel');
+end;
+
 procedure InitializeWizard;
 begin
   DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing),
@@ -149,8 +159,19 @@ begin
   if CurStep = ssPostInstall then
   begin
     if WizardIsTaskSelected('ollama') and FileExists(ExpandConstant('{tmp}\OllamaSetup.exe')) then
-      Exec(ExpandConstant('{tmp}\OllamaSetup.exe'), '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
-        '', SW_SHOW, ewWaitUntilTerminated, Code);
+    begin
+      // Installation silencieuse d'Ollama, qui prend du temps : dit ici, avec une barre
+      // animée, au lieu d'un assistant qui semble figé
+      WizardForm.StatusLabel.Caption := CustomMessage('OllamaInstalling');
+      WizardForm.FilenameLabel.Caption := '';
+      WizardForm.ProgressGauge.Style := npbstMarquee;
+      try
+        Exec(ExpandConstant('{tmp}\OllamaSetup.exe'), '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
+          '', SW_SHOW, ewWaitUntilTerminated, Code);
+      finally
+        WizardForm.ProgressGauge.Style := npbstNormal;
+      end;
+    end;
     if not WebView2Present then
       SuppressibleMsgBox(CustomMessage('NoWebView2'), mbInformation, MB_OK, IDOK);
   end;

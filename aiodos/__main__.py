@@ -135,76 +135,126 @@ def _write_ui_file(path: str, url: str) -> Path:
     return target
 
 
+class NodeError(Exception):
+    pass
+
+
+class _Node:
+    """Le nœud : la base, l'application et le serveur local de l'interface et de l'API.
+    Avec une fenêtre, il démarre hors du fil graphique : elle s'ouvre aussitôt sur un écran
+    d'attente (ui/window.py), et l'interface s'y affiche quand il est prêt."""
+
+    def __init__(self, args, port: int, token: str, show_key: str):
+        self.args, self.port, self.token, self.show_key = args, port, token, show_key
+        self.server = None
+        self.thread = None
+        self.ui_file = None
+        self.failed = False
+        self.done = threading.Event()              # démarrage fini, réussi ou non
+
+    def start(self) -> str:
+        """Démarre tout et rend l'adresse de l'interface (jeton compris) ; NodeError si le
+        serveur ne répond pas."""
+        try:
+            import uvicorn
+
+            from aiodos import db, migrate_legacy
+            from aiodos.api.server import create_app
+            from aiodos.knowledge import store
+
+            args, port = self.args, self.port
+            db.connect()
+            store.ensure_defaults()
+            migrated = None if args.no_migrate else migrate_legacy.run_if_needed()
+            if migrated:
+                log.info("Import v1 : %s", migrated)
+            app = create_app(self.token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
+                "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
+                "discovery": not args.no_discovery,
+                "internet": args.internet or args.internet_local or bool(args.internet_relay_only),
+                "internet_local": args.internet_local,
+                "internet_relay_only": args.internet_relay_only}, _parse_slots(args.slots),
+                windowed=not args.headless, show_key=self.show_key)
+            # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
+            # de la sienne, qui suppose une console
+            self.server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
+                                                        log_level="warning", access_log=False,
+                                                        log_config=None))
+            self.thread = threading.Thread(target=self.server.run, daemon=True,
+                                           name="aiodos-node")
+            self.thread.start()
+            deadline = time.monotonic() + 20
+            while not self.server.started and self.thread.is_alive()                     and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if not self.server.started:
+                raise NodeError("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
+            launcher.confirm_when_healthy(self.alive)
+            url = f"http://127.0.0.1:{port}/?t={self.token}"
+            log.info("AIODOS %s prêt sur le port %s", __version__, port)
+            if args.ui_file:
+                self.ui_file = _write_ui_file(args.ui_file, url)
+            return url
+        except Exception:
+            self.failed = True
+            raise
+        finally:
+            self.done.set()
+
+    def alive(self) -> bool:
+        return (self.thread is not None and self.thread.is_alive()
+                and not self.server.should_exit)
+
+    def stop_soon(self):
+        if self.server is not None:
+            self.server.should_exit = True
+
+    def stop(self):
+        """Arrêt complet avant de rendre la main : port réseau rendu, compagnon Internet
+        arrêté (jusqu'à 8 s), sinon une nouvelle version les trouverait pris."""
+        self.done.wait(timeout=120)                # fenêtre fermée pendant le démarrage
+        self.stop_soon()
+        if self.thread is not None:
+            self.thread.join(timeout=30 if restart.requested() else 5)
+        if self.ui_file is not None:
+            self.ui_file.unlink(missing_ok=True)
+
+
 def _serve(args) -> int:
-    import uvicorn
-
-    from aiodos import db, migrate_legacy
-    from aiodos.api.server import create_app
-    from aiodos.knowledge import store
-
     port = args.port or _free_port()
     token = secrets.token_urlsafe(24)
     show_key = secrets.token_urlsafe(24)        # pour faire revenir la fenêtre, sans le jeton
-    ui_file = None
     if not instance.acquire(port, show_key):
         # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
         if args.headless or not instance.wake_running():
             _alert("AIODOS est déjà ouvert sur cette machine.")
         return launcher.ALREADY_RUNNING
 
+    node = _Node(args, port, token, show_key)
     try:
-        db.connect()
-        store.ensure_defaults()
-        migrated = None if args.no_migrate else migrate_legacy.run_if_needed()
-        if migrated:
-            log.info("Import v1 : %s", migrated)
-
-        app = create_app(token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
-            "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
-            "discovery": not args.no_discovery,
-            "internet": args.internet or args.internet_local or bool(args.internet_relay_only),
-            "internet_local": args.internet_local,
-            "internet_relay_only": args.internet_relay_only}, _parse_slots(args.slots),
-            windowed=not args.headless, show_key=show_key)
-        # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
-        # de la sienne, qui suppose une console
-        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
-                                               log_level="warning", access_log=False,
-                                               log_config=None))
-        thread = threading.Thread(target=server.run, daemon=True, name="aiodos-node")
-        thread.start()
-        deadline = time.monotonic() + 20
-        while not server.started and thread.is_alive() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        if not server.started:
-            _alert("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
-            return 1
-        launcher.confirm_when_healthy(lambda: thread.is_alive() and not server.should_exit)
-
-        url = f"http://127.0.0.1:{port}/?t={token}"
-        log.info("AIODOS %s prêt sur le port %s", __version__, port)
-        if args.ui_file:
-            ui_file = _write_ui_file(args.ui_file, url)
         if args.headless:
+            try:
+                url = node.start()
+            except NodeError as exc:
+                _alert(str(exc))
+                return 1
             print(f"Nœud AIODOS prêt : {url}", flush=True)
             _stop_on_signals()
             try:
-                while thread.is_alive() and not restart.requested():
+                while node.alive() and not restart.requested():
                     time.sleep(1)
             except KeyboardInterrupt:
                 pass
         else:
+            # La fenêtre d'abord, sur un écran d'attente ; le nœud démarre pendant ce temps
             from aiodos.ui import window
             restart.on_request(window.close)
-            window.run(url, on_closed=lambda: setattr(server, "should_exit", True))
-        server.should_exit = True
-        # Avant de passer la main, l'arrêt doit être complet : port réseau rendu,
-        # compagnon Internet arrêté (jusqu'à 8 s), sinon la nouvelle version les trouve pris
-        thread.join(timeout=30 if restart.requested() else 5)
+            window.run(node.start, on_closed=node.stop_soon,
+                       quit_on_error=os.environ.get(launcher.TRIAL_ENV) == "1")
+        node.stop()
     finally:
         instance.release()
-        if ui_file is not None:
-            ui_file.unlink(missing_ok=True)
+    if node.failed:
+        return 1
     if restart.requested():               # nouvelle version installée : on passe la main
         return restart.relaunch(sys.argv[1:])
     return 0
