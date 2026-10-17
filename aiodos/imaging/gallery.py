@@ -109,6 +109,12 @@ def list_images(limit: int = 60, before: int | None = None) -> list:
     return [dict(r) for r in rows]
 
 
+def batch(name: str) -> list:
+    """Les images d'un lot (une demande), dans l'ordre où elles sont arrivées."""
+    return [dict(r) for r in db.query("SELECT * FROM images WHERE batch=? ORDER BY id",
+                                      (_SAFE.sub("", str(name).lower())[:32],))]
+
+
 def path_of(row: dict) -> Path:
     """Le fichier d'une image : dans le dossier actuel, ou dans celui où elle a été écrite
     avant un changement de dossier."""

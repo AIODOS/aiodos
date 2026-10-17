@@ -6,11 +6,14 @@ import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
+import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, resetMedia }
+  from './chat-create.js';
 
 const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think',
   'peer_libraries_enabled'];
 let el = {};
 let busy = false;
+let creating = false;      // une création d'image en route vers le nœud
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
 
@@ -87,6 +90,7 @@ export function mountChat(container) {
   el.send.onclick = () => (busy ? stop() : send());
   el.title.onclick = renameCurrent;
   el.list.addEventListener('click', onMessageClick);
+  mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
@@ -246,6 +250,7 @@ function newConversation() {
   state.currentConversation = null;
   prefs.set('lastConversation', null);
   setTitle(null);
+  resetMedia();
   showWelcome();
   emit('chat:current');
   el.input.focus();
@@ -265,9 +270,11 @@ async function openConversation(id) {
   prefs.set('lastConversation', conv.id);
   setTitle(conv.title);
   el.list.innerHTML = '';
+  resetMedia();
   const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
     if (m.role === 'user') { appendUser(m.content); continue; }
+    if (m.media) { appendMedia(el.list, m.media); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
     if (m.thinking) view.restoreThinking(m.thinking);
     view.sources(m.sources);
@@ -547,18 +554,21 @@ async function confirmPeers(text, pre) {
 }
 
 async function send() {
-  if (busy) return;
+  if (busy || creating) return;
   const text = el.input.value.trim();
   if (!text) return;
+  const explicit = creationRequest(text);          // mode « Créer » ouvert
+  if (explicit) { await create(text, explicit); return; }
   const model = selectedModel();
+
+  let pre;
+  try { pre = await post('/chat/preflight', { text, model }); } catch (e) { errorToast(e); return; }
+  if (pre.create) { await create(text, autoRequest(pre.create)); return; }   // « Crée une image de… »
   if (!model) {
     if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
     else toast('Les modèles se chargent, un instant…');
     return;
   }
-
-  let pre;
-  try { pre = await post('/chat/preflight', { text, model }); } catch (e) { errorToast(e); return; }
   const go = await confirmOutgoing(text, model, pre);
   if (!go) return;
 
@@ -597,4 +607,38 @@ async function send() {
     refreshTree();
     el.input.focus();
   }
+}
+
+// Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
+// images s'ajoutent à la conversation, le calcul part dans la file
+async function create(text, request) {
+  creating = true;
+  el.input.value = '';
+  autoresize();
+  appendUser(text);
+  scrollBottom(true);
+  let made;
+  try {
+    made = await post('/chat/create', {
+      ...request, text, conversation_id: state.currentConversation?.id ?? null,
+      chat_model: selectedModel() || null,
+    });
+  } catch (e) {
+    appendNotice(el.list, e.message, e.status === 409);    // 409 : aucun modèle ne peut la calculer
+    scrollBottom(true);
+    return;
+  } finally {
+    creating = false;
+  }
+  if (state.currentConversation?.id !== made.conversation_id) {
+    state.currentConversation = { id: made.conversation_id, title: made.title || 'Nouvelle conversation',
+      model: selectedModel() };
+    prefs.set('lastConversation', made.conversation_id);
+  }
+  if (made.title) { state.currentConversation.title = made.title; setTitle(made.title); }
+  emit('chat:current');
+  appendMedia(el.list, made.media);
+  scrollBottom(true);
+  refreshTree();
+  el.input.focus();
 }

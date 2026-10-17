@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -149,6 +149,11 @@ MIGRATIONS = {
     10: """
     ALTER TABLE ledger ADD COLUMN given_chats INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE ledger ADD COLUMN received_chats INTEGER NOT NULL DEFAULT 0;
+    """,
+    # Images et vidéos créées dans la conversation (chat/creations.py) : la réponse de
+    # l'assistant garde sa demande (lot, travail, modèle, description), en JSON
+    11: """
+    ALTER TABLE messages ADD COLUMN media TEXT;
     """,
 }
 

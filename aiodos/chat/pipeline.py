@@ -19,6 +19,7 @@ import logging
 import re
 
 from aiodos import settings
+from aiodos.chat import creations
 from aiodos.cluster import group as cluster
 from aiodos.knowledge import search, store
 from aiodos.network import placement, remote_models, remote_search, sharing
@@ -82,7 +83,17 @@ def preflight(text: str, model: str) -> dict:
         "cloud_confirm": bool(settings.get("cloud_confirm")),
         "consult": _consult_targets(),                 # chez qui partirait la question
         "consult_allowed": peers_allowed(model),       # et si ce modèle peut s'en servir
+        "create": _creation(text),                     # une image ou une vidéo à créer
     }
+
+
+def _creation(text: str) -> dict | None:
+    """La demande d'image ou de vidéo du message (chat/creations.py) ; jamais d'erreur ici."""
+    try:
+        return creations.preflight(text)
+    except Exception as exc:
+        log.warning("Demande de création illisible : %s", exc)
+        return None
 
 
 def _consult_targets() -> list:
@@ -261,6 +272,15 @@ def _peer_context(question, sources, accepted):
             for p in found]
 
 
+def _can_create() -> str | None:
+    """AIODOS sait créer des images : le modèle de conversation doit le savoir."""
+    try:
+        return creations.capability_note()
+    except Exception as exc:
+        log.warning("Modèles d'images illisibles : %s", exc)
+        return None
+
+
 def build_messages(history, question, *, libraries, conversations, web_search,
                    conversation_id=None, destination=None, web=None, peers=None):
     """Construit les messages pour le modèle. → (messages, sources citées)
@@ -273,6 +293,9 @@ def build_messages(history, question, *, libraries, conversations, web_search,
     only = visible_libraries(destination)
     conversations = conversations and destination is None    # la mémoire reste ici
     messages = [{"role": "system", "content": settings.get("system_prompt")}]
+    note = _can_create()
+    if note:
+        messages.append({"role": "system", "content": note})
     sources = []
     if libraries or conversations:
         summary = search.manifest(libraries, conversations, only=only)

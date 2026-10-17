@@ -281,7 +281,7 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .composer { padding: 10px 22px 18px; }
 .composer-box {
   max-width: 840px; margin: 0 auto; display: flex; align-items: flex-end; gap: 10px;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 16px; padding: 10px 10px 10px 16px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 16px; padding: 10px 10px 10px 8px;
   transition: border-color .15s, box-shadow .15s;
 }
 .composer-box:focus-within { border-color: #5b74d6; box-shadow: 0 0 0 3px rgba(91, 116, 214, .18); }
@@ -293,6 +293,45 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .composer .send:disabled { opacity: .35; cursor: default; }
 .composer .send.stop { background: var(--panel-3); color: var(--text); border: 1px solid var(--line-2); }
 .composer .hint { max-width: 840px; margin: 6px auto 0; font-size: 11.5px; color: var(--faint); text-align: center; }
+
+/* Créer une image ou une vidéo dans la conversation (js/views/chat-create.js) : le bouton à
+   gauche du message, la barre de réglages au-dessus, la réponse qui montre les images */
+.create-btn { width: 38px; height: 38px; border-radius: 11px; color: var(--muted); flex: none; }
+.create-btn.on { color: #dff8ff; background: rgba(79, 216, 235, .12); }
+.create-bar { max-width: 840px; margin: 0 auto 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.create-kind { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 9px 0 11px; border-radius: 15px;
+  font-size: 12.5px; color: #dff8ff; border: 1px solid rgba(79, 216, 235, .55); background: rgba(79, 216, 235, .1); }
+.create-kind:hover { background: rgba(79, 216, 235, .18); }
+.create-kind .icon, .create-seed .icon { width: 15px; height: 15px; }
+.create-kind .icon:last-child { width: 13px; height: 13px; opacity: .7; }
+.create-bar .select { width: auto; min-width: 0; height: 30px; padding-top: 0; padding-bottom: 0; font-size: 12.5px; }
+.create-seed { cursor: pointer; }
+.create-note { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.create-note:empty { display: none; }
+
+.creation-grid { display: grid; gap: 8px; max-width: 440px; }
+.creation-grid.tall { max-width: 300px; }
+.creation-grid.wide { max-width: 560px; }
+.creation-grid.several { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
+.creation-grid.several.tall { max-width: 420px; }
+.creation-grid.several.n1 { grid-template-columns: minmax(0, 1fr); max-width: 440px; }
+.creation-tile { position: relative; display: block; width: 100%; padding: 0; border: 1px solid var(--line);
+  border-radius: 12px; overflow: hidden; background: var(--panel-2); }
+.creation-tile img, .creation-tile video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.creation-tile:hover { border-color: var(--line-2); }
+.creation-tile .img-tag { opacity: 1; }
+.creation-slot { display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); color: var(--faint);
+  background: linear-gradient(110deg, var(--panel) 35%, var(--panel-3) 50%, var(--panel) 65%) 0 0 / 300% 100%;
+  animation: shimmer 1.8s linear infinite; }
+.creation-slot .icon { width: 28px; height: 28px; opacity: .55; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.creation-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; }
+.creation-state:empty { display: none; }
+.creation-state .typing { padding: 0; }
+.creation-state .icon-btn { width: 26px; height: 26px; }
+.creation-state .icon-btn .icon { width: 15px; height: 15px; }
+.msg.notice .banner { margin: 0; flex-wrap: wrap; }
+.msg.notice .banner > div { flex: 1 1 220px; }
 
 .welcome { max-width: 680px; margin: 0 auto; text-align: center; }
 .messages-inner:has(> .welcome) { min-height: 100%; justify-content: center; }   /* accueil centré */
@@ -515,12 +554,12 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .img-dl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .img-dl .bar { flex: 1; min-width: 180px; }
 .err-text { color: var(--err); font-size: 13px; margin-left: 8px; }
-.img-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
-.img-form .textarea { min-height: 72px; }
-.img-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.img-controls .select { width: auto; min-width: 150px; }
-.img-controls .input { width: 170px; }
-.img-controls .grow { flex: 1; }
+/* Elles se demandent dans une discussion : la vue le rappelle, avec de quoi y aller */
+.img-ask { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.img-ask-text { display: flex; gap: 10px; flex: 1 1 320px; color: var(--muted); }
+.img-ask-text > .icon { color: var(--cyan); margin-top: 2px; }
+.img-ask-text div .icon { width: 16px; height: 16px; vertical-align: -3px; color: var(--text); }
+.img-ask-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 #img-pending { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 #img-pending:empty { display: none; }
 .img-job { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; }
@@ -645,7 +684,7 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
   .toast { min-width: 0; max-width: none; }
 
   .library { grid-template-columns: 1fr; }
-  .img-controls .select, .img-controls .input { flex: 1 1 140px; width: auto; min-width: 0; }
-  .img-controls #img-format { flex-basis: 100%; }
   .img-grid { columns: 2 140px; }
+  .create-bar .select { flex: 1 1 120px; }
+  .creation-grid, .creation-grid.wide, .creation-grid.several { max-width: 100%; }
 }

@@ -82,11 +82,12 @@ def claim_next(resources, node) -> dict | None:
             "WHERE id=? AND status=?", (RUNNING, now, node, row["id"], QUEUED)).rowcount
         if not claimed:
             return None
-        c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
-                  "WHERE id=? AND status=?", (RUNNING, now, row["job_id"], QUEUED))
+        started = c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
+                            "WHERE id=? AND status=?", (RUNNING, now, row["job_id"], QUEUED)).rowcount
     unit = dict(row)
     unit["payload"] = json.loads(unit["payload"])
     unit["attempts"] += 1
+    unit["job_started"] = bool(started)       # le travail passe de « en file » à « en cours »
     return unit
 
 

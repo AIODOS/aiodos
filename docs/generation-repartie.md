@@ -241,6 +241,43 @@ pas plus lents (8,5 s) et un décodage à court de mémoire, refait par tuiles.
    de ggml (les versions publiées ne l'ont pas : pas de `ggml-rpc.dll` dans l'archive).
 2. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
 
+## 8. Dans la conversation (18/10/2026)
+
+Demande de l'auteur : la création d'images ne doit pas être à part, puisque dans tous les
+assistants elle se fait dans la conversation ; pareil pour la vidéo. Les images et les
+vidéos se demandent donc là, et la vue « Images et vidéos » garde la galerie, les modèles
+et les créations en cours.
+
+- **Une demande écrite** est reconnue avant l'envoi (`chat/creations.py`, `intent`, appelé
+  par le preflight) : un verbe de création (crée, génère, dessine, fais, je voudrais…),
+  un genre (image, photo, logo, affiche, vidéo…) et ce qu'il faut montrer. « Crée-moi une
+  image d'un phare sous l'orage » donne la description « un phare sous l'orage ». La
+  phrase peut aussi dire le nombre (« 4 images »), le format (portrait, paysage, carré,
+  pour un téléphone…) et, pour une vidéo, la durée. Ne sont **pas** des demandes : une
+  question (« comment créer une image Docker ? »), un sujet de code ou de système
+  (Docker, ISO, Python, image disque…), une tournure figurée (« donne-moi une image
+  claire de la situation »), une phrase sans sujet (« tu sais créer des images ? »).
+  « Dessine-moi un mouton » en est une, sans le mot « image ».
+- **Le bouton Image**, à gauche du message, ouvre le mode « Créer » : modèle, format,
+  durée, nombre ; le message entier est alors la description. « Reprendre » (sur une
+  création, ou dans la galerie) y remet la description, les réglages et la graine.
+- **Le modèle** : celui choisi la dernière fois pour ce genre s'il peut calculer, sinon
+  le premier prêt, ici ou chez mes machines en ligne ; ceux à licence restrictive en
+  dernier. Si aucun ne peut, la conversation le dit, avec un lien vers la vue Images et
+  vidéos, et rien n'est gardé.
+- **Ce qui est gardé** : le message, puis une réponse de l'assistant dont la colonne
+  `media` (migration 11) garde la demande : genre, modèle, description, nombre, taille,
+  graine, lot et travail. La réponse montre les images à mesure qu'elles arrivent (lot de
+  la galerie, `GET /api/images?batch=`), avec l'état du travail et de quoi l'arrêter. Le
+  texte de cette réponse la résume pour le modèle de conversation (« (Création d'une
+  image avec Z-Image Turbo, d'après la description : « … ».) ») : il sait ce qui a été
+  créé sans voir les images, et la mémoire des conversations aussi.
+- **Le modèle de conversation sait qu'AIODOS crée des images** quand un modèle peut les
+  calculer : une consigne courte le lui dit, pour qu'il ne réponde pas « je ne peux pas ».
+- **Rien ne change pour la répartition** : le travail est le même que celui de la vue
+  Images (unités indépendantes, mes machines d'abord, un ami seulement avec l'accord des
+  deux côtés), et la description ne part chez une autre machine que le temps du calcul.
+
 ## Sources
 
 - stable-diffusion.cpp : [dépôt](https://github.com/leejet/stable-diffusion.cpp),

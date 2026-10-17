@@ -11,12 +11,11 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.imaging import catalog, download, gallery, local_copies, share
+from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.models import URGENT
-from aiodos.network import peers, sharing
 
 router = APIRouter(prefix="/api/images")
 
@@ -37,30 +36,10 @@ class GenerateIn(BaseModel):
     frames: int | None = None           # vidéos : nombre d'images (4n + 1), 33 par défaut
 
 
-def helpers(friends: bool | None = None) -> dict:
-    """{modèle : [machines en ligne qui l'ont et peuvent le calculer pour moi]} : mes machines
-    qui prêtent leur puissance, et les amis qui prêtent leur carte pour les images (leur
-    profil ne les montre qu'alors), si je les y autorise (friends : None, selon le réglage
-    images_from_friends)."""
-    if friends is None:
-        friends = bool(settings.get("images_from_friends"))
-    found = {}
-    for peer in peers.list_peers():
-        mine = sharing.level(peer["node_id"]) == sharing.MINE
-        if not peer["online"] or not (mine or friends):
-            continue
-        images = (peer.get("profile") or {}).get("images") or {}
-        if not images.get("engine") or not images.get("shares"):
-            continue
-        for model_id in images.get("models") or []:
-            found.setdefault(model_id, []).append(peer["name"] if mine else f"{peer['name']} (ami)")
-    return found
-
-
 def _models() -> dict:
     found = images_engine.info()
-    others = helpers()
-    offered = helpers(friends=True)              # amis prêts à calculer, si je l'accepte
+    others = lenders.helpers()
+    offered = lenders.helpers(friends=True)              # amis prêts à calculer, si je l'accepte
     models = []
     for model_id, spec in catalog.MODELS.items():
         models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
@@ -113,9 +92,8 @@ async def generate(body: GenerateIn, request: Request):
         params = kind.normalize(body.model_dump())
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    here = await asyncio.to_thread(lambda: images_engine.folder() is not None
-                                   and catalog.ready(params["model"]))
-    if not here and not (await asyncio.to_thread(helpers)).get(params["model"]):
+    here, others = await asyncio.to_thread(lenders.can_compute, params["model"])
+    if not here and not others:
         raise HTTPException(409, "Ni cette machine ni mes machines en ligne ne peuvent "
                                  "calculer ce modèle : télécharge-le d'abord.")
     executor = request.app.state.executor
@@ -127,8 +105,10 @@ async def generate(body: GenerateIn, request: Request):
 
 
 @router.get("")
-async def list_images(limit: int = 60, before: int | None = None):
-    rows = await asyncio.to_thread(gallery.list_images, limit, before)
+async def list_images(limit: int = 60, before: int | None = None, batch: str | None = None):
+    """La galerie, les plus récentes d'abord ; `batch` : les images d'une demande."""
+    rows = await asyncio.to_thread(
+        (lambda: gallery.batch(batch)) if batch else (lambda: gallery.list_images(limit, before)))
     return [dict(row, path=str(gallery.path_of(row))) for row in rows]   # où est le fichier
 
 

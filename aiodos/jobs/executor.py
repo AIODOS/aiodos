@@ -138,6 +138,9 @@ class Executor:
                 return
             self.busy[unit["resource"]] += 1
             self._publish_status()
+            # « En cours » se voit dès la première unité (sans attendre la fin de la limite de
+            # 4 messages par seconde : la création du travail vient d'être annoncée)
+            self.publish_job(unit["job_id"], force=unit.get("job_started", False))
             task = asyncio.create_task(self._execute(unit))
             self._running.add(task)
             task.add_done_callback(self._running.discard)

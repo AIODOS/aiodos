@@ -68,8 +68,13 @@ function onJob(job) {
   if (finished && job.kind === 'generate_images') {
     const n = job.result?.images ?? job.done;
     const noun = job.params?.frames ? 'vidéo' : 'image';
-    if (state.view !== 'images') {
-      toast(`${job.title} : ${n} ${noun}${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} (vue Images et vidéos).`,
+    // Demandée dans une conversation : rien à dire si elle est sous les yeux
+    const conv = job.params?.conversation_id;
+    const seen = conv ? state.view === 'chat' && state.currentConversation?.id === conv
+      : state.view === 'images';
+    if (!seen && job.status !== 'cancelled') {
+      toast(`${job.title} : ${n} ${noun}${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} `
+        + `(${conv ? 'dans sa conversation' : 'vue Images et vidéos'}).`,
         job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
     }
   } else if (finished && job.kind !== 'index_conversation') {

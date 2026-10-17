@@ -34,8 +34,9 @@ def get(conv_id) -> dict | None:
         return None
     conv = dict(row)
     conv["messages"] = [
-        dict(m, sources=json.loads(m["sources"] or "[]"))
-        for m in db.query("SELECT id, role, content, thinking, model, sources, created "
+        dict(m, sources=json.loads(m["sources"] or "[]"),
+             media=json.loads(m["media"]) if m["media"] else None)
+        for m in db.query("SELECT id, role, content, thinking, model, sources, media, created "
                           "FROM messages WHERE conversation_id=? ORDER BY id", (conv_id,))]
     return conv
 
@@ -58,17 +59,19 @@ def delete(conv_id):
 
 
 def add_message(conv_id, role, content, thinking=None, model=None, sources=None,
-                conversation_model=None) -> int:
+                conversation_model=None, media=None) -> int:
     """model : le modèle qui a répondu ; conversation_model : celui que la conversation
     garde pour la suite, s'il diffère (mode automatique : « auto:… », alors que la
-    réponse retient la machine qui l'a calculée)."""
+    réponse retient la machine qui l'a calculée). media : images ou vidéos créées dans
+    la conversation (chat/creations.py)."""
     now = db.now()
     with db.transaction() as c:
         message_id = c.execute(
             "INSERT INTO messages(conversation_id, role, content, thinking, model, "
-            "sources, created) VALUES(?, ?, ?, ?, ?, ?, ?)",
+            "sources, media, created) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
             (conv_id, role, content, thinking, model,
-             json.dumps(sources or [], ensure_ascii=False), now)).lastrowid
+             json.dumps(sources or [], ensure_ascii=False),
+             json.dumps(media, ensure_ascii=False) if media else None, now)).lastrowid
         c.execute("UPDATE conversations SET updated=?, model=COALESCE(?, model) WHERE id=?",
                   (now, conversation_model or model, conv_id))
     return message_id

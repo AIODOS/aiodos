@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import render
-from aiodos.chat import conversations
+from aiodos.chat import conversations, creations
 
 router = APIRouter(prefix="/api")
 
@@ -34,6 +34,8 @@ def read(conv_id: int):
     for m in conv["messages"]:
         if m["role"] == "assistant":
             m["html"] = render.to_html(m["content"])
+            if m.get("media"):                  # images ou vidéos créées : déjà là, en cours
+                m["media"] = creations.view(m["media"])
     return conv
 
 

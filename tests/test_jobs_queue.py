@@ -42,6 +42,14 @@ def test_priority_then_arrival_order():
     assert _drain() == [urgent, normal_1, normal_2, background]
 
 
+def test_the_first_unit_says_the_job_has_started():
+    """L'exécuteur annonce alors « en cours » tout de suite (jobs/executor.py)."""
+    job_id = _job("deux", count=2)
+    first, second = (queue.claim_next({"cpu"}, "local") for _ in range(2))
+    assert first["job_started"] and not second["job_started"]
+    assert queue.job_summary(job_id)["status"] == "running"
+
+
 def test_only_requested_resources_are_claimed():
     gpu_job = _job("gpu", resource="gpu")
     cpu_job = _job("cpu", resource="cpu")
