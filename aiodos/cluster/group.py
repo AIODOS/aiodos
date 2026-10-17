@@ -116,7 +116,9 @@ class Group:
         self.closed = False
 
     # ------------------------------------------------------------- mise en place
-    def start(self):
+    def start(self, stop=None):
+        """Réunit les cartes et lance llama-server. `stop` (bouton Stop) interrompt la mise
+        en place : tout ce qui était pris est rendu."""
         found = engine.info(max_age=0)
         if not found:
             raise RuntimeError("llama.cpp n'est pas installé sur cette machine "
@@ -135,6 +137,8 @@ class Group:
                                "moment (réglage « Prêter ma carte graphique » chez elles).")
         try:
             for helper in cut["helpers"]:
+                if stop is not None and stop.is_set():
+                    raise RuntimeError("Mise en place du modèle réparti interrompue.")
                 peer = peers.get(helper["node_id"])
                 reply = client.call(identity.node_id(), peer, "cluster/lend",
                                     {"version": found["version"], "model": self.name},
@@ -145,7 +149,8 @@ class Group:
             self.server = engine.llama_server(
                 Path(found["folder"]), path, [port for _, _, port in self.loans],
                 cut["devices"], cut["split"], self.api_key, CONTEXT, cut["layers"])
-            self.server.start(timeout=LOAD_TIMEOUT, ready=lambda: engine.loaded(self.server.port))
+            self.server.start(timeout=LOAD_TIMEOUT, ready=lambda: engine.loaded(self.server.port),
+                              stop=stop)
         except Exception:
             self.close()
             raise
@@ -267,7 +272,7 @@ def _forget(group: Group):
             del _groups[group.name]
 
 
-def _group(name: str, retry: bool = True) -> Group:
+def _group(name: str, retry: bool = True, stop=None) -> Group:
     with _lock:
         group = _groups.get(name)
         if group is None or group.closed:
@@ -275,7 +280,7 @@ def _group(name: str, retry: bool = True) -> Group:
     with group.lock:                      # un seul lancement à la fois par modèle
         if not group.closed and group.server is None:
             try:
-                group.start()
+                group.start(stop)
             except Exception:
                 _forget(group)
                 raise
@@ -283,7 +288,7 @@ def _group(name: str, retry: bool = True) -> Group:
             _forget(group)
             group.close()
             if retry:
-                return _group(name, retry=False)
+                return _group(name, retry=False, stop=stop)
             raise RuntimeError("Le modèle réparti ne démarre pas : réessaie plus tard.")
     return group
 
@@ -293,7 +298,7 @@ def chat_stream(model, messages, think=True, stop=None):
     name = parse(model)
     if not name:
         raise RuntimeError("Modèle réparti inconnu.")
-    yield from _group(name).chat_stream(messages, think, stop)
+    yield from _group(name, stop=stop).chat_stream(messages, think, stop)
 
 
 def stop_all():

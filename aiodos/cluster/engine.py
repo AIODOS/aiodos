@@ -154,9 +154,11 @@ class Process:
         self.log_path = paths.log_path().parent / f"{name}.log"
         self.process = None
 
-    def start(self, timeout: float, ready=None) -> "Process":
+    def start(self, timeout: float, ready=None, stop=None) -> "Process":
         """Lance le programme et attend qu'il écoute sur son port, puis que `ready()` soit
-        vrai s'il est donné (llama-server écoute avant d'avoir chargé le modèle)."""
+        vrai s'il est donné (llama-server écoute avant d'avoir chargé le modèle). `stop`
+        (threading.Event, bouton Stop d'une conversation) interrompt l'attente : le
+        programme est arrêté."""
         log_file = self.log_path.open("w", encoding="utf-8", errors="replace")
         try:
             self.process = subprocess.Popen(
@@ -172,6 +174,9 @@ class Process:
         while time.monotonic() < end:
             if self.process.poll() is not None:
                 raise EngineError(f"{self.program.name} s'est arrêté : {self.tail()}")
+            if stop is not None and stop.is_set():
+                self.stop()
+                raise EngineError("Chargement interrompu.")
             if _listening(self.port) and (ready is None or ready()):
                 return self
             time.sleep(0.25)
