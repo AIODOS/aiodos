@@ -941,7 +941,7 @@ Reste : les plafonds de volume pour les données mobiles. Ils ne correspondent �
 question de 2.1, et un téléphone ne sait pas encore dire s'il est en Wi-Fi ou en 4G.
 
 **Bibliothèques consultables** (après 2.5, 17/10/2026 ; `aiodos/knowledge/visibility.py`,
-`aiodos/network/consult.py`, `aiodos/network/remote_search.py`, migration 6). Demande de
+`aiodos/network/consult.py`, `aiodos/network/remote_search.py`, migration 7). Demande de
 l'utilisateur, le 17/10/2026 : chercher dans les bibliothèques de ses amis, plus tard dans
 celles d'inconnus, en gardant une partie ouverte et une partie fermée, « s'il y a des
 choses qu'on ne veut pas partager ».
@@ -1026,7 +1026,7 @@ Risques connus :
   d'une bibliothèque consultable. Le journal le montre.
 
 Tests :
-- `tests/test_consult.py` (17 tests, sans réseau ni Ollama) :
+- `tests/test_consult.py` (18 tests, sans réseau ni Ollama) :
   - qui voit quoi ;
   - parties fermées, avec un second contrôle qui les arrête même si le premier filtre manquait ;
   - cadenas et mémoire jamais consultables, même avec une base modifiée à la main ;

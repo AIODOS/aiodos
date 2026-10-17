@@ -1,11 +1,12 @@
 """Bibliothèques consultables, côté propriétaire, sans réseau ni Ollama : ce qui est ouvert
 et à qui, parties fermées, ce qui sort d'un passage, limites, journal, action scellée."""
 import json
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
 
-from aiodos import db, settings
+from aiodos import db, paths, settings
 from aiodos.api.server import create_app
 from aiodos.jobs.kinds import reindex
 from aiodos.knowledge import chunking, store, visibility
@@ -79,6 +80,25 @@ def _documents(reply) -> set:
 
 
 # ----------------------------------------------------------- ce qui est ouvert
+def test_libraries_of_an_existing_database_stay_closed():
+    """Base d'une version précédente (schéma 5) : la migration 7 ajoute la consultation, et
+    aucune bibliothèque n'est ouverte, même celles dont le calcul est partagé avec les amis."""
+    conn = sqlite3.connect(paths.db_path())
+    conn.executescript(db.SCHEMA)
+    for target in (2, 3, 4, 5):
+        conn.executescript(db.MIGRATIONS[target])
+    conn.execute("INSERT INTO collections(name, enabled, system, created, share_friends) "
+                 "VALUES('Archives', 1, 0, 0, 1)")
+    conn.execute("PRAGMA user_version=5")
+    conn.commit()
+    conn.close()
+    db.close()
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 7
+    assert [(c["name"], c["scope"], c["open_to"]) for c in store.list_collections()] == [
+        ("Archives", "friends", "none")]
+    assert db.query("SELECT * FROM closed_parts") == db.query("SELECT * FROM consult_log") == []
+
+
 def test_nothing_is_consultable_by_default_and_the_question_is_not_even_read(library,
                                                                             monkeypatch):
     assert {c["open_to"] for c in store.list_collections()} == {"none"}

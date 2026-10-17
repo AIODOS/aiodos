@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -89,8 +89,9 @@ MIGRATIONS = {
     # fichiers) : qui peut chercher dans chaque bibliothèque (« none » : personne, par
     # défaut ; « mine » : mes machines ; « friends » : mes machines et mes amis ;
     # « everyone » réservé aux inconnus de la phase 3), les dossiers et documents fermés
-    # d'une bibliothèque ouverte, et le journal des recherches reçues.
-    6: """
+    # d'une bibliothèque ouverte, et le journal des recherches reçues. (La 6 est celle du
+    # mode d'arrière-plan, branche claude/charming-wiles-bbba4f, fusionnée avant.)
+    7: """
     ALTER TABLE collections ADD COLUMN open_to TEXT NOT NULL DEFAULT 'none';
     CREATE TABLE IF NOT EXISTS closed_parts (
         collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
