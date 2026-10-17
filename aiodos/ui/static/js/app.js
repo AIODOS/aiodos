@@ -14,6 +14,7 @@ import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
 import { mountMobile } from './mobile.js';
+import { frenchSpacing } from './typo.js';
 
 const VIEWS = ['chat', 'library', 'images', 'jobs', 'node', 'network', 'settings'];
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -100,6 +101,7 @@ function onEvent(ev) {
 }
 
 async function boot() {
+  frenchSpacing();                          // avant les vues : tout ce qui s'ajoute est suivi
   hydrateIcons();
   mountChat($('#view-chat'));
   mountLibrary($('#view-library'));
