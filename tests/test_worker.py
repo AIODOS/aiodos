@@ -179,19 +179,57 @@ def _supply(monkeypatch, plugged=True, level=None, temperature=None, mobile=Fals
 
 
 def test_sharing_conditions(monkeypatch):
+    """« Seulement quand je n'utilise pas ce PC » : la règle de l'économiseur d'écran."""
     _supply(monkeypatch, plugged=True)
     monkeypatch.setattr(identity, "idle_seconds", lambda: 30.0)
     assert sharing_state()["state"] == "off"
-    settings.set_many({"share_enabled": True, "idle_minutes": 10})
+    settings.set_many({"share_enabled": True, "share_when_idle": True, "idle_minutes": 10})
     state = sharing_state()
     assert state["state"] == "busy" and "10 min" in state["detail"]
     monkeypatch.setattr(identity, "idle_seconds", lambda: 11 * 60.0)
     assert sharing_state()["active"]
     _supply(monkeypatch, plugged=False)
     assert sharing_state()["state"] == "battery"
-    settings.set_many({"share_on_ac_only": False, "share_when_idle": False})
-    monkeypatch.setattr(identity, "idle_seconds", lambda: 0.0)
+    settings.set_value("share_on_ac_only", False)        # inactif, et la batterie permise
     assert sharing_state()["active"]
+
+
+def test_lending_goes_on_while_the_pc_is_used_on_mains_only(monkeypatch):
+    """Décision du 17/10/2026 : par défaut, le prêt continue pendant l'utilisation, en
+    priorité basse, mais jamais sur batterie, même quand le partage y est permis."""
+    settings.set_many({"share_enabled": True, "idle_minutes": 10})
+    monkeypatch.setattr(identity, "idle_seconds", lambda: 5.0)       # quelqu'un s'en sert
+    _supply(monkeypatch, plugged=True)
+    state = sharing_state()
+    assert state["active"] and state["state"] == "in_use" and "priorité basse" in state["detail"]
+    _supply(monkeypatch, plugged=None)                  # alimentation inconnue : comme le secteur
+    assert sharing_state()["state"] == "in_use"
+    _supply(monkeypatch, plugged=False)
+    assert sharing_state()["state"] == "battery"
+    settings.set_value("share_on_ac_only", False)
+    state = sharing_state()
+    assert not state["active"] and state["state"] == "battery" and "utilisé" in state["detail"]
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)      # inactivité inconnue
+    assert not sharing_state()["active"]
+    monkeypatch.setattr(identity, "idle_seconds", lambda: 11 * 60.0)  # personne : comme avant
+    assert sharing_state()["state"] == "ready"
+
+
+def test_while_the_pc_is_used_the_gpu_is_lent_half_the_time_at_most(setup):
+    lender = setup["lender"]
+    lender.state = {"active": True, "state": "in_use", "detail": ""}
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)          # unité « embed », 100 %
+    remaining = lender._gpu_rest_until - worker.time.monotonic()
+    assert 1.5 < remaining <= 2.0                                  # 2 s × 50 / 50
+    settings.set_value("share_max_gpu", 25)                        # plus strict : gardé
+    lender._gpu_rest_until = 0.0
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)
+    assert 5.5 < lender._gpu_rest_until - worker.time.monotonic() <= 6.0
+    lender.state = {"active": True, "state": "ready", "detail": ""}
+    settings.set_value("share_max_gpu", 100)
+    lender._gpu_rest_until = 0.0
+    lender._rest_gpu(setup["assignment"], compute_s=2.0)           # personne : pas de pause
+    assert lender._gpu_rest_until == 0.0
 
 
 def test_a_pc_keeps_its_rules_whatever_its_battery(monkeypatch):

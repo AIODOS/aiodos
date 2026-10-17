@@ -14,14 +14,15 @@ processeurs logiques ; RTX 4070 Laptop 8 Go ; Windows 11 ; Ollama 0.40.5).
 | Une conversation passe devant | pendant une réponse servie par cette machine, le calcul sur la carte graphique attend entre deux lots | `aiodos/jobs/pacing.py` (`wait_turn`) |
 | Batterie ménagée | réglage « Sur batterie » : ménager (par défaut), attendre le secteur, ou pleine vitesse | `pacing.py`, vue « Cette machine » |
 | Ollama | `num_thread` seulement sur batterie, et seulement si le modèle d'embedding tourne sur le processeur | `aiodos/services/ollama.py` |
+| Prêter pendant l'utilisation | le calcul pour les autres machines continue quand l'utilisateur se sert du PC : priorité basse, jamais sur batterie, carte graphique la moitié du temps au plus ; désactivable | `aiodos/network/worker.py` (`sharing_state`) |
 | Fermer la fenêtre sans arrêter le nœud | icône dans la zone de notification de Windows | `aiodos/ui/tray.py`, `aiodos/ui/window.py` |
 | Mesurer | indexation, conversations, processeur, carte graphique | `tools/bench_background.py`, `tools/cpu_probe.py` |
 
-Les règles déjà en place ne changent pas : partager seulement quand le PC est inactif
-(`share_when_idle`), seulement sur secteur (`share_on_ac_only`), batterie minimale et
-température maximale d'un téléphone (`network/worker.py`). Elles disent *quand* une
-machine calcule pour les autres ; ce qui suit dit *comment* avance le travail de fond, le
-sien comme celui des autres.
+Les règles déjà en place ne changent pas — seulement sur secteur (`share_on_ac_only`),
+batterie minimale et température maximale d'un téléphone (`network/worker.py`) —, sauf une,
+par décision de l'utilisateur après les mesures : le prêt n'attend plus que le PC soit
+inactif (§ 5 bis). Ces règles disent *quand* une machine calcule pour les autres ; le
+reste dit *comment* avance le travail de fond, le sien comme celui des autres.
 
 ## 1. Ce qui consomme pendant une indexation
 
@@ -186,6 +187,39 @@ les options de chaque requête :
   chargé, la carte graphique était en P8 (1,4 à 2,9 W) : pas de gain visible.
 - Pas de priorité dans l'API d'Ollama : la cadence (§ 4) et le passage des conversations
   (§ 3) sont les seuls leviers côté AIODOS.
+
+## 5 bis. Prêter pendant l'utilisation
+
+Question posée à l'utilisateur le 17/10/2026 : prêter aussi pendant qu'il travaille, si les
+mesures montrent qu'un calcul en priorité basse ne le gêne pas. Réponse : oui, si les
+mesures sont bonnes, en priorité basse, jamais sur batterie, et désactivable.
+
+Les mesures (§ 7) sont bonnes pour ce qu'elles couvrent : pendant une indexation, qui est
+le travail qu'une machine fait pour une autre, la conversation garde presque sa vitesse au
+repos (153 à 192 caractères/s contre 169 à 187) et l'interface répond comme avant
+(1,95 ms contre 2,20). Elles ne couvrent pas les autres programmes de l'utilisateur : un
+jeu ou un montage vidéo partagerait la carte graphique avec Ollama, qu'AIODOS ne peut pas
+abaisser.
+
+D'où la règle (`worker.sharing_state`, `worker._rest_gpu`) :
+
+- par défaut, le prêt continue pendant l'utilisation (état « en priorité basse pendant que
+  tu utilises ce PC ») : threads de fond abaissés (§ 2), une conversation sur ce PC arrête
+  et rend les unités qui occupent la carte graphique (comme avant) ;
+- pendant l'utilisation, la carte graphique n'est prêtée que la moitié du temps au plus
+  (après une unité de t secondes, une pause de t ; « GPU prêté au maximum » plus bas reste
+  appliqué) : c'est la seule « priorité basse » possible pour elle ;
+- jamais sur batterie pendant l'utilisation, même quand « Seulement sur secteur » est
+  désactivé ; une inactivité qu'on ne sait pas mesurer (PC sous Linux) compte comme une
+  utilisation ;
+- « Seulement quand je n'utilise pas ce PC » (clé `share_when_idle`, désormais désactivé
+  par défaut) revient à l'ancienne règle de l'économiseur d'écran ;
+- téléphones : rien ne change (ils ne calculent qu'en charge, assez chargés et pas trop
+  chauds).
+
+Ce changement vaut pour toutes les machines qui prêtent déjà leur puissance (réglage
+« Prêter ma puissance » activé) et qui n'ont jamais touché à « Seulement quand je
+n'utilise pas ce PC » : elles se mettent à prêter aussi pendant l'utilisation.
 
 ## 6. Fermer la fenêtre sans arrêter le nœud (Windows)
 

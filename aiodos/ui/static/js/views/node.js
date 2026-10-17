@@ -215,8 +215,8 @@ function renderShare() {
   const mobile = shareMobile = !!state.node?.power?.mobile;
   const device = mobile ? 'ce téléphone' : 'ce PC';
   const idleRows = `
-    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens.")}
-    <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Avant de commencer à prêter de la puissance.</small></div>
+    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme l'économiseur d'écran de SETI@home : le travail s'arrête dès que tu reviens. Désactivé, ce PC prête aussi pendant que tu l'utilises : en priorité basse, jamais sur batterie, la carte graphique la moitié du temps au plus, et tes conversations passent devant.")}
+    <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Sans clavier ni souris pendant ce temps, ce PC est considéré comme libre : le prêt n'est plus retenu (avec le réglage ci-dessus, il ne commence qu'à ce moment).</small></div>
       <select class="select" data-num="idle_minutes" style="width:140px">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
   const phoneRows = `

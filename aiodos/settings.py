@@ -68,7 +68,10 @@ DEFAULTS = {
     "offload_enabled": True,          # confier des unités à mes machines appairées
     "share_enabled": False,           # calculer pour mes machines appairées
     "lend_models": False,             # répondre aux conversations de mes machines appairées
-    "share_when_idle": True,          # comme l'économiseur d'écran de SETI@home
+    # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
+    # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
+    # en priorité basse, jamais sur batterie (network/worker.py, docs/arriere-plan.md)
+    "share_when_idle": False,
     "idle_minutes": 10,
     "share_on_ac_only": True,         # téléphone : seulement en charge
     "share_min_battery": 80,          # téléphone : charge minimale pour calculer (%)

@@ -44,10 +44,12 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 2. **Appairer** : les machines AIODOS du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
-3. **Prêter sa puissance** (vue « Cette machine ») : par défaut, seulement quand le PC
-   n'est pas utilisé depuis 10 minutes et qu'il est sur secteur, comme l'économiseur
-   d'écran de SETI@home. Dès que l'utilisateur revient, les unités en cours sont
-   rendues. Une conversation passe aussi devant : le GPU lui revient.
+3. **Prêter sa puissance** (vue « Cette machine ») : par défaut sur secteur seulement.
+   Pendant que tu te sers du PC, le calcul prêté continue en priorité basse, jamais sur
+   batterie, la carte graphique la moitié du temps au plus ; une conversation passe
+   devant : le GPU lui revient. « Seulement quand je n'utilise pas ce PC » le réserve aux
+   moments d'inactivité (10 minutes par défaut), comme l'économiseur d'écran de
+   SETI@home : dès que l'utilisateur revient, les unités en cours sont rendues.
 
 Comment le travail circule :
 
