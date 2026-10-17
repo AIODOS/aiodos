@@ -68,7 +68,7 @@ const SECTIONS = [
     { key: 'llamacpp_dir', label: 'Dossier de llama.cpp', type: 'text',
       help: 'Le dossier qui contient llama-server et ggml-rpc-server, de la même version sur toutes '
         + 'tes machines. Vide : data/engines/llama.cpp. Le réglage « Prêter ma carte graphique » est '
-        + 'dans la vue Nœud.' },
+        + 'dans la vue « Cette machine ».' },
     { key: 'lend_gpu_device', label: 'Carte prêtée', type: 'text',
       help: 'Vide : la carte qui a le plus de mémoire libre. Sinon son nom (« Vulkan1 », « CUDA0 »), '
         + 'ou « CPU » pour prêter la mémoire vive (bien plus lent).' },
