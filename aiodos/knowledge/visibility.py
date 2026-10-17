@@ -56,24 +56,40 @@ def set_open_to(collection_id, level: str):
     db.execute("UPDATE collections SET open_to=? WHERE id=?", (level, collection_id))
 
 
-def _path(path) -> str:
-    path = str(path or "").strip().rstrip("/")
-    if not path:
+def _path(path, folder: bool) -> str:
+    """Chemin tel que la règle le comparera : celui d'un document, exactement comme il est
+    enregistré (« …/docs/ » et « …/docs » sont deux pages, une espace compte) ; celui d'un
+    dossier, sans « / » final."""
+    path = str(path or "")
+    if folder:
+        path = path.rstrip("/")
+    if not path.strip():
         raise ValueError("Chemin vide.")
     return path
 
 
 def close(collection_id, path, folder: bool):
     """Ferme à la consultation un document (folder=False : ce chemin exact) ou un dossier
-    (tout ce qui est dessous, y compris ce qui y sera indexé plus tard)."""
+    (tout ce qui est dessous, y compris ce qui y sera indexé plus tard). Un chemin qui ne
+    désigne rien dans la bibliothèque est refusé : la règle ne fermerait rien."""
     _editable(collection_id)
+    path = _path(path, folder)
+    if folder:
+        found = db.query_one("SELECT 1 FROM entries WHERE collection_id=? AND "
+                             "substr(source, 1, length(?) + 1) = ? || '/' LIMIT 1",
+                             (collection_id, path, path))
+    else:
+        found = db.query_one("SELECT 1 FROM entries WHERE collection_id=? AND source=? LIMIT 1",
+                             (collection_id, path))
+    if not found:
+        raise ValueError(f"« {path} » n'est pas dans cette bibliothèque : rien à fermer.")
     db.execute("INSERT OR IGNORE INTO closed_parts(collection_id, path, folder, created) "
-               "VALUES(?, ?, ?, ?)", (collection_id, _path(path), 1 if folder else 0, db.now()))
+               "VALUES(?, ?, ?, ?)", (collection_id, path, 1 if folder else 0, db.now()))
 
 
 def reopen(collection_id, path, folder: bool):
     db.execute("DELETE FROM closed_parts WHERE collection_id=? AND path=? AND folder=?",
-               (collection_id, _path(path), 1 if folder else 0))
+               (collection_id, _path(path, folder), 1 if folder else 0))
 
 
 def closed_parts() -> dict:

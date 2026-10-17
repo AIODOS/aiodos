@@ -5,6 +5,10 @@ from aiodos import db
 from aiodos.knowledge import store
 
 DEFAULT_TITLE = "Nouvelle conversation"
+# À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
+# doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
+WITHHELD = ("(Réponse appuyée sur des passages trouvés chez d'autres machines : "
+            "non transmise à ce modèle.)")
 
 
 def list_tree() -> dict:
@@ -66,11 +70,26 @@ def add_message(conv_id, role, content, thinking=None, model=None, sources=None)
     return message_id
 
 
-def history(conv_id, limit=30) -> list:
-    """Derniers échanges, dans l'ordre, au format attendu par les modèles."""
-    rows = db.query("SELECT role, content FROM messages WHERE conversation_id=? "
+def cites_others(sources) -> bool:
+    """La réponse s'appuie-t-elle sur des passages trouvés chez d'autres machines ?
+    `sources` : la liste enregistrée avec le message, ou son texte JSON."""
+    if isinstance(sources, str):
+        try:
+            sources = json.loads(sources or "[]")
+        except ValueError:
+            return False
+    return any(isinstance(s, dict) and s.get("type") == "remote" for s in sources or [])
+
+
+def history(conv_id, limit=30, with_others=True) -> list:
+    """Derniers échanges, dans l'ordre, au format attendu par les modèles. with_others=False :
+    une réponse appuyée sur des passages d'autres machines est remplacée par WITHHELD."""
+    rows = db.query("SELECT role, content, sources FROM messages WHERE conversation_id=? "
                     "ORDER BY id DESC LIMIT ?", (conv_id, limit))
-    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+    return [{"role": r["role"],
+             "content": WITHHELD if not with_others and r["role"] == "assistant"
+             and cites_others(r["sources"]) else r["content"]}
+            for r in reversed(rows)]
 
 
 def auto_title(conv_id, text) -> str | None:

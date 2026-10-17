@@ -4,28 +4,34 @@ copie de mes fichiers (action scellée « library/search »).
 La machine qui demande envoie sa question. Celle-ci calcule son vecteur avec son propre
 modèle d'embedding (les vecteurs de deux modèles ne se comparent pas), cherche dans ce que
 la demandeuse a le droit de voir selon son niveau de confiance (knowledge/visibility.py),
-et ne rend que les passages qui passent son seuil de pertinence. Pour qu'on ne puisse pas
-aspirer une bibliothèque entière :
+et ne rend que les passages qui passent son seuil de pertinence. Pour freiner qui voudrait
+aspirer une bibliothèque entière (sans l'empêcher : de recherche en recherche, une
+bibliothèque ouverte se lit passage par passage ; ce qu'on ne veut pas montrer se ferme) :
 
 - au plus MAX_PASSAGES passages par recherche ;
 - au plus MAX_PER_MINUTE recherches par minute et par machine ;
 - une machine mise de côté (contrôle échoué, cf. sharing.py) n'a plus rien.
 
+Et pour que cette machine reste disponible : au plus AT_ONCE recherches calculées à la
+fois, le vecteur en EMBED_TIMEOUT secondes au plus, et aucune pendant une conversation ici
+(refus immédiats, lisibles).
+
 De chaque passage sortent son texte, le nom du document (sans ses dossiers ni son
-emplacement sur ce PC ; pour une page web, son adresse sans paramètres), le nom de la
-bibliothèque et son score. Chaque recherche reçue est notée (table consult_log) : qui,
-quand, combien de passages et de quels documents (leur chemin dans la bibliothèque). La
-question, elle, n'est pas gardée, comme une conversation servie par lending.py. Appelée
-dans un thread (p2p_app.HANDLERS).
+emplacement sur ce PC ; pour une page web, son hôte et le dernier segment de son adresse),
+le nom de la bibliothèque et son score. Chaque recherche reçue est notée (table
+consult_log) : qui, quand, combien de passages et de quels documents (leur chemin dans la
+bibliothèque). La question, elle, n'est pas gardée, comme une conversation servie par
+lending.py. Appelée dans un thread (p2p_app.HANDLERS).
 """
 import json
 import math
 import threading
 import time
 from collections import deque
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from aiodos import db, settings
+from aiodos.jobs import pacing
 from aiodos.knowledge import visibility
 from aiodos.network import sharing
 from aiodos.network.client import PeerError
@@ -34,6 +40,9 @@ from aiodos.services import ollama
 MAX_PASSAGES = 8              # passages rendus au plus par recherche
 MAX_PER_MINUTE = 10           # recherches servies au plus par minute et par machine
 WINDOW = 60
+AT_ONCE = 2                   # recherches calculées en même temps, au plus (refus au-delà)
+EMBED_TIMEOUT = 10            # s : vecteur de la question (le fil sert aussi l'interface)
+_busy = threading.BoundedSemaphore(AT_ONCE)
 MAX_QUESTION = 2000           # caractères ; le demandeur coupe avant d'envoyer
 MAX_TEXT = 4000               # un passage fait 900 caractères (knowledge/chunking.py)
 KEEP_DAYS = 90                # durée du journal
@@ -93,13 +102,18 @@ LIMITER = Limiter()
 # ------------------------------------------------------------- ce qui sort
 def shown_name(source: str, kind: str) -> str:
     """Nom du document montré à la machine qui cherche : sans les dossiers ; pour une
-    page web, l'adresse sans identifiants, paramètres ni ancre."""
+    page web, son hôte et le dernier segment de son chemin (« exemple.org/…/page ») : ni
+    le reste du chemin, ni identifiants, paramètres ou ancre, qui peuvent porter un jeton."""
     source = str(source or "")
     if kind == "url":
         parts = urlsplit(source)
         if parts.scheme in ("http", "https") and parts.hostname:
             host = parts.netloc.rpartition("@")[2]
-            return urlunsplit((parts.scheme, host, parts.path, "", ""))[:300]
+            segments = [s for s in parts.path.split("/") if s]
+            if not segments:
+                return host[:300]
+            middle = "/" if len(segments) == 1 else "/…/"
+            return f"{host}{middle}{segments[-1]}"[:300]
     return source.replace("\\", "/").rsplit("/", 1)[-1][:300]
 
 
@@ -146,13 +160,24 @@ def search(manager, sender, payload):
     if not opened:                        # rien d'ouvert : la question n'est même pas lue
         log(sender)
         return {"passages": [], "open": 0}
+    # Une conversation ici passe d'abord, et les recherches des autres restent peu
+    # nombreuses à la fois : refus tout de suite, plutôt qu'une file qui bloque le fil
+    if pacing.chatting():
+        raise PeerError(f"« {manager.name()} » répond à une conversation : réessaie dans un "
+                        "instant.")
+    if not _busy.acquire(blocking=False):
+        raise PeerError(f"« {manager.name()} » est occupée à d'autres recherches : réessaie "
+                        "dans un instant.")
     try:
-        vector = ollama.embed([question])[0]
-    except Exception as exc:
-        raise PeerError(f"« {manager.name()} » ne peut pas chercher pour l'instant : "
-                        "Ollama n'y répond pas.") from exc
-    threshold = float(settings.get("rag_min_score") or 0)
-    hits = [h for h in visibility.search(vector, k, levels) if h["score"] >= threshold]
+        try:
+            vector = ollama.embed([question], timeout=EMBED_TIMEOUT)[0]
+        except Exception as exc:
+            raise PeerError(f"« {manager.name()} » ne peut pas chercher pour l'instant : "
+                            "Ollama n'y répond pas à temps.") from exc
+        threshold = float(settings.get("rag_min_score") or 0)
+        hits = [h for h in visibility.search(vector, k, levels) if h["score"] >= threshold]
+    finally:
+        _busy.release()
     # Au journal, le chemin du document dans sa bibliothèque : c'est le mien, je le vois
     log(sender, len(hits), [(h["collection"], h["source"]) for h in hits])
     return {"passages": [_passage(h) for h in hits], "open": len(opened)}

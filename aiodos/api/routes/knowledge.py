@@ -34,6 +34,7 @@ class ClosedIn(BaseModel):
 
 class ConsultIn(BaseModel):
     question: str
+    machines: list[str] = []              # celles que la vue annonçait : la question ne part que là
 
 
 class IndexPathsIn(BaseModel):
@@ -140,12 +141,13 @@ def consult_targets():
 @router.post("/consult")
 async def consult(body: ConsultIn):
     """Recherche dans les bibliothèques que mes machines et mes amis m'ouvrent : la question
-    part chez chacune, seuls les passages trouvés reviennent."""
+    part chez celles que la vue annonçait (body.machines), seuls les passages reviennent."""
     question = body.question.strip()
     if not question:
         raise HTTPException(400, "Question vide.")
     passages, machines = await asyncio.to_thread(
-        remote_search.search, question, VIEW_PER_PEER, remote_search.VIEW_TIMEOUT)
+        remote_search.search, question, body.machines, VIEW_PER_PEER,
+        remote_search.VIEW_TIMEOUT, remote_search.VIEW_GRACE)
     return {"passages": passages, "machines": machines}
 
 

@@ -45,16 +45,24 @@ def _library_of_a(a, tmp_path) -> int:
 
 
 def _ask(node, question):
-    return node.api("POST", "/consult", {"question": question})
+    """Recherche de la vue Bibliothèques : chez les machines qu'elle annonce à l'instant."""
+    shown = [m["node_id"] for m in node.api("GET", "/consult")["machines"]]
+    return node.api("POST", "/consult", {"question": question, "machines": shown})
 
 
-def _chat_sources(node, text):
-    """Sources d'une réponse qui cherche aussi chez les autres (lues avant la génération :
-    le modèle n'a pas besoin d'exister)."""
+def _installed_model() -> str:
+    """Un modèle installé ici (celui d'embedding suffit : les sources arrivent avant la
+    génération) ; un modèle inconnu d'Ollama ne recevrait pas les passages des autres."""
+    tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=5).json()["models"]
+    return next(m["name"] for m in tags if m["name"].split(":")[0] == EMBED_MODEL)
+
+
+def _chat_sources(node, text, accepted):
+    """Sources d'une réponse qui cherche aussi chez les machines acceptées."""
     response = requests.post(
         f"http://127.0.0.1:{node.port}/api/chat",
-        json={"text": text, "model": "modele-absent", "libraries": False,
-              "conversations": False, "peer_libraries": True},
+        json={"text": text, "model": _installed_model(), "libraries": False,
+              "conversations": False, "peer_libraries": accepted},
         headers={"X-Aiodos-Token": node.token}, stream=True, timeout=120)
     assert response.status_code == 200, response.text
     with response:
@@ -89,7 +97,7 @@ def _searches_in_open_library(a, b, a_id, b_id, courses):
         assert "4512" not in texts and "trois mille" not in texts
 
     # Dans une conversation : les citations disent chez qui
-    sources = _chat_sources(b, ROCKET)
+    sources = _chat_sources(b, ROCKET, [a_id])
     assert {"type": "remote", "label": "fusee.txt", "collection": "Cours",
             "peer": "PC de Marc"} in [{k: s[k] for k in ("type", "label", "collection", "peer")}
                                       for s in sources]

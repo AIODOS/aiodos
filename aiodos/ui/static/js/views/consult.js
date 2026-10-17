@@ -33,8 +33,8 @@ export async function refreshConsult() {
   if (!box) return;
   try { ({ machines } = await get('/consult')); } catch { return; }
   $('#consult-where', box).innerHTML = machines.length
-    ? `Ta question partira chez ${named(machines)} : chacune cherche dans ce qu'elle t'ouvre et ne renvoie que les
-       passages trouvés, jamais ses fichiers. Elle n'est envoyée nulle part ailleurs.`
+    ? `Ta question partira chez ${named(machines)}, et nulle part ailleurs : chacune cherche dans ce qu'elle
+       t'ouvre et ne renvoie que quelques passages, pas ses fichiers.`
     : 'Aucune de tes machines appairées ne t\'ouvre de bibliothèque pour l\'instant. Chacune le règle dans son '
       + 'menu ⋯ de bibliothèque, « Consultable par… » ; c\'est visible ici dans la minute.';
   $('#consult-go', box).disabled = !machines.length;
@@ -46,7 +46,9 @@ async function run() {
   const out = $('#consult-results', box);
   out.innerHTML = `<div class="faint consult-status">Recherche chez ${named(machines)}…</div>`;
   $('#consult-go', box).disabled = true;
-  try { render(await post('/consult', { question })); }
+  // Seulement chez les machines annoncées ci-dessus : une machine arrivée depuis n'est pas
+  // interrogée sans que tu l'aies vue
+  try { render(await post('/consult', { question, machines: machines.map(m => m.node_id) })); }
   catch (e) { out.innerHTML = ''; errorToast(e); }
   finally { $('#consult-go', box).disabled = !machines.length; }
 }

@@ -963,7 +963,9 @@ machines n'ont donc pas besoin du même modèle, contrairement au travail confi�
 - **Parties fermées** : dans une bibliothèque, un dossier ou un document se ferme à la
   consultation (bouton œil barré au survol, table `closed_parts`). La règle porte sur le
   chemin, pas sur l'entrée : un document réindexé reste fermé, un fichier ajouté plus tard
-  dans un dossier fermé l'est aussi. On peut fermer avant d'ouvrir la bibliothèque.
+  dans un dossier fermé l'est aussi. On peut fermer avant d'ouvrir la bibliothèque. Le
+  chemin d'un document est gardé tel quel (la page « …/docs/ » n'est pas « …/docs », une
+  espace compte), et un chemin qui ne désigne rien dans la bibliothèque est refusé.
 - **Jamais consultables** : une bibliothèque gardée sur ce PC (le cadenas), et la mémoire
   des conversations. Poser le cadenas ferme aussi la consultation ; l'enlever ne la rouvre
   pas d'office.
@@ -974,32 +976,52 @@ machines n'ont donc pas besoin du même modèle, contrairement au travail confi�
 | Ce qui sort | Pourquoi |
 |---|---|
 | Le texte des passages trouvés | C'est l'objet de la recherche. Quelques-uns seulement (au plus 8), au-dessus du seuil de pertinence du modèle du propriétaire. |
-| Le nom du document, sans ses dossiers | Il faut citer la source. Les dossiers disent comment le propriétaire range sa vie (« Santé/… »), et l'emplacement sur le disque contient souvent son prénom (`C:\Users\…`). Une page web garde son adresse, sans identifiants, paramètres ni ancre, qui peuvent porter un jeton. |
+| Le nom du document, sans ses dossiers | Il faut citer la source. Les dossiers disent comment le propriétaire range sa vie (« Santé/… »), et l'emplacement sur le disque contient souvent son prénom (`C:\Users\…`). Une page web : son hôte et le dernier segment de son adresse (« exemple.org/…/page ») ; ni le reste du chemin, ni identifiants, paramètres ou ancre, qui peuvent porter un jeton. |
 | Le nom de la bibliothèque | Il situe le passage (« Cours », « Recettes ») ; le propriétaire l'a choisi, et la fenêtre d'ouverture lui rappelle qu'il sera vu. |
 | Le score de chaque passage | Pour classer ; chaque machine applique son propre seuil, puisque chaque modèle a son échelle. |
 | Le nombre de bibliothèques qui lui sont ouvertes | Dans le profil échangé toutes les minutes : la question ne part que chez les machines qui ont quelque chose pour elle. |
 
-Ne sortent jamais : les fichiers, leur emplacement et leurs dossiers, la liste des documents
-(pas de sommaire : on ne voit que ce que ses questions font remonter), les vecteurs, les
-dates, ce qui est fermé. Côté demandeur, les passages servent à la réponse, puis ne sont
-gardés nulle part : la conversation enregistre la réponse (qui peut en reprendre des bouts)
-et les citations (document, bibliothèque, machine), et rien n'entre dans ses bibliothèques.
-Ils ne partent ni vers le cloud, ni vers le modèle prêté par un ami
-(`pipeline.peers_allowed`) : le propriétaire les a ouverts à cette machine, pas à des tiers.
+Ne sortent pas :
+- les fichiers eux-mêmes : des passages seulement, quelques-uns par recherche. De recherche
+  en recherche, une bibliothèque ouverte peut quand même se lire passage par passage ;
+- leur emplacement et leurs dossiers ;
+- la liste des documents (pas de sommaire : on ne voit que ce que ses questions font
+  remonter) ;
+- les vecteurs, les dates, ce qui est fermé.
+
+Côté demandeur, ce qui est reçu ne va pas plus loin que ses machines, puisque le propriétaire
+l'a ouvert à cette machine, pas à des tiers :
+- les passages servent à la réponse, puis ne sont gardés nulle part. La conversation garde la
+  réponse (qui peut en reprendre des bouts) et les citations (document, bibliothèque,
+  machine). Rien n'entre dans ses bibliothèques ;
+- ni les passages, ni les réponses qui s'en servent ne vont à un modèle hors de la liste
+  d'autorisations de `pipeline.peers_allowed`. Autorisés :
+  - un modèle installé ici ;
+  - un gros modèle réparti entre mes machines ;
+  - un modèle prêté par une de mes machines.
+  Pour tout autre modèle (cloud, modèle prêté par un ami, toute nouvelle façon de répondre
+  ailleurs), une telle réponse est remplacée dans l'historique par une mention « non
+  transmise » ;
+- ces réponses n'entrent pas dans la mémoire des conversations.
 
 *Le protocole.* Une action scellée, `library/search` (`p2p_app.HANDLERS`) : la question
 (2 000 caractères au plus, coupée avant l'envoi) et le nombre de passages voulus ; la réponse
 donne les passages et le nombre de bibliothèques ouvertes à cette machine. Ce qui revient est
-contrôlé (forme, longueurs, nombre). Les machines sont interrogées en même temps : 8 s au plus
-pour une conversation, 20 s depuis la vue Bibliothèques ; une machine lente ou qui refuse ne
-retarde pas les autres. Une machine qui répond qu'elle n'ouvre plus rien n'est plus interrogée,
-sans attendre son prochain profil.
+contrôlé (forme, longueurs, nombre), et les noms nettoyés (retours à la ligne, crochets,
+guillemets, chevrons). Les machines sont interrogées en même temps : une conversation attend
+10 s au plus en tout, la vue Bibliothèques 30 s (le temps d'un relais) ; une machine lente ou
+qui refuse ne retarde pas les autres. Une machine qui répond qu'elle n'ouvre plus rien n'est
+plus interrogée, sans attendre son prochain profil (seule cette clé du profil enregistré change).
 
-*Les limites*, contre qui voudrait aspirer une bibliothèque entière : au plus 8 passages par
-recherche et 10 recherches par minute et par machine (fenêtre glissante). Soit 80 passages par
-minute au plus, chacun noté au journal. Elles ralentissent et rendent visible une aspiration,
-sans la rendre impossible : ce qu'on ne veut pas montrer, il faut le fermer. Pour des inconnus
-(phase 3), il faudra des plafonds plus bas, par jour.
+*Les limites*, pour freiner qui voudrait aspirer une bibliothèque entière : au plus 8 passages
+par recherche et 10 recherches par minute et par machine (fenêtre glissante). Soit 80 passages
+par minute au plus, chacun noté au journal. Elles ralentissent et rendent visible une
+aspiration, sans la rendre impossible : ce qu'on ne veut pas montrer, il faut le fermer. Pour
+des inconnus (phase 3), il faudra des plafonds plus bas, par jour. Et pour que la machine
+consultée reste disponible, chaque refus étant immédiat et lisible :
+- au plus 2 recherches calculées à la fois (au-delà : « occupée ») ;
+- le vecteur de la question en 10 s au plus ;
+- aucune recherche pendant une conversation sur cette machine.
 
 *Le journal* (`consult_log`, vue Réseau, comme celui de 2.5) : chaque recherche reçue, avec qui,
 quand, combien de passages et de quels documents (leur chemin dans la bibliothèque), ou la
@@ -1009,32 +1031,48 @@ garde 90 jours.
 
 *Côté demandeur.* Dans la conversation, l'option « Chez les autres » (réglage
 `peer_libraries_enabled`, désactivé par défaut) ajoute leurs passages au contexte ; chaque
-citation dit chez qui il a été trouvé (« fusee.txt · chez PC de Marc »). Avant que la question
-parte chez un ami, une fenêtre le dit et demande l'accord (une fois par session si on le
-souhaite). Le serveur ne cherche chez les autres que si la demande le dit (`peer_libraries`),
-jamais d'après le réglage : une autre application cliente ne leur enverra pas une question à
-l'insu de l'utilisateur. La vue Bibliothèques a une recherche dans ce qui est ouvert chez les
-autres, qui dit d'avance chez qui part la question.
+citation dit chez qui il a été trouvé (« fusee.txt · chez PC de Marc »). Ces passages arrivent
+au modèle à part des miens, dans un bloc marqué « non vérifié ».
+
+Avant que la question parte chez un ami, une fenêtre le dit et demande l'accord ; on peut ne
+plus être redemandé pour ces amis pendant la session. Le serveur ne cherche que chez les
+machines que la demande nomme (`peer_libraries` : les identifiants acceptés, parmi ceux que le
+preflight annonçait), jamais d'après le réglage :
+- un ami arrivé en ligne entre l'accord et l'envoi ne reçoit rien ;
+- une autre application cliente n'enverra pas de question à l'insu de l'utilisateur.
+
+La vue Bibliothèques a une recherche dans ce qui est ouvert chez les autres. Elle dit d'avance
+chez qui part la question, et elle ne part que là.
 
 Risques connus :
 - **Le propriétaire lit la question** : il faut bien qu'il calcule son vecteur. AIODOS ne la
   garde pas, mais une version modifiée pourrait le faire. C'est le même cas qu'un modèle prêté.
 - **Un passage peut contenir des instructions** pour le modèle (injection de prompt), comme
-  une page web. Il lui est présenté comme un extrait à citer, ce qui limite le risque sans
-  l'annuler : l'injection de prompt n'est pas totalement évitable (§ 6.5).
+  une page web, ou chercher à se faire passer pour un de mes fichiers. Il est présenté à
+  part, dans un bloc marqué « non vérifié », entre des délimiteurs que son texte ne peut pas
+  imiter, avec des noms nettoyés. Cela limite le risque sans l'annuler : l'injection de
+  prompt n'est pas totalement évitable (§ 6.5).
 - **Les questions successives** d'un ami dessinent peu à peu le contenu ouvert : c'est la nature
   d'une bibliothèque consultable. Le journal le montre.
 
 Tests :
-- `tests/test_consult.py` (18 tests, sans réseau ni Ollama) :
+- `tests/test_consult.py` (20 tests, sans réseau ni Ollama) :
   - qui voit quoi ;
-  - parties fermées, avec un second contrôle qui les arrête même si le premier filtre manquait ;
+  - parties fermées, avec un second contrôle qui les arrête même si le premier filtre
+    manquait ; chemins gardés tels quels (« / » final, espace) ;
   - cadenas et mémoire jamais consultables, même avec une base modifiée à la main ;
   - ce qui sort d'un passage ;
-  - limites, journal sans la question ;
+  - limites, disponibilité (conversation en cours, recherches simultanées), journal sans la
+    question ;
   - action scellée, API de l'interface.
-- `tests/test_remote_search.py` (11 tests) : à qui part la question, contrôle de ce qui revient,
-  machine lente ou qui refuse, citations « chez … », ni cloud ni modèle d'un ami.
+- `tests/test_remote_search.py` (16 tests) :
+  - à qui part la question, et seulement avec accord ;
+  - profils reçus mal formés ;
+  - contrôle de ce qui revient, noms nettoyés ;
+  - machine lente ou qui refuse ;
+  - bloc « non vérifié » ;
+  - liste d'autorisations des modèles ;
+  - réponses qui ne partent pas plus loin et n'entrent pas en mémoire.
 - `tests/test_network_consult.py` : deux vrais nœuds avec Ollama, appairés en amis :
   - par le réseau local, puis sur invitation par leurs seuls compagnons ;
   - l'un cherche chez l'autre, depuis la vue Bibliothèques puis depuis une conversation, et cite

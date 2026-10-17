@@ -419,15 +419,17 @@ async function confirmOutgoing(text, model, pre) {
 
 // « Chez les autres » : la question part chez les machines qui m'ouvrent leurs bibliothèques
 // (preflight.consult) ; chez un ami, seulement après accord (network/remote_search.py).
+// → identifiants des machines acceptées : le serveur ne cherche que chez elles.
 async function confirmPeers(text, pre) {
-  if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return false;
+  if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return [];
   if (!pre.consult_allowed) {
-    toast('Les passages trouvés chez tes machines et tes amis ne partent ni vers le cloud, ni vers le modèle '
+    toast('Les passages trouvés chez tes machines et tes amis ne vont ni au cloud, ni à un modèle '
       + 'prêté par un ami : cette réponse s\'en passera.', 'info', 7000);
-    return false;
+    return [];
   }
-  const friends = pre.consult.filter(m => m.friend);
-  if (!friends.length || session.peerConsent) return true;
+  const ids = pre.consult.map(m => m.node_id);
+  const unasked = pre.consult.filter(m => m.friend && !session.peerConsent.has(m.node_id));
+  if (!unasked.length) return ids;
   const r = await modal({
     title: 'Chercher aussi chez tes amis ?', iconName: 'network',
     text: `Ta question va partir chez ${pre.consult.map(m => `« ${m.name} »`).join(', ')} : chaque machine `
@@ -435,10 +437,10 @@ async function confirmPeers(text, pre) {
       + 'pas ta question, mais chaque machine note dans son journal que tu as cherché, et combien de passages elle '
       + 't\'a rendus.',
     quote: text.slice(0, 300), confirm: 'Chercher chez eux', cancel: 'Répondre sans',
-    check: 'Ne plus demander pendant cette session',
+    check: 'Ne plus redemander pour ces amis pendant cette session',
   });
-  if (r.ok && r.checked) session.peerConsent = true;
-  return r.ok;
+  if (r.ok && r.checked) pre.consult.forEach(m => session.peerConsent.add(m.node_id));
+  return r.ok ? ids : [];
 }
 
 async function send() {

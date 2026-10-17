@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from aiodos import db, paths, settings
 from aiodos.api.server import create_app
+from aiodos.jobs import pacing
 from aiodos.jobs.kinds import reindex
 from aiodos.knowledge import chunking, store, visibility
 from aiodos.network import consult, envelope, p2p_app, peers, sharing
@@ -159,11 +160,11 @@ def test_closed_folders_and_documents_never_leave(library, fake_embed):
     assert "journal.txt" in _documents(_search(library))
     visibility.close(courses, "cours/secret", folder=True)
     visibility.close(courses, "notes.txt", folder=False)
-    assert _documents(_search(library)) == {"fusee.txt", "https://exemple.org/fusee"}
+    assert _documents(_search(library)) == {"fusee.txt", "exemple.org/fusee"}
     # Réindexé, ou ajouté plus tard dans le dossier fermé : toujours fermé
     _add(courses, "cours/secret/journal.txt", "Journal réécrit : la fusée lunaire.", fake_embed)
     _add(courses, "cours/secret/nouveau.txt", "Nouveau secret : la fusée lunaire.", fake_embed)
-    assert _documents(_search(library)) == {"fusee.txt", "https://exemple.org/fusee"}
+    assert _documents(_search(library)) == {"fusee.txt", "exemple.org/fusee"}
     assert visibility.closed_parts()[courses] == [
         {"path": "cours/secret", "folder": True}, {"path": "notes.txt", "folder": False}]
     visibility.reopen(courses, "cours/secret", folder=True)
@@ -183,13 +184,34 @@ def test_a_folder_closes_what_is_below_it_and_nothing_else(library, fake_embed):
     visibility.set_open_to(courses, visibility.FRIENDS)
     _add(courses, "cours/secret_bis/autre.txt", "Autre : la fusée lunaire.", fake_embed)
     _add(courses, "cours/100%_sûr/vrai.txt", "Vrai : la fusée lunaire.", fake_embed)
+    _add(courses, "cours/1_%/joker.txt", "Joker : la fusée lunaire.", fake_embed)
     visibility.close(courses, "cours/secret", folder=True)         # pas « secret_bis »
-    visibility.close(courses, "cours/1", folder=True)              # pas « 100%_sûr »
-    visibility.close(courses, "cours/100%_sûr/", folder=True)      # « / » final ignoré
+    visibility.close(courses, "cours/1_%", folder=True)            # « % » et « _ » à la lettre
     found = _documents(_search(library))
-    assert "autre.txt" in found and "journal.txt" not in found and "vrai.txt" not in found
-    with pytest.raises(ValueError):
-        visibility.close(courses, "  ", folder=True)
+    assert {"autre.txt", "vrai.txt"} <= found and not {"journal.txt", "joker.txt"} & found
+    visibility.close(courses, "cours/100%_sûr/", folder=True)      # « / » final d'un dossier
+    assert "vrai.txt" not in _documents(_search(library))
+    for nothing in ("  ", "cours/absent", "cours/secr"):
+        with pytest.raises(ValueError):
+            visibility.close(courses, nothing, folder=True)
+
+
+def test_a_document_is_closed_exactly_as_it_is_named(library, fake_embed):
+    """Une page dont l'adresse finit par « / », un nom qui commence par une espace : la
+    règle garde le chemin tel quel, sinon elle ne retrouverait jamais le document."""
+    courses = library["courses"]
+    visibility.set_open_to(courses, visibility.FRIENDS)
+    _add(courses, "https://exemple.org/docs/", "Docs : la fusée lunaire.", fake_embed, kind="url")
+    _add(courses, " espace.txt", "Espace : la fusée lunaire.", fake_embed, kind="file")
+    visibility.close(courses, "https://exemple.org/docs/", folder=False)
+    visibility.close(courses, " espace.txt", folder=False)
+    texts = " ".join(p["text"] for p in _search(library)["passages"])
+    assert "Docs" not in texts and "Espace" not in texts
+    for nothing in ("https://exemple.org/docs", "espace.txt", "notes.txt/"):
+        with pytest.raises(ValueError, match="rien à fermer"):
+            visibility.close(courses, nothing, folder=False)
+    visibility.reopen(courses, " espace.txt", folder=False)
+    assert "Espace" in " ".join(p["text"] for p in _search(library)["passages"])
 
 
 # --------------------------------------------------------------- ce qui sort
@@ -202,14 +224,40 @@ def test_only_text_document_name_library_and_score_leave(library):
     assert "Users" not in shown and "cours/" not in shown          # ni emplacement, ni dossiers
     assert "jeton" not in shown and "#haut" not in shown           # ni paramètres d'adresse
     assert _documents(reply) == {"fusee.txt", "journal.txt", "notes.txt",
-                                 "https://exemple.org/fusee"}
+                                 "exemple.org/fusee"}
 
 
 def test_names_shown_to_the_other_machine():
     assert consult.shown_name("cours/maths/fusee.txt", "folder") == "fusee.txt"
     assert consult.shown_name("rapport.pdf", "file") == "rapport.pdf"
+    # Une page web : son hôte et le dernier segment ; ni identifiants, ni paramètres, ni ancre
     assert consult.shown_name("https://moi:secret@exemple.org:8080/a/b?x=1#y", "url") \
-        == "https://exemple.org:8080/a/b"
+        == "exemple.org:8080/…/b"
+    assert consult.shown_name("https://exemple.org/docs/", "url") == "exemple.org/docs"
+    assert consult.shown_name("https://exemple.org", "url") == "exemple.org"
+
+
+def test_a_search_never_holds_this_machine(library, monkeypatch):
+    """Disponibilité : pendant une conversation ici, ou quand assez de recherches sont déjà
+    en calcul, refus immédiat ; le vecteur de la question a un délai court."""
+    visibility.set_open_to(library["courses"], visibility.FRIENDS)
+    pacing.set_interactive(1)                                  # une conversation ici
+    try:
+        with pytest.raises(PeerError, match="répond à une conversation"):
+            _search(library)
+    finally:
+        pacing.set_interactive(0)
+    busy = consult.threading.BoundedSemaphore(1)
+    busy.acquire()                                             # déjà une recherche en calcul
+    monkeypatch.setattr(consult, "_busy", busy)
+    with pytest.raises(PeerError, match="occupée"):
+        _search(library)
+    busy.release()
+    delays = []
+    monkeypatch.setattr(ollama, "embed", lambda texts, model=None, timeout=None:
+                        delays.append(timeout) or [[1.0] * 64])
+    _search(library)
+    assert delays == [consult.EMBED_TIMEOUT] and busy.acquire(blocking=False)  # rendue
 
 
 def test_passages_are_bounded_and_must_be_relevant(library, fake_embed):
@@ -229,7 +277,7 @@ def test_questions_are_checked(library, monkeypatch):
         with pytest.raises(PeerError):
             _search(library, question=bad)
 
-    def down(texts, model=None):
+    def down(texts, model=None, timeout=None):
         raise ConnectionError("Ollama arrêté")
     monkeypatch.setattr(ollama, "embed", down)
     with pytest.raises(PeerError, match="Ollama"):

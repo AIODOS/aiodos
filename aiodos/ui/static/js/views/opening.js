@@ -5,8 +5,9 @@ import { esc } from '../dom.js';
 import { icon } from '../icons.js';
 import { modal, toast, errorToast } from '../ui.js';
 
-const WHAT_IS_SEEN = 'Elles verront le texte des passages trouvés, le nom du document (sans ses dossiers) '
-  + 'et celui de la bibliothèque : jamais tes fichiers entiers, ni leur emplacement sur ce PC. '
+const WHAT_IS_SEEN = 'Elles verront le texte des passages trouvés, quelques-uns par recherche, le nom du '
+  + 'document (sans ses dossiers) et celui de la bibliothèque ; pas tes fichiers eux-mêmes, ni leur emplacement '
+  + 'sur ce PC. Mais de recherche en recherche, une bibliothèque ouverte peut se lire passage par passage. '
   + 'Chaque recherche est notée dans la vue Réseau.\n\n'
   + 'Pour cacher un dossier ou un document, ferme-le d\'abord (bouton œil barré, au survol dans le contenu).';
 
