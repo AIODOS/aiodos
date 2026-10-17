@@ -194,6 +194,9 @@ python -m pytest tests
 
 ## Licence
 
-GPL-3.0 — voir [LICENSE](LICENSE).
+GPL-3.0 — voir [LICENSE](LICENSE) : personne ne peut en distribuer une version fermée. Avec
+une permission en plus pour les boutiques d'applications (App Store, Google Play…), à
+condition que le code source reste disponible : voir [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md).
+Les contributions sont acceptées sous ces mêmes conditions.
 
 [Ollama]: https://ollama.com
