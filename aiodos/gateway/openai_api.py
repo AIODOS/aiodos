@@ -303,8 +303,9 @@ async def chat_completions(request: Request):
     include_usage = streaming and bool((body.get("stream_options") or {}).get("include_usage"))
     response_format = (body.get("response_format") or {}).get("type") \
         if isinstance(body.get("response_format"), dict) else None
+    several = isinstance(body.get("n"), int) and body["n"] > 1
     local_only = (_has_media(messages) or response_format in ("json_object", "json_schema")
-                  or bool(body.get("logprobs")) or (body.get("n") or 1) > 1)
+                  or bool(body.get("logprobs")) or several)
     tools = bool(body.get("tools") or body.get("functions")) or any(
         isinstance(m, dict) and (m.get("tool_calls") or m.get("role") in ("tool", "function"))
         for m in messages)
@@ -312,7 +313,6 @@ async def chat_completions(request: Request):
     try:
         models = await asyncio.to_thread(answer.plan, model_id, executor,
                                          local_only=local_only, prefer_local=tools)
-        plain = plain_messages(messages)
     except GatewayError as exc:
         return _failure(exc)
     think, options = _thinks(body), sampling(body)
@@ -320,8 +320,8 @@ async def chat_completions(request: Request):
     def attempt(model, stop):
         if answer.is_local(model):
             yield from answer.local_raw("/v1/chat/completions", {**body, "model": model}, stop)
-        else:
-            yield from answer.remote(model, plain, think, options, stop)
+        else:                             # en texte, seulement pour une autre machine
+            yield from answer.remote(model, plain_messages(messages), think, options, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:

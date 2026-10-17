@@ -43,9 +43,10 @@ def _pieces(text: str) -> list:
 
 
 class OllamaStub:
-    def __init__(self, models=("petit:1b",), delay: float = 0.0):
+    def __init__(self, models=("petit:1b",), delay: float = 0.0, name: str = ""):
         self.models = list(models) + [EMBEDDING]
         self.delay = delay                # secondes entre deux mots (réponse en cours)
+        self.name = name                  # dit dans chaque réponse : quelle machine a répondu
         self.requests = []
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
@@ -70,6 +71,9 @@ class OllamaStub:
 
     def bodies(self, path: str) -> list:
         return [body for p, body in self.requests if p == path]
+
+    def answer(self, model: str) -> str:
+        return f"{answer_of(model)} ({self.name})" if self.name else answer_of(model)
 
     # -------------------------------------------------------------- routes
     def _app(self) -> FastAPI:
@@ -129,9 +133,14 @@ class OllamaStub:
                 return unknown(body.get("model"))
             return {"embedding": _bag_of_words([body["prompt"]])[0]}
 
+        async def slowly(model):
+            """Le temps d'écrire toute la réponse, quand elle ne vient pas en flux."""
+            if stub.delay:
+                await asyncio.sleep(stub.delay * len(_pieces(stub.answer(model))))
+
         def lines(model, field, done_extra):
             async def produce():
-                for piece in _pieces(answer_of(model)):
+                for piece in _pieces(stub.answer(model)):
                     if stub.delay:
                         await asyncio.sleep(stub.delay)
                     yield json.dumps({"model": model, "created_at": STAMP, **field(piece),
@@ -151,8 +160,9 @@ class OllamaStub:
                 return unknown(model)
             field = lambda text: {"message": {"role": "assistant", "content": text}}
             if body.get("stream") is False:
+                await slowly(model)
                 return {"model": model, "created_at": STAMP,
-                        "message": {"role": "assistant", "content": answer_of(model)},
+                        "message": {"role": "assistant", "content": stub.answer(model)},
                         "done": True, "done_reason": "stop", "prompt_eval_count": 3,
                         "eval_count": 4}
             return StreamingResponse(lines(model, field, {}), media_type="application/x-ndjson")
@@ -168,7 +178,8 @@ class OllamaStub:
                         "done_reason": "load"}
             field = lambda text: {"response": text}
             if body.get("stream") is False:
-                return {"model": model, "created_at": STAMP, "response": answer_of(model),
+                await slowly(model)
+                return {"model": model, "created_at": STAMP, "response": stub.answer(model),
                         "done": True, "done_reason": "stop"}
             return StreamingResponse(lines(model, field, {"context": [1, 2, 3]}),
                                      media_type="application/x-ndjson")
@@ -184,13 +195,14 @@ class OllamaStub:
             base = {"id": "chatcmpl-1", "created": 1, "model": model,
                     "system_fingerprint": "fp_ollama"}
             if not body.get("stream"):
+                await slowly(model)
                 return {**base, "object": "chat.completion", "choices": [{
-                    "index": 0, "message": {"role": "assistant", "content": answer_of(model)},
+                    "index": 0, "message": {"role": "assistant", "content": stub.answer(model)},
                     "finish_reason": "stop"}],
                     "usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}}
 
             async def events():
-                for piece in _pieces(answer_of(model)):
+                for piece in _pieces(stub.answer(model)):
                     chunk = {**base, "object": "chat.completion.chunk", "choices": [{
                         "index": 0, "delta": {"role": "assistant", "content": piece},
                         "finish_reason": None}]}

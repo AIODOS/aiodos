@@ -276,7 +276,6 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
     try:
         models = await asyncio.to_thread(answer.plan, model_id, executor,
                                          local_only=local_only, prefer_local=prefer_local)
-        plain = plain_messages(messages) if messages is not None else None
     except GatewayError as exc:
         return _error(exc)
     think = body.get("think") is not False
@@ -285,10 +284,10 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
     def attempt(model, stop):
         if answer.is_local(model):
             yield from answer.local_raw(path, {**body, "model": model}, stop)
-        elif plain is None:               # chargement ou déchargement : rien à calculer là-bas
+        elif messages is None:            # chargement ou déchargement : rien à calculer là-bas
             yield "content", ""
-        else:
-            yield from answer.remote(model, plain, think, options, stop)
+        else:                             # en texte, seulement pour une autre machine
+            yield from answer.remote(model, plain_messages(messages), think, options, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
@@ -296,7 +295,7 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
     except Exception as exc:
         stream.close()
         return _error(exc)
-    if plain is None and raw_head(head) is None:
+    if messages is None and raw_head(head) is None:
         stream.close()
         unload = body.get("keep_alive") in (0, "0", "0s")
         line = Remote(model_id, chat).final()

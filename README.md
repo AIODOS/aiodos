@@ -68,12 +68,29 @@ Comment le travail circule :
   celles qui ont le plus calculé pour toi sont servies en premier.
 
 **Prêter ses modèles pour les conversations** (vue « Cette machine », désactivé par
-défaut) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, choisit dans
-la conversation un modèle d'une autre machine (« Sur mes machines » dans le choix du
-modèle). La réponse est calculée là-bas et arrive en flux chiffré, morceau par morceau ;
-le bouton Stop coupe la génération là-bas. Le texte de la conversation passe par la
-machine qui prête le temps de la réponse, sans y être enregistré, et son travail de fond
-se met en pause pendant ce temps.
+défaut) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, fait répondre
+ses conversations par le modèle d'une autre machine. La réponse est calculée là-bas et
+arrive en flux chiffré, morceau par morceau ; le bouton Stop coupe la génération là-bas.
+Le texte de la conversation passe par la machine qui prête le temps de la réponse, sans y
+être enregistré, et son travail de fond se met en pause pendant ce temps.
+
+**La machine qui répond se choisit seule** : dans le choix du modèle, chaque modèle
+n'apparaît qu'une fois, en mode « automatique ». La conversation part vers cette machine
+si elle a le modèle et qu'elle est libre (sauf s'il n'y tient pas en mémoire vidéo alors
+qu'une autre machine libre l'y fait tenir), sinon vers la moins occupée de tes machines
+qui le prêtent ; chaque réponse dit quelle machine l'a calculée, et une machine qui ne
+répond pas cède la place à la suivante. On peut aussi désigner une machine précise, à côté
+du modèle. Les machines d'un ami ne répondent d'office que si on l'accepte (Réglages →
+Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC et la mémoire
+des conversations ne la suivent jamais ; chez un ami, seules les bibliothèques partagées
+avec tes amis donnent leurs extraits.
+
+**Ouvrir AIODOS aux autres outils** (Réglages → Autres outils, désactivé par défaut) : une
+API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement
+(`127.0.0.1`, port fixe 11435, clé d'accès à copier). Open WebUI, AnythingLLM, Continue, un
+éditeur de code ou un assistant (Claude Desktop, Claude Code…) y trouvent les modèles de
+cette machine et ceux que te prêtent tes machines, avec le même choix automatique, et
+cherchent dans tes bibliothèques. Pas à pas : [docs/autres-outils.md](docs/autres-outils.md).
 
 Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --headless`.
 `--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
@@ -147,6 +164,14 @@ aiodos/
 ├── services/          Ollama, extraction de fichiers, médias, web, cloud
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle
 ├── chat/              conversations et préparation des réponses
+├── gateway/           AIODOS ouvert aux autres outils (docs/autres-outils.md)
+│   ├── server.py      serveur sur 127.0.0.1, port fixe, clé d'accès (access.py)
+│   ├── openai_api.py  API compatible OpenAI (/v1/…)
+│   ├── ollama_api.py  API compatible Ollama (/api/…)
+│   ├── mcp_server.py  serveur MCP : bibliothèques et conversation pour les assistants
+│   ├── mcp_stdio.py   pont stdio, pour les assistants qui lancent un programme
+│   ├── catalog.py     modèles proposés et leurs identifiants
+│   └── answer.py      réponse par cette machine ou par une machine appairée
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │   ├── queue.py       persistance, priorités, réessais, reprise
 │   ├── executor.py    exécution selon les ressources (GPU, embeddings, CPU, réseau)
@@ -162,6 +187,7 @@ aiodos/
 │   ├── worker.py      partage de puissance : calculer pour ses autres machines
 │   ├── lending.py     prêter ses modèles pour les conversations des autres machines
 │   ├── remote_models.py  utiliser dans ses conversations les modèles prêtés
+│   ├── placement.py   choisir seul la machine qui répond (mode automatique)
 │   ├── route.py       chemin vers une machine : réseau local s'il répond, Internet sinon
 │   ├── companion.py   lancer et surveiller le compagnon Internet aiodos-net
 │   ├── internet.py    le compagnon vu du réseau : liste blanche, état par machine
@@ -181,6 +207,9 @@ legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 
 **Sécurité de l'API locale** : elle n'écoute que sur `127.0.0.1`, vérifie l'en-tête
 `Host` (contre le *DNS rebinding*) et exige un jeton tiré au hasard à chaque lancement.
+La passerelle des autres outils, fermée par défaut, n'écoute elle aussi que sur `127.0.0.1`,
+vérifie `Host` et `Origin` (une page web ne s'en sert pas) et exige sa clé d'accès, stable
+et renouvelable.
 
 ## Données
 

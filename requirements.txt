@@ -19,3 +19,5 @@ faster-whisper     # transcription audio/vidéo (local)
 # Tests
 pytest
 httpx
+openai             # client officiel d'OpenAI : essais de la passerelle (Apache-2.0)
+mcp                # SDK officiel de MCP : essais du serveur MCP (MIT)

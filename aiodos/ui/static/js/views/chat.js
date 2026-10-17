@@ -129,7 +129,9 @@ function fillModels() {
 function selectModel(id) {
   const value = id?.startsWith('cloud:') ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
-  el.model.value = values.includes(value) ? value : (values[0] || '');
+  // Sans choix connu : un modèle de cette machine d'abord
+  const here = entries.find(e => e.machines.some(m => m.local))?.name;
+  el.model.value = values.includes(value) ? value : (here || values[0] || '');
   fillMachines(id);
 }
 
@@ -292,7 +294,8 @@ function appendAssistant(model, here = false) {
     thinkTimer = null;
   };
   return {
-    route(ev) {                       // machine choisie (mode automatique) ou relève
+    route(ev) {                       // mode automatique : la machine choisie, ou qui prend le relais
+      if (!model?.startsWith(AUTO)) return;
       node.querySelector('.model-tag').textContent =
         `${modelName(ev.model)} · ${ev.machine || 'cette machine'}`;
     },

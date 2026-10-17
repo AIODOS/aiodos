@@ -533,6 +533,37 @@ def test_the_stdio_bridge_with_the_official_client(gateway):
     assert found.structured_content["passages"][0]["source"] == "budget.txt"
 
 
+def test_the_stdio_bridge_relays_line_by_line(gateway):
+    """Le pont lancé comme le ferait un assistant, sans SDK : un message JSON-RPC par ligne,
+    dans les deux époques du protocole ; il ajoute lui-même les en-têtes du transport HTTP."""
+    import os
+    _library(DOCS)
+    meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}}
+    messages = [
+        {"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {"_meta": meta}},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "rechercher_bibliotheques", "arguments": {"question": "budget 2024"},
+            "_meta": meta}},
+        {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {
+            "protocolVersion": "2025-11-25", "capabilities": {},
+            "clientInfo": {"name": "essai", "version": "1"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/list"},
+    ]
+    env = {**os.environ, "AIODOS_DATA_DIR": str(paths.data_dir()),
+           "PYTHONPATH": str(paths.APP_ROOT), "PYTHONIOENCODING": "utf-8"}
+    done = subprocess.run([sys.executable, "-m", "aiodos.gateway.mcp_stdio"],
+                          input="".join(json.dumps(m) + "\n" for m in messages).encode(),
+                          capture_output=True, env=env, cwd=paths.APP_ROOT, timeout=60)
+    replies = [json.loads(line) for line in done.stdout.decode("utf-8").splitlines() if line]
+    assert [r["id"] for r in replies] == [1, 2, 3, 4], done.stderr
+    assert replies[0]["result"]["resultType"] == "complete"
+    assert replies[1]["result"]["structuredContent"]["passages"][0]["source"] == "budget.txt"
+    assert replies[2]["result"]["protocolVersion"] == "2025-11-25"
+    assert len(replies[3]["result"]["tools"]) == 3
+
+
 def test_the_stdio_bridge_says_when_aiodos_is_closed(gateway):
     from aiodos.gateway import mcp_stdio
     gateway.ui.post("/api/gateway", json={"enabled": False}, headers=UI)
