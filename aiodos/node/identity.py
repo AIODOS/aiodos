@@ -97,8 +97,19 @@ def gpus() -> list:
     return result
 
 
+SIMULATE_IDLE_ENV = "AIODOS_SIMULATE_IDLE"
+
+
 def idle_seconds():
-    """Temps depuis la dernière action clavier/souris (base du mode « économiseur »)."""
+    """Temps depuis la dernière action clavier/souris (base du mode « économiseur »).
+    AIODOS_SIMULATE_IDLE=secondes le remplace : essais et tests, qui ne doivent pas
+    dépendre de ce que fait l'utilisateur de la machine pendant qu'ils tournent."""
+    simulated = os.environ.get(SIMULATE_IDLE_ENV, "").strip()
+    if simulated:
+        try:
+            return max(0.0, float(simulated))
+        except ValueError:
+            pass
     if sys.platform != "win32":
         return None
 

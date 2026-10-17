@@ -221,6 +221,11 @@ Ce changement vaut pour toutes les machines qui prêtent déjà leur puissance (
 « Prêter ma puissance » activé) et qui n'ont jamais touché à « Seulement quand je
 n'utilise pas ce PC » : elles se mettent à prêter aussi pendant l'utilisation.
 
+Pour les essais : `AIODOS_SIMULATE_IDLE=secondes` remplace la mesure de l'inactivité
+(clavier, souris). Les tests la fixent à un jour, comme ils fixent le secteur : sans cela,
+la vitesse des tests à deux nœuds dépendrait de ce que fait l'utilisateur du PC pendant
+qu'ils tournent.
+
 ## 6. Fermer la fenêtre sans arrêter le nœud (Windows)
 
 Une icône AIODOS dans la zone de notification (`NotifyIcon` de WinForms, que pywebview

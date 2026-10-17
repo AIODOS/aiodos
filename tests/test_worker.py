@@ -215,6 +215,17 @@ def test_lending_goes_on_while_the_pc_is_used_on_mains_only(monkeypatch):
     assert sharing_state()["state"] == "ready"
 
 
+def test_activity_can_be_simulated_for_tests_and_measurements(monkeypatch):
+    """Les tests ne dépendent pas de ce que fait l'utilisateur de la machine pendant
+    qu'ils tournent (conftest : inactif depuis un jour)."""
+    assert identity.idle_seconds() == 86400.0
+    monkeypatch.setenv("AIODOS_SIMULATE_IDLE", "5")
+    assert identity.idle_seconds() == 5.0
+    settings.set_value("share_enabled", True)
+    _supply(monkeypatch, plugged=True)
+    assert sharing_state()["state"] == "in_use"
+
+
 def test_while_the_pc_is_used_the_gpu_is_lent_half_the_time_at_most(setup):
     lender = setup["lender"]
     lender.state = {"active": True, "state": "in_use", "detail": ""}
