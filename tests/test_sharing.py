@@ -161,7 +161,9 @@ def test_trust_is_chosen_when_confirming_the_pairing(data_dir, monkeypatch):
 
 
 def test_api_changes_trust_restores_and_shows_what_was_sent(owner):
-    with TestClient(create_app("jeton", {"testserver"})) as client:
+    # embed=0 : l'exécuteur de ce nœud ne calcule pas lui-même les unités à confier à B
+    # (avec un vrai Ollama sur la machine, il les prenait avant le bail : test instable)
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as client:
         headers = {"X-Aiodos-Token": "jeton"}
         snap = client.post(f"/api/network/peers/{B}/trust", json={"trust": "friend"},
                            headers=headers).json()
