@@ -53,6 +53,16 @@ def _stream(stream):
         return subprocess.DEVNULL
 
 
+def _flush(target):
+    """Vide une sortie, sans jamais échouer : une console fermée, ou le tube d'un
+    processus parti (sous Windows, « [Errno 22] Invalid argument »), ne doit pas
+    empêcher le redémarrage."""
+    try:
+        target.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def relaunch(argv: list) -> int:
     """À appeler une fois le nœud arrêté et le verrou d'instance rendu."""
     if launcher.supervised():
@@ -60,11 +70,11 @@ def relaunch(argv: list) -> int:
     command = [sys.executable, "-m", "aiodos", *launcher.child_argv(argv)]
     env = dict(os.environ, AIODOS_DATA_DIR=str(paths.data_dir()))
     for handler in logging.getLogger().handlers:
-        handler.flush()
+        _flush(handler)
     if sys.platform != "win32":
         for stream in (sys.stdout, sys.stderr):
             if stream:
-                stream.flush()
+                _flush(stream)
         os.chdir(paths.APP_ROOT)
         os.execve(sys.executable, command, env)
     subprocess.Popen(command, cwd=paths.APP_ROOT, env=env, stdin=subprocess.DEVNULL,

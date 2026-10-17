@@ -13,6 +13,7 @@ import sys
 
 from aiodos import paths
 
+NO_DIALOG_ENV = "AIODOS_NO_DIALOG"   # nœuds lancés par les essais : messages au journal seulement
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _STILL_ACTIVE = 259
 _show = []                 # fonction qui montre la fenêtre de cette instance (ui/window.py)
@@ -104,7 +105,13 @@ def release():
 
 
 def alert(message: str):
-    if sys.platform == "win32":
+    """Message à l'utilisateur : une fenêtre sous Windows, sinon la console. Jamais de
+    fenêtre pour un nœud lancé par les essais (NO_DIALOG_ENV) : il n'a personne devant lui,
+    et sa fenêtre surgirait sur le bureau, parfois longtemps après la fin de l'essai."""
+    if sys.platform == "win32" and not os.environ.get(NO_DIALOG_ENV):
         ctypes.windll.user32.MessageBoxW(None, message, "AIODOS", 0x40)
-    else:
-        print(message)
+        return
+    try:
+        print(message, file=sys.stderr, flush=True)
+    except (OSError, ValueError, AttributeError):  # console fermée, tube coupé : rien à faire
+        pass

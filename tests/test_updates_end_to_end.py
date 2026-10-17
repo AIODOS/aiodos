@@ -3,10 +3,8 @@ reçoit d'une machine appairée une version signée, l'installe, redémarre dess
 son lanceur la garde. Les deux machines font tourner une copie du code de travail,
 qui fait confiance à une clé de publication jetable."""
 import json
-import os
 import re
 import shutil
-import signal
 from pathlib import Path
 
 import requests
@@ -28,13 +26,9 @@ def copy_code(dest: Path, version: str, trusted: dict) -> Path:
 
 
 def stop(node: Node):
-    """Le processus lancé par le test, et celui qui tient le nœud après un redémarrage."""
+    """Le nœud, celui qui le tient après un redémarrage et le lanceur qui le surveille
+    (cf. tests/nodes.Node.stop)."""
     node.stop()
-    try:
-        pid = json.loads((node.data_dir / "instance.json").read_text(encoding="utf-8"))["pid"]
-        os.kill(pid, signal.SIGTERM)
-    except (OSError, ValueError, KeyError):
-        pass
 
 
 def version_of(node: Node):

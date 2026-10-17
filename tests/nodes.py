@@ -3,8 +3,10 @@
 Chaque nœud a son propre dossier de données et écoute sur 127.0.0.1 : pas de
 pare-feu à franchir, pas de diffusion UDP (ajout par adresse).
 """
+import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -36,7 +38,9 @@ class Node:
         self.output = []
 
     def start(self, timeout=40):
-        env = dict(os.environ, AIODOS_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8")
+        # Jamais de fenêtre d'erreur sur le bureau : un nœud d'essai n'a personne devant lui
+        env = dict(os.environ, AIODOS_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8",
+                   AIODOS_NO_DIALOG="1")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.process = subprocess.Popen(
             [sys.executable, "-m", "aiodos", "--headless", "--no-migrate",
@@ -81,12 +85,82 @@ class Node:
         return self.api("GET", "/network")["node_id"]
 
     def stop(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
+        """Arrête le nœud et tout ce qu'il a lancé. Après une mise à jour, le nœud tourne
+        dans un autre processus (instance.json), surveillé par un lanceur qui, s'il le
+        voyait s'arrêter seul, relancerait la version précédente : resté seul, ce nœud
+        retenterait sa mise à jour une heure plus tard, longtemps après l'essai. On arrête
+        donc d'abord ce lanceur, puis le nœud, puis le processus lancé par l'essai, chacun
+        avec ses enfants (compagnon)."""
+        pids = []
+        holder = self._holder()
+        if holder:
+            parent = _parent_python(holder)
+            if parent:
+                pids.append(parent)
+            pids.append(holder)
+        if self.process:
+            pids.append(self.process.pid)
+        for pid in dict.fromkeys(pids):
+            _kill_tree(pid)
+        if self.process:
             try:
                 self.process.wait(10)
             except subprocess.TimeoutExpired:
                 self.process.kill()
+
+    def _holder(self) -> int | None:
+        try:
+            return int(json.loads((self.data_dir / "instance.json")
+                                  .read_text(encoding="utf-8"))["pid"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+
+def _kill_tree(pid: int):
+    """Le processus et ses enfants ; sans erreur s'il n'est plus là."""
+    if sys.platform == "win32":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        pass
+
+
+def _parent_python(pid: int) -> int | None:
+    """Le lanceur d'AIODOS qui surveille `pid` : son parent, s'il est un Python autre que
+    celui des essais. Sous Windows seulement (ailleurs, le nœud relancé remplace son
+    processus : execve)."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                    ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)          # TH32CS_SNAPPROCESS
+    processes = {}
+    entry = Entry()
+    entry.dwSize = ctypes.sizeof(Entry)
+    ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+    while ok:
+        processes[entry.th32ProcessID] = (entry.th32ParentProcessID, entry.szExeFile.lower())
+        ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    kernel32.CloseHandle(snapshot)
+    parent = processes.get(pid, (None, ""))[0]
+    if not parent or parent == os.getpid() or parent not in processes:
+        return None
+    return parent if processes[parent][1] in ("python.exe", "pythonw.exe") else None
 
 
 def pair(a: Node, b: Node, a_trusts="mine", b_trusts="mine"):
