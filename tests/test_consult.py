@@ -233,13 +233,19 @@ def test_searches_per_minute_are_limited_per_machine(library, monkeypatch):
     assert len(refusals) == 1                                        # un refus noté, pas trois
 
 
-def test_a_machine_set_aside_gets_nothing(library):
+def test_a_machine_set_aside_gets_nothing(library, monkeypatch):
     visibility.set_open_to(library["courses"], visibility.FRIENDS)
     peers.set_aside(FRIEND_PC, "un résultat ne correspond pas")
     assert consult.open_count(FRIEND_PC) == 0
     with pytest.raises(PeerError, match="ne te laisse plus chercher"):
         _search(library)
     assert consult.entries(FRIEND_PC)[0]["refused"] == "machine mise de côté"
+    # Si elle insiste, la limite borne aussi ce qui est noté
+    monkeypatch.setattr(consult, "LIMITER", consult.Limiter(limit=2, clock=lambda: 1000.0))
+    for _ in range(6):
+        with pytest.raises(PeerError):
+            _search(library)
+    assert len(consult.entries(FRIEND_PC)) == 1 + 2 + 1
 
 
 # ------------------------------------------------------------------ journal

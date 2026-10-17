@@ -129,17 +129,18 @@ def _wanted(payload) -> int:
 def search(manager, sender, payload):
     """Action scellée « library/search » : {question, k} → {passages, open}."""
     question, k = _question(payload), _wanted(payload)
-    aside = sharing.set_aside_reason(sender)
-    if aside:
-        log(sender, refused="machine mise de côté")
-        raise PeerError(f"« {manager.name()} » ne te laisse plus chercher dans ses "
-                        f"bibliothèques : {aside}.")
+    # La limite d'abord : elle compte toute recherche reçue, et borne ainsi ce qui est noté
     wait, note = LIMITER.take(sender)
     if wait:
         if note:
             log(sender, refused=f"plus de {LIMITER.limit} recherches par minute")
         raise PeerError(f"« {manager.name()} » limite les recherches à {LIMITER.limit} par "
                         f"minute : réessaie dans {math.ceil(wait)} s.")
+    aside = sharing.set_aside_reason(sender)
+    if aside:
+        log(sender, refused="machine mise de côté")
+        raise PeerError(f"« {manager.name()} » ne te laisse plus chercher dans ses "
+                        f"bibliothèques : {aside}.")
     levels = levels_for(sender)
     opened = visibility.open_collections(levels)
     if not opened:                        # rien d'ouvert : la question n'est même pas lue

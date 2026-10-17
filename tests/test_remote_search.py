@@ -167,9 +167,15 @@ def test_the_chat_asks_the_others_only_when_the_message_says_so(api, monkeypatch
                     headers=TOKEN) as response:
         events = _events(response)
     assert asked == ["La fusée ?"]
-    assert next(e["sources"] for e in events if e["type"] == "sources") == [
-        {"type": "remote", "label": "fusee.txt", "collection": "Cours", "peer": "PC de Léa",
-         "score": 0.61}]
+    cited = [{"type": "remote", "label": "fusee.txt", "collection": "Cours", "peer": "PC de Léa",
+              "score": 0.61}]
+    assert next(e["sources"] for e in events if e["type"] == "sources") == cited
+    # Gardés : la réponse et les citations ; le texte du passage, nulle part
+    conversation = api.get(f"/api/conversations/{events[0]['conversation_id']}",
+                           headers=TOKEN).json()
+    assert conversation["messages"][-1]["sources"] == cited
+    assert "décolle" not in json.dumps(conversation, ensure_ascii=False)
+    assert not db.query("SELECT 1 FROM chunks WHERE text LIKE '%décolle%'")
 
 
 def test_preflight_says_where_the_question_would_go(api):

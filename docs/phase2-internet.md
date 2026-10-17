@@ -981,10 +981,11 @@ machines n'ont donc pas besoin du même modèle, contrairement au travail confi�
 
 Ne sortent jamais : les fichiers, leur emplacement et leurs dossiers, la liste des documents
 (pas de sommaire : on ne voit que ce que ses questions font remonter), les vecteurs, les
-dates, ce qui est fermé. Côté demandeur, les passages servent à la réponse et restent dans
-la conversation (les citations), sans entrer dans ses bibliothèques ; ils ne partent ni vers
-le cloud, ni vers le modèle prêté par un ami (`pipeline.peers_allowed`) : le propriétaire les
-a ouverts à cette machine, pas à des tiers.
+dates, ce qui est fermé. Côté demandeur, les passages servent à la réponse, puis ne sont
+gardés nulle part : la conversation enregistre la réponse (qui peut en reprendre des bouts)
+et les citations (document, bibliothèque, machine), et rien n'entre dans ses bibliothèques.
+Ils ne partent ni vers le cloud, ni vers le modèle prêté par un ami
+(`pipeline.peers_allowed`) : le propriétaire les a ouverts à cette machine, pas à des tiers.
 
 *Le protocole.* Une action scellée, `library/search` (`p2p_app.HANDLERS`) : la question
 (2 000 caractères au plus, coupée avant l'envoi) et le nombre de passages voulus ; la réponse
