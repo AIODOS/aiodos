@@ -22,7 +22,7 @@ aux conditions déjà en place (inactivité, secteur, température, part du GPU)
 import re
 from pathlib import Path
 
-from aiodos import db
+from aiodos import db, settings
 from aiodos.network import peers
 
 MINE = "mine"
@@ -92,6 +92,8 @@ def profile_for(node_id, profile: dict) -> dict:
     reduced = {k: profile[k] for k in FRIEND_PROFILE if k in profile}
     models = (profile.get("ollama") or {}).get("models") or []
     reduced["ollama"] = {"models": models if profile.get("lends_models") else []}
+    if settings.get("lend_images_friends") and profile.get("images"):
+        reduced["images"] = profile["images"]     # ma carte graphique, prêtée pour leurs images
     return reduced
 
 

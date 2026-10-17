@@ -3,8 +3,10 @@ consigne, graine, réglages → PNG ou WebM). Elle se calcule ici, ou chez une d
 machines qui a le même modèle, aux mêmes empreintes (network/work.py), puis n'est gardée
 qu'ici (imaging/gallery.py).
 
-Jamais confiée à un ami, ni calculée pour un ami (mine_only) : la consigne peut être
-personnelle. Une machine qui reçoit un ordre d'image en revérifie les réglages (checked).
+Pas confiée à un ami ni calculée pour un ami (mine_only), sauf accord des deux côtés :
+le propriétaire autorise ses amis à calculer ses images (réglage images_from_friends), et
+l'ami leur prête sa carte graphique (lend_images_friends). La consigne peut être
+personnelle : elle passe alors chez l'ami le temps du calcul, sans y être gardée. Une machine qui reçoit un ordre d'image en revérifie les réglages (checked).
 Le calcul suit la cadence du travail de fond (jobs/pacing.py) : il attend la fin d'une
 conversation servie par cette machine.
 """
@@ -182,5 +184,8 @@ def finalize_images(job_id, params, units):
 
 register_portable("generate_image", compute_image, assimilate_image,
                   requires=requires_image, validate=check_image, here=runnable_here,
-                  mine_only=True)
+                  mine_only=True, friends_out="images_from_friends",
+                  friends_in="lend_images_friends",
+                  shared_keys=("model", "prompt", "negative", "width", "height", "steps",
+                               "cfg", "frames", "seed"))
 register_job_kind("generate_images", split_generate, finalize_images)

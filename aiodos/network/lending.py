@@ -15,7 +15,7 @@ comme num_ctx rechargerait le modèle ici) et « stats » : un dernier morceau d
 nombre de jetons. Une machine d'une version précédente ignore les deux.
 """
 from aiodos import settings
-from aiodos.network import activity
+from aiodos.network import activity, lend_queue
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -79,12 +79,20 @@ def chat(manager, sender, payload, stop):
         extra["stats"] = True
 
     def answer():
-        manager.executor.interactive_begin()
+        # Une à la fois ; qui m'a le plus donné passe d'abord (lend_queue.py)
         try:
-            with activity.chat("for", sender):          # « répond à sa conversation »
-                for kind, text in ollama.chat_stream(model, messages, think=think, stop=stop,
-                                                     **extra):
-                    yield {kind: text}
-        finally:
-            manager.executor.interactive_end()
+            with lend_queue.turn(sender, stop):
+                manager.executor.interactive_begin()
+                try:
+                    with activity.chat("for", sender):  # « répond à sa conversation »
+                        for kind, text in ollama.chat_stream(model, messages, think=think,
+                                                             stop=stop, **extra):
+                            yield {kind: text}
+                finally:
+                    manager.executor.interactive_end()
+        except lend_queue.Busy:
+            raise PeerError(f"« {manager.name()} » répond déjà à d'autres conversations depuis "
+                            "longtemps : réessaie dans un moment.") from None
+        except lend_queue.Cancelled:
+            return                                       # elle est partie avant son tour
     return answer()

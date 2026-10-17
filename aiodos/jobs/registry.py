@@ -15,6 +15,8 @@ Une tâche simple fait tout d'un coup, sur ce nœud seulement.
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from aiodos import settings
+
 
 @dataclass
 class UnitSpec:
@@ -49,7 +51,11 @@ class TaskSpec:
     # « model » du payload : moteur présent, fichiers complets) ? Sinon elles attendent en
     # file qu'une de mes machines qui le sait les demande. None : toujours
     here: Optional[Callable] = None
-    mine_only: bool = False               # jamais calculée par un ami, ni pour un ami
+    mine_only: bool = False               # jamais calculée par un ami, ni pour un ami...
+    # ... sauf accord des deux côtés, deux réglages : le propriétaire accepte de confier ces
+    # unités à ses amis (friends_out), l'ami de les calculer pour ses amis (friends_in)
+    friends_out: Optional[str] = None
+    friends_in: Optional[str] = None
 
     @property
     def portable(self) -> bool:
@@ -84,9 +90,19 @@ def task(name):
 
 def register_portable(name, compute, assimilate, file_key=None, options=None,
                       requires=None, validate=None, shared_keys=(), sample=None, here=None,
-                      mine_only=False):
+                      mine_only=False, friends_out=None, friends_in=None):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
-                           tuple(shared_keys), sample, here, mine_only)
+                           tuple(shared_keys), sample, here, mine_only, friends_out, friends_in)
+
+
+def friends_may_take(spec) -> bool:
+    """Chez le propriétaire : une unité de cette tâche peut-elle partir chez un ami ?"""
+    return not spec.mine_only or bool(spec.friends_out and settings.get(spec.friends_out))
+
+
+def may_compute_for_friend(spec) -> bool:
+    """Chez celui qui calcule : peut-il calculer une unité de cette tâche pour un ami ?"""
+    return not spec.mine_only or bool(spec.friends_in and settings.get(spec.friends_in))
 
 
 def runnable_here(task, model) -> bool:

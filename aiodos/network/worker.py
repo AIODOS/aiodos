@@ -345,7 +345,7 @@ class Worker:
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
                 raise RuntimeError(f"tâche « {a.order['task']} » inconnue sur cette machine")
-            if spec.mine_only and sharing.level(a.peer_id) != sharing.MINE:
+            if sharing.level(a.peer_id) != sharing.MINE                     and not registry.may_compute_for_friend(spec):
                 raise RuntimeError("tâche réservée à mes machines")
             file = self._download(a, folder) if a.order.get("blob") else None
             output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)

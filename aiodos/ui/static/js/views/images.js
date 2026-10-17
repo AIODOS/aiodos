@@ -1,6 +1,6 @@
 // Images et vidéos : une description, et chaque image ou vidéo demandée devient une unité
 // de la file, calculée ici ou par mes machines qui ont le modèle (docs/generation-repartie.md).
-import { get, post, del, fileUrl } from '../api.js';
+import { get, post, put, del, fileUrl } from '../api.js';
 import { $, h, esc, bytes, ago, debounce } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, prefs } from '../state.js';
@@ -106,6 +106,12 @@ function renderModels() {
     b.onclick = () => download(b.dataset.download, b.dataset.source || null);
   });
   box.querySelectorAll('[data-cancel]').forEach(b => { b.onclick = cancelDownload; });
+  box.querySelectorAll('[data-friends-ok]').forEach(b => {
+    b.onclick = async () => {
+      try { await put('/settings', { images_from_friends: true }); } catch (err) { errorToast(err); return; }
+      loadModels();
+    };
+  });
 }
 
 /** Formats, durée et nombre selon le modèle choisi (règles du catalogue). */
@@ -140,7 +146,13 @@ function anyHelper() {
 function modelCard(m) {
   const dl = info.download?.model === m.id ? info.download : null;
   const helpers = m.helpers.length
-    ? `<div class="faint">Mes machines qui l'ont et prêtent leur puissance : ${m.helpers.map(esc).join(', ')}.</div>` : '';
+    ? `<div class="faint">Machines qui l'ont et peuvent le calculer pour toi : ${m.helpers.map(esc).join(', ')}.</div>` : '';
+  // Un ami propose sa carte graphique : avec ton accord, une fois pour toutes (Réglages)
+  const friends = !info.from_friends && m.state !== 'ready' && (m.friends || []).length ? `
+    <div class="banner info img-friends">${icon('network')}<div>${esc(m.friends.join(', '))} ${m.friends.length > 1
+      ? 'peuvent' : 'peut'} calculer ce modèle pour toi : ta description et le résultat passeront chez
+      ${m.friends.length > 1 ? 'eux' : 'lui'} le temps du calcul, sans y être gardés.</div>
+      <button class="btn sm" data-friends-ok>Autoriser mes amis</button></div>` : '';
   const glyph = icon(m.kind === 'video' ? 'video' : 'image');
   const notice = m.notice ? `<div class="banner warn img-notice">${icon('warn')}<div>${esc(m.notice)}</div></div>` : '';
   if (m.state === 'ready' && !dl?.running) {
@@ -179,7 +191,7 @@ function modelCard(m) {
   return `<div class="card img-model-card">
     <h2>${glyph}${esc(m.label)} <span class="pill${m.notice ? ' warn' : ''}">${esc(m.license)}</span></h2>
     <p class="hint">${esc(m.about)} ${bytes(m.size)} depuis Hugging Face, chaque fichier vérifié par son empreinte.</p>
-    ${notice}${helpers}${action}</div>`;
+    ${notice}${helpers}${friends}${action}</div>`;
 }
 
 async function download(id, source) {

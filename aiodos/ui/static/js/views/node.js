@@ -235,6 +235,7 @@ function renderShare() {
     ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', `${mobile ? 'Ce téléphone' : 'Ce PC'} calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.`)}
     ${shareRow('lend_models', 'Prêter mes modèles pour leurs conversations', `Elles pourront faire répondre leurs conversations par les modèles de ${device}. Le texte passe ici, chiffré, le temps de la réponse, sans être enregistré ; ton travail de fond se met en pause pendant ce temps.`)}
     ${mobile ? '' : shareRow('lend_gpu', 'Prêter ma carte graphique pour les gros modèles', "Un modèle trop gros pour une seule machine est découpé entre mes machines : celle-ci en garde une tranche le temps d'une conversation, par un tunnel chiffré du compagnon. Seulement pour mes machines, jamais pour un ami ; il faut llama.cpp de la même version des deux côtés.")}
+    ${mobile ? '' : shareRow('lend_images_friends', 'Prêter ma carte graphique à mes amis pour les images', "Quand ce PC prête sa puissance, il peut aussi calculer les images et les vidéos de tes amis qui le lui demandent. Leur description et le résultat passent ici le temps du calcul, sans être gardés.")}
     ${mobile ? '' : idleRows}
     ${shareRow('share_on_ac_only', mobile ? 'Seulement en charge' : 'Seulement sur secteur',
       mobile ? "Jamais sur batterie. L'inactivité d'un téléphone n'est pas mesurable : c'est la charge qui compte." : 'Jamais sur batterie.')}

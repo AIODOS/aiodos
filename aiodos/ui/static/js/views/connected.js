@@ -106,6 +106,21 @@ function summary(net) {
   return chips.join('');
 }
 
+// Réciprocité souple : une machine qui reçoit sans rien prêter en est avertie (sans blocage)
+function nudge(net) {
+  const total = (keys) => net.peers.reduce((n, p) => n + keys.reduce((m, k) => m + (p[k] || 0), 0), 0);
+  const received = total(['received_units', 'received_chats']);
+  const given = total(['given_units', 'given_chats']);
+  const s = state.settings || {};
+  const hasModels = (state.models || []).some(m => m.group === 'local');
+  if (received < 3 || given > 0 || s.share_enabled || (s.lend_models && hasModels)) return '';
+  return `<div class="banner info live-nudge">${icon('bolt')}<div>Tes machines et tes amis t'ont déjà rendu
+    ${received} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour
+    participer : ${hasModels ? '' : 'installe un modèle d’Ollama, puis '}active « Prêter mes modèles » ou
+    « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.</div>
+    <button class="btn sm" data-go-node>Cette machine</button></div>`;
+}
+
 /** La carte « Machines connectées », en tête de la vue Réseau. */
 export function renderConnected(box, net) {
   box.hidden = !net.enabled;
@@ -125,10 +140,11 @@ export function renderConnected(box, net) {
     <h2>${icon('bolt')}Machines connectées</h2>
     <p class="hint">En direct : qui est en ligne, qui prête sa puissance, et ce que chaque machine fait pour
       l'autre. Nouvelles toutes les 15 secondes environ.</p>
-    ${net.peers.length ? `<div class="live-summary">${summary(net)}</div>
+    ${net.peers.length ? `${nudge(net)}<div class="live-summary">${summary(net)}</div>
       <table class="live"><thead><tr><th>Machine</th><th>Liaison</th><th>Prête</th><th>En ce moment</th>
         <th>Échangé</th></tr></thead><tbody>${rows}</tbody></table>`
       : '<div class="empty" style="padding:14px">Aucune machine appairée : appaire tes machines plus bas.</div>'}`;
+  box.querySelector('[data-go-node]')?.addEventListener('click', () => emit('view:show', 'node'));
 }
 
 /** Dans la barre du bas : machines en ligne (et qui travaille pour toi), un clic ouvre Réseau. */

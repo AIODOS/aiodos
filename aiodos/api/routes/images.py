@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from aiodos import settings
 from aiodos.imaging import catalog, download, gallery, local_copies, share
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
@@ -36,23 +37,30 @@ class GenerateIn(BaseModel):
     frames: int | None = None           # vidéos : nombre d'images (4n + 1), 33 par défaut
 
 
-def helpers() -> dict:
-    """{modèle : [mes machines en ligne qui l'ont et prêtent leur puissance]}."""
+def helpers(friends: bool | None = None) -> dict:
+    """{modèle : [machines en ligne qui l'ont et peuvent le calculer pour moi]} : mes machines
+    qui prêtent leur puissance, et les amis qui prêtent leur carte pour les images (leur
+    profil ne les montre qu'alors), si je les y autorise (friends : None, selon le réglage
+    images_from_friends)."""
+    if friends is None:
+        friends = bool(settings.get("images_from_friends"))
     found = {}
     for peer in peers.list_peers():
-        if not peer["online"] or sharing.level(peer["node_id"]) != sharing.MINE:
+        mine = sharing.level(peer["node_id"]) == sharing.MINE
+        if not peer["online"] or not (mine or friends):
             continue
         images = (peer.get("profile") or {}).get("images") or {}
         if not images.get("engine") or not images.get("shares"):
             continue
         for model_id in images.get("models") or []:
-            found.setdefault(model_id, []).append(peer["name"])
+            found.setdefault(model_id, []).append(peer["name"] if mine else f"{peer['name']} (ami)")
     return found
 
 
 def _models() -> dict:
     found = images_engine.info()
     others = helpers()
+    offered = helpers(friends=True)              # amis prêts à calculer, si je l'accepte
     models = []
     for model_id, spec in catalog.MODELS.items():
         models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
@@ -63,6 +71,8 @@ def _models() -> dict:
                        "notice": spec.get("notice"),
                        "negative": spec["negative"], **catalog.state(model_id),
                        "helpers": others.get(model_id, []),
+                       "friends": [name for name in offered.get(model_id, [])
+                                   if name not in others.get(model_id, [])],
                        "sources": share.sources(model_id),
                        "local": local_copies.available(model_id)})   # déjà sur ce PC
     return {"engine": {"found": found is not None,
@@ -70,7 +80,8 @@ def _models() -> dict:
                        "device": (images_engine.best_device(images_engine.devices())
                                   or {}).get("label") if found else None,
                        "loaded": images_engine.loaded()},
-            "models": models, "download": download.progress()}
+            "models": models, "download": download.progress(),
+            "from_friends": bool(settings.get("images_from_friends"))}
 
 
 @router.get("/models")

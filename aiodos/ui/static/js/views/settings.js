@@ -93,6 +93,9 @@ const SECTIONS = [
       help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
         + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
         + 'téléchargé, sans prendre de place en plus sur le même disque.' },
+    { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
+      help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
+        + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },
     { key: 'images_device', label: 'Carte qui calcule les images', type: 'text',
       help: 'Vide : la meilleure carte graphique (jamais celle intégrée au processeur s\'il y en a une autre). '
         + 'Sinon son nom (« Vulkan1 », « CUDA0 »), ou « CPU ».' },

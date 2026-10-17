@@ -122,11 +122,14 @@ def lease(manager, sender, payload):
         spec = registry.TASKS.get(unit["task"])
         if spec is None or not spec.portable:
             return False
-        if friend and spec.mine_only:
-            return False                  # images : jamais chez un ami
+        if friend and not registry.friends_may_take(spec):
+            return False                  # images : chez un ami seulement si je l'accepte
         collection = unit["payload"].get("collection_id")
-        if collection in local_only or (friend and collection not in shareable):
-            return False
+        if collection is not None:
+            if collection in local_only or (friend and collection not in shareable):
+                return False
+        elif friend and not spec.mine_only:
+            return False                  # sans bibliothèque, chez un ami : images acceptées seulement
         if unit["task"] not in options:
             options[unit["task"]] = spec.options() if spec.options else {}
         if not spec.requires:

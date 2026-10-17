@@ -174,6 +174,24 @@ def test_images_go_to_my_machines_never_to_a_friend(tiny_model, monkeypatch):
     assert order["payload"]["prompt"] == "un chat" and order["payload"]["seed"] == params["seed"]
 
 
+def test_a_friend_gets_images_only_if_the_owner_allows_it(tiny_model, monkeypatch):
+    """Réglage images_from_friends : mes images peuvent partir chez un ami, avec la consigne
+    et les réglages seulement (shared_keys), pas le lot ni l'ordre dans le lot."""
+    monkeypatch.setattr(work.ollama, "list_models", lambda max_age=10: [])
+    peers.save(FRIEND, "PC d'un ami", b"a" * 32, "127.0.0.1", 2, trust="friend")
+    params = kind.normalize({"model": "essai", "prompt": "un chat", "count": 1})
+    queue.create_job("generate_images", params)
+    caps = {"work_api": work.WORK_API, "images": {"engine": "f0aac52", "files": catalog.hashes("essai")}}
+    ask = lambda: work.lease(_Manager(), FRIEND, {"resources": ["gpu"], "caps": caps})
+    assert ask()["unit"] is None                                       # par défaut : non
+    settings.set_value("images_from_friends", True)
+    order = ask()["unit"]
+    assert order["task"] == "generate_image"
+    assert set(order["payload"]) <= {"model", "prompt", "negative", "width", "height", "steps",
+                                     "cfg", "frames", "seed"}
+    assert order["payload"]["prompt"] == "un chat"
+
+
 def test_an_image_this_machine_cannot_compute_waits_for_another(tiny_model, monkeypatch):
     ready()
     queue.create_job("generate_images", kind.normalize({"model": "essai", "prompt": "x"}))
@@ -672,6 +690,22 @@ def test_an_image_order_from_a_friend_is_refused(tiny_model, monkeypatch):
     outcome = w._process(worker_module.Assignment(FRIEND, "PC d'un ami", order))
     assert "réservée à mes machines" in outcome
     assert sent and sent[0][0] == "work/fail"
+    # Avec le réglage « Prêter ma carte graphique à mes amis pour les images », calculée
+    settings.set_value("lend_images_friends", True)
+    monkeypatch.setattr(worker_module.Worker, "_send_result",
+                        lambda self, a, output, compute_s: {"accepted": True}, raising=False)
+    monkeypatch.setattr(w, "_rest_gpu", lambda a, s: None, raising=False)
+    monkeypatch.setattr(kind.generate, "image", lambda payload, halt: {"png": png(64, 64), "seconds": 0.1})
+    assert w._process(worker_module.Assignment(FRIEND, "PC d'un ami", order)).startswith("faite")
+
+
+def test_a_friend_sees_my_images_only_if_i_lend_them():
+    from aiodos.network import p2p_app, sharing
+    peers.save(FRIEND, "PC d'un ami", b"a" * 32, "127.0.0.1", 2, trust="friend")
+    full = {"node_id": "moi", "name": "PC", "images": {"engine": "x", "models": ["essai"], "shares": True}}
+    assert "images" not in sharing.profile_for(FRIEND, full)
+    settings.set_value("lend_images_friends", True)
+    assert sharing.profile_for(FRIEND, full)["images"]["models"] == ["essai"]
 
 
 # --------------------------------------------------------------------- vidéos
