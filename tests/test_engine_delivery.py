@@ -8,7 +8,8 @@ import pytest
 
 from aiodos import settings
 from aiodos.cluster import delivery, engine
-from aiodos.updates import binaries, platforms
+from aiodos.imaging import engine as images_engine
+from aiodos.updates import binaries, engines, platforms
 from aiodos.updates.store import Store
 from tests.test_updates_service import PEER, world  # noqa: F401 (installation partagée)
 from tests.test_updates_service_companion import announce
@@ -16,6 +17,7 @@ from tests.updates_kit import fake_code, new_key, publish, zip_folder
 
 HERE = platforms.tag() or "linux-x86_64"
 ENGINE = f"llama.cpp-{HERE}"
+IMAGE_ENGINE = f"stable-diffusion.cpp-{HERE}"
 
 
 def engine_zip(path: Path, nested: str = "", programs=delivery.PROGRAMS, extra=b"") -> Path:
@@ -37,10 +39,11 @@ def key(monkeypatch):
     return private, trusted
 
 
-def release(tmp_path, store, key, version, engine_path=None):
+def release(tmp_path, store, key, version, engine_path=None, image_path=None):
     code = fake_code(tmp_path / f"code-{version}", version)
     return publish(store, zip_folder(code, tmp_path / f"{version}.zip"), version, *key,
-                   engines={HERE: engine_path} if engine_path else None)
+                   engines={HERE: engine_path} if engine_path else None,
+                   image_engines={HERE: image_path} if image_path else None)
 
 
 # ------------------------------------------------------------------ paquets
@@ -104,12 +107,34 @@ def test_the_folder_of_the_settings_comes_first(tmp_path, key, monkeypatch):
     assert engine.folder() == chosen
 
 
+def test_the_image_engine_is_delivered_like_llama(tmp_path, key, monkeypatch):
+    """stable-diffusion.cpp arrive avec la version, se déplie dans son propre dossier, et
+    passe après le dossier choisi dans les réglages, avant celui posé à la main."""
+    store = Store()
+    sd = engine_zip(tmp_path / "sd-master-bin.zip", programs=engines.PROGRAMS[engines.IMAGES])
+    release(tmp_path, store, key, "2.0.1", engine_zip(tmp_path / "llama-b1-bin.zip"), sd)
+    folder = engines.find(engines.IMAGES, store)
+    assert folder.parent == engines.root(engines.IMAGES) == images_engine.root()
+    assert images_engine.complete(folder) and not delivery.complete(folder)
+    assert delivery.find(store).parent == delivery.root()              # chacun le sien
+    monkeypatch.setattr(engines, "find", lambda engine, store=None: (
+        folder if engine == engines.IMAGES else None))
+    assert images_engine.folder() == folder
+    chosen = tmp_path / "choisi"
+    chosen.mkdir()
+    (chosen / platforms.executable("sd-server")).write_bytes(b"MZ")
+    settings.set_value("sdcpp_dir", str(chosen))
+    assert images_engine.folder() == chosen
+
+
 # ------------------------------------------------------------------ service
 def test_the_engine_comes_with_the_new_version(world, tmp_path, monkeypatch):  # noqa: F811
     monkeypatch.setattr(platforms, "tag", lambda: HERE)
     code = fake_code(tmp_path / "code-moteur", "2.0.1")
     publish(world.lender, zip_folder(code, tmp_path / "c.zip"), "2.0.1", world.private,
-            world.trusted, engines={HERE: engine_zip(tmp_path / "llama-b1-bin.zip")})
+            world.trusted, engines={HERE: engine_zip(tmp_path / "llama-b1-bin.zip")},
+            image_engines={HERE: engine_zip(tmp_path / "sd-bin.zip",
+                                            programs=engines.PROGRAMS[engines.IMAGES])})
     announce(world)
     from aiodos.updates import p2p
 
@@ -118,5 +143,6 @@ def test_the_engine_comes_with_the_new_version(world, tmp_path, monkeypatch):  #
     monkeypatch.setattr(p2p.client, "call", call)
     world.updates.tick()
     store = world.updates.store
-    assert sorted(f["kind"] for f in store.held("2.0.1")) == sorted(["source", ENGINE])
+    assert sorted(f["kind"] for f in store.held("2.0.1")) == sorted(["source", ENGINE,
+                                                                       IMAGE_ENGINE])
     assert not world.updates.status()["error"]

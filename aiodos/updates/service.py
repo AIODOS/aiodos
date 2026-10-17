@@ -155,9 +155,11 @@ class UpdateService:
         self._obtain_program(manifests.COMPANION, "compagnon")
 
     def _obtain_engine(self):
-        """Moteur llama.cpp de cette plateforme (gros modèles répartis), s'il manque. Il
-        reste le même d'une version à l'autre : déjà reçu, il est copié (store.reuse)."""
-        self._obtain_program(manifests.ENGINE, "moteur llama.cpp")
+        """Moteurs de cette plateforme (llama.cpp pour les gros modèles répartis,
+        stable-diffusion.cpp pour les images), s'ils manquent. Ils restent les mêmes d'une
+        version à l'autre : déjà reçus, ils sont copiés (store.reuse)."""
+        for engine in manifests.ENGINES:
+            self._obtain_program(engine, f"moteur {engine}")
 
     def _obtain_program(self, program: str, what: str):
         """Programme `program` de cette plateforme, s'il manque, pour la version reçue la

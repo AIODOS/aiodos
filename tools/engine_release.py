@@ -1,20 +1,21 @@
-"""Le moteur llama.cpp joint à une version (tools/publish.py), pour les gros modèles
-répartis : l'archive officielle de ggml-org, d'une version épinglée ici. Elle est
-téléchargée une fois, gardée dans ~/.aiodos/moteurs/, et sa taille et son empreinte sont
-revérifiées à chaque publication.
+"""Les moteurs joints à une version (tools/publish.py) : llama.cpp pour les gros modèles
+répartis, stable-diffusion.cpp pour les images. Chaque fois l'archive officielle, d'une
+version épinglée ici. Elle est téléchargée une fois, gardée dans ~/.aiodos/moteurs/, et sa
+taille et son empreinte sont revérifiées à chaque publication.
 
-Changer de version de llama.cpp :
-- relever BUILD, les noms, les tailles et les empreintes (champ « digest » de l'API des
-  versions de github.com/ggml-org/llama.cpp) ;
-- refaire les mesures de docs/gros-modeles.md, puis publier.
+Changer de version d'un moteur :
+- relever la version, les noms, les tailles et les empreintes (champ « digest » de l'API
+  des versions sur GitHub) ;
+- refaire les mesures (docs/gros-modeles.md, docs/generation-repartie.md), puis publier.
 
 Toutes les machines d'un groupe doivent avoir la même version de llama.cpp : elle voyage
 avec AIODOS.
 
 Pour les essais (tests/test_updates_publish.py), AIODOS_ENGINE_ASSETS désigne un fichier
-JSON qui remplace la table épinglée : {plateforme : {"name", "size", "sha256", "source"}},
-où « source » est un fichier local ; {} : aucun moteur. AIODOS_ENGINE_CACHE remplace
-le dossier ~/.aiodos/moteurs/.
+JSON qui remplace les tables épinglées : {plateforme : {"name", "size", "sha256",
+"source"}} pour llama.cpp seul, ou {"engines" : {moteur : {plateforme : {…}}}}, où
+« source » est un fichier local ; {} : aucun moteur. AIODOS_ENGINE_CACHE remplace le
+dossier ~/.aiodos/moteurs/.
 """
 import hashlib
 import json
@@ -23,14 +24,33 @@ import shutil
 import urllib.request
 from pathlib import Path
 
-BUILD = "b11707"                  # 17/10/2026 : celle des mesures de docs/gros-modeles.md
-URL = "https://github.com/ggml-org/llama.cpp/releases/download/{build}/{name}"
-ASSETS = {
-    # Version Vulkan : toutes les cartes graphiques (NVIDIA, AMD, Intel), 30 Mo
-    "windows-x86_64": {
-        "name": "llama-b11707-bin-win-vulkan-x64.zip",
-        "size": 32260710,
-        "sha256": "9c7d17c12053bf95b03a179f9bcdf15fdeafe680a4f2845d23bc951bc18c0fa5",
+LLAMA = "llama.cpp"
+IMAGES = "stable-diffusion.cpp"
+ENGINES = {
+    LLAMA: {
+        "build": "b11707",        # 17/10/2026 : celle des mesures de docs/gros-modeles.md
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/{build}/{name}",
+        "assets": {
+            # Version Vulkan : toutes les cartes graphiques (NVIDIA, AMD, Intel), 30 Mo
+            "windows-x86_64": {
+                "name": "llama-b11707-bin-win-vulkan-x64.zip",
+                "size": 32260710,
+                "sha256": "9c7d17c12053bf95b03a179f9bcdf15fdeafe680a4f2845d23bc951bc18c0fa5",
+            },
+        },
+    },
+    IMAGES: {
+        # 17/10/2026 : celle des mesures de docs/generation-repartie.md
+        "build": "master-973-f0aac52",
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/{build}/{name}",
+        "assets": {
+            # Version Vulkan : toutes les cartes graphiques, 29 Mo (sans le RPC de ggml)
+            "windows-x86_64": {
+                "name": "sd-master-f0aac52-bin-win-vulkan-x64.zip",
+                "size": 29363455,
+                "sha256": "64ae41edf331723871ff6925f6f9d8bb46f6407d49e51f2073ef11f646765cb2",
+            },
+        },
     },
 }
 CACHE = Path.home() / ".aiodos" / "moteurs"
@@ -41,17 +61,22 @@ class EngineError(Exception):
     pass
 
 
-def assets() -> dict:
-    """{plateforme : {"name", "size", "sha256", "source"}} des archives à joindre."""
+def assets(engine: str = LLAMA) -> dict:
+    """{plateforme : {"name", "size", "sha256", "source"}} des archives du moteur à joindre."""
     override = os.environ.get("AIODOS_ENGINE_ASSETS")
     if override:
-        return json.loads(Path(override).read_text(encoding="utf-8"))
-    return {where: dict(asset, source=URL.format(build=BUILD, name=asset["name"]))
-            for where, asset in ASSETS.items()}
+        table = json.loads(Path(override).read_text(encoding="utf-8"))
+        if "engines" in table:
+            return table["engines"].get(engine, {})
+        return table if engine == LLAMA else {}
+    pinned = ENGINES[engine]
+    return {where: dict(asset, source=pinned["url"].format(build=pinned["build"],
+                                                           name=asset["name"]))
+            for where, asset in pinned["assets"].items()}
 
 
-def targets() -> list:
-    return sorted(assets())
+def targets(engine: str = LLAMA) -> list:
+    return sorted(assets(engine))
 
 
 def _sha256(path: Path) -> str:
@@ -67,11 +92,11 @@ def _matches(path: Path, asset: dict) -> bool:
             and _sha256(path) == asset["sha256"])
 
 
-def fetch(where: str, cache: Path | None = None) -> Path:
+def fetch(where: str, cache: Path | None = None, engine: str = LLAMA) -> Path:
     """L'archive du moteur pour la plateforme `where`, taille et empreinte vérifiées."""
-    asset = assets().get(where)
+    asset = assets(engine).get(where)
     if not asset:
-        raise EngineError(f"pas de llama.cpp épinglé pour {where}")
+        raise EngineError(f"pas de {engine} épinglé pour {where}")
     cache = cache or Path(os.environ.get("AIODOS_ENGINE_CACHE") or CACHE)
     cache.mkdir(parents=True, exist_ok=True)
     path = cache / asset["name"]

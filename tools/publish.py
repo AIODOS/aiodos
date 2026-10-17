@@ -13,9 +13,10 @@ v<numéro> marque le commit. S'y joint le compagnon Internet aiodos-net de chaqu
 plateforme, construit à partir de ce même commit et vérifié (companion_build.py) :
 par défaut, celles qu'on sait construire ici ; une plateforme sans ses outils est
 signalée, et la version part sans son compagnon ; une construction qui échoue arrête
-tout, avant que rien ne soit publié. S'y joint aussi le moteur llama.cpp des gros modèles
-répartis, l'archive officielle d'une version épinglée (engine_release.py) ; s'il ne peut
-être téléchargé, la version part sans lui. La clé privée reste hors du dépôt, dans
+tout, avant que rien ne soit publié. S'y joignent aussi les moteurs : llama.cpp des gros
+modèles répartis et stable-diffusion.cpp des images, chacun l'archive officielle d'une
+version épinglée (engine_release.py) ; s'il ne peut être téléchargé, la version part
+sans lui. La clé privée reste hors du dépôt, dans
 ~/.aiodos/publication/ (ou là où pointe AIODOS_RELEASE_KEY) : voir LISEZMOI.txt à côté.
 """
 import argparse
@@ -203,15 +204,16 @@ def cmd_release(args):
                                   "name": built.name, "size": built.stat().st_size,
                                   "sha256": sha256_of(built)}))
         skipped_engines = []
-        for where in ([] if args.no_engine else engine_release.targets()):
-            try:
-                engine = engine_release.fetch(where)
-            except engine_release.EngineError as exc:
-                skipped_engines.append((where, str(exc)))
-                continue
-            files.append((engine, {"kind": platforms.kind(manifests.ENGINE, where),
-                                   "name": engine.name, "size": engine.stat().st_size,
-                                   "sha256": sha256_of(engine)}))
+        for name in ([] if args.no_engine else engine_release.ENGINES):
+            for where in engine_release.targets(name):
+                try:
+                    engine = engine_release.fetch(where, engine=name)
+                except engine_release.EngineError as exc:
+                    skipped_engines.append((name, where, str(exc)))
+                    continue
+                files.append((engine, {"kind": platforms.kind(name, where),
+                                       "name": engine.name, "size": engine.stat().st_size,
+                                       "sha256": sha256_of(engine)}))
         signed = manifests.sign({
             "format": manifests.FORMAT, "app": manifests.APP, "version": number,
             "published": int(time.time()), "commit": commit, "min_python": MIN_PYTHON,
@@ -233,13 +235,13 @@ def cmd_release(args):
     print(f"Version {number} publiée (commit {commit[:10]}, étiquette {tag}, "
           f"{files[0][1]['size'] / 1e6:.1f} Mo) dans {store.root}.")
     for path, item in files[1:]:
-        what = "Moteur" if item["kind"].startswith(manifests.ENGINE) else "Compagnon"
+        what = "Moteur" if item["kind"].startswith(manifests.ENGINES) else "Compagnon"
         print(f"{what} joint : {item['kind']} ({item['size'] / 1e6:.1f} Mo)")
     for target, reason in skipped:
         print(f"ATTENTION : compagnon non joint ({target}) : {reason}. Les machines de cette "
               "plateforme garderont le compagnon qu'elles ont déjà.")
-    for where, reason in skipped_engines:
-        print(f"ATTENTION : moteur llama.cpp non joint ({where}) : {reason}. Les machines de "
+    for name, where, reason in skipped_engines:
+        print(f"ATTENTION : moteur {name} non joint ({where}) : {reason}. Les machines de "
               "cette plateforme garderont celui qu'elles ont déjà.")
     if getattr(keys, "APPROVER_KEYS", None):      # absent d'un keys.py plus ancien
         print(f"EN ATTENTE D'APPROBATION : ouvre la vue Mises à jour de ton appareil "

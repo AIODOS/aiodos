@@ -127,9 +127,11 @@ L'étape 2 de la recommandation : des images entières, unités indépendantes d
   (`imaging/download.py`) : reprise après une coupure, chaque fichier vérifié avant d'être
   gardé dans `data/images/models/`.
 - **Le moteur** (`imaging/engine.py`) : `sd-server` de stable-diffusion.cpp (master-973,
-  Vulkan), cherché dans le réglage « Dossier de stable-diffusion.cpp », sinon dans
-  `data/engines/stable-diffusion.cpp`. Il reste chargé entre deux images et s'arrête
-  1 min 30 après la dernière. Il calcule sur la meilleure carte : jamais celle intégrée au
+  Vulkan, 29 Mo), livré avec les versions signées comme llama.cpp
+  (`tools/engine_release.py`, `updates/engines.py`). Un dossier choisi dans le réglage
+  « Dossier de stable-diffusion.cpp » passe avant, un dossier posé à la main dans
+  `data/engines/stable-diffusion.cpp` après. Il reste chargé entre deux images et
+  s'arrête 1 min 30 après la dernière. Il calcule sur la meilleure carte : jamais celle intégrée au
   processeur quand il y en a une autre (sur ce PC, Vulkan0 est la carte Intel).
 - **Une image = une unité** (`jobs/kinds/images.py`) : modèle, description, graine,
   taille et pas. Les graines d'une demande se suivent. Une de mes machines qui a le
@@ -140,6 +142,11 @@ L'étape 2 de la recommandation : des images entières, unités indépendantes d
   description dans ses métadonnées.
 - **Une machine sans le modèle** laisse ses images en file pour celles qui l'ont
   (`TaskSpec.here`). Sans aucune machine capable, la demande est refusée.
+- **Essai réel de bout en bout** (`tests/test_images_e2e.py`, variables
+  `AIODOS_SDCPP_DIR` et `AIODOS_IMAGE_MODELS`) : deux nœuds sur ce PC, A sans
+  stable-diffusion.cpp, B avec, qui prête sa puissance. A demande deux images en 512² :
+  B les calcule, A les garde, B n'en garde aucune. 51 s en tout le 17/10/2026, empreintes
+  des 6,7 Go et chargement compris.
 - **La carte graphique partagée avec Ollama.** Essai du 17/10/2026 : Ollama gardait deux
   modèles chargés (7,7 Go sur 8 avec sd-server), et la première image a échoué faute de
   mémoire. Désormais :
@@ -165,12 +172,12 @@ images. Deux machines comme celle-ci font donc deux images en 35 s au lieu d'une
 
 **Suite** :
 
-1. Livrer stable-diffusion.cpp avec les versions signées, comme llama.cpp.
-2. Mesurer la version CUDA sur les cartes NVIDIA (sans doute plus rapide que Vulkan).
-3. Remplir les modèles d'une machine depuis une autre de mes machines, par le réseau
+1. Mesurer la version CUDA sur les cartes NVIDIA (sans doute plus rapide que Vulkan).
+2. Remplir les modèles d'une machine depuis une autre de mes machines, par le réseau
    local, plutôt que depuis Hugging Face.
-4. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
+3. L'encodeur de texte sur une autre machine : il faut un sd-server construit avec le RPC
    de ggml (les versions publiées ne l'ont pas : pas de `ggml-rpc.dll` dans l'archive).
+4. Android : pas d'archive officielle pour Android ; à construire avec le NDK.
 
 ## Sources
 

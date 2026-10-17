@@ -1,8 +1,8 @@
 """stable-diffusion.cpp : sd-server, le moteur des images, lancé par AIODOS.
 
-Le dossier du moteur : réglage « sdcpp_dir », sinon un stable-diffusion.cpp posé dans
-data/engines/stable-diffusion.cpp (il sera livré avec les versions signées, comme
-llama.cpp).
+Le dossier du moteur : réglage « sdcpp_dir », sinon celui livré avec les versions signées
+(updates/engines.py, comme llama.cpp), sinon un stable-diffusion.cpp posé à la main dans
+data/engines/stable-diffusion.cpp.
 
 Un seul sd-server à la fois, pour un modèle : il garde le modèle chargé entre deux images
 (le charger prend plusieurs secondes), et s'arrête IDLE_S après la dernière, ou dès
@@ -23,12 +23,12 @@ from pathlib import Path
 
 import requests
 
-from aiodos import paths, settings
+from aiodos import settings
 from aiodos.cluster.engine import NO_WINDOW, EngineError, Process, free_port
 from aiodos.imaging import catalog
 from aiodos.jobs import pacing
 from aiodos.services import ollama
-from aiodos.updates import platforms
+from aiodos.updates import engines, platforms
 
 log = logging.getLogger("aiodos.images")
 
@@ -47,17 +47,22 @@ _state = {"process": None, "model": None, "busy": 0, "used": 0.0, "reaper": None
 
 
 def root() -> Path:
-    return paths.data_dir() / "engines" / "stable-diffusion.cpp"
+    return engines.root(engines.IMAGES)
 
 
 def complete(folder: Path) -> bool:
-    return (folder / platforms.executable(SERVER)).is_file()
+    return engines.complete(folder, engines.IMAGES)
 
 
 def folder() -> Path | None:
+    """Dossier de stable-diffusion.cpp s'il contient sd-server, sinon None : celui du
+    réglage, sinon celui livré avec les versions, sinon un dossier posé à la main."""
     configured = str(settings.get("sdcpp_dir") or "").strip()
     if configured:
         return Path(configured) if complete(Path(configured)) else None
+    delivered = engines.find(engines.IMAGES)
+    if delivered is not None:
+        return delivered
     manual = root()
     return manual if complete(manual) else None
 

@@ -73,19 +73,21 @@ def zip_folder(folder: Path, archive: Path) -> Path:
 
 def publish(store: Store, archive: Path, version: str, private, trusted: dict,
             companions: dict | None = None, engines: dict | None = None, approvers=None,
-            **extra) -> dict:
+            image_engines: dict | None = None, **extra) -> dict:
     """Range dans `store` un paquet signé (comme tools/publish.py) ; le manifeste lu.
     companions : {plateforme : chemin du programme} à joindre (aiodos-net-<plateforme>) ;
     engines : {plateforme : archive} du moteur llama.cpp (llama.cpp-<plateforme>) ;
+    image_engines : de même pour stable-diffusion.cpp (stable-diffusion.cpp-<plateforme>) ;
     approvers={} : gardé sans approbation (version qui attend la sienne)."""
     files = [(archive, {"kind": "source", "name": f"aiodos-{version}.zip",
                         "size": archive.stat().st_size, "sha256": sha256_of(archive)})]
     for where, path in (companions or {}).items():
         files.append((path, {"kind": f"aiodos-net-{where}", "name": f"aiodos-net-{version}-{where}",
                              "size": path.stat().st_size, "sha256": sha256_of(path)}))
-    for where, path in (engines or {}).items():
-        files.append((path, {"kind": f"llama.cpp-{where}", "name": path.name,
-                             "size": path.stat().st_size, "sha256": sha256_of(path)}))
+    for engine, table in (("llama.cpp", engines), ("stable-diffusion.cpp", image_engines)):
+        for where, path in (table or {}).items():
+            files.append((path, {"kind": f"{engine}-{where}", "name": path.name,
+                                 "size": path.stat().st_size, "sha256": sha256_of(path)}))
     data = {"format": 1, "app": "aiodos", "version": version, "published": int(time.time()),
             "commit": "0" * 40, "min_python": "3.11", "notes": "",
             "files": [item for _, item in files], **extra}

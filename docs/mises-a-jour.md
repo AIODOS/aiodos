@@ -85,11 +85,13 @@ publication compte quelques minutes de plus.
 - **`--targets windows-x86_64,android-aarch64`** exige exactement ces plateformes. Un
   outil manquant arrête tout.
 - **`--no-companion`** publie sans compagnon.
-- **Le moteur llama.cpp** des gros modèles répartis est joint aussi : l'archive officielle
-  d'une version épinglée dans `tools/engine_release.py` (nom, taille, empreinte), gardée
-  dans `~/.aiodos/moteurs/` après le premier téléchargement. S'il ne peut être téléchargé,
-  ou ne correspond pas à l'empreinte épinglée, la version part sans lui
-  (« ATTENTION : moteur llama.cpp non joint »). **`--no-engine`** publie sans lui.
+- **Les moteurs** sont joints aussi : llama.cpp pour les gros modèles répartis, et
+  stable-diffusion.cpp pour les images (depuis le 17/10/2026). Chacun est l'archive
+  officielle d'une version épinglée dans `tools/engine_release.py` (nom, taille,
+  empreinte), gardée dans `~/.aiodos/moteurs/` après le premier téléchargement. Un moteur
+  qui ne peut être téléchargé, ou qui ne correspond pas à l'empreinte épinglée, est
+  laissé de côté, et la version part sans lui (« ATTENTION : moteur … non joint »).
+  **`--no-engine`** publie sans aucun moteur.
 - **Une construction ou une vérification qui échoue arrête tout** : rien n'est publié,
   et le numéro reste libre. Ce PC est sujet à des plantages : un `rustc` arrêté net
   (`STATUS_ACCESS_VIOLATION`) s'est produit une fois le 16/10. Il suffit de relancer.
@@ -124,6 +126,7 @@ chaque plateforme. Il voyage avec les versions.
 | `aiodos-net-windows-x86_64` | `aiodos-net-2.0.3-windows-x86_64.exe` | PC Windows 64 bits |
 | `aiodos-net-android-aarch64` | `aiodos-net-2.0.3-android-aarch64` | téléphones Android 64 bits (Termux, Android 7 et plus) |
 | `llama.cpp-windows-x86_64` | `llama-b11707-bin-win-vulkan-x64.zip` | PC Windows 64 bits : moteur des gros modèles répartis (docs/gros-modeles.md) |
+| `stable-diffusion.cpp-windows-x86_64` | `sd-master-f0aac52-bin-win-vulkan-x64.zip` | PC Windows 64 bits : moteur des images (docs/generation-repartie.md) |
 
 Le format du manifeste ne change pas (`FORMAT = 1`).
 
@@ -153,9 +156,10 @@ le compagnon de sa plateforme à une machine qui l'annonce (actions `update/mani
 Une machine transmet aussi les fichiers d'un paquet incomplet, s'ils sont entiers : par
 exemple le compagnon d'une machine installée depuis une archive.
 
-Le moteur llama.cpp suit le même chemin que le compagnon (`_obtain_engine`). Un fichier
-déjà reçu avec une autre version, de même empreinte, est copié au lieu d'être téléchargé
-de nouveau (`store.reuse`) : le moteur, épinglé, ne change pas à chaque version.
+Les moteurs suivent le même chemin que le compagnon (`_obtain_engine`). Un fichier déjà
+reçu avec une autre version, de même empreinte, est copié au lieu d'être téléchargé de
+nouveau (`store.reuse`) : un moteur, épinglé, ne change pas à chaque version. Chacun se
+déplie une fois dans `data/engines/<moteur>/<empreinte>/` (`aiodos/updates/engines.py`).
 
 **Où il est rangé.** Le compagnon reçu reste dans le paquet
 (`packages/<version>/aiodos-net-…`), pour les machines de même plateforme. Pour le

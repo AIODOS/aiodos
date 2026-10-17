@@ -160,7 +160,7 @@ relais de n0, pas en direct.
   de la conversation (résultats web, rappel juste avant la question) rejoignent le message
   de l'utilisateur qui les suit : certains modèles (Mistral) refusent tout ce qui n'alterne
   pas utilisateur et assistant, ce qu'Ollama cachait.
-- **Livré avec les versions** (`tools/engine_release.py`, `aiodos/cluster/delivery.py`) :
+- **Livré avec les versions** (`tools/engine_release.py`, `aiodos/updates/engines.py`) :
   l'outil de publication joint l'archive officielle de llama.cpp, d'une version épinglée
   (b11707, Vulkan, 30 Mo pour Windows), empreinte vérifiée et signée dans le manifeste. Le
   service de mise à jour la reçoit comme le compagnon ; identique d'une version à l'autre,

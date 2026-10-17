@@ -151,6 +151,32 @@ def test_the_llama_engine_is_joined_or_left_out(tmp_path):
     assert kinds == ["source"]
 
 
+def test_the_image_engine_is_joined_too(tmp_path):
+    """stable-diffusion.cpp (images) voyage avec la version, comme llama.cpp."""
+    repo, key, trusted = prepared(tmp_path)
+    tables = {}
+    for engine, programs in (("llama.cpp", ("llama-server.exe", "ggml-rpc-server.exe")),
+                             ("stable-diffusion.cpp", ("sd-server.exe",))):
+        archive = tmp_path / f"{engine}-essai-win.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            for name in programs:
+                z.writestr(name, b"MZ")
+        tables[engine] = {"windows-x86_64": {"name": archive.name,
+                                             "size": archive.stat().st_size,
+                                             "sha256": sha256_of(archive),
+                                             "source": str(archive)}}
+    data, store = tmp_path / "data", Store(tmp_path / "data" / "updates")
+    set_version(repo, "3.1.0")
+    git(repo, "commit", "-qm", "version 3.1.0", "--", "aiodos/__init__.py")
+    done = tool(repo, key, "release", "--data-dir", str(data), "--no-companion",
+                assets={"engines": tables})
+    assert done.returncode == 0, done.stderr
+    kinds = [f["kind"] for f in store.manifest("3.1.0", trusted)["files"]]
+    assert kinds == ["source", "llama.cpp-windows-x86_64",
+                     "stable-diffusion.cpp-windows-x86_64"]
+    assert "Moteur joint : stable-diffusion.cpp-windows-x86_64" in done.stdout
+
+
 def test_with_an_approval_device_the_release_waits(tmp_path):
     """Un appareil d'approbation déclaré dans keys.py : la version publiée est gardée,
     signée par l'auteur, mais attend son approbation avant d'être proposée."""

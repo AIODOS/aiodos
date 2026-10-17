@@ -152,8 +152,8 @@ vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 devient une unité de la file, calculée ici ou par mes machines qui ont le même modèle et
 prêtent leur puissance ; l'image revient et n'est gardée qu'ici. Le moteur est
 [stable-diffusion.cpp], le modèle Z-Image Turbo (Apache-2.0, 6,7 Go à télécharger depuis
-la vue, chaque fichier vérifié par son empreinte). Sur une RTX 4070 de portable : 35 s
-par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
+la vue, chaque fichier vérifié par son empreinte), livré avec les mises à jour. Sur une
+RTX 4070 de portable : 35 s par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
 [docs/generation-repartie.md](docs/generation-repartie.md).
 
 ## Installation
@@ -193,7 +193,8 @@ machine appairée en machine appairée, s'installe **à côté** de la version a
 AIODOS redémarre dessus quand la machine est libre. Si elle ne démarre pas, la
 précédente reprend la main aussitôt. Réglage : Réglages → Mises à jour (activé par
 défaut). Une copie de développement (dépôt git) n'est jamais remplacée. Une version
-emporte aussi le compagnon Internet et llama.cpp, vérifiés par leur empreinte.
+emporte aussi le compagnon Internet et les moteurs llama.cpp et stable-diffusion.cpp,
+vérifiés par leur empreinte.
 
 **Approbation sur un deuxième appareil** : une fois les appareils déclarés (téléphone de
 l'auteur et appareil de secours), une version publiée attend d'être approuvée sur l'un
@@ -257,13 +258,13 @@ aiodos/
 │                      programmes lancés arrêtés avec AIODOS (children.py)
 ├── updates/           mises à jour signées : transmission entre machines, installation
 │                      à côté, lanceur avec retour en arrière, approbation sur un deuxième
-│                      appareil (approval.py) — docs/mises-a-jour.md
+│                      appareil (approval.py), moteurs livrés (engines.py) — docs/mises-a-jour.md
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native, icône de la zone de notification (tray.py),
                        interface web (HTML/CSS/JS, sans compilation)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
 tests/                 tests automatisés (pytest)
-tools/                 publication des versions (llama.cpp joint : engine_release.py),
+tools/                 publication des versions (moteurs joints : engine_release.py),
                        outils de mesure (modèle d'embedding, coût du travail de fond :
                        bench_background.py, modèles répartis : bench_repartition.py)
 docs/                  notes de mesures et de choix techniques, téléphone Android
