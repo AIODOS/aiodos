@@ -8,6 +8,7 @@ ggml-rpc-server, version Vulkan), le compagnon compilé et le modèle mistral:7b
 Ollama ; sinon le test est ignoré. Le premier chargement envoie ~4 Go de poids par le
 tunnel : compter une à deux minutes.
 """
+import json
 import os
 
 import pytest
@@ -34,6 +35,18 @@ pytestmark = pytest.mark.skipif(
     reason="il faut AIODOS_LLAMACPP_DIR (llama.cpp), le compagnon compilé et mistral:7b")
 
 
+def _chat_events(node, model, text) -> list:
+    """Tous les événements d'une conversation (comme _chat, qui ne rend que « done »)."""
+    response = requests.post(
+        f"http://127.0.0.1:{node.port}/api/chat",
+        json={"text": text, "model": model, "think": False, "libraries": False,
+              "conversations": False},
+        headers={"X-Aiodos-Token": node.token}, stream=True, timeout=600)
+    assert response.status_code == 200, response.text
+    return [json.loads(line[6:]) for line in response.iter_lines(decode_unicode=True)
+            if line and line.startswith("data: ")]
+
+
 @pytest.fixture
 def machines(tmp_path, monkeypatch):
     b = Node(tmp_path / "b", "PC fixe", ["--internet-local"]).start()
@@ -58,8 +71,12 @@ def test_a_machine_without_a_card_borrows_one(machines):
     offer = a.wait_for(offered, timeout=60, what="modèle réparti proposé")
     assert offer["group"] == "cluster" and offer["machines"] == ["PC fixe"]
 
-    done = _chat(a, model_id, "Réponds seulement par le mot : bonjour")
-    assert done["error"] is None and done["html"].strip(), done
+    events = _chat_events(a, model_id, "Réponds seulement par le mot : bonjour")
+    done = events[-1]
+    assert done["type"] == "done" and done["error"] is None and done["html"].strip(), done
+    # La mise en place s'est montrée : carte demandée à B, puis chargement
+    steps = [e["text"] for e in events if e["type"] == "status"]
+    assert any("PC fixe" in step for step in steps) and any("Chargement" in s for s in steps)
     # Le serveur RPC de B n'écoute que sur 127.0.0.1, ouvert à la seule clé de A
     exposed = b.wait_for(lambda: ((b.api("GET", "/network/internet").get("companion") or {})
                                   .get("tunnels") or {}).get("exposed"),

@@ -15,6 +15,7 @@ part en route, la réponse s'arrête avec un message, et le groupe est défait.
 """
 import json
 import logging
+import queue
 import secrets
 import threading
 import time
@@ -121,11 +122,13 @@ class Group:
         self.last_used = time.monotonic()
         self.lock = threading.Lock()
         self.closed = False
+        self.loading = False      # premier chargement en cours : jamais « inactif »
 
     # ------------------------------------------------------------- mise en place
-    def start(self, stop=None):
+    def start(self, stop=None, progress=None):
         """Réunit les cartes et lance llama-server. `stop` (bouton Stop) interrompt la mise
-        en place : tout ce qui était pris est rendu."""
+        en place : tout ce qui était pris est rendu. `progress(texte)` dit où elle en est."""
+        progress = progress or (lambda text: None)
         found = engine.info(max_age=0)
         if not found:
             raise RuntimeError("llama.cpp n'est pas installé sur cette machine "
@@ -147,22 +150,34 @@ class Group:
                 if stop is not None and stop.is_set():
                     raise RuntimeError("Mise en place du modèle réparti interrompue.")
                 peer = peers.get(helper["node_id"])
+                progress(f"Demande de la carte graphique de « {peer['name']} »…")
                 reply = client.call(identity.node_id(), peer, "cluster/lend",
                                     {"version": found["version"], "model": self.name},
                                     timeout=90)
                 # Noté avant le tunnel : la carte est rendue même s'il ne s'ouvre pas
                 self.loans.append([peer, reply["service"], None])
                 self.loans[-1][2] = companion.open_tunnel(peer["net_id"], reply["service"])
+            # Des nouvelles dès maintenant : un premier chargement dure souvent plus que les
+            # 90 s au bout desquelles une machine sans nouvelles reprend sa carte
+            self.loading = True
+            threading.Thread(target=self._keep, daemon=True,
+                             name=f"aiodos-groupe-{self.name}").start()
+            machines = len(self.loans) + 1
+            progress(f"Chargement de {self.name} sur {machines} machines : la première fois, "
+                     "les poids traversent le réseau, puis chaque machine les garde…")
             self.server = engine.llama_server(
                 Path(found["folder"]), path, [port for _, _, port in self.loans],
                 cut["devices"], cut["split"], self.api_key, CONTEXT, cut["layers"])
             self.server.start(timeout=LOAD_TIMEOUT, ready=lambda: engine.loaded(self.server.port),
-                              stop=stop)
+                              stop=stop, waiting=lambda seconds: progress(
+                                  f"Chargement du modèle réparti… {seconds} s"))
         except Exception:
             self.close()
             raise
+        finally:
+            self.loading = False
+        self.last_used = time.monotonic()
         log.info("Modèle %s réparti : %s, découpage %s", self.name, cut["devices"], cut["split"])
-        threading.Thread(target=self._keep, daemon=True, name=f"aiodos-groupe-{self.name}").start()
 
     def _keep(self):
         """Donne des nouvelles aux machines qui prêtent ; défait le groupe après IDLE_S
@@ -172,6 +187,9 @@ class Group:
             time.sleep(KEEP_EVERY)
             if self.closed:
                 return
+            if self.loading:                  # pendant le chargement : garder les cartes
+                self._still_lent()
+                continue
             idle = time.monotonic() - self.last_used > IDLE_S
             if idle or not (self.server and self.server.alive) or not self._still_lent():
                 break
@@ -296,7 +314,7 @@ def _forget(group: Group):
             del _groups[group.name]
 
 
-def _group(name: str, retry: bool = True, stop=None) -> Group:
+def _group(name: str, retry: bool = True, stop=None, progress=None) -> Group:
     with _lock:
         group = _groups.get(name)
         if group is None or group.closed:
@@ -304,7 +322,7 @@ def _group(name: str, retry: bool = True, stop=None) -> Group:
     with group.lock:                      # un seul lancement à la fois par modèle
         if not group.closed and group.server is None:
             try:
-                group.start(stop)
+                group.start(stop, progress)
             except Exception:
                 _forget(group)
                 raise
@@ -312,18 +330,34 @@ def _group(name: str, retry: bool = True, stop=None) -> Group:
             _forget(group)
             group.close()
             if retry:
-                return _group(name, retry=False, stop=stop)
+                return _group(name, retry=False, stop=stop, progress=progress)
             raise RuntimeError("Le modèle réparti ne démarre pas : réessaie plus tard.")
     return group
 
 
 def chat_stream(model, messages, think=True, stop=None, options=None, stats=False):
     """Couples (genre, texte), comme ollama.chat_stream, calculés par le groupe (options,
-    stats : cf. Group.chat_stream)."""
+    stats : cf. Group.chat_stream). Pendant sa mise en place (plusieurs minutes la première
+    fois), des couples ("status", texte) disent où elle en est ; un groupe déjà prêt répond
+    aussitôt."""
     name = parse(model)
     if not name:
         raise RuntimeError("Modèle réparti inconnu.")
-    yield from _group(name, stop=stop).chat_stream(messages, think, stop, options, stats)
+    news, result = queue.Queue(), {}
+
+    def prepare():
+        try:
+            result["group"] = _group(name, stop=stop, progress=news.put)
+        except Exception as exc:          # remonte dans la conversation, ci-dessous
+            result["error"] = exc
+        finally:
+            news.put(None)
+    threading.Thread(target=prepare, daemon=True, name=f"aiodos-groupe-{name}-prepa").start()
+    while (text := news.get()) is not None:
+        yield "status", text
+    if "error" in result:
+        raise result["error"]
+    yield from result["group"].chat_stream(messages, think, stop, options, stats)
 
 
 def stop_all():

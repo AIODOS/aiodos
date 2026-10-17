@@ -106,6 +106,46 @@ def test_stop_interrupts_a_long_loading(tmp_path):
     assert time.monotonic() - began < 10 and not slow.alive
 
 
+def test_the_setup_of_a_distributed_model_is_shown(monkeypatch):
+    """Premier message : la mise en place (cartes demandées, poids envoyés) dit où elle en
+    est, puis la réponse arrive ; une mise en place qui échoue le dit après ses étapes."""
+    class Ready:
+        def chat_stream(self, messages, think, stop, options, stats):
+            yield "content", "Bonjour"
+
+    def setup(name, stop=None, progress=None):
+        progress("Demande de la carte graphique de « PC fixe »…")
+        progress("Chargement du modèle réparti… 5 s")
+        return Ready()
+    monkeypatch.setattr(group, "_group", setup)
+    assert list(group.chat_stream("reparti:gros:70b", [])) == [
+        ("status", "Demande de la carte graphique de « PC fixe »…"),
+        ("status", "Chargement du modèle réparti… 5 s"), ("content", "Bonjour")]
+
+    def broken(name, stop=None, progress=None):
+        progress("Demande de la carte graphique de « PC fixe »…")
+        raise RuntimeError("« PC fixe » ne prête pas sa carte graphique.")
+    monkeypatch.setattr(group, "_group", broken)
+    stream = group.chat_stream("reparti:gros:70b", [])
+    assert next(stream) == ("status", "Demande de la carte graphique de « PC fixe »…")
+    with pytest.raises(RuntimeError, match="ne prête pas"):
+        next(stream)
+
+
+def test_a_setup_step_does_not_commit_the_answer():
+    """Mode automatique : tant qu'il n'y a que des étapes de mise en place, une machine qui
+    échoue laisse la place à la suivante (placement.run)."""
+    from aiodos.network import placement
+
+    def attempt(model):
+        if model == "reparti:gros:70b":
+            yield "status", "Chargement…"
+            raise RuntimeError("machine partie")
+        yield "content", "réponse d'ailleurs"
+    items = list(placement.run(["reparti:gros:70b", "gros:70b"], attempt))
+    assert ("content", "réponse d'ailleurs") in items and ("status", "Chargement…") in items
+
+
 def test_the_end_of_the_model_stays_here():
     gib = 2 ** 30
     card = {"name": "Vulkan1", "free_mib": 8000}                        # 6 464 Mio utiles

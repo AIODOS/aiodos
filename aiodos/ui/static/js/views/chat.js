@@ -280,6 +280,7 @@ function appendAssistant(model, here = false) {
   let thinkStart = 0;
   let thinkTimer = null;
   let answered = false;
+  let statusText = '';                 // modèle réparti : où en est sa mise en place
 
   // Premier message : charger le modèle en VRAM peut prendre 20-30 s. On le dit.
   const waitStart = Date.now();
@@ -289,7 +290,7 @@ function appendAssistant(model, here = false) {
     if (seconds < 3 || !dots) return;
     let label = content.querySelector('.wait-label');
     if (!label) { label = h('<span class="wait-label faint"></span>'); content.append(label); }
-    label.textContent = `Le modèle se prépare… ${duration(seconds)}`;
+    label.textContent = statusText || `Le modèle se prépare… ${duration(seconds)}`;
   }, 1000);
   const stopWaiting = () => {
     clearInterval(waitTimer);
@@ -306,6 +307,14 @@ function appendAssistant(model, here = false) {
       if (!model?.startsWith(AUTO)) return;
       node.querySelector('.model-tag').textContent =
         `${modelName(ev.model)} · ${ev.machine || 'cette machine'}`;
+    },
+    status(text) {                    // mise en place d'un modèle réparti (cluster/group.py)
+      statusText = text;
+      if (!content.querySelector('.typing')) return;
+      let label = content.querySelector('.wait-label');
+      if (!label) { label = h('<span class="wait-label faint"></span>'); content.append(label); }
+      label.textContent = text;
+      scrollBottom();
     },
     think(text) {
       stopWaiting();
@@ -527,6 +536,7 @@ async function send() {
         emit('chat:current');
       } else if (ev.type === 'route') view.route(ev);
       else if (ev.type === 'sources') view.sources(ev.sources);
+      else if (ev.type === 'status') view.status(ev.text);
       else if (ev.type === 'thinking') view.think(ev.text);
       else if (ev.type === 'render') view.render(ev.html);
       else if (ev.type === 'done') view.done(ev.html, ev.error);

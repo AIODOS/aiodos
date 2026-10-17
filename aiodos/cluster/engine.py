@@ -31,6 +31,7 @@ SERVER = "llama-server"
 RPC = "ggml-rpc-server"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 INFO_TTL = 300                    # versions et appareils relus au plus toutes les 5 min
+WAIT_NOTE = 5                     # s entre deux nouvelles d'un chargement en cours
 _VERSION = re.compile(r"version:\s*(\S+)\s*\(build (\d+), commit (\w+)\)")
 _DEVICE = re.compile(r"^\s*([A-Za-z]+\d+):\s*(.+?)\s*\((\d+) MiB, (\d+) MiB free\)\s*$")
 
@@ -154,11 +155,12 @@ class Process:
         self.log_path = paths.log_path().parent / f"{name}.log"
         self.process = None
 
-    def start(self, timeout: float, ready=None, stop=None) -> "Process":
+    def start(self, timeout: float, ready=None, stop=None, waiting=None) -> "Process":
         """Lance le programme et attend qu'il écoute sur son port, puis que `ready()` soit
         vrai s'il est donné (llama-server écoute avant d'avoir chargé le modèle). `stop`
         (threading.Event, bouton Stop d'une conversation) interrompt l'attente : le
-        programme est arrêté."""
+        programme est arrêté. `waiting(secondes)` est appelé toutes les WAIT_NOTE secondes
+        d'attente (avancement montré dans la conversation)."""
         log_file = self.log_path.open("w", encoding="utf-8", errors="replace")
         try:
             self.process = subprocess.Popen(
@@ -170,8 +172,12 @@ class Process:
             raise EngineError(f"{self.program.name} ne démarre pas : {exc}") from exc
         log_file.close()                  # le programme garde sa propre copie
         children.bind(self.process.pid)   # arrêté avec AIODOS, même si AIODOS est tué
-        end = time.monotonic() + timeout
+        began = time.monotonic()
+        end, noted = began + timeout, began
         while time.monotonic() < end:
+            if waiting is not None and time.monotonic() - noted >= WAIT_NOTE:
+                noted = time.monotonic()
+                waiting(int(noted - began))
             if self.process.poll() is not None:
                 raise EngineError(f"{self.program.name} s'est arrêté : {self.tail()}")
             if stop is not None and stop.is_set():

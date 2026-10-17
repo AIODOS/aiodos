@@ -55,9 +55,14 @@ class Node:
         return self
 
     def start(self, timeout=40):
-        # Jamais de fenêtre d'erreur sur le bureau : un nœud d'essai n'a personne devant lui
+        # Jamais de fenêtre d'erreur sur le bureau : un nœud d'essai n'a personne devant lui.
+        # Secteur et inactivité simulés, comme dans conftest.py, aussi pour les nœuds lancés
+        # avant lui (fixtures de module) : sinon, PC sur batterie ou utilisé, ils ne
+        # prêteraient rien et l'essai dépendrait de l'état du PC
         env = dict(os.environ, AIODOS_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8",
-                   AIODOS_NO_DIALOG="1")
+                   AIODOS_NO_DIALOG="1",
+                   AIODOS_SIMULATE_POWER=os.environ.get("AIODOS_SIMULATE_POWER", "ac"),
+                   AIODOS_SIMULATE_IDLE=os.environ.get("AIODOS_SIMULATE_IDLE", "86400"))
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.process = subprocess.Popen(
             [sys.executable, "-m", "aiodos", "--headless", "--no-migrate",

@@ -175,6 +175,8 @@ async def chat(body: ChatIn, request: Request):
                 elif kind == "sources":
                     state["sources"] = data
                     yield sse({"type": "sources", "sources": data})
+                elif kind == "status":    # mise en place d'un modèle réparti : montré, pas gardé
+                    yield sse({"type": "status", "text": data})
                 elif kind == "thinking":
                     state["thinking"] += data
                     yield sse({"type": "thinking", "text": data})
