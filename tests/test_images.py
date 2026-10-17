@@ -731,3 +731,23 @@ def test_the_api_serves_a_video_as_webm(tiny_video, client):
     models = {m["id"]: m for m in client.get("/api/images/models", headers=AUTH).json()["models"]}
     assert models["wan2.1-t2v-1.3b"]["kind"] == "video" and models["wan2.1-t2v-1.3b"]["durations"]
     assert models["minimax-h3"]["notice"]
+
+
+def test_a_late_verification_writes_where_it_started(tiny_model, tmp_path, monkeypatch):
+    """Une empreinte calculée en arrière-plan finit après son contexte (fin d'un essai) :
+    elle s'écrit dans le cache des données où elle a commencé, jamais ailleurs."""
+    spec = tiny_model["files"]["vae"]
+    path = tiny_model["folder"] / spec["name"]
+    first = catalog.cache_file_path()
+    gate = threading.Event()
+    real = catalog.sha256_of
+
+    def slow(target, stop=None):
+        gate.wait(5)
+        return real(target, stop)
+    monkeypatch.setattr(catalog, "sha256_of", slow)
+    catalog._verify_later(path, spec)
+    monkeypatch.setenv("AIODOS_DATA_DIR", str(tmp_path / "ailleurs"))   # le contexte change
+    gate.set()
+    wait_for(lambda: first.exists() and str(path) in json.loads(first.read_text(encoding="utf-8")))
+    assert not (tmp_path / "ailleurs" / "images" / "verified.json").exists()

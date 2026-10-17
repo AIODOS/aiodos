@@ -194,13 +194,13 @@ def hashes(model_id: str) -> list:
 
 
 # ------------------------------------------------------------ vérification
-def _cache_path() -> Path:
+def cache_file_path() -> Path:
     return paths.data_dir() / "images" / "verified.json"
 
 
-def _load() -> dict:
+def _load(cache_file: Path | None = None) -> dict:
     try:
-        return json.loads(_cache_path().read_text(encoding="utf-8"))
+        return json.loads((cache_file or cache_file_path()).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -210,12 +210,13 @@ def _stamp(path: Path) -> list:
     return [info.st_size, info.st_mtime_ns]
 
 
-def record(path: Path, sha256: str):
-    """Note l'empreinte d'un fichier (calculée au téléchargement ou après coup)."""
+def record(path: Path, sha256: str, cache_file: Path | None = None):
+    """Note l'empreinte d'un fichier (calculée au téléchargement ou après coup), dans
+    `cache_file` : celui des données d'AIODOS au moment où le calcul a commencé."""
+    target = cache_file or cache_file_path()
     with _lock:
-        cache = _load()
+        cache = _load(target)
         cache[str(path)] = {"stamp": _stamp(path), "sha256": sha256}
-        target = _cache_path()
         target.parent.mkdir(parents=True, exist_ok=True)
         part = target.with_name(target.name + ".tmp")
         part.write_bytes(json.dumps(cache, indent=1).encode("utf-8"))
@@ -232,10 +233,11 @@ def sha256_of(path: Path, stop=None) -> str | None:
     return digest.hexdigest()
 
 
-def verify(path: Path, spec: dict) -> bool:
+def verify(path: Path, spec: dict, cache_file: Path | None = None) -> bool:
     """Calcule l'empreinte maintenant (quelques secondes par Go) et la note."""
+    target = cache_file or cache_file_path()       # avant le calcul, qui dure
     digest = sha256_of(path)
-    record(path, digest)
+    record(path, digest, target)
     if digest != spec["sha256"]:
         log.warning("Empreinte inattendue pour %s", path)
     return digest == spec["sha256"]
@@ -247,9 +249,11 @@ def _verify_later(path: Path, spec: dict):
             return
         _checking.add(str(path))
 
+    target = cache_file_path()        # fixé au lancement : le fil peut survivre à son contexte
+
     def run():
         try:
-            verify(path, spec)
+            verify(path, spec, target)
         except OSError as exc:
             log.warning("Vérification impossible de %s : %s", path, exc)
         finally:

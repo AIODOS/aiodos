@@ -71,7 +71,9 @@ def start(model_id: str, changed=None, source: str | None = None) -> dict:
         _state.update(model=model_id, running=True, base=0, current=0, file=None, error=None,
                       rate=0.0, total=catalog.total_size(model_id),
                       source=machine.name if machine else "Hugging Face")
-    threading.Thread(target=_run, args=(model_id, changed, machine), daemon=True,
+    # Dossier et cache fixés maintenant : le fil peut survivre à son contexte (essais)
+    where = (catalog.folder(), catalog.cache_file_path())
+    threading.Thread(target=_run, args=(model_id, changed, machine, where), daemon=True,
                      name="aiodos-images-telechargement").start()
     return progress()
 
@@ -80,9 +82,9 @@ def cancel():
     _stop.set()
 
 
-def _run(model_id: str, changed, machine=None):
+def _run(model_id: str, changed, machine=None, where=None):
+    folder, cache_file = where or (catalog.folder(), catalog.cache_file_path())
     try:
-        folder = catalog.folder()
         folder.mkdir(parents=True, exist_ok=True)
         specs = list(catalog.model(model_id)["files"].values())
         for spec in specs:
@@ -91,7 +93,7 @@ def _run(model_id: str, changed, machine=None):
                 continue
             with _lock:
                 _state["file"] = spec["name"]
-            _fetch(spec, folder, machine)
+            _fetch(spec, folder, machine, cache_file)
         log.info("Modèle d'images %s téléchargé", model_id)
     except Cancelled:
         with _lock:
@@ -114,11 +116,11 @@ def _advance(n: int):
         _state["current"] = 0
 
 
-def _fetch(spec: dict, folder, machine=None):
+def _fetch(spec: dict, folder, machine=None, cache_file=None):
     target = folder / spec["name"]
     if target.exists():
         # Fichier posé à la main, pas encore vérifié : vérifié plutôt que retéléchargé
-        if target.stat().st_size == spec["size"] and catalog.verify(target, spec):
+        if target.stat().st_size == spec["size"] and catalog.verify(target, spec, cache_file):
             _advance(spec["size"])
             return
         target.unlink()
@@ -144,7 +146,7 @@ def _fetch(spec: dict, folder, machine=None):
         raise DownloadError(f"{spec['name']} : fichier reçu différent de celui attendu "
                             "(taille ou empreinte).")
     os.replace(part, target)
-    catalog.record(target, spec["sha256"])
+    catalog.record(target, spec["sha256"], cache_file)
     _advance(spec["size"])
 
 
