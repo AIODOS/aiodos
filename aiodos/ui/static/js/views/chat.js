@@ -6,7 +6,8 @@ import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 
-const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think'];
+const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think',
+  'peer_libraries_enabled'];
 let el = {};
 let busy = false;
 let controller = null;
@@ -20,6 +21,7 @@ export function mountChat(container) {
         <select class="select" id="model-select" title="Modèle utilisé pour répondre"></select>
         <div class="chips">
           <button class="chip" data-flag="knowledge_enabled" title="Utiliser tes bibliothèques de connaissance">${icon('book')}Bibliothèques</button>
+          <button class="chip" data-flag="peer_libraries_enabled" title="Chercher aussi dans les bibliothèques de mes machines et de mes amis (ta question part chez eux)">${icon('network')}Chez les autres</button>
           <button class="chip" data-flag="conversations_enabled" title="Se souvenir de tes autres conversations">${icon('memory')}Mémoire</button>
           <button class="chip" data-flag="web_search_enabled" title="Chercher sur le web (validation avant chaque envoi)">${icon('globe')}Web</button>
           <button class="chip" data-flag="think" title="Laisser le modèle réfléchir avant de répondre (plus lent, souvent meilleur)">${icon('think')}Réflexion</button>
@@ -283,6 +285,9 @@ function appendAssistant(model) {
       for (const s of list || []) {
         if (s.type === 'web') {
           box.append(h(`<a class="source" href="${esc(s.url)}" title="${esc(s.title || s.url)}">${icon('globe')}${esc(s.label)}</a>`));
+        } else if (s.type === 'remote') {         // trouvé dans la bibliothèque d'une autre machine
+          box.append(h(`<span class="source remote" title="Bibliothèque « ${esc(s.collection)} », chez « ${esc(s.peer)} »">`
+            + `${icon('network')}${esc(s.label)} · chez ${esc(s.peer)}</span>`));
         } else {
           const ico = s.type === 'conversation' ? 'memory' : 'file';
           box.append(h(`<span class="source" title="${esc(s.collection || '')}">${icon(ico)}${esc(s.label)}</span>`));
@@ -373,6 +378,8 @@ async function confirmOutgoing(text, model, pre) {
     if (r.ok && r.checked) session.webConsent = true;
   }
 
+  const peers = await confirmPeers(text, pre);
+
   let cloudConfirmed = false;
   if (pre.cloud) {
     const label = state.models.find(m => m.id === model)?.label || pre.cloud;
@@ -403,7 +410,31 @@ async function confirmOutgoing(text, model, pre) {
     }
     cloudConfirmed = true;
   }
-  return { web, cloudConfirmed };
+  return { web, cloudConfirmed, peers };
+}
+
+// « Chez les autres » : la question part chez les machines qui m'ouvrent leurs bibliothèques
+// (preflight.consult) ; chez un ami, seulement après accord (network/remote_search.py).
+async function confirmPeers(text, pre) {
+  if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return false;
+  if (!pre.consult_allowed) {
+    toast('Les passages trouvés chez tes machines et tes amis ne partent ni vers le cloud, ni vers le modèle '
+      + 'prêté par un ami : cette réponse s\'en passera.', 'info', 7000);
+    return false;
+  }
+  const friends = pre.consult.filter(m => m.friend);
+  if (!friends.length || session.peerConsent) return true;
+  const r = await modal({
+    title: 'Chercher aussi chez tes amis ?', iconName: 'network',
+    text: `Ta question va partir chez ${pre.consult.map(m => `« ${m.name} »`).join(', ')} : chaque machine `
+      + 'cherche dans les bibliothèques qu\'elle t\'ouvre, et seuls les passages trouvés reviennent. AIODOS n\'y garde '
+      + 'pas ta question, mais chaque machine note dans son journal que tu as cherché, et combien de passages elle '
+      + 't\'a rendus.',
+    quote: text.slice(0, 300), confirm: 'Chercher chez eux', cancel: 'Répondre sans',
+    check: 'Ne plus demander pendant cette session',
+  });
+  if (r.ok && r.checked) session.peerConsent = true;
+  return r.ok;
 }
 
 async function send() {
@@ -431,7 +462,7 @@ async function send() {
   controller = new AbortController();
   try {
     await streamChat({
-      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed,
+      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
       conversation_id: state.currentConversation?.id ?? null,
     }, ev => {
       if (ev.type === 'start') {

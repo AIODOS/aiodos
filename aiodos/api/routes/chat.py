@@ -40,6 +40,10 @@ class ChatIn(BaseModel):
     libraries: bool | None = None
     conversations: bool | None = None
     think: bool | None = None
+    # Chercher aussi chez mes machines et mes amis (la question part chez eux) : seulement
+    # si la demande le dit, jamais d'après un réglage (une autre application cliente ne
+    # l'enverra pas sans le savoir)
+    peer_libraries: bool = False
 
 
 @router.get("/models")
@@ -91,9 +95,11 @@ async def chat(body: ChatIn, request: Request):
         def put(item):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
+            # Ni vers le cloud, ni vers le modèle prêté par un ami : sans les autres machines
+            peers = body.peer_libraries and pipeline.peers_allowed(body.model)
             messages, sources = pipeline.build_messages(
                 history, text, libraries=libraries, conversations=memory,
-                web_search=body.web, conversation_id=conv_id)
+                web_search=body.web, conversation_id=conv_id, peers=peers)
             put(("sources", sources))
             for kind, piece in pipeline.generate(body.model, messages, think, stop):
                 put((kind, piece))

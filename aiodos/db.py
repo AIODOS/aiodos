@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -84,6 +84,30 @@ MIGRATIONS = {
         net_addrs TEXT,
         used      REAL
     );
+    """,
+    # Bibliothèques consultables (recherche par les machines appairées, sans copie des
+    # fichiers) : qui peut chercher dans chaque bibliothèque (« none » : personne, par
+    # défaut ; « mine » : mes machines ; « friends » : mes machines et mes amis ;
+    # « everyone » réservé aux inconnus de la phase 3), les dossiers et documents fermés
+    # d'une bibliothèque ouverte, et le journal des recherches reçues.
+    6: """
+    ALTER TABLE collections ADD COLUMN open_to TEXT NOT NULL DEFAULT 'none';
+    CREATE TABLE IF NOT EXISTS closed_parts (
+        collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+        path          TEXT NOT NULL,
+        folder        INTEGER NOT NULL DEFAULT 0,
+        created       REAL NOT NULL,
+        PRIMARY KEY (collection_id, path, folder)
+    );
+    CREATE TABLE IF NOT EXISTS consult_log (
+        id        INTEGER PRIMARY KEY,
+        node_id   TEXT NOT NULL,
+        at        REAL NOT NULL,
+        passages  INTEGER NOT NULL DEFAULT 0,
+        documents TEXT,
+        refused   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS ix_consult_log_node ON consult_log(node_id, at);
     """,
 }
 

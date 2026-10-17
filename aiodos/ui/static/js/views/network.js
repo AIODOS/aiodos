@@ -224,6 +224,7 @@ function renderPeers(net) {
   for (const peer of net.peers) {
     const friend = peer.trust === 'friend';
     const shared = peer.shared;
+    const consulted = peer.consulted;          // ses recherches dans mes bibliothèques ouvertes
     const row = h(`
       <div class="peer">
         <div class="peer-head">
@@ -249,6 +250,9 @@ function renderPeers(net) {
           · Tu as calculé pour elle : ${duration(peer.given_s)} (${peer.given_units} unité(s))</div>
         ${shared ? `<div class="peer-ledger faint">Confié à cette machine : ${shared.count} fichier(s) ou page(s)
           ${shared.bytes ? `(${bytes(shared.bytes)})` : ''}, le dernier ${ago(shared.last)}</div>` : ''}
+        ${consulted ? `<div class="peer-ledger faint">A cherché dans tes bibliothèques : ${consulted.count} recherche(s),
+          ${consulted.passages} passage(s) rendu(s)${consulted.refused ? `, ${consulted.refused} refus` : ''},
+          la dernière ${ago(consulted.last)}</div>` : ''}
       </div>`);
     row.querySelector('[data-act="more"]').onclick = e => {
       e.stopPropagation();
@@ -257,6 +261,8 @@ function renderPeers(net) {
           ? { label: 'C\'est une de mes machines', icon: 'network', action: () => setTrust(peer, 'mine') }
           : { label: 'C\'est la machine d\'un ami', icon: 'shield', action: () => setTrust(peer, 'friend') },
         ...(shared ? [{ label: 'Voir ce qui lui a été confié', icon: 'file', action: () => showShared(peer) }] : []),
+        ...(consulted ? [{ label: 'Voir ses recherches dans tes bibliothèques', icon: 'search',
+          action: () => showConsulted(peer) }] : []),
       ]);
     };
     row.querySelector('[data-act="restore"]')?.addEventListener('click', async () => {
@@ -305,6 +311,23 @@ async function showShared(peer) {
     title: `Confié à « ${peer.name} »`, iconName: 'file', cancel: null, confirm: 'Fermer',
     text: 'Les fichiers et pages dont le calcul lui a été confié, du plus récent au plus ancien '
       + '(à droite de la flèche, le nom sous lequel il les a reçus).',
+    quote: lines.join('\n') || 'Rien pour l\'instant.',
+  });
+}
+
+async function showConsulted(peer) {
+  let entries;
+  try { ({ entries } = await get(`/network/peers/${peer.node_id}/consulted`)); } catch (e) { errorToast(e); return; }
+  const lines = entries.map(e => {
+    const when = new Date(e.at * 1000).toLocaleString('fr-FR');
+    if (e.refused) return `${when} · refusée : ${e.refused}`;
+    const docs = e.documents.map(d => `${d.document} (${d.library})`).join(', ');
+    return `${when} · ${e.passages} passage(s)${docs ? ` : ${docs}` : ''}`;
+  });
+  await modal({
+    title: `Recherches de « ${peer.name} »`, iconName: 'search', cancel: null, confirm: 'Fermer',
+    text: 'Ses recherches dans les bibliothèques que tu lui ouvres, de la plus récente à la plus ancienne, '
+      + 'avec les documents d\'où viennent les passages qu\'elle a reçus. Ses questions ne sont pas gardées.',
     quote: lines.join('\n') || 'Rien pour l\'instant.',
   });
 }

@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
-from aiodos.network import envelope, lending, netinfo, peers, sharing, work
+from aiodos.network import consult, envelope, lending, netinfo, peers, sharing, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -32,7 +32,10 @@ def _ping(manager, sender, payload):
 
 
 def _profile(manager, sender, payload):
-    return sharing.profile_for(sender, identity.profile())     # allégé pour un ami
+    # Allégé pour un ami ; avec, pour chacune, le nombre de bibliothèques qui lui sont
+    # ouvertes (elle n'envoie ses questions qu'aux machines qui ont quelque chose pour elle)
+    return dict(sharing.profile_for(sender, identity.profile()),
+                consult={"open": consult.open_count(sender)})
 
 
 def _unpair(manager, sender, payload):
@@ -53,6 +56,7 @@ HANDLERS = {
     "unpair": _unpair,
     "pair/confirm": _pair_confirm,
     "net/info": netinfo.handle,   # clés Internet (compagnon aiodos-net) échangées
+    **consult.HANDLERS,           # recherche dans mes bibliothèques ouvertes : library/search
     **work.HANDLERS,              # travail confié : work/lease, work/blob, work/result…
     **updates.HANDLERS,           # versions signées : update/manifest, update/chunk
 }

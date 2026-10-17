@@ -3,7 +3,8 @@
 > Étude du 16/10/2026. Ce document prépare des choix, dont plusieurs reviennent à
 > l'utilisateur (cf. [§ 6](#6-questions-à-trancher-gouvernance-et-confidentialité)) ;
 > leur mise en œuvre suit le plan du [§ 7](#7-plan-par-étapes) (étapes 2.0 à 2.7 faites,
-> 2.3 en partie ; ce qui reste est noté à chaque étape).
+> 2.3 en partie, et les bibliothèques consultables après 2.5 ; ce qui reste est noté à chaque
+> étape).
 > Les faits sur les projets étudiés datent de ce jour et vieilliront vite : les
 > revérifier avant d'agir.
 
@@ -938,6 +939,108 @@ plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
 
 Reste : les plafonds de volume pour les données mobiles. Ils ne correspondent à aucune
 question de 2.1, et un téléphone ne sait pas encore dire s'il est en Wi-Fi ou en 4G.
+
+**Bibliothèques consultables** (après 2.5, 17/10/2026 ; `aiodos/knowledge/visibility.py`,
+`aiodos/network/consult.py`, `aiodos/network/remote_search.py`, migration 6). Demande de
+l'utilisateur, le 17/10/2026 : chercher dans les bibliothèques de ses amis, plus tard dans
+celles d'inconnus, en gardant une partie ouverte et une partie fermée, « s'il y a des
+choses qu'on ne veut pas partager ».
+
+Le principe : **aucun fichier n'est copié.** La question part chez la machine consultée ;
+celle-ci calcule son vecteur avec son propre modèle d'embedding, cherche dans ce que la
+machine qui demande a le droit de voir, et ne rend que les meilleurs passages. Les deux
+machines n'ont donc pas besoin du même modèle, contrairement au travail confié de 2.5.
+
+*Ce que le propriétaire ouvre* (menu ⋯ de chaque bibliothèque) :
+
+- **Consultable par** : personne (par défaut), mes machines, ou mes machines et mes amis
+  (`collections.open_to`). Ce réglage est distinct de la portée de calcul de 2.5 : une
+  bibliothèque peut être calculée par mes amis sans être consultable par eux, et l'inverse.
+  La valeur « tout le monde » (`everyone`) est réservée aux inconnus de la phase 3 : la base
+  a sa place, mais l'interface ne la propose pas et le réglage la refuse. L'interrupteur
+  d'une bibliothèque (« utilisée dans les réponses ») ne regarde que les réponses de cette
+  machine : ouverte, la bibliothèque reste consultable même désactivée ici.
+- **Parties fermées** : dans une bibliothèque, un dossier ou un document se ferme à la
+  consultation (bouton œil barré au survol, table `closed_parts`). La règle porte sur le
+  chemin, pas sur l'entrée : un document réindexé reste fermé, un fichier ajouté plus tard
+  dans un dossier fermé l'est aussi. On peut fermer avant d'ouvrir la bibliothèque.
+- **Jamais consultables** : une bibliothèque gardée sur ce PC (le cadenas), et la mémoire
+  des conversations. Poser le cadenas ferme aussi la consultation ; l'enlever ne la rouvre
+  pas d'office.
+- **Une machine mise de côté** après un contrôle échoué (2.5) ne peut plus chercher.
+
+*Ce que voit la machine qui demande*, et pourquoi :
+
+| Ce qui sort | Pourquoi |
+|---|---|
+| Le texte des passages trouvés | C'est l'objet de la recherche. Quelques-uns seulement (au plus 8), au-dessus du seuil de pertinence du modèle du propriétaire. |
+| Le nom du document, sans ses dossiers | Il faut citer la source. Les dossiers disent comment le propriétaire range sa vie (« Santé/… »), et l'emplacement sur le disque contient souvent son prénom (`C:\Users\…`). Une page web garde son adresse, sans identifiants, paramètres ni ancre, qui peuvent porter un jeton. |
+| Le nom de la bibliothèque | Il situe le passage (« Cours », « Recettes ») ; le propriétaire l'a choisi, et la fenêtre d'ouverture lui rappelle qu'il sera vu. |
+| Le score de chaque passage | Pour classer ; chaque machine applique son propre seuil, puisque chaque modèle a son échelle. |
+| Le nombre de bibliothèques qui lui sont ouvertes | Dans le profil échangé toutes les minutes : la question ne part que chez les machines qui ont quelque chose pour elle. |
+
+Ne sortent jamais : les fichiers, leur emplacement et leurs dossiers, la liste des documents
+(pas de sommaire : on ne voit que ce que ses questions font remonter), les vecteurs, les
+dates, ce qui est fermé. Côté demandeur, les passages servent à la réponse et restent dans
+la conversation (les citations), sans entrer dans ses bibliothèques ; ils ne partent ni vers
+le cloud, ni vers le modèle prêté par un ami (`pipeline.peers_allowed`) : le propriétaire les
+a ouverts à cette machine, pas à des tiers.
+
+*Le protocole.* Une action scellée, `library/search` (`p2p_app.HANDLERS`) : la question
+(2 000 caractères au plus, coupée avant l'envoi) et le nombre de passages voulus ; la réponse
+donne les passages et le nombre de bibliothèques ouvertes à cette machine. Ce qui revient est
+contrôlé (forme, longueurs, nombre). Les machines sont interrogées en même temps : 8 s au plus
+pour une conversation, 20 s depuis la vue Bibliothèques ; une machine lente ou qui refuse ne
+retarde pas les autres. Une machine qui répond qu'elle n'ouvre plus rien n'est plus interrogée,
+sans attendre son prochain profil.
+
+*Les limites*, contre qui voudrait aspirer une bibliothèque entière : au plus 8 passages par
+recherche et 10 recherches par minute et par machine (fenêtre glissante). Soit 80 passages par
+minute au plus, chacun noté au journal. Elles ralentissent et rendent visible une aspiration,
+sans la rendre impossible : ce qu'on ne veut pas montrer, il faut le fermer. Pour des inconnus
+(phase 3), il faudra des plafonds plus bas, par jour.
+
+*Le journal* (`consult_log`, vue Réseau, comme celui de 2.5) : chaque recherche reçue, avec qui,
+quand, combien de passages et de quels documents (leur chemin dans la bibliothèque), ou la
+raison d'un refus (un seul refus noté par minute, pour qu'une machine qui insiste ne le remplisse
+pas). La question n'est pas gardée, comme une conversation servie par un modèle prêté. Le journal
+garde 90 jours.
+
+*Côté demandeur.* Dans la conversation, l'option « Chez les autres » (réglage
+`peer_libraries_enabled`, désactivé par défaut) ajoute leurs passages au contexte ; chaque
+citation dit chez qui il a été trouvé (« fusee.txt · chez PC de Marc »). Avant que la question
+parte chez un ami, une fenêtre le dit et demande l'accord (une fois par session si on le
+souhaite). Le serveur ne cherche chez les autres que si la demande le dit (`peer_libraries`),
+jamais d'après le réglage : une autre application cliente ne leur enverra pas une question à
+l'insu de l'utilisateur. La vue Bibliothèques a une recherche dans ce qui est ouvert chez les
+autres, qui dit d'avance chez qui part la question.
+
+Risques connus :
+- **Le propriétaire lit la question** : il faut bien qu'il calcule son vecteur. AIODOS ne la
+  garde pas, mais une version modifiée pourrait le faire. C'est le même cas qu'un modèle prêté.
+- **Un passage peut contenir des instructions** pour le modèle (injection de prompt), comme
+  une page web. Il lui est présenté comme un extrait à citer, ce qui limite le risque sans
+  l'annuler : l'injection de prompt n'est pas totalement évitable (§ 6.5).
+- **Les questions successives** d'un ami dessinent peu à peu le contenu ouvert : c'est la nature
+  d'une bibliothèque consultable. Le journal le montre.
+
+Tests :
+- `tests/test_consult.py` (17 tests, sans réseau ni Ollama) :
+  - qui voit quoi ;
+  - parties fermées, avec un second contrôle qui les arrête même si le premier filtre manquait ;
+  - cadenas et mémoire jamais consultables, même avec une base modifiée à la main ;
+  - ce qui sort d'un passage ;
+  - limites, journal sans la question ;
+  - action scellée, API de l'interface.
+- `tests/test_remote_search.py` (11 tests) : à qui part la question, contrôle de ce qui revient,
+  machine lente ou qui refuse, citations « chez … », ni cloud ni modèle d'un ami.
+- `tests/test_network_consult.py` : deux vrais nœuds avec Ollama, appairés en amis :
+  - par le réseau local, puis sur invitation par leurs seuls compagnons ;
+  - l'un cherche chez l'autre, depuis la vue Bibliothèques puis depuis une conversation, et cite
+    ses passages ;
+  - le dossier et le document fermés ne sortent pas ;
+  - chaque recherche est au journal ;
+  - avec le cadenas, plus rien ne sort et la question cesse de partir.
 
 **2.6 Transferts adaptés à Internet** : fichier de l'unité en flux binaire avec
 reprise, plafond de taille par défaut plus bas, délais revus pour les chemins relayés.

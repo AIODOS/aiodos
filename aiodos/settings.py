@@ -37,6 +37,7 @@ DEFAULTS = {
     "rag_min_score": 0.40,            # pertinence minimale d'un extrait (suit le modèle)
     "knowledge_enabled": True,
     "conversations_enabled": False,   # mémoire inter-conversations
+    "peer_libraries_enabled": False,  # chercher aussi chez mes machines et mes amis (la question part)
     # --- Web & cloud ---
     "web_search_enabled": False,
     "web_results": 3,

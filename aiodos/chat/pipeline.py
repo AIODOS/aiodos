@@ -5,13 +5,15 @@ Ordre des messages envoyés au modèle :
   [résultats web] → [extraits pertinents] → règle anti-invention → question.
 La règle anti-invention est placée juste avant la question : c'est la position
 la plus forte, celle qui l'emporte sur d'anciens échanges mémorisés (leçon v1).
+Les extraits peuvent venir aussi des bibliothèques que mes machines et mes amis
+m'ouvrent (network/remote_search.py), si la conversation le demande.
 """
 import logging
 import re
 
 from aiodos import settings
 from aiodos.knowledge import search
-from aiodos.network import remote_models
+from aiodos.network import remote_models, remote_search, sharing
 from aiodos.services import cloud, ollama, web
 
 log = logging.getLogger("aiodos.chat")
@@ -33,6 +35,11 @@ _WEB_EMPTY = ("La recherche web n'a renvoyé aucun résultat exploitable. Dis-le
               "honnêtement et n'invente aucune source.")
 _RAG = ("Extraits des connaissances de l'utilisateur. Sers-t'en s'ils sont pertinents, "
         "ignore-les sinon :\n\n{}")
+_RAG_PEERS = ("Extraits des connaissances de l'utilisateur, et des bibliothèques que ses "
+              "machines ou ses amis lui ouvrent (la source dit chez qui). Sers-t'en s'ils "
+              "sont pertinents, ignore-les sinon ; pour un extrait venu d'une autre machine, "
+              "dis chez qui il a été trouvé :\n\n{}")
+REMOTE_MAX = 6        # passages venus des autres machines, au plus, dans une réponse
 _RULE_WEB = ("RAPPEL : les résultats web ci-dessus sont réels. Appuie-toi dessus et cite "
              "uniquement leurs URL ; n'invente aucune autre adresse.")
 _RULE_LOCAL = ("RAPPEL IMPORTANT : ici tu fonctionnes en local, SANS accès à Internet. "
@@ -51,12 +58,25 @@ def preflight(text: str, model: str) -> dict:
         "cloud_host": cloud.PROVIDERS[provider]["host"] if provider else None,
         "cloud_has_key": cloud.has_key(provider) if provider else None,
         "cloud_confirm": bool(settings.get("cloud_confirm")),
+        "consult": remote_search.describe(),          # chez qui partirait la question
+        "consult_allowed": peers_allowed(model),       # et si ce modèle peut s'en servir
     }
 
 
 def runs_here(model) -> bool:
     """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ?"""
     return not cloud.provider_of(model) and not remote_models.parse(model)
+
+
+def peers_allowed(model) -> bool:
+    """Les passages trouvés chez mes machines et mes amis peuvent-ils servir à ce modèle ?
+    Ils ne vont pas plus loin que mes machines : ni vers le cloud, ni vers la machine d'un
+    ami qui prête son modèle (le propriétaire les a ouverts à moi, pas à des tiers). Une
+    nouvelle façon de faire répondre ailleurs devra être ajoutée ici."""
+    if cloud.provider_of(model):
+        return False
+    lent = remote_models.parse(model)
+    return lent is None or sharing.level(lent[0]) == sharing.MINE
 
 
 def available_models() -> list:
@@ -135,9 +155,32 @@ def _knowledge_context(question, libraries, conversations, sources, conversation
     return [f"[Source : {h['source']}]\n{h['text']}" for h in hits]
 
 
+def _peer_context(question, sources):
+    """Passages trouvés dans les bibliothèques ouvertes de mes machines et de mes amis : le
+    meilleur de chacune d'abord, REMOTE_MAX au plus ; chaque citation dit chez qui."""
+    try:
+        found, _machines = remote_search.search(question)
+    except Exception as exc:
+        log.warning("Recherche chez les autres machines impossible : %s", exc)
+        return []
+    found = sorted(found, key=lambda p: (p["rank"], -p["score"]))[:REMOTE_MAX]
+    seen = set()
+    for p in found:
+        if (p["node_id"], p["library"], p["document"]) in seen:
+            continue
+        seen.add((p["node_id"], p["library"], p["document"]))
+        sources.append({"type": "remote", "label": p["document"], "collection": p["library"],
+                        "peer": p["peer"], "score": round(p["score"], 3)})
+    return [f"[Source : {p['document']} — bibliothèque « {p['library']} », chez "
+            f"« {p['peer']} »]\n{p['text']}" for p in found]
+
+
 def build_messages(history, question, *, libraries, conversations, web_search,
-                   conversation_id=None):
-    """Construit les messages pour le modèle. → (messages, sources citées)"""
+                   conversation_id=None, peers=False):
+    """Construit les messages pour le modèle. → (messages, sources citées)
+
+    peers : chercher aussi dans les bibliothèques que mes machines et mes amis m'ouvrent
+    (la question part chez elles) ; jamais par défaut."""
     messages = [{"role": "system", "content": settings.get("system_prompt")}]
     sources = []
     if libraries or conversations:
@@ -152,11 +195,15 @@ def build_messages(history, question, *, libraries, conversations, web_search,
         web_ok = bool(blocks)
         messages.append({"role": "system", "content": _WEB_RESULTS.format(
             "\n\n".join(blocks)) if web_ok else _WEB_EMPTY})
+    extracts = []
     if libraries or conversations:
         extracts = _knowledge_context(question, libraries, conversations, sources,
                                       conversation_id)
-        if extracts:
-            messages.append({"role": "system", "content": _RAG.format("\n\n".join(extracts))})
+    remote = _peer_context(question, sources) if peers else []
+    if extracts or remote:
+        template = _RAG_PEERS if remote else _RAG
+        messages.append({"role": "system",
+                         "content": template.format("\n\n".join(extracts + remote))})
     messages.append({"role": "system", "content": _RULE_WEB if web_ok else _RULE_LOCAL})
     messages.append({"role": "user", "content": question})
     return messages, sources
