@@ -77,6 +77,20 @@ def add_message(conv_id, role, content, thinking=None, model=None, sources=None,
     return message_id
 
 
+def last_media(conv_id) -> dict | None:
+    """La demande d'images ou de vidéos de la dernière réponse, si cette réponse en est une
+    (chat/retouches.py : « Fais-la de nuit » se rapporte à elle)."""
+    row = db.query_one("SELECT media FROM messages WHERE conversation_id=? AND role='assistant' "
+                       "ORDER BY id DESC LIMIT 1", (conv_id,))
+    if row is None or not row["media"]:
+        return None
+    try:
+        media = json.loads(row["media"])
+    except ValueError:
+        return None
+    return media if isinstance(media, dict) and media.get("prompt") else None
+
+
 def cites_others(sources) -> bool:
     """La réponse s'appuie-t-elle sur des passages trouvés chez d'autres machines ?
     `sources` : la liste enregistrée avec le message, ou son texte JSON."""

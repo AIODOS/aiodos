@@ -261,6 +261,19 @@ et les créations en cours.
 - **Le bouton Image**, à gauche du message, ouvre le mode « Créer » : modèle, format,
   durée, nombre ; le message entier est alors la description. « Reprendre » (sur une
   création, ou dans la galerie) y remet la description, les réglages et la graine.
+- **Retoucher la dernière création** (`chat/retouches.py`) : après une image, « Fais-la
+  de nuit », « Ajoute un chat », « Peux-tu la rendre plus lumineuse ? » se rapportent à
+  elle, sans redire « image ». Le modèle de conversation réécrit la description (l'ancienne
+  et la demande ; « Je retouche la description… » le temps de l'écrire), et la nouvelle
+  création garde le modèle, le format et la graine : la composition reste. « Encore une »,
+  « Une autre », « Pareil » : une variante, même description, autre graine. Sans modèle de
+  conversation en 45 s, la demande s'ajoute à la description. Une question (« Pourquoi
+  est-elle floue ? ») n'est pas une retouche. Essai réel : « Fais-la de nuit, avec la pleine
+  lune » après la vidéo du renard a donné « Un renard roux qui trotte dans la neige fraîche
+  sous la lumière de la pleine lune de nuit », même graine, même format.
+- **Un ami pourrait calculer** : si aucun modèle n'est prêt ici ni chez mes machines,
+  mais qu'un ami propose le sien, la conversation le nomme, avec « Autoriser mes amis »
+  (le réglage `images_from_friends`), et la création repart aussitôt.
 - **Le modèle** : celui choisi la dernière fois pour ce genre s'il peut calculer, sinon
   le premier prêt, ici ou chez mes machines en ligne ; ceux à licence restrictive en
   dernier. Si aucun ne peut, la conversation le dit, avec un lien vers la vue Images et

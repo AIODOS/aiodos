@@ -3,7 +3,8 @@ l'utilisateur et la réponse qui montrera les images s'ajoutent à la conversati
 travail part dans la file, calculé ici ou par mes machines qui ont le modèle."""
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from aiodos.chat import creations
@@ -26,6 +27,7 @@ class CreateIn(BaseModel):
     seconds: float | None = None
     seed: int | None = None
     negative: str | None = None
+    followup: str | None = None         # « edit » ou « variation » de la dernière création
 
 
 @router.post("/create")
@@ -33,8 +35,8 @@ async def create(body: CreateIn, request: Request):
     try:
         made = await asyncio.to_thread(creations.start, body.text, body.model_dump(),
                                        body.conversation_id, body.chat_model)
-    except creations.CreationError as exc:
-        raise HTTPException(exc.status, str(exc))
+    except creations.CreationError as exc:     # avec les amis qui pourraient calculer
+        return JSONResponse({"detail": str(exc), "friends": exc.friends}, status_code=exc.status)
     executor = request.app.state.executor
     executor.wake()
     executor.publish_job(made["job_id"], force=True)

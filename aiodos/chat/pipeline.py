@@ -71,7 +71,7 @@ _RULE_WEB_NOTHING = ("RAPPEL IMPORTANT : la recherche web n'a rien donné d'util
                      "N'invente JAMAIS d'URL ni de résultat de recherche.")
 
 
-def preflight(text: str, model: str) -> dict:
+def preflight(text: str, model: str, conversation_id=None) -> dict:
     """Ce que l'interface doit faire valider avant l'envoi (web, cloud)."""
     provider = cloud.provider_of(model)
     return {
@@ -83,14 +83,15 @@ def preflight(text: str, model: str) -> dict:
         "cloud_confirm": bool(settings.get("cloud_confirm")),
         "consult": _consult_targets(),                 # chez qui partirait la question
         "consult_allowed": peers_allowed(model),       # et si ce modèle peut s'en servir
-        "create": _creation(text),                     # une image ou une vidéo à créer
+        "create": _creation(text, conversation_id),    # une image ou une vidéo à créer
     }
 
 
-def _creation(text: str) -> dict | None:
-    """La demande d'image ou de vidéo du message (chat/creations.py) ; jamais d'erreur ici."""
+def _creation(text: str, conversation_id=None) -> dict | None:
+    """La demande d'image ou de vidéo du message, ou la retouche de la dernière création
+    (chat/creations.py) ; jamais d'erreur ici."""
     try:
-        return creations.preflight(text)
+        return creations.preflight(text, conversation_id)
     except Exception as exc:
         log.warning("Demande de création illisible : %s", exc)
         return None

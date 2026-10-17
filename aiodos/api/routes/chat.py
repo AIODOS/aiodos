@@ -32,6 +32,7 @@ log = logging.getLogger("aiodos.chat")
 class PreflightIn(BaseModel):
     text: str
     model: str
+    conversation_id: int | None = None  # pour reconnaître la retouche d'une création
 
 
 class ChatIn(BaseModel):
@@ -57,7 +58,7 @@ def models():
 
 @router.post("/chat/preflight")
 def preflight(body: PreflightIn):
-    return pipeline.preflight(body.text, body.model)
+    return pipeline.preflight(body.text, body.model, body.conversation_id)
 
 
 def _flag(value, key):

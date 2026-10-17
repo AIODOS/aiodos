@@ -13,7 +13,8 @@ qui sait ainsi ce qui a été créé, sans voir les images.
 """
 import re
 
-from aiodos.chat import conversations
+from aiodos import settings
+from aiodos.chat import conversations, retouches
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -23,9 +24,12 @@ MAX_VIDEOS = 4                    # vidéos demandées d'une phrase, au plus (pl
 
 
 class CreationError(Exception):
-    def __init__(self, message, status=400):
+    """status : code HTTP ; friends : amis qui pourraient calculer, si on les y autorise."""
+
+    def __init__(self, message, status=400, friends=None):
         super().__init__(message)
         self.status = status
+        self.friends = friends or []
 
 
 # ------------------------------------------------------------- la demande, dans le texte
@@ -102,6 +106,11 @@ _DURATION = re.compile(r"(?:^|,?\s+(?:de|d'une durée de|pendant|durant|of)?\s*)
                        re.IGNORECASE)
 
 
+def technical(text: str) -> bool:
+    """Un sujet de code ou de système (Docker, ISO, Python…) : la réponse est un texte."""
+    return _TECHNICAL.search(text or "") is not None
+
+
 def _clean(text: str) -> str:
     text = text.replace("’", "'").replace("‘", "'")
     return " ".join(text.split())
@@ -116,7 +125,7 @@ def intent(text: str) -> dict | None:
     """{"kind": "image" | "video", "prompt", "count", "shape", "seconds"} si le message
     demande de créer une image ou une vidéo ; None sinon (question, code, simple mention)."""
     text = _clean(text or "")
-    if not text or len(text) > 2000 or _QUESTION.match(text) or _TECHNICAL.search(text):
+    if not text or len(text) > 2000 or _QUESTION.match(text) or technical(text):
         return None
     found = _REQUEST.search(text)
     if found:
@@ -239,37 +248,83 @@ def capability_note() -> str | None:
             "images créées : tu n'en connais que la description.")
 
 
-def preflight(text: str) -> dict | None:
+def preflight(text: str, conversation_id=None) -> dict | None:
     """La demande reconnue dans le message, et le modèle qui la calculerait (None : aucun
-    ne le peut en ce moment)."""
+    ne le peut en ce moment). Après une création, une retouche (« Fais-la de nuit ») ou
+    une variante (« Encore une ») de celle-ci : followup, d'après chat/retouches.py."""
     found = intent(text)
+    if found is None and conversation_id is not None:
+        last = conversations.last_media(conversation_id)
+        followup = retouches.detect(text) if last else None
+        if followup:
+            found = {"kind": last.get("kind") or "image", "prompt": None,
+                     "count": last.get("count") or 1, "shape": None, "seconds": None,
+                     "followup": followup, "model_wanted": last.get("model")}
     if found is None:
         return None
-    model_id = pick(found["kind"])
+    model_id = pick(found["kind"], found.pop("model_wanted", None))
     return {**found, "model": model_id,
             "label": catalog.MODELS[model_id]["label"] if model_id else None}
 
 
 # ------------------------------------------------------------------- dans la conversation
+def _nothing_can(media_kind: str) -> CreationError:
+    """Aucun modèle de ce genre ne peut calculer : la façon d'en avoir un. Des amis qui
+    le proposeraient, si on les y autorise, sont nommés (friends)."""
+    what = "vidéos" if media_kind == "video" else "images"
+    offered = sorted({name for model_id, names in lenders.helpers(friends=True).items()
+                      if catalog.MODELS.get(model_id, {}).get("kind", "image") == media_kind
+                      for name in names})
+    if offered and not settings.get("images_from_friends"):
+        who = ", ".join(offered)
+        return CreationError(
+            f"Aucun modèle de {what} n'est prêt ici ni chez tes machines, mais {who} "
+            f"{'peuvent' if len(offered) > 1 else 'peut'} les calculer pour toi : ta "
+            f"description et le résultat passeront chez {'eux' if len(offered) > 1 else 'lui'} "
+            f"le temps du calcul, sans y être gardés.", status=409, friends=offered)
+    return CreationError(f"Aucun modèle de {what} ne peut calculer en ce moment, ni ici ni "
+                         f"chez tes machines en ligne : installe-en un dans « Images et "
+                         f"vidéos ».", status=409)
+
+
+def _followed(request: dict, text: str, conv_id, chat_model) -> dict:
+    """Une retouche ou une variante de la dernière création de la conversation : ses
+    réglages (modèle, format, durée, nombre), et sa description retouchée ou reprise."""
+    last = conversations.last_media(conv_id) if conv_id is not None else None
+    if last is None:
+        return request
+    edit = request.get("followup") == retouches.EDIT
+    prompt = retouches.rewrite(last["prompt"], text, chat_model) if edit else last["prompt"]
+    return {**request, "kind": last.get("kind") or "image", "model": last.get("model"),
+            "prompt": prompt, "width": last.get("width"), "height": last.get("height"),
+            "frames": last.get("frames"), "count": request.get("count") or last.get("count"),
+            "shape": None, "seconds": None,
+            # Retouche : même graine, la composition reste ; variante : une autre
+            "seed": last.get("seed") if edit else None}
+
+
 def start(text: str, request: dict, conversation_id=None, chat_model=None) -> dict:
     """Ajoute la demande à la conversation (créée au besoin) et lance son travail.
     request : kind, model, prompt, count, width, height, shape, frames, seconds, seed,
-    negative (vides : tirés du message, du modèle et de ses réglages par défaut).
+    negative (vides : tirés du message, du modèle et de ses réglages par défaut), et
+    followup (retouche ou variante de la dernière création, chat/retouches.py).
     → {"conversation_id", "title", "user_message_id", "message_id", "job_id", "media"} ;
     CreationError si rien ne peut la calculer, ou si elle est invalide."""
     text = (text or "").strip()
     if not text:
         raise CreationError("Message vide.")
+    conv_id = conversation_id
+    if conv_id is not None and not conversations.get(conv_id):
+        conv_id = None
+    if request.get("followup") and not request.get("prompt"):
+        request = _followed(request, text, conv_id, chat_model)
     found = intent(text) or {}
     media_kind = request.get("kind") or found.get("kind") or "image"
     if media_kind not in ("image", "video"):
         raise CreationError("Genre inconnu : image ou vidéo.")
     model_id = pick(media_kind, request.get("model"))
     if model_id is None:
-        what = "vidéos" if media_kind == "video" else "images"
-        raise CreationError(f"Aucun modèle de {what} ne peut calculer en ce moment, ni ici ni "
-                            f"chez tes machines en ligne : installe-en un dans « Images et "
-                            f"vidéos ».", status=409)
+        raise _nothing_can(media_kind)
     # Un format choisi (largeur, hauteur) l'emporte sur celui que la phrase suggère ; il ne
     # vaut que pour le modèle demandé (un autre a ses propres formats et durées)
     same = model_id == request.get("model")
@@ -289,8 +344,7 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
             "seed": request.get("seed"), "steps": request.get("steps"), "frames": frames})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
-    conv_id = conversation_id
-    if conv_id is None or not conversations.get(conv_id):
+    if conv_id is None:
         conv_id = conversations.create(model=chat_model or None)
     user_message_id = conversations.add_message(conv_id, "user", text)
     title = conversations.auto_title(conv_id, text)

@@ -3,7 +3,7 @@
 // durée, nombre ; sans lui, une demande écrite (« Crée une image d'un phare… ») est reconnue
 // avant l'envoi. La réponse de l'assistant montre les images à mesure qu'elles arrivent,
 // calculées ici ou par tes machines qui ont le modèle.
-import { get, post } from '../api.js';
+import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit, prefs } from '../state.js';
@@ -155,6 +155,9 @@ export function creationRequest(text) {
 /** La demande reconnue dans un message (preflight) : le modèle préféré de ce genre, son
  *  format habituel si la phrase n'en dit rien. */
 export function autoRequest(found) {
+  if (found.followup) {           // retouche ou variante : les réglages de la dernière création
+    return { kind: found.kind, followup: found.followup, count: found.count };
+  }
   const model = prefs.get(`create.model.${found.kind}`, found.model) || found.model;
   const [width, height] = String(prefs.get(`images.format.${model}`, '')).split('x').map(Number);
   return { kind: found.kind, model, prompt: found.prompt, count: found.count, shape: found.shape,
@@ -168,17 +171,38 @@ export function resetMedia() {
   live.clear();
 }
 
-/** Une réponse qui ne vient pas d'un modèle (« aucun modèle d'images prêt »…), non gardée. */
-export function appendNotice(list, message, imagesButton = false) {
+/** Une réponse qui ne vient pas d'un modèle (« aucun modèle d'images prêt »…), non gardée.
+ *  friends : amis qui pourraient calculer, et retry() pour recommencer une fois autorisés. */
+export function appendNotice(list, message, { images = false, friends = [], retry = null } = {}) {
   list.querySelector('.welcome')?.remove();
   const node = h(`
     <div class="msg assistant notice">
       <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body"><div class="banner warn">${icon('warn')}<div>${esc(message)}</div>
-        ${imagesButton ? `<button class="btn sm" data-go-images>${icon('image')}Images et vidéos</button>` : ''}</div></div>
+        ${friends.length && retry ? `<button class="btn sm" data-friends-ok>${icon('network')}Autoriser mes amis</button>` : ''}
+        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}Images et vidéos</button>` : ''}</div></div>
     </div>`);
   node.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
+  node.querySelector('[data-friends-ok]')?.addEventListener('click', async () => {
+    try { state.settings = await put('/settings', { images_from_friends: true }); }
+    catch (err) { errorToast(err); return; }
+    node.remove();
+    retry();
+  });
   list.append(node);
+}
+
+/** En attendant la réponse du nœud (une retouche réécrit d'abord la description). */
+export function appendWaiting(list, label = '') {
+  list.querySelector('.welcome')?.remove();
+  const node = h(`
+    <div class="msg assistant waiting">
+      <img class="avatar" src="/logo.png?v=serpents" alt="">
+      <div class="body"><div class="typing"><i></i><i></i><i></i></div>
+        ${label ? `<span class="wait-label faint">${esc(label)}</span>` : ''}</div>
+    </div>`);
+  list.append(node);
+  return () => node.remove();
 }
 
 /** La réponse qui montre une création (media : chat/creations.py, view). */

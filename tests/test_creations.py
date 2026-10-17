@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from aiodos.api.server import create_app
-from aiodos.chat import conversations, creations, pipeline
+from aiodos.chat import conversations, creations, pipeline, retouches
 from aiodos.imaging import catalog, engine, generate
 from aiodos.jobs import queue
 from tests.test_images import png, ready, tiny_model, wait_for  # noqa: F401  (fixture)
@@ -163,3 +163,67 @@ def test_the_chat_model_knows_aiodos_can_create_images(tiny_model, monkeypatch):
     ready()
     monkeypatch.setattr(engine, "folder", lambda: tiny_model["folder"])
     assert "sait aussi créer des images :" in system()
+
+
+# ------------------------------------------------------------- retouches et variantes
+@pytest.mark.parametrize("text, expected", [
+    ("Fais-la de nuit", "edit"), ("Ajoute un chat sur le toit", "edit"),
+    ("Peux-tu la rendre plus lumineuse ?", "edit"), ("Encore une !", "variation"),
+    ("Une autre", "variation"), ("Pareil", "variation"),
+    ("Encore une, mais en noir et blanc", "edit"), ("avec un chien", "edit"),
+    ("Pourquoi est-elle floue ?", None), ("Merci beaucoup", None), ("Bonjour", None),
+    ("Sans rire, c'est génial", None), ("Avec plaisir", None),
+    ("Plus de détails sur ce modèle ?", None), ("Ajoute un script Python", None),
+])
+def test_a_follow_up_of_the_last_creation_is_recognized(text, expected):
+    assert retouches.detect(text) == expected
+
+
+def test_without_a_chat_model_the_request_is_added_to_the_description(monkeypatch):
+    def no_ollama(*args, **kwargs):
+        raise ConnectionError("Ollama arrêté")
+    monkeypatch.setattr(retouches.ollama, "list_models", no_ollama)
+    assert retouches.rewrite("un phare sous l'orage", "Fais-la de nuit") == \
+        "un phare sous l'orage, de nuit"
+
+
+def test_the_chat_model_rewrites_the_description(monkeypatch):
+    asked = []
+    monkeypatch.setattr(retouches.ollama, "list_models", lambda *a, **k: [{"name": "qwen3.5:9b"}])
+    monkeypatch.setattr(retouches.ollama, "capabilities_many", lambda names: {n: ["completion"] for n in names})
+
+    def fake_stream(model, messages, think=None, stop=None, options=None):
+        asked.append((model, messages[-1]["content"]))
+        yield "content", "« Un phare sous l'orage, la nuit, "
+        yield "content", "éclairé par la lune. »"
+    monkeypatch.setattr(retouches.ollama, "chat_stream", fake_stream)
+    assert retouches.rewrite("un phare sous l'orage", "Fais-la de nuit", "auto:qwen3.5:9b") == \
+        "Un phare sous l'orage, la nuit, éclairé par la lune."
+    assert asked[0][0] == "qwen3.5:9b" and "Fais-la de nuit" in asked[0][1]
+
+
+def test_a_variation_and_an_edit_follow_the_last_creation(client, can_draw, monkeypatch):
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "width": 1024, "height": 1024}).json()
+    conv = first["conversation_id"]
+    pre = client.post("/api/chat/preflight", headers=AUTH, json={
+        "text": "Encore une", "model": "", "conversation_id": conv}).json()["create"]
+    assert (pre["followup"], pre["kind"], pre["model"]) == ("variation", "image", "essai")
+    again = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Encore une", "followup": "variation", "conversation_id": conv}).json()["media"]
+    assert again["prompt"] == "un chat roux" and again["batch"] != first["media"]["batch"]
+    monkeypatch.setattr(retouches, "rewrite", lambda prompt, text, model=None: f"{prompt}, la nuit")
+    edited = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-la de nuit", "followup": "edit", "conversation_id": conv}).json()["media"]
+    assert edited["prompt"] == "un chat roux, la nuit" and edited["seed"] == again["seed"]
+    assert len(conversations.get(conv)["messages"]) == 6
+
+
+def test_friends_who_could_compute_are_offered(client, monkeypatch):
+    from aiodos.imaging import lenders
+    monkeypatch.setattr(lenders, "helpers", lambda friends=None: (
+        {"z-image-turbo": ["PC de Léa (ami)"]} if friends else {}))
+    reply = client.post("/api/chat/create", headers=AUTH,
+                        json={"text": "Crée une image d'un chat roux"})
+    assert reply.status_code == 409
+    assert reply.json()["friends"] == ["PC de Léa (ami)"] and "PC de Léa" in reply.json()["detail"]

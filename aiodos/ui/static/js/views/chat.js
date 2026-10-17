@@ -6,8 +6,8 @@ import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
-import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, resetMedia }
-  from './chat-create.js';
+import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
+  resetMedia } from './chat-create.js';
 
 const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think',
   'peer_libraries_enabled'];
@@ -562,7 +562,10 @@ async function send() {
   const model = selectedModel();
 
   let pre;
-  try { pre = await post('/chat/preflight', { text, model }); } catch (e) { errorToast(e); return; }
+  try {
+    pre = await post('/chat/preflight', {
+      text, model, conversation_id: state.currentConversation?.id ?? null });
+  } catch (e) { errorToast(e); return; }
   if (pre.create) { await create(text, autoRequest(pre.create)); return; }   // « Crée une image de… »
   if (!model) {
     if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
@@ -611,11 +614,14 @@ async function send() {
 
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
 // images s'ajoutent à la conversation, le calcul part dans la file
-async function create(text, request) {
+async function create(text, request, again = false) {
   creating = true;
-  el.input.value = '';
-  autoresize();
-  appendUser(text);
+  if (!again) {                  // une nouvelle tentative (amis autorisés) ne répète pas le message
+    el.input.value = '';
+    autoresize();
+    appendUser(text);
+  }
+  const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…' : '');
   scrollBottom(true);
   let made;
   try {
@@ -624,12 +630,16 @@ async function create(text, request) {
       chat_model: selectedModel() || null,
     });
   } catch (e) {
-    appendNotice(el.list, e.message, e.status === 409);    // 409 : aucun modèle ne peut la calculer
+    done();
+    // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être
+    appendNotice(el.list, e.message, { images: e.status === 409, friends: e.data?.friends || [],
+      retry: () => create(text, request, true) });
     scrollBottom(true);
     return;
   } finally {
     creating = false;
   }
+  done();
   if (state.currentConversation?.id !== made.conversation_id) {
     state.currentConversation = { id: made.conversation_id, title: made.title || 'Nouvelle conversation',
       model: selectedModel() };

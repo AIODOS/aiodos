@@ -10,16 +10,21 @@ if (token) {
 }
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, data = null) {
     super(message);
     this.status = status;
+    this.data = data;            // la réponse entière, quand elle dit plus que « detail »
   }
 }
 
 async function failure(res) {
   let message = `Erreur ${res.status}`;
-  try { message = (await res.json()).detail || message; } catch { /* pas de JSON */ }
-  return new ApiError(res.status, message);
+  let data = null;
+  try {
+    data = await res.json();
+    if (typeof data.detail === 'string') message = data.detail;
+  } catch { /* pas de JSON */ }
+  return new ApiError(res.status, message, data);
 }
 
 export async function api(method, path, body) {
