@@ -42,7 +42,7 @@ from aiodos.updates.store import Store, sha256_of  # noqa: E402
 # Ce qu'une machine fait tourner : ni les tests, ni la documentation, ni les sources du
 # compagnon (il est joint à part, construit pour chaque plateforme)
 RUNTIME = ["aiodos", "assets", "lancer.bat", "lancer-noeud.sh", "requirements.txt",
-           "requirements-node.txt", "LICENSE", "README.md"]
+           "requirements-node.txt", "LICENSE", "LICENSE-EXCEPTION.md", "README.md"]
 MIN_PYTHON = "3.11"
 KEYS_FILE = ROOT / "aiodos" / "updates" / "keys.py"
 
