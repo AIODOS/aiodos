@@ -154,7 +154,7 @@ prêtent leur puissance ; l'image revient et n'est gardée qu'ici. Le moteur est
 [stable-diffusion.cpp], livré avec les mises à jour, et le modèle Z-Image Turbo
 (Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis la vue,
 ou copié d'une de mes machines qui l'a déjà, sans Internet. Sur une
-RTX 4070 de portable : 35 s par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
+RTX 4070 de portable : 22 s par image en 1024 × 1024. Une image ne part jamais chez un ami. Détails et mesures :
 [docs/generation-repartie.md](docs/generation-repartie.md).
 
 ## Installation

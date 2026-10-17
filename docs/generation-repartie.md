@@ -165,14 +165,18 @@ L'étape 2 de la recommandation : des images entières, unités indépendantes d
 
 | | 1024 × 1024 | 512 × 512 |
 |---|---|---|
-| Chargement du modèle | 3 à 7 s | |
-| Première image après l'installation | 2 min 16 (compilation des shaders Vulkan : 70 s au premier pas, 26 s au décodage) | |
-| Image suivante | 35 s (3,7 s par pas, décodage 3,8 s) | 12 s |
+| Chargement du modèle | 1,5 à 7 s | |
+| Toute première image | 2 min 16 (compilation des shaders Vulkan : 70 s au premier pas, 26 s au décodage ; le pilote les garde ensuite) | |
+| Image, PC au repos | 22 s (2 s par pas, encodeur 1,6 s, décodage 2,6 s) | |
+| Image, suite de tests en parallèle | 35 s (3,7 s par pas) | 12 s |
 | Carte partagée avec Ollama | | 47 s |
 
 Le placement automatique de sd-server garde le cœur sur la carte (3,7 Go) et met
 l'encodeur de texte et le décodeur en mémoire vive : 2,8 Go de carte occupés entre deux
-images. Deux machines comme celle-ci font donc deux images en 35 s au lieu d'une.
+images. Deux machines comme celle-ci font donc deux images en 22 s au lieu d'une.
+
+Vérifié le 17/10/2026 : mistral:7b chargé dans Ollama (4,7 Go de carte), une image
+demandée : AIODOS l'a déchargé, sd-server s'est chargé en 1,5 s, l'image a pris 22 s.
 
 **Suite** :
 
