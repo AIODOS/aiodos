@@ -124,12 +124,13 @@ function renderBackground() {
   box.innerHTML = `
     <h2>${icon('cpu')}Travail de fond</h2>
     <div id="background-status"></div>
-    <p class="hint">Indexations et calculs pour tes machines passent après toi : priorité basse et mode
-      efficacité du processeur, toujours. Pendant une conversation sur cette machine, le calcul sur la carte
-      graphique attend la fin de la réponse.</p>
-    <div class="setting-row"><div class="txt"><b>Sur batterie</b><small>Ménager : une tâche à la fois,
-      moins de fils de calcul, et des pauses (calcul la moitié du temps). Attendre : rien ne tourne en fond
-      avant le retour du secteur. Les conversations restent servies dans tous les cas.</small></div>
+    <p class="hint">Indexations et calculs pour tes machines passent après toi : priorité basse, toujours
+      (et sous Windows, mode efficacité du processeur). Pendant une conversation sur cette machine, le calcul
+      sur la carte graphique attend la fin de la réponse.</p>
+    <div class="setting-row"><div class="txt"><b>Sur batterie</b><small>Ménager : une unité à la fois par
+      ressource (carte graphique, processeur…), moins de fils de calcul, et des pauses (calcul la moitié du
+      temps). Attendre : rien ne tourne en fond avant le retour du secteur. Les conversations restent servies
+      dans tous les cas.</small></div>
       <select class="select" id="battery-mode" style="width:240px">${options.map(([v, l]) =>
         `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',

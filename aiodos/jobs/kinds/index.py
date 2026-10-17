@@ -123,14 +123,15 @@ def compute_index_file(payload, file, options, stop=None):
     if not path.exists():
         raise FileNotFoundError(f"Fichier introuvable : {payload.get('path') or payload['source']}")
     vision = transcribe = None
+    pace = lambda seconds: pacing.step(seconds, stop)       # entre deux pages, deux segments
     if options.get("vision"):
         model, mode = options["vision"]["model"], options["vision"]["mode"]
         vision = lambda p: pacing.paced(lambda: media.vision_extract(p, model, mode), stop)
     if options.get("whisper"):
         transcribe = lambda p: media.transcribe(
             p, options["whisper"], stop=stop, threads=pacing.threads(media.WHISPER_THREADS),
-            rest=lambda seconds: pacing.rest(seconds, stop))
-    text = extract.extract_text(path, vision=vision, transcribe=transcribe)
+            pace=pace)
+    text = extract.extract_text(path, vision=vision, transcribe=transcribe, pace=pace)
     if stop is not None and stop.is_set():
         raise Interrupted()
     if not text or not text.strip():

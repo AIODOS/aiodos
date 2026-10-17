@@ -7,8 +7,9 @@ jeton tiré au hasard à chaque lancement protège son API (passé par une varia
 d'environnement, jamais dans les journaux ni sur la ligne de commande). AIODOS lui donne
 la liste des machines appairées (liste blanche) et lui confie les requêtes qui ne
 passent pas par le réseau local (cf. route.py). Si AIODOS s'arrête, même brutalement,
-le compagnon s'arrête avec lui (il surveille son entrée standard). Il tourne en fond :
-priorité inférieure à la normale et mode efficacité EcoQoS (node/priority.py).
+le compagnon s'arrête avec lui (il surveille son entrée standard). Il garde la priorité
+normale : il relaie aussi des conversations (modèles prêtés par Internet), et son
+processeur est négligeable (docs/arriere-plan.md § 2).
 """
 import json
 import logging
@@ -26,7 +27,6 @@ import requests
 
 from aiodos import paths
 from aiodos.network.client import error_detail
-from aiodos.node import priority
 from aiodos.network.route import NO_PROXY
 from aiodos.updates import binaries, launcher
 from aiodos.updates.manifest import UpdateError
@@ -262,11 +262,10 @@ class Companion:
             process = subprocess.Popen(
                 self.command(binary), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, env=env, text=True, encoding="utf-8",
-                errors="replace", creationflags=_NO_WINDOW | priority.CREATION_FLAGS)
+                errors="replace", creationflags=_NO_WINDOW)
         except OSError as exc:
             self._broken.add(origin)          # le suivant sera essayé (cf. locate)
             return self._fail(f"Le compagnon aiodos-net ({origin}) ne se lance pas : {exc}")
-        priority.lower_process(process.pid)
         ready = threading.Event()
         found = {}
         threading.Thread(target=self._read_stdout, args=(process, ready, found), daemon=True,
@@ -301,7 +300,6 @@ class Companion:
         if stopping:
             _terminate(process)
             return False
-        priority.lower_process(process.pid)   # Linux : les threads créés depuis le lancement
         build = ""
         if found.get("version"):
             build += f", version {found['version']}"

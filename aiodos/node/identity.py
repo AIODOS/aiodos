@@ -5,6 +5,7 @@ qui peut faire quoi : VRAM, modèles installés, machine inactive ou sur secteur
 L'alimentation (secteur, batterie, température) est lue par node/power.py.
 """
 import ctypes
+import functools
 import json
 import os
 import platform
@@ -117,9 +118,29 @@ def idle_seconds():
         _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_ulong)]
     info = LastInput()
     info.cbSize = ctypes.sizeof(LastInput)
-    if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
-        return max(0, (ctypes.windll.kernel32.GetTickCount() - info.dwTime) / 1000)
+    user32, kernel32 = _input_api()
+    if user32.GetLastInputInfo(ctypes.byref(info)):
+        return idle_from_ticks(kernel32.GetTickCount(), info.dwTime)
     return None
+
+
+def idle_from_ticks(now: int, last_input: int) -> float:
+    """Secondes entre deux instants de GetTickCount, un compteur de millisecondes sur
+    32 bits sans signe : il dépasse 2^31 après 24,9 jours de fonctionnement et repart de
+    zéro après 49,7. La différence se calcule donc modulo 2^32."""
+    return ((now - last_input) & 0xFFFFFFFF) / 1000
+
+
+@functools.lru_cache(maxsize=1)
+def _input_api():
+    """user32 et kernel32 avec des types exacts : sans restype, ctypes lirait GetTickCount
+    comme un entier signé, négatif au-delà de 24,9 jours (le PC passerait pour utilisé)."""
+    from ctypes import wintypes
+    user32, kernel32 = ctypes.WinDLL("user32"), ctypes.WinDLL("kernel32")
+    kernel32.GetTickCount.restype = wintypes.DWORD
+    user32.GetLastInputInfo.argtypes = [ctypes.c_void_p]
+    user32.GetLastInputInfo.restype = wintypes.BOOL
+    return user32, kernel32
 
 
 def _models(vram_total) -> list:

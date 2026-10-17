@@ -82,10 +82,10 @@ Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --
 `requirements-node.txt` suffit à l'installer (ni fenêtre, ni Whisper).
 
 **Le travail de fond passe après l'utilisateur** : indexations et calcul pour les autres
-machines tournent en priorité basse et en mode efficacité du processeur ; pendant une
-conversation, le calcul sur la carte graphique attend la fin de la réponse ; sur batterie,
-il est ménagé (une tâche à la fois, des pauses, moins de fils de calcul), ou attend le
-secteur, au choix. Mesures et détails : [docs/arriere-plan.md](docs/arriere-plan.md).
+machines tournent en priorité basse (et sous Windows, en mode efficacité du processeur) ;
+pendant une conversation, le calcul sur la carte graphique attend la fin de la réponse ;
+sur batterie, il est ménagé (une unité à la fois par ressource, des pauses, moins de fils
+de calcul), ou attend le secteur, au choix. Mesures et détails : [docs/arriere-plan.md](docs/arriere-plan.md).
 
 **Un téléphone Android** peut aussi calculer, sous Termux : il ne prête sa puissance
 qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.

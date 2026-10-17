@@ -4,7 +4,7 @@ Deux nœuds sur la même base fonctionneraient (les réservations d'unités sont
 atomiques), mais deux fenêtres identiques prêteraient à confusion. AIODOS relancé
 alors qu'il tourne déjà (fenêtre cachée dans la zone de notification…) demande à
 l'instance en place de montrer sa fenêtre (wake_running) : le verrou garde pour cela
-le port et le jeton de son API locale, comme le journal d'un nœud sans fenêtre.
+le port de son API locale et une clé propre à cette demande (pas le jeton de l'API).
 """
 import ctypes
 import json
@@ -52,13 +52,14 @@ def running() -> bool:
         return False
 
 
-def acquire(port: int, token: str | None = None) -> bool:
-    """Réserve l'instance. Faux si une autre instance vivante tient déjà le verrou."""
+def acquire(port: int, show_key: str | None = None) -> bool:
+    """Réserve l'instance. Faux si une autre instance vivante tient déjà le verrou.
+    show_key : clé qui fera revenir sa fenêtre (cf. wake_running, POST /instance/show)."""
     if running():
         return False
     lock = {"pid": os.getpid(), "port": port}
-    if token:
-        lock["token"] = token
+    if show_key:
+        lock["show_key"] = show_key
     _lock_file().write_text(json.dumps(lock), encoding="utf-8")
     return True
 
@@ -77,7 +78,7 @@ def wake_running(timeout: float = 5) -> bool:
     """Demande à l'instance qui tient le verrou de montrer sa fenêtre. Vrai si c'est fait."""
     try:
         other = json.loads(_lock_file().read_text(encoding="utf-8"))
-        pid, port, token = int(other["pid"]), int(other["port"]), str(other["token"])
+        pid, port, key = int(other["pid"]), int(other["port"]), str(other["show_key"])
     except (OSError, ValueError, KeyError, TypeError):
         return False
     if sys.platform == "win32":
@@ -85,8 +86,8 @@ def wake_running(timeout: float = 5) -> bool:
         ctypes.windll.user32.AllowSetForegroundWindow(pid)
     import requests
     try:
-        reply = requests.post(f"http://127.0.0.1:{port}/api/window/show", timeout=timeout,
-                              headers={"X-Aiodos-Token": token},
+        reply = requests.post(f"http://127.0.0.1:{port}/instance/show", timeout=timeout,
+                              headers={"X-Aiodos-Show": key},
                               proxies={"http": None, "https": None})
         return reply.ok and reply.json().get("shown") is True
     except (requests.RequestException, ValueError):

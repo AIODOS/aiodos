@@ -38,6 +38,14 @@ def engine_down(exc) -> bool:
     return url.startswith(ollama.base())
 
 
+def _run_unit(task, payload) -> tuple:
+    """Une unité de la file (thread de fond), et le temps passé à attendre ou à se reposer
+    (jobs/pacing.py) : il ne compte pas dans le temps de calcul."""
+    before = pacing.waited()
+    result = registry.run_local(task, payload)
+    return result, pacing.waited() - before
+
+
 class Executor:
     def __init__(self, node_id: str, publish, slots: dict | None = None):
         self.node_id = node_id
@@ -137,9 +145,10 @@ class Executor:
     async def _execute(self, unit):
         started = time.perf_counter()
         try:
-            result = await priority.run(registry.run_local, unit["task"], unit["payload"])
+            result, waited = await priority.run(_run_unit, unit["task"], unit["payload"])
             job_id, finished = await asyncio.to_thread(
-                queue.finish_unit, unit["id"], result or {}, time.perf_counter() - started)
+                queue.finish_unit, unit["id"], result or {},
+                max(0.0, time.perf_counter() - started - waited))
         except registry.Interrupted:         # arrêt d'AIODOS pendant une attente : rien n'a échoué
             await asyncio.to_thread(queue.release_unit, unit["id"])
             job_id, finished = unit["job_id"], False

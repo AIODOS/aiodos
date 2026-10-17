@@ -29,15 +29,16 @@ _whisper_lock = threading.Lock()
 WHISPER_THREADS = 4               # fils de calcul de faster-whisper par défaut (cpu_threads=0)
 
 
-def transcribe(path, model_name: str = "small", stop=None, threads=None, rest=None) -> str:
+def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=None) -> str:
     """Transcrit la parole d'un fichier audio ou vidéo (une à la fois : le
     modèle Whisper occupe déjà plusieurs cœurs du processeur).
 
     stop    : threading.Event ; s'il est levé, la transcription s'arrête au segment
               suivant (le texte partiel renvoyé doit alors être ignoré par l'appelant) ;
     threads : fils de calcul (None : WHISPER_THREADS) ; un autre nombre recharge le modèle ;
-    rest    : rest(secondes) après chaque segment, avec le temps qu'il a pris (cadence du
-              travail de fond, cf. jobs/pacing.py)."""
+    pace    : pace(secondes) après chaque segment, avec le temps qu'il a pris : la cadence
+              du travail de fond (jobs/pacing.py : pause sur batterie, attente du secteur)
+              passe avant le calcul du segment suivant."""
     with _whisper_lock:
         key = (model_name, threads or 0)
         model = _whisper.get(key)
@@ -55,8 +56,8 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, rest=No
                 break
             if segment.text.strip():
                 lines.append(segment.text.strip())
-            if rest is not None:
-                rest(time.monotonic() - began)
+            if pace is not None:
+                pace(time.monotonic() - began)
                 began = time.monotonic()
         text = "\n".join(lines)
     language = getattr(info, "language", "?")

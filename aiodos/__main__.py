@@ -117,7 +117,8 @@ def _serve(args) -> int:
 
     port = args.port or _free_port()
     token = secrets.token_urlsafe(24)
-    if not instance.acquire(port, token):
+    show_key = secrets.token_urlsafe(24)        # pour faire revenir la fenêtre, sans le jeton
+    if not instance.acquire(port, show_key):
         # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
         if args.headless or not instance.wake_running():
             _alert("AIODOS est déjà ouvert sur cette machine.")
@@ -136,7 +137,7 @@ def _serve(args) -> int:
             "internet": args.internet or args.internet_local or bool(args.internet_relay_only),
             "internet_local": args.internet_local,
             "internet_relay_only": args.internet_relay_only}, _parse_slots(args.slots),
-            windowed=not args.headless)
+            windowed=not args.headless, show_key=show_key)
         # log_config=None : uvicorn utilise notre journalisation (fichier) au lieu
         # de la sienne, qui suppose une console
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,

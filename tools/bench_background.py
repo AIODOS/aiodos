@@ -374,7 +374,9 @@ def run(args) -> dict:
     simulate = "battery" if args.battery else None
     node = Node(code, data, simulate, args.slots)
     recorder = Recorder(node)
-    result = {"label": args.label, "code": str(code), "revision": revision(code),
+    # Pas de chemin local dans les résultats (nom d'utilisateur, dossiers de travail)
+    result = {"label": args.label, "code": "ce dépôt" if code == REPO else code.name,
+              "revision": revision(code),
               "simulation": simulate, "settings": dict(args.set), "slots": args.slots,
               "corpus": f"{args.big} gros fichiers" if args.big else args.corpus,
               "machine": machine(), "chat_model": args.chat_model, "at": time.strftime("%Y-%m-%d %H:%M:%S")}

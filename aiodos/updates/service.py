@@ -29,7 +29,7 @@ from aiodos import __version__, settings
 from aiodos.jobs import queue
 from aiodos.network import peers
 from aiodos.network.client import PeerError
-from aiodos.node import identity, priority
+from aiodos.node import identity
 from aiodos.updates import binaries, install, launcher, p2p, platforms, restart, state
 from aiodos.updates import manifest as manifests
 from aiodos.updates import version as versions
@@ -85,7 +85,6 @@ class UpdateService:
         self._wake.set()
 
     def _run(self):
-        priority.lower_current_thread()          # travail de fond (node/priority.py)
         self._tidy()
         while not self._stopping:
             try:

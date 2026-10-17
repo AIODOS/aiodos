@@ -3,9 +3,12 @@
 Ce qui sert directement l'utilisateur (interface, conversations) garde la priorité
 normale. Ce qui travaille en fond la cède :
   - les threads du travail de fond : unités de la file et calcul pour d'autres machines,
-    exécutés par un groupe de threads à part (run), et le service des mises à jour ;
-  - les programmes qu'AIODOS lance pour lui-même : compagnon aiodos-net, nvidia-smi,
-    essai d'une nouvelle version (CREATION_FLAGS, lower_process).
+    exécutés par un groupe de threads à part (run) ;
+  - nvidia-smi, que le profil de la machine lance souvent (CREATION_FLAGS) ; lower_process
+    sert à un programme de calcul lancé en fond.
+Restent en priorité normale : le compagnon aiodos-net, qui relaie aussi des
+conversations, et l'essai d'une nouvelle version, dont le délai ne doit pas dépendre de
+la charge du PC (une version qui le dépasse est refusée 24 h).
 
 Windows (documentation de Microsoft, relue le 17/10/2026) :
   - un thread de fond passe en priorité « inférieure à la normale »

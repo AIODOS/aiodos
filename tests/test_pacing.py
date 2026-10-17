@@ -184,7 +184,7 @@ def test_every_embedding_request_carries_it(loaded, monkeypatch):
 
 
 # ------------------------------------------------ fils de calcul : Whisper
-def test_whisper_takes_fewer_threads_and_rests(monkeypatch):
+def test_whisper_takes_fewer_threads_and_is_paced(monkeypatch):
     created = []
 
     class FakeWhisper:
@@ -196,9 +196,75 @@ def test_whisper_takes_fewer_threads_and_rests(monkeypatch):
             return iter(segments), SimpleNamespace(language="fr")
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisper))
     monkeypatch.setattr(media, "_whisper", {})
-    rests = []
-    text = media.transcribe(Path("note.wav"), "small", threads=2, rest=rests.append)
-    assert created == [2] and len(rests) == 2 and text.endswith("un\ndeux")
+    paces = []
+    text = media.transcribe(Path("note.wav"), "small", threads=2, pace=paces.append)
+    assert created == [2] and len(paces) == 2 and text.endswith("un\ndeux")
     media.transcribe(Path("note.wav"), "small", threads=2)    # même modèle, gardé
     media.transcribe(Path("note.wav"), "small")               # secteur : fils par défaut
     assert created == [2, 0] and len(media._whisper) == 1
+
+
+# ------------------------------------- calcul sur le processeur : pages, segments
+def test_waiting_for_mains_stops_a_long_transcription_between_segments(battery, monkeypatch,
+                                                                       tmp_path):
+    """En « attendre le secteur », une longue vidéo s'arrête au segment suivant (une unité
+    pour une autre machine lui est rendue ; une unité d'ici attendrait)."""
+    from aiodos.jobs.kinds import index
+    _mode("pause")
+    done = []
+
+    def transcribe(path, model_name, stop=None, threads=None, pace=None):
+        for segment in range(3):
+            pace(0.01)                          # après chaque segment : la cadence
+            done.append(segment)
+        return "texte"
+    monkeypatch.setattr(media, "transcribe", transcribe)
+    video = tmp_path / "cours.mp4"
+    video.write_bytes(b"\x00")
+    with pytest.raises(registry.Interrupted):
+        index.compute_index_file({"path": str(video), "source": "cours.mp4"}, str(video),
+                                 {"embed_model": "x", "vision": None, "whisper": "small"},
+                                 threading.Event())
+    assert done == []
+
+
+def test_documents_are_paced_page_by_page(tmp_path):
+    from aiodos.services import extract
+    durations = []
+    assert list(extract.paced(["p1", "p2", "p3"], durations.append)) == ["p1", "p2", "p3"]
+    assert len(durations) == 3 and all(d >= 0 for d in durations)
+    assert list(extract.paced(["seul"])) == ["seul"]               # sans cadence
+
+    def stopped(seconds):
+        raise registry.Interrupted()
+    with pytest.raises(registry.Interrupted):
+        list(extract.paced(["p1", "p2"], stopped))
+
+
+def test_step_rests_on_battery_then_waits_for_mains(battery, no_sleep):
+    pacing.step(0.4)                                       # « ménager » : une pause
+    assert no_sleep == [pytest.approx(0.4)]
+    _mode("pause")
+    with pytest.raises(registry.Interrupted):              # pour une autre machine : rendue
+        pacing.step(0.4, threading.Event())
+
+
+def test_unknown_power_is_mains_on_a_pc_but_battery_on_a_phone(monkeypatch):
+    monkeypatch.setattr(pacing.power, "read", lambda: {"plugged": None, "mobile": False})
+    assert pacing.refresh(force=True)["mode"] == "ac"
+    monkeypatch.setattr(pacing.power, "read", lambda: {"plugged": None, "mobile": True})
+    assert pacing.refresh(force=True)["mode"] == "eco"
+
+
+# --------------------------------------------- temps de calcul sans les attentes
+def test_waiting_is_not_counted_as_computing(monkeypatch):
+    """Réciprocité : le temps passé à attendre une conversation ou à se reposer ne compte
+    pas comme du calcul donné (ni dans les statistiques d'une unité d'ici)."""
+    from aiodos.jobs import executor
+
+    def unit(task, payload):
+        pacing._count_wait(time.monotonic() - 0.25)       # 0,25 s d'attente pendant l'unité
+        return {"ok": True}
+    monkeypatch.setattr(registry, "run_local", unit)
+    result, waited = executor._run_unit("index_file", {})
+    assert result == {"ok": True} and waited == pytest.approx(0.25, abs=0.05)

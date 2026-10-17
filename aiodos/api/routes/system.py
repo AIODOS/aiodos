@@ -1,4 +1,5 @@
 """Réglages, flux d'événements, ouverture de liens externes, fenêtre à montrer."""
+import secrets
 import webbrowser
 
 from fastapi import APIRouter, HTTPException, Request
@@ -9,6 +10,8 @@ from aiodos import instance, settings
 from aiodos.jobs.kinds import reindex
 
 router = APIRouter(prefix="/api")
+# Hors de /api : protégé par sa propre clé (cf. instance.wake_running), pas par le jeton
+window_router = APIRouter()
 
 # Options avec lesquelles le compagnon Internet se lance : changées, il repart avec
 COMPANION_OPTIONS = {"internet_relays", "internet_directory", "internet_portmap"}
@@ -45,10 +48,16 @@ async def events(request: Request):
                              headers={"Cache-Control": "no-cache"})
 
 
-@router.post("/window/show")
-def show_window():
+@window_router.post("/instance/show", include_in_schema=False)
+def show_window(request: Request):
     """AIODOS relancé alors qu'il tourne déjà (fenêtre cachée dans la zone de
-    notification…) : la fenêtre de cette instance revient (cf. instance.wake_running)."""
+    notification…) : la fenêtre de cette instance revient (cf. instance.wake_running).
+    La clé, propre à cette demande, ne donne accès à rien d'autre."""
+    expected = getattr(request.app.state, "show_key", None)
+    given = request.headers.get("x-aiodos-show", "")
+    # En octets : un en-tête non ASCII doit être refusé, pas faire échouer la comparaison
+    if not expected or not secrets.compare_digest(given.encode(), expected.encode()):
+        raise HTTPException(403, "Clé refusée.")
     return {"shown": instance.show_window()}
 
 

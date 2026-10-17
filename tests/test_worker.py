@@ -215,6 +215,80 @@ def test_lending_goes_on_while_the_pc_is_used_on_mains_only(monkeypatch):
     assert sharing_state()["state"] == "ready"
 
 
+def test_unknown_activity_on_mains_counts_as_use(monkeypatch):
+    """Linux, nœud sans écran : activité inconnue, donc les égards d'une utilisation (carte
+    graphique prêtée la moitié du temps). « Seulement quand je n'utilise pas ce PC » prête
+    alors sans retenue, faute de pouvoir mesurer une utilisation (règle d'avant)."""
+    settings.set_value("share_enabled", True)
+    monkeypatch.setattr(identity, "idle_seconds", lambda: None)
+    _supply(monkeypatch, plugged=True)
+    state = sharing_state()
+    assert state["active"] and state["state"] == "in_use" and "pas mesurable" in state["detail"]
+    settings.set_value("share_when_idle", True)
+    assert sharing_state()["state"] == "ready"
+
+
+def test_idle_time_survives_the_tick_counter_overflow():
+    """GetTickCount : 32 bits sans signe, au-delà de 2^31 après 24,9 jours, à zéro après
+    49,7 jours. Avant la correction, le PC passait alors pour utilisé en permanence."""
+    assert identity.idle_from_ticks(10_000, 4_000) == 6.0
+    assert identity.idle_from_ticks(2**31 + 9_000, 2**31 - 1_000) == 10.0     # 24,9 jours
+    assert identity.idle_from_ticks(5_000, 2**32 - 4_096) == 9.096          # tour complet
+
+
+def test_real_idle_time_is_sane_on_windows(monkeypatch):
+    if not identity.sys.platform == "win32":
+        pytest.skip("Windows")
+    monkeypatch.delenv("AIODOS_SIMULATE_IDLE", raising=False)
+    idle = identity.idle_seconds()
+    assert idle is not None and 0 <= idle < 50 * 24 * 3600
+
+
+def test_machines_that_already_lend_keep_lending_only_when_idle():
+    """Migration 6 : le nouveau défaut (prêter pendant l'utilisation) ne vaut que pour les
+    nouvelles installations ; une machine où le partage a été réglé garde l'ancienne règle,
+    sauf choix explicite."""
+    import sqlite3
+
+    def base(rows):
+        db.close()
+        path = paths.db_path()
+        for suffix in ("", "-wal", "-shm"):
+            path.with_name(path.name + suffix).unlink(missing_ok=True)
+        db._initialized.discard(str(path))
+        conn = sqlite3.connect(path)
+        conn.executescript(db.SCHEMA)
+        for target in sorted(db.MIGRATIONS):
+            if target <= 5:
+                conn.executescript(db.MIGRATIONS[target])
+        conn.executemany("INSERT INTO settings(key, value) VALUES(?, ?)", rows)
+        conn.execute("PRAGMA user_version=5")
+        conn.commit()
+        conn.close()
+        return settings.get("share_when_idle")
+
+    assert base([("share_enabled", "true")]) is True
+    assert base([("share_enabled", "false")]) is True                     # réglé, puis coupé
+    assert base([("share_enabled", "true"), ("share_when_idle", "false")]) is False
+    assert base([]) is False                                              # jamais réglé
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 6
+
+
+def test_the_owner_is_credited_with_computing_not_waiting(setup, monkeypatch):
+    """Réciprocité : une pause sur batterie ou l'attente d'une conversation, pendant une
+    unité prêtée, ne compte pas comme du calcul donné."""
+    import time
+    from aiodos.jobs import pacing
+
+    def compute(payload, file, options, stop):
+        pacing._count_wait(time.monotonic() - 30)          # 30 s d'attente « pendant » l'unité
+        return {"pieces": ["texte"], "vectors": np.ones((1, 4), dtype=np.float32)}
+    _compute_with(monkeypatch, compute)
+    assert setup["lender"]._process(setup["assignment"]).startswith("faite")
+    ledger = {p["node_id"]: p for p in peers.list_peers()}
+    assert 0 <= ledger[OWNER]["given_s"] < 5                # pas 30 s
+
+
 def test_activity_can_be_simulated_for_tests_and_measurements(monkeypatch):
     """Les tests ne dépendent pas de ce que fait l'utilisateur de la machine pendant
     qu'ils tournent (conftest : inactif depuis un jour)."""

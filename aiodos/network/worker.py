@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aiodos import __version__, paths, settings
-from aiodos.jobs import leases, registry
+from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.models import GPU_BOUND
 from aiodos.network import client, peers, route, wire, work
@@ -89,10 +89,14 @@ def sharing_state(previous=None) -> dict:
         # Prêt pendant l'utilisation : jamais sur batterie, même si le partage y est permis
         return {"active": False, "state": "battery",
                 "detail": f"En pause : {device} est utilisé et sur batterie."}
-    elif idle is not None and idle < wait:
+    elif in_use:
+        # Activité inconnue (Linux, nœud sans écran) : les mêmes égards que pendant une
+        # utilisation. « Seulement quand je n'utilise pas ce PC » prête alors sans retenue,
+        # faute de pouvoir mesurer une utilisation (règle d'avant).
+        when = ("pendant que tu utilises ce PC" if idle is not None
+                else "(l'activité de ce PC n'est pas mesurable)")
         return {"active": True, "state": "in_use",
-                "detail": "Prêt à calculer pour tes autres machines, en priorité basse pendant "
-                          "que tu utilises ce PC."}
+                "detail": f"Prêt à calculer pour tes autres machines, en priorité basse {when}."}
     return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
 
 
@@ -333,7 +337,7 @@ class Worker:
             pass                   # sans réponse, le bail expirera chez le propriétaire
 
     def _process(self, a: Assignment) -> str:
-        started = time.perf_counter()
+        started, waited = time.perf_counter(), pacing.waited()
         folder = paths.work_dir() / f"{a.peer_id[:8]}-{int(a.order['id'])}"
         try:
             spec = registry.TASKS.get(a.order["task"])
@@ -341,7 +345,8 @@ class Worker:
                 raise RuntimeError(f"tâche « {a.order['task']} » inconnue sur cette machine")
             file = self._download(a, folder) if a.order.get("blob") else None
             output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)
-            compute_s = time.perf_counter() - started
+            # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
+            compute_s = max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
             reply = self._send_result(a, output, compute_s)
             if not reply.get("accepted"):
                 return f"résultat refusé ({reply.get('reason')})"
@@ -359,7 +364,8 @@ class Worker:
                 self._quiet(a, "work/release")
                 return "Ollama injoignable ici : unité rendue"
             self._quiet(a, "work/fail", error=str(exc)[:400],
-                        compute_s=time.perf_counter() - started)
+                        compute_s=max(0.0, time.perf_counter() - started
+                                      - (pacing.waited() - waited)))
             return f"échec : {exc}"
         finally:
             shutil.rmtree(folder, ignore_errors=True)

@@ -58,8 +58,15 @@ def eco_threads(default: int | None = None) -> int:
     return max(1, (os.cpu_count() or 4) // 4)
 
 
+def _on_battery(supply: dict) -> bool:
+    """Sur batterie. Une alimentation inconnue compte comme le secteur sur un PC (machine
+    de bureau, état illisible), comme la batterie sur un téléphone, qui en a toujours une."""
+    plugged = supply.get("plugged")
+    return plugged is False or (plugged is None and bool(supply.get("mobile")))
+
+
 def _regime(mode: str, supply: dict) -> dict:
-    if supply.get("plugged") is not False:
+    if not _on_battery(supply):
         return AC
     if mode == "normal":
         return {**AC, "mode": "normal", "on_battery": True,
@@ -69,8 +76,8 @@ def _regime(mode: str, supply: dict) -> dict:
                 "detail": "Sur batterie : le travail de fond attend le retour du secteur."}
     return {"mode": "eco", "on_battery": True, "slots": dict(BATTERY_SLOTS),
             "duty": BATTERY_DUTY, "threads": eco_threads(),
-            "detail": "Sur batterie : travail de fond ménagé (une unité à la fois, "
-                      "pauses entre les lots, moins de fils de calcul)."}
+            "detail": "Sur batterie : travail de fond ménagé (une unité à la fois par "
+                      "ressource, pauses entre les lots, moins de fils de calcul)."}
 
 
 def refresh(force: bool = False) -> dict:
@@ -120,6 +127,19 @@ def chatting() -> bool:
 
 
 # ------------------------------------------------------------------- lots
+_waits = threading.local()
+
+
+def waited() -> float:
+    """Secondes passées par ce thread à attendre et à se reposer (wait_turn, rest) : à
+    retirer du temps de calcul d'une unité (réciprocité, statistiques)."""
+    return getattr(_waits, "seconds", 0.0)
+
+
+def _count_wait(began: float):
+    _waits.seconds = waited() + time.monotonic() - began
+
+
 def _check(stop):
     if _stopping.is_set() or (stop is not None and stop.is_set()):
         raise Interrupted()
@@ -141,17 +161,21 @@ def wait_turn(stop=None, gpu: bool = True):
     carte graphique), et le retour du secteur en mode « pause ». Une unité calculée pour
     une autre machine (`stop` donné) n'attend pas le secteur : elle est rendue
     (Interrupted), son propriétaire la confiera ailleurs."""
-    while True:
-        _check(stop)
-        if gpu and chatting():
-            _idle.wait(POLL)
-            continue
-        if refresh()["mode"] == "pause":
-            if stop is not None:
-                raise Interrupted()
-            _sleep(PAUSE_POLL, stop)
-            continue
-        return
+    began = time.monotonic()
+    try:
+        while True:
+            _check(stop)
+            if gpu and chatting():
+                _idle.wait(POLL)
+                continue
+            if refresh()["mode"] == "pause":
+                if stop is not None:
+                    raise Interrupted()
+                _sleep(PAUSE_POLL, stop)
+                continue
+            return
+    finally:
+        _count_wait(began)
 
 
 def rest(worked: float, stop=None):
@@ -159,7 +183,18 @@ def rest(worked: float, stop=None):
     le calcul à BATTERY_DUTY du temps."""
     duty = refresh()["duty"]
     if duty < 1 and worked > 0:
-        _sleep(min(MAX_REST, worked * (1 - duty) / duty), stop)
+        began = time.monotonic()
+        try:
+            _sleep(min(MAX_REST, worked * (1 - duty) / duty), stop)
+        finally:
+            _count_wait(began)
+
+
+def step(worked: float, stop=None):
+    """Entre deux pas d'un calcul sur le processeur (page d'un document, segment d'une
+    transcription) : la pause sur batterie, puis l'attente du secteur en mode « pause »."""
+    rest(worked, stop)
+    wait_turn(stop, gpu=False)
 
 
 def paced(call, stop=None, gpu: bool = True):

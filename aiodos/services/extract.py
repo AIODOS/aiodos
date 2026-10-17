@@ -8,6 +8,7 @@ minimal ou un téléphone peut manquer d'un paquet de lecture (python-pptx…).
 """
 import importlib.util
 import re
+import time
 import zipfile
 from pathlib import Path
 
@@ -66,11 +67,25 @@ def _installed(module) -> bool:
         return False
 
 
-def extract_text(path, vision=None, transcribe=None):
+def paced(items, pace=None):
+    """Les éléments de `items`, avec pace(secondes) après chacun, le temps qu'il a pris
+    pour être traité : la cadence du travail de fond (jobs/pacing.py) passe entre deux
+    pages, deux diapositives, deux chapitres."""
+    began = time.monotonic()
+    for item in items:
+        yield item
+        if pace is not None:
+            pace(time.monotonic() - began)
+            began = time.monotonic()
+
+
+def extract_text(path, vision=None, transcribe=None, pace=None):
     """Texte du fichier, ou None s'il n'y a rien d'exploitable.
 
     vision     : callable(path) -> str pour les images (None = ignorer)
     transcribe : callable(path) -> str pour l'audio/vidéo (None = ignorer)
+    pace       : pace(secondes) entre deux pages (PDF), diapositives, feuilles ou
+                 chapitres (EPUB) d'un document (cf. paced)
     """
     p = Path(path)
     family = classify(p)
@@ -83,18 +98,18 @@ def extract_text(path, vision=None, transcribe=None):
     if p.stat().st_size > MAX_TEXT_BYTES:
         return None
     if family == "document":
-        return _extract_document(p)
+        return _extract_document(p, pace)
     if family == "text":
         return p.read_text(encoding="utf-8", errors="ignore")
     return _text_fallback(p)
 
 
-def _extract_document(p: Path):
+def _extract_document(p: Path, pace=None):
     ext = p.suffix.lower()
     if ext == ".pdf":
         from pypdf import PdfReader
         reader = PdfReader(str(p))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
+        return "\n".join((page.extract_text() or "") for page in paced(reader.pages, pace))
     if ext == ".docx":
         import docx
         doc = docx.Document(str(p))
@@ -106,7 +121,7 @@ def _extract_document(p: Path):
     if ext == ".pptx":
         from pptx import Presentation
         parts = []
-        for number, slide in enumerate(Presentation(str(p)).slides, 1):
+        for number, slide in enumerate(paced(Presentation(str(p)).slides, pace), 1):
             parts.append(f"# Diapositive {number}")
             for shape in slide.shapes:
                 if shape.has_text_frame:
@@ -116,7 +131,7 @@ def _extract_document(p: Path):
         import openpyxl
         wb = openpyxl.load_workbook(str(p), read_only=True, data_only=True)
         parts = []
-        for ws in wb.worksheets:
+        for ws in paced(wb.worksheets, pace):
             parts.append(f"# Feuille : {ws.title}")
             for row in ws.iter_rows(values_only=True):
                 cells = [str(c) for c in row if c is not None]
@@ -128,7 +143,7 @@ def _extract_document(p: Path):
         return rtf_to_text(p.read_text(encoding="utf-8", errors="ignore"))
     if ext == ".epub":
         from aiodos.services import epub
-        return epub.read_text(p)
+        return epub.read_text(p, pace)
     if ext in (".html", ".htm"):
         from aiodos.services.web import html_to_text
         return html_to_text(p.read_text(encoding="utf-8", errors="ignore"))[1]
