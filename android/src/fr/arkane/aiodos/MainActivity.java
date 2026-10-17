@@ -37,7 +37,9 @@ public class MainActivity extends Activity {
     /** Trouve le nœud en marche (adresse dans ~/.aiodos-ui, qui répond), ou le (re)démarre
      *  avec --ui-file et les options de ~/.aiodos-options (« --internet »…), puis écrit
      *  l'adresse de son interface. SIGTERM pour arrêter l'ancien : lancé en arrière-plan,
-     *  le nœud ignore SIGINT (les versions récentes s'arrêtent proprement sur les deux). */
+     *  le nœud ignore SIGINT (les versions récentes s'arrêtent proprement sur les deux).
+     *  « [p]ython3 » : pkill -f lit toute la ligne de commande, et ce script, qui contient
+     *  le motif dans son texte, se serait arrêté lui-même. */
     static final String SCRIPT =
         "F=\"$HOME/.aiodos-ui\"\n"
         + "cd \"$HOME/aiodos\" 2>/dev/null || { echo \"AIODOS n'est pas dans ~/aiodos "
@@ -47,9 +49,9 @@ public class MainActivity extends Activity {
         + "2>/dev/null; }\n"
         + "if alive; then cat \"$F\"; exit 0; fi\n"
         + "rm -f \"$F\"\n"
-        + "if command -v pgrep >/dev/null && pgrep -f 'python3 -m aiodos' >/dev/null; then\n"
-        + "  pkill -TERM -f 'python3 -m aiodos'\n"
-        + "  for i in $(seq 1 20); do pgrep -f 'python3 -m aiodos' >/dev/null || break; sleep 1; done\n"
+        + "if command -v pgrep >/dev/null && pgrep -f '[p]ython3 -m aiodos' >/dev/null; then\n"
+        + "  pkill -TERM -f '[p]ython3 -m aiodos'\n"
+        + "  for i in $(seq 1 20); do pgrep -f '[p]ython3 -m aiodos' >/dev/null || break; sleep 1; done\n"
         + "fi\n"
         + "OPTIONS=$(cat \"$HOME/.aiodos-options\" 2>/dev/null)\n"
         + "nohup sh lancer-noeud.sh --ui-file \"$F\" $OPTIONS >\"$HOME/aiodos-noeud.log\" 2>&1 &\n"
@@ -186,6 +188,15 @@ public class MainActivity extends Activity {
             }
         }
         String detail = (err + "\n" + message).trim();
+        if (detail.isEmpty() && result != null) {      // rien de lisible : ce que Termux a rendu
+            StringBuilder raw = new StringBuilder("Termux n'a rien écrit");
+            for (String key : new String[] {"exitCode", "err"}) {
+                if (result.containsKey(key)) {
+                    raw.append(" · ").append(key).append(" ").append(result.get(key));
+                }
+            }
+            detail = raw.append('.').toString();
+        }
         if (detail.contains("allow-external-apps")) {
             detail = "Termux n'accepte pas encore les commandes des autres applications. Dans "
                 + "Termux : echo allow-external-apps=true >> ~/.termux/termux.properties";

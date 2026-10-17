@@ -75,8 +75,10 @@ def test_the_phone_app_script_restarts_a_node_without_the_file():
     à la main, puis rendre l'adresse."""
     source = (paths.APP_ROOT / "android" / "src" / "fr" / "arkane" / "aiodos"
               / "MainActivity.java").read_text(encoding="utf-8")
-    # SIGTERM : lancé en arrière-plan par ce même script, le nœud ignore SIGINT
-    assert "lancer-noeud.sh --ui-file" in source and "pkill -TERM -f 'python3 -m aiodos'" in source
+    # SIGTERM : lancé en arrière-plan par ce même script, le nœud ignore SIGINT ; et un
+    # motif que le texte du script ne contient pas, sinon pkill -f l'arrêterait lui-même
+    assert "lancer-noeud.sh --ui-file" in source and "pkill -TERM -f '[p]ython3 -m aiodos'" in source
+    assert "'python3 -m aiodos'" not in source
     assert "com.termux.RUN_COMMAND_PENDING_INTENT" in source
 
 
