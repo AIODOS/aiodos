@@ -1,6 +1,7 @@
 """Outil de publication (tools/publish.py), essayé dans un dépôt git jetable : la clé
 naît hors du dépôt, une version « -dev » ou non signée par une clé de confiance est
 refusée, et le paquet publié est complet, signé, prêt à être transmis."""
+import json
 import os
 import re
 import shutil
@@ -12,7 +13,7 @@ import zipfile
 import pytest
 
 from aiodos.updates import manifest as manifests
-from aiodos.updates.store import Store
+from aiodos.updates.store import Store, sha256_of
 from tests.nodes import APP_ROOT
 
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.org",
@@ -24,11 +25,20 @@ def git(repo, *args):
                           text=True, env=dict(os.environ, **IDENTITY)).stdout.strip()
 
 
-def tool(repo, key, *args):
+def engines(repo, assets=None) -> dict:
+    """Moteur llama.cpp des essais : aucun par défaut (rien n'est téléchargé), ou la
+    table `assets` (engine_release.py) ; cache dans un dossier jetable."""
+    table = repo.parent / "moteurs.json"
+    table.write_text(json.dumps(assets or {}), encoding="utf-8")
+    return {"AIODOS_ENGINE_ASSETS": str(table),
+            "AIODOS_ENGINE_CACHE": str(repo.parent / "moteurs-cache")}
+
+
+def tool(repo, key, *args, assets=None):
     return subprocess.run([sys.executable, str(repo / "tools" / "publish.py"), *args],
                           capture_output=True, text=True, encoding="utf-8",
-                          env=dict(os.environ, **IDENTITY, AIODOS_RELEASE_KEY=str(key),
-                                   PYTHONIOENCODING="utf-8"))
+                          env=dict(os.environ, **IDENTITY, **engines(repo, assets),
+                                   AIODOS_RELEASE_KEY=str(key), PYTHONIOENCODING="utf-8"))
 
 
 def set_version(repo, number):
@@ -90,6 +100,55 @@ def test_publication_from_key_to_package(tmp_path):
     assert manifests.FORMAT == found["format"]
 
 
+# --------------------------------------------------------------------- moteur llama.cpp
+def prepared(tmp_path):
+    """Dépôt jetable dont le commit fait confiance à une clé de publication fraîche."""
+    repo = tmp_path / "depot"
+    for name in ("aiodos", "tools", "assets"):
+        shutil.copytree(APP_ROOT / name, repo / name, ignore=shutil.ignore_patterns("__pycache__"))
+    for name in ("lancer.bat", "lancer-noeud.sh", "requirements.txt", "requirements-node.txt",
+                 "LICENSE", "NOTICE", "README.md"):
+        shutil.copyfile(APP_ROOT / name, repo / name)
+    (repo / "aiodos" / "updates" / "keys.py").write_text("TRUSTED_KEYS = {\n}\n", encoding="utf-8")
+    git(repo, "init", "-q")
+    key = tmp_path / "cle.pem"
+    assert tool(repo, key, "key").returncode == 0
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "départ")
+    trusted = {}
+    exec((repo / "aiodos" / "updates" / "keys.py").read_text(encoding="utf-8"), trusted)
+    return repo, key, trusted["TRUSTED_KEYS"]
+
+
+def test_the_llama_engine_is_joined_or_left_out(tmp_path):
+    repo, key, trusted = prepared(tmp_path)
+    archive = tmp_path / "llama-essai-bin-win-vulkan-x64.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        for name in ("llama-server.exe", "ggml-rpc-server.exe"):
+            z.writestr(name, b"MZ")
+    asset = {"name": archive.name, "size": archive.stat().st_size,
+             "sha256": sha256_of(archive), "source": str(archive)}
+    data, store = tmp_path / "data", Store(tmp_path / "data" / "updates")
+
+    def publish(number, *extra, assets=None):
+        set_version(repo, number)
+        git(repo, "commit", "-qm", f"version {number}", "--", "aiodos/__init__.py")
+        done = tool(repo, key, "release", "--data-dir", str(data), "--no-companion", *extra,
+                    assets=assets)
+        assert done.returncode == 0, done.stderr
+        return done, [f["kind"] for f in store.manifest(number, trusted)["files"]]
+
+    done, kinds = publish("3.0.0", assets={"windows-x86_64": asset})
+    assert kinds == ["source", "llama.cpp-windows-x86_64"]
+    assert "Moteur joint : llama.cpp-windows-x86_64" in done.stdout
+    assert (tmp_path / "moteurs-cache" / archive.name).is_file()      # gardé pour la suite
+    # Archive différente de celle épinglée : la version part sans le moteur, avec un mot
+    done, kinds = publish("3.0.1", assets={"windows-x86_64": dict(asset, sha256="0" * 64)})
+    assert kinds == ["source"] and "moteur llama.cpp non joint (windows-x86_64)" in done.stdout
+    _, kinds = publish("3.0.2", "--no-engine", assets={"windows-x86_64": asset})
+    assert kinds == ["source"]
+
+
 # --------------------------------------------------------------------- compagnon
 sys.path.insert(0, str(APP_ROOT / "tools"))
 import companion_build  # noqa: E402
@@ -138,8 +197,8 @@ def release(repo, key, data, number, *extra, **env):
     git(repo, "commit", "-qm", f"version {number}", "--", "aiodos/__init__.py")
     return subprocess.run([sys.executable, str(repo / "tools" / "publish.py"), "release",
                            "--data-dir", str(data), *extra], capture_output=True, text=True,
-                          encoding="utf-8", env=dict(os.environ, **IDENTITY, **env,
-                                                     AIODOS_RELEASE_KEY=str(key),
+                          encoding="utf-8", env=dict(os.environ, **IDENTITY, **engines(repo),
+                                                     **env, AIODOS_RELEASE_KEY=str(key),
                                                      PYTHONIOENCODING="utf-8"))
 
 
