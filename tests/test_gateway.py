@@ -135,6 +135,8 @@ def test_web_pages_and_other_hosts_are_refused(gateway):
     assert gateway.get("/api/tags", headers={"Origin": "https://evil.example"}).status_code == 403
     assert gateway.get("/api/tags", headers={"Origin": "http://localhost:3000"}).status_code == 200
     assert gateway.get("/api/tags", headers={"Host": f"localhost:{port}"}).status_code == 200
+    docker = {"Host": f"host.docker.internal:{port}"}        # conteneur sous Docker Desktop
+    assert gateway.get("/api/tags", headers=docker).status_code == 200
     server = gateway.ui.app.app.state.gateway._server
     assert server.config.host == "127.0.0.1"                        # jamais sur le réseau
 

@@ -75,42 +75,54 @@ Une **machine appairée**, elle, ne reçoit que la conversation en texte. D'où 
 
 ## 3. Open WebUI
 
-La passerelle n'écoute que sur `127.0.0.1` : un Open WebUI lancé **dans Docker** ne la joint
-pas (pour un conteneur, `127.0.0.1` est le conteneur lui-même, et `host.docker.internal` ne
-mène pas aux services liés à `127.0.0.1` de la machine). Installe-le donc **directement sur
-la machine** (Python 3.11 ou 3.12) :
+Le plus simple est de l'installer **directement sur la machine** (Python 3.11 conseillé, 3.12
+possible, pas 3.13) :
 
 ```
 pip install open-webui
 open-webui serve
 ```
 
-puis ouvre http://localhost:8080. Ensuite, dans **Réglages administrateur → Connexions** :
+puis d'ouvrir http://localhost:8080.
 
-- **API OpenAI** : ajoute une connexion, URL `http://127.0.0.1:11435/v1` (sans `/` à la fin),
-  clé d'accès d'AIODOS ; ou
-- **API Ollama** : URL `http://127.0.0.1:11435`, authentification « Bearer », clé d'accès
-  d'AIODOS.
+**Dans Docker** : la passerelle n'écoute que sur `127.0.0.1`. Avec Docker Desktop (Windows,
+macOS), un conteneur joint en principe les services de `127.0.0.1` de la machine par le nom
+`host.docker.internal`, que la passerelle accepte : remplace alors `127.0.0.1` par
+`host.docker.internal` dans les adresses ci-dessous (pas encore essayé : Docker n'est pas
+installé sur la machine où AIODOS est mis au point). Avec Docker sous Linux, un conteneur ne
+joint pas `127.0.0.1` de la machine : installe alors Open WebUI directement.
+
+Ensuite, dans **Settings → Admin → Connections** (Réglages → Admin → Connexions) :
+
+- **API OpenAI** (« Manage OpenAI API Connections », « ➕ Add Connection ») : URL
+  `http://127.0.0.1:11435/v1` (sans `/` à la fin), API Key = la clé d'AIODOS ; « Verify
+  Connection » demande la liste des modèles ;
+- ou **API Ollama** (« Manage Ollama API Connections ») : URL `http://127.0.0.1:11435`,
+  Auth « Bearer », API Key = la clé d'AIODOS.
 
 Les modèles du cercle apparaissent dans la liste de conversation ; un modèle d'une machine
-appairée s'y lit « qwen3.6 · PC fixe ». Pour la recherche dans ses documents, Open WebUI peut
-prendre le modèle d'embedding d'AIODOS (Réglages administrateur → Documents, moteur
-« Ollama », même URL et même clé). Les « connexions directes » d'Open WebUI, faites depuis le
-navigateur, ne marchent pas (pas de CORS, voir § 1).
+appairée s'y lit « qwen3.6 · PC fixe ». Pour la recherche dans ses propres documents, Open WebUI
+peut prendre le modèle d'embedding de cette machine (Admin → Documents, moteur « Ollama », même
+URL et même clé). Open WebUI parle aussi MCP (§ 7). Ses « connexions directes », faites depuis
+le navigateur, ne marchent pas (pas de CORS, voir § 1).
 
 ## 4. AnythingLLM
 
-AnythingLLM (version de bureau, ou serveur installé sur la machine — pas dans Docker, pour la
-même raison qu'Open WebUI) :
+AnythingLLM Desktop, ou le serveur installé sur la machine (dans Docker, voir la remarque sur
+Docker au § 3). Les libellés ci-dessous sont ceux de la version 1.18, en anglais même dans
+l'interface française :
 
-- **Modèle de conversation** : Paramètres → AI Providers → LLM, fournisseur **« Generic
-  OpenAI »** : Base URL `http://127.0.0.1:11435/v1`, API Key = la clé d'AIODOS, Chat Model
-  Name = un identifiant du § 2, Token context window = celui du modèle (8192 par exemple).
-  Ou fournisseur **« Ollama »** : URL `http://127.0.0.1:11435`, et la clé dans
-  « Authentication Token » (sous « Advanced »).
-- **Embeddings** : Paramètres → AI Providers → Embedder, « Ollama » (même URL, « Auth
-  Token ») ou « Generic OpenAI » (Base URL `…/v1`), avec le modèle d'embedding de cette
-  machine (embeddinggemma…).
+- **Modèle de conversation** : Settings → AI Providers → LLM (« Préférence LLM »), fournisseur
+  **« Generic OpenAI »** : « Base URL » `http://127.0.0.1:11435/v1`, « API Key » = la clé
+  d'AIODOS, « Selected Model » = un identifiant du § 2 (la liste vient de la passerelle),
+  « Model context window » = celui du modèle (8192 par exemple), « Max Tokens ».
+  Ou fournisseur **« Ollama »** : « Ollama Model », puis « Show advanced settings » : « Ollama
+  Base URL » `http://127.0.0.1:11435` et « Authentication Token » = la clé d'AIODOS.
+- **Embeddings** : AI Providers → Embedder (« Préférences d'intégration ») : « Ollama » (même
+  URL, « Auth Token (optional) » = la clé) ou « Generic OpenAI » (« Base URL » `…/v1`,
+  « Embedding Model », « API Key »), avec le modèle d'embedding de cette machine
+  (embeddinggemma…).
+- **MCP** : voir § 7.
 
 ## 5. Continue (VS Code, JetBrains) et les éditeurs de code
 
@@ -183,29 +195,61 @@ porte sa version, le serveur se présente par `server/discover`), et les version
 main `initialize` : **2025-11-25**, **2025-06-18** et **2025-03-26**.
 
 **Assistant qui appelle une adresse** (Streamable HTTP) : adresse `http://127.0.0.1:11435/mcp`,
-en-tête `Authorization: Bearer <clé>`. Par exemple :
+en-tête `Authorization: Bearer <clé>`. Selon l'assistant :
 
-- Claude Code :
+- **Claude Code** :
   ```
   claude mcp add --transport http aiodos http://127.0.0.1:11435/mcp --header "Authorization: Bearer aiodos-…"
   ```
-- VS Code (`.vscode/mcp.json`) :
+  ou, dans le `.mcp.json` d'un projet (`"type": "http"` est obligatoire) :
   ```json
-  {"servers": {"aiodos": {"type": "http", "url": "http://127.0.0.1:11435/mcp",
-                          "headers": {"Authorization": "Bearer aiodos-…"}}}}
+  {"mcpServers": {"aiodos": {"type": "http", "url": "http://127.0.0.1:11435/mcp",
+                             "headers": {"Authorization": "Bearer ${AIODOS_KEY}"}}}}
   ```
-- Cursor (`~/.cursor/mcp.json`) :
+  (`${AIODOS_KEY}` : une variable d'environnement de ton choix, pour ne pas écrire la clé
+  dans le fichier.)
+- **VS Code** (`.vscode/mcp.json`, ou « MCP: Open User Configuration ») ; la clé est demandée
+  une fois, sans être écrite dans le fichier :
+  ```json
+  {"inputs": [{"type": "promptString", "id": "aiodos-key", "description": "Clé d'AIODOS",
+               "password": true}],
+   "servers": {"aiodos": {"type": "http", "url": "http://127.0.0.1:11435/mcp",
+                          "headers": {"Authorization": "Bearer ${input:aiodos-key}"}}}}
+  ```
+- **Cursor** (`~/.cursor/mcp.json`, ou `.cursor/mcp.json` dans un projet) et **LM Studio**
+  (onglet « Program », Install → Edit mcp.json, même format) :
   ```json
   {"mcpServers": {"aiodos": {"url": "http://127.0.0.1:11435/mcp",
                              "headers": {"Authorization": "Bearer aiodos-…"}}}}
   ```
+- **Continue** (`config.yaml`, mode agent seulement) :
+  ```yaml
+  mcpServers:
+    - name: AIODOS
+      type: streamable-http
+      url: http://127.0.0.1:11435/mcp
+      requestOptions:
+        headers:
+          Authorization: Bearer aiodos-…
+  ```
+- **Open WebUI** (0.6.31 ou plus) : Settings → Admin → Integrations → External Tool Servers →
+  « + Add Connection », Type « MCP (Streamable HTTP) », URL ci-dessus, Auth « Bearer », Key =
+  la clé d'AIODOS.
+- **AnythingLLM** : dans `plugins/anythingllm_mcp_servers.json` de son dossier de stockage,
+  `"type": "streamable"` (pas « http »), avec `url` et `headers` comme ci-dessus.
+
+Pour VS Code, Continue, AnythingLLM et l'exemple `.mcp.json` de Claude Code, la configuration
+est bâtie sur les clés que décrit leur documentation, qui n'a pas d'exemple tout fait de ce cas.
 
 **Assistant qui lance un programme** (stdio : Claude Desktop…) : le pont
 `python -m aiodos.gateway.mcp_stdio` relaie vers la passerelle. Il lit lui-même l'adresse et
 la clé dans les réglages d'AIODOS, et relit une clé renouvelée. La configuration exacte, avec
 le chemin de Python et celui d'AIODOS sur ta machine, est prête à copier dans **Réglages →
-Autres outils** (« Assistant qui lance un programme ») ; pour Claude Desktop, elle va dans
-`claude_desktop_config.json` (menu Réglages → Développeur → Modifier la configuration) :
+Autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
+`%APPDATA%\Claude\claude_desktop_config.json` (Settings → Developer → « Edit Config »), puis
+on relance Claude Desktop. Ce fichier n'accepte que ce genre de serveur : les « connecteurs »
+distants de Claude Desktop passent par les serveurs d'Anthropic, qui ne joignent pas
+`127.0.0.1`.
 
 ```json
 {"mcpServers": {"aiodos": {
@@ -222,7 +266,8 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 - Pas de gestion des modèles par la passerelle (`/api/pull`, `create`, `delete`…) : on les
   installe avec Ollama.
 - Une machine appairée ne reçoit ni outils, ni images, ni format imposé (§ 2).
-- Pas de connexion depuis un conteneur Docker ou une autre machine : 127.0.0.1 seulement.
+- Pas de connexion depuis une autre machine : 127.0.0.1 seulement (un conteneur Docker
+  Desktop de cette machine passe en principe par `host.docker.internal`, § 3).
 - Pas de CORS : un outil qui tourne dans le navigateur (extension, page web) ne peut pas
   l'utiliser.
 - Le nombre de jetons d'une réponse venue d'une machine appairée n'est connu que si elle a
@@ -246,5 +291,11 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 - MCP : [spécification 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28),
   [changements](https://modelcontextprotocol.io/specification/2026-07-28/changelog),
   [SDK Python](https://github.com/modelcontextprotocol/python-sdk) (licence MIT).
-- Outils : [Open WebUI](https://docs.openwebui.com), [AnythingLLM](https://docs.anythingllm.com),
-  [Continue](https://docs.continue.dev).
+- Outils : [Open WebUI](https://docs.openwebui.com) (connexions, MCP),
+  [AnythingLLM](https://docs.anythingllm.com/mcp-compatibility/overview),
+  [Continue](https://docs.continue.dev/customize/deep-dives/mcp),
+  [Claude Code](https://code.claude.com/docs/en/mcp),
+  [Claude Desktop](https://modelcontextprotocol.io/docs/develop/connect-local-servers),
+  [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration),
+  [Cursor](https://cursor.com/docs/mcp), [LM Studio](https://lmstudio.ai/docs/app/mcp),
+  [Docker, réseau de l'hôte](https://docs.docker.com/engine/network/drivers/host/).

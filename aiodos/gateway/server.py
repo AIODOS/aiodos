@@ -3,7 +3,9 @@
 Il tourne dans la boucle asyncio du nœud, comme le serveur entre machines, et démarre ou
 s'arrête quand l'utilisateur ouvre ou ferme l'accès dans les Réglages (apply), sans
 relancer AIODOS. Trois verrous devant chaque requête (Guard) :
-  1. l'en-tête Host doit être 127.0.0.1:port ou localhost:port (DNS rebinding) ;
+  1. l'en-tête Host doit être 127.0.0.1:port ou localhost:port (DNS rebinding), ou
+     host.docker.internal:port : sous Docker Desktop, un conteneur de cette machine (Open
+     WebUI…) joint ainsi les services de 127.0.0.1 ; aucune page web ne porte ce nom ;
   2. un en-tête Origin, s'il est là, doit venir de la machine elle-même : une page web
      ouverte dans un navigateur ne s'en sert pas (et sans CORS, elle ne lirait rien) ;
   3. la clé d'accès (access.py) : « Authorization: Bearer <clé> », comme pour l'API
@@ -95,7 +97,7 @@ def create_gateway_app(node, port: int):
     app.state.node = node
     for module in (openai_api, ollama_api, mcp_server):
         app.include_router(module.router)
-    return Guard(app, {f"{HOST}:{port}", f"localhost:{port}"})
+    return Guard(app, {f"{HOST}:{port}", f"localhost:{port}", f"host.docker.internal:{port}"})
 
 
 async def _serve(server):
