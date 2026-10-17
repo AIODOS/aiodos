@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Application Android d'AIODOS (tools/build_android.py). versionCode et versionName sont
+     ceux d'AIODOS, posés à la construction. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="fr.arkane.aiodos">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+
+    <!-- L'interface du nœud, servie sur 127.0.0.1 par Termux -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Démarrer le nœud dans Termux (autorisation accordée par l'utilisateur) -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

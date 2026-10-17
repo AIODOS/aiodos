@@ -162,7 +162,7 @@ def make_runtime(stage: Path, archive: Path):
     work.mkdir(parents=True, exist_ok=True)
     (work / "constraints.txt").write_text(constraints(), encoding="utf-8")
     command = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
-               "--no-warn-script-location", "--only-binary=:all:", "--target", str(packages),
+               "--no-warn-script-location", "--prefer-binary", "--target", str(packages),
                "-c", str(work / "constraints.txt"), *pinned()]
     done = subprocess.run(command)
     if done.returncode != 0:

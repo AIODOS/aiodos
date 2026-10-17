@@ -164,6 +164,21 @@ juger). Rien de tout cela ne part jamais chez un ami. Détails et mesures :
 
 ## Installation
 
+**Windows, avec l'installeur** (`AIODOS-Setup-<version>.exe`) : il installe AIODOS pour
+toi seul, sans droits administrateur, avec son propre Python, le compagnon Internet,
+llama.cpp et stable-diffusion.cpp. Il propose de télécharger Ollama s'il manque. Tes
+données vont dans `%LOCALAPPDATA%\AIODOS`, et les versions suivantes arrivent par les
+mises à jour signées. L'installeur n'est pas encore signé : Windows demande de confirmer
+(« Informations complémentaires », puis « Exécuter quand même »). Pour le construire :
+`python tools/build_installer.py` (Inno Setup 6, `dist/`). Étude complète :
+[docs/installeurs.md](docs/installeurs.md).
+
+**Téléphone Android** : le nœud tourne dans Termux ([docs/android.md](docs/android.md)), et
+l'application AIODOS (`python tools/build_android.py --install`) le démarre et affiche son
+interface.
+
+**À la main**, depuis le code :
+
 1. Installer [Ollama] et quelques modèles, par exemple :
    ```
    ollama pull qwen2.5-coder:7b

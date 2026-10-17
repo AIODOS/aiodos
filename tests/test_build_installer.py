@@ -57,3 +57,23 @@ def test_the_runtime_ignores_the_user_packages(monkeypatch):
     monkeypatch.setattr(sys, "path", list(path))
     exec(build_installer.SITECUSTOMIZE, {})
     assert sys.path == [path[0], path[2]] and fake_site.ENABLE_USER_SITE is False
+
+
+def test_the_node_can_tell_the_phone_app_where_its_interface_is(tmp_path):
+    """--ui-file : l'adresse de l'interface (jeton compris), écrite d'un coup, pour
+    l'application Android qui la lit par Termux."""
+    from aiodos import __main__ as entry
+    target = entry._write_ui_file(str(tmp_path / ".aiodos-ui"), "http://127.0.0.1:8800/?t=abc")
+    assert target.read_text(encoding="utf-8") == "http://127.0.0.1:8800/?t=abc\n"
+    assert not (tmp_path / ".aiodos-ui.part").exists()
+    if sys.platform != "win32":
+        assert target.stat().st_mode & 0o777 == 0o600
+
+
+def test_the_phone_app_script_restarts_a_node_without_the_file():
+    """Le script que l'application confie à Termux : relancer avec --ui-file un nœud lancé
+    à la main, puis rendre l'adresse."""
+    source = (paths.APP_ROOT / "android" / "src" / "fr" / "arkane" / "aiodos"
+              / "MainActivity.java").read_text(encoding="utf-8")
+    assert "lancer-noeud.sh --ui-file" in source and "pkill -INT -f 'python3 -m aiodos'" in source
+    assert "com.termux.RUN_COMMAND_PENDING_INTENT" in source

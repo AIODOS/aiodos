@@ -241,6 +241,33 @@ Nœud AIODOS prêt : http://127.0.0.1:8800/?t=…
 - puis `termux-wake-unlock` ;
 - Ollama continue de tourner : l'arrêter avec `pkill ollama`.
 
+### 7 bis. L'application AIODOS (17/10/2026)
+
+Une application Android, avec son icône, remplace ces gestes : elle démarre le nœud dans
+Termux s'il ne tourne pas, puis affiche son interface en plein écran. C'est la première
+étape de l'application de l'étude ([installeurs.md](installeurs.md), § 3) : le nœud tourne
+encore dans Termux.
+
+- **Construire** sur le PC : `python tools/build_android.py` (outils du SDK Android, sans
+  Gradle ; `dist/AIODOS-<version>.apk`, 107 Ko, signé d'une clé de développement gardée
+  dans `~/.aiodos/android/`). `--install` l'installe sur le téléphone branché.
+- **Une fois, dans Termux** : autoriser les commandes venues d'autres applications :
+
+  ```sh
+  echo allow-external-apps=true >> ~/.termux/termux.properties
+  ```
+
+- **Au premier lancement**, Android demande d'autoriser AIODOS à « exécuter des commandes
+  dans l'environnement Termux » : accepter.
+- **Comment elle trouve l'interface.** Elle demande à Termux (intention `RUN_COMMAND`) de
+  lire `~/.aiodos-ui`, où le nœud écrit l'adresse de son interface, jeton compris (option
+  `--ui-file`, fichier lisible par Termux seul, effacé à l'arrêt). Si ce fichier manque ou
+  ne répond plus, elle arrête un nœud lancé à la main et le relance avec cette option ;
+  journal : `~/aiodos-noeud.log`.
+- Il faut la version d'AIODOS qui connaît `--ui-file` (17/10/2026 et après) dans
+  `~/aiodos` : elle arrive par les mises à jour, ou par une copie (« Piloter le téléphone
+  depuis le PC », plus bas).
+
 ## 8. Appairer avec le PC
 
 1. **Sur le téléphone** : ouvrir son interface (étape 7) et la laisser ouverte.

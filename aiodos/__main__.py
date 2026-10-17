@@ -15,6 +15,7 @@ import socket
 import sys
 import threading
 import time
+from pathlib import Path
 
 from aiodos import __version__, instance, paths
 from aiodos.updates import launcher, restart
@@ -96,6 +97,9 @@ def main():
                         help="ne pas importer les données de la v1 (tests)")
     parser.add_argument("--data-dir", default=None,
                         help="dossier de données (plusieurs nœuds sur une même machine)")
+    parser.add_argument("--ui-file", default=None, metavar="FICHIER",
+                        help="écrit l'adresse de l'interface, jeton compris, dans ce fichier "
+                             "lisible par soi seul, effacé à l'arrêt (application Android)")
     args = parser.parse_args()
     if args.data_dir:
         os.environ["AIODOS_DATA_DIR"] = os.path.abspath(args.data_dir)
@@ -108,6 +112,18 @@ def main():
     return _serve(args)
 
 
+def _write_ui_file(path: str, url: str) -> Path:
+    """L'adresse de l'interface pour l'application Android, qui la lit par Termux : un
+    fichier lisible par soi seul (0600), écrit d'un coup."""
+    target = Path(path).expanduser().resolve()
+    part = target.with_name(target.name + ".part")
+    handle = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as out:
+        out.write(url + "\n")
+    os.replace(part, target)
+    return target
+
+
 def _serve(args) -> int:
     import uvicorn
 
@@ -118,6 +134,7 @@ def _serve(args) -> int:
     port = args.port or _free_port()
     token = secrets.token_urlsafe(24)
     show_key = secrets.token_urlsafe(24)        # pour faire revenir la fenêtre, sans le jeton
+    ui_file = None
     if not instance.acquire(port, show_key):
         # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
         if args.headless or not instance.wake_running():
@@ -155,6 +172,8 @@ def _serve(args) -> int:
 
         url = f"http://127.0.0.1:{port}/?t={token}"
         log.info("AIODOS %s prêt sur le port %s", __version__, port)
+        if args.ui_file:
+            ui_file = _write_ui_file(args.ui_file, url)
         if args.headless:
             print(f"Nœud AIODOS prêt : {url}", flush=True)
             try:
@@ -172,6 +191,8 @@ def _serve(args) -> int:
         thread.join(timeout=30 if restart.requested() else 5)
     finally:
         instance.release()
+        if ui_file is not None:
+            ui_file.unlink(missing_ok=True)
     if restart.requested():               # nouvelle version installée : on passe la main
         return restart.relaunch(sys.argv[1:])
     return 0
