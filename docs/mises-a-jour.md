@@ -270,6 +270,37 @@ La même chaîne est vérifiée sous Windows à chaque passage des tests
   Tant que toutes les machines n'ont pas reçu cette dernière version, l'ancienne
   clé reste acceptée par celles qui ne l'ont pas encore.
 
+## Approbation sur un deuxième appareil
+
+Décision du 17/10/2026 : chaque version doit aussi être approuvée sur un deuxième
+appareil, en général le téléphone de l'auteur. Une clé de publication volée ne suffit
+alors plus à pousser une version chez les amis : il faudrait aussi le téléphone.
+Code : `aiodos/updates/approval.py`, `manifest.approve` et `manifest.approved`.
+
+- **Mise en place.**
+  1. Sur le téléphone, ouvrir Réglages, Mises à jour, et cliquer « Approuver depuis cet
+     appareil ». La clé d'approbation se crée dans `data/updates/approbation.pem` et ne
+     quitte jamais l'appareil.
+  2. Coller la ligne affichée dans `APPROVER_KEYS` de `aiodos/updates/keys.py`, faire un
+     commit, puis publier.
+  3. **En déclarer deux** : le téléphone et un appareil de secours. Sans approbateur
+     joignable, plus aucune version ne peut partir.
+- **Publier.** L'outil signe comme avant, puis écrit « EN ATTENTE D'APPROBATION ». La
+  version est gardée, mais ni installée ni proposée : le stock ne voit pas une version
+  sans approbation.
+- **Approuver.** Sur le téléphone, le bouton « Versions en attente » demande à mes
+  machines en ligne les versions qui attendent (action `update/pending`). Il montre le
+  numéro, les notes, le commit, chaque fichier avec sa taille et son empreinte. Le
+  bouton « Approuver » signe le texte même du manifeste, précédé du contexte
+  `aiodos-approbation` (une approbation ne vaut jamais signature d'auteur, ni l'inverse),
+  et renvoie l'approbation (`update/approve`). La machine qui a publié la vérifie,
+  l'ajoute à l'enveloppe, et la version part. Les deux actions ne répondent qu'à mes
+  machines, jamais à un ami.
+- **Compatibilité.** L'approbation est un champ de plus dans l'enveloppe signée
+  (`approvals`) ; le format du manifeste ne change pas. Les versions qui ne la
+  connaissent pas l'ignorent. Celles qui la connaissent l'exigent dès que
+  `APPROVER_KEYS` n'est pas vide. Tant qu'il l'est, rien ne change.
+
 ## Copie de développement
 
 Un dossier qui contient un dépôt git (`.git`) n'est **jamais** remplacé : on y fait

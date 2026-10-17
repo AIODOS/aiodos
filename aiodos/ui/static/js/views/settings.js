@@ -7,6 +7,7 @@ import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
+import { renderApproval } from './approval.js';
 
 const SECTIONS = [
   { title: 'Conversation', icon: 'chat', fields: [
@@ -85,6 +86,7 @@ const SECTIONS = [
         + 'machines appairées, s\'installent à côté de la version actuelle, et AIODOS redémarre dessus quand '
         + 'la machine est libre. Si la nouvelle version ne démarre pas, la précédente reprend la main.' },
     { type: 'updates' },
+    { type: 'approval' },
   ] },
   { title: 'Autres outils', icon: 'plug', fields: [
     { type: 'gateway' },
@@ -124,6 +126,7 @@ function field(f) {
   const s = state.settings;
   if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
   if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
+  if (f.type === 'approval') return '<div id="approval-box"></div>';
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
   if (f.type === 'switch') {
@@ -185,6 +188,7 @@ function render() {
   });
   bindUpdates(form);
   bindGateway(form);
+  renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
 }
 

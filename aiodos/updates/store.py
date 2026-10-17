@@ -69,14 +69,33 @@ class Store:
             return None
         return found if found["version"] == version else None
 
-    def add_manifest(self, signed: dict, trusted=None) -> dict:
-        found = manifests.verify(signed, trusted)
+    def add_manifest(self, signed: dict, trusted=None, approvers=None) -> dict:
+        """Garde l'enveloppe signée, vérifiée ; approvers={} : sans exiger d'approbation
+        (version publiée ici, qui attend la sienne, cf. pending)."""
+        found = manifests.verify(signed, trusted, approvers)
         folder = self._dir("packages", found["version"])
         folder.mkdir(parents=True, exist_ok=True)
         temporary = folder / f"manifest.{os.getpid()}.tmp"
         temporary.write_text(json.dumps(signed, ensure_ascii=False), encoding="utf-8")
         os.replace(temporary, folder / "manifest.json")
         return found
+
+    def pending(self, trusted=None, approvers=None) -> list:
+        """[(version, enveloppe)] des paquets signés par l'auteur mais pas encore approuvés
+        par un appareil d'approbation : ni installés, ni proposés (approval.py)."""
+        approvers = manifests.declared_approvers() if approvers is None else approvers
+        if not approvers:
+            return []
+        waiting = []
+        for version in self.package_versions():
+            signed = self.signed(version)
+            try:
+                manifests.verify(signed, trusted, approvers={})
+            except UpdateError:
+                continue
+            if not manifests.approved(signed, approvers):
+                waiting.append((version, signed))
+        return waiting
 
     def file_path(self, version: str, name: str, trusted=None) -> Path:
         """Fichier d'un paquet, seulement s'il figure dans son manifeste vérifié."""

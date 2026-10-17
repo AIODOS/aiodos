@@ -16,6 +16,8 @@ from aiodos.updates import manifest as manifests
 from aiodos.updates.store import Store, sha256_of
 from tests.nodes import APP_ROOT
 
+# keys.py des dépôts jetables : aucune clé de publication, aucun appareil d'approbation
+KEYS_FILE = "TRUSTED_KEYS = {\n}\n\nAPPROVER_KEYS = {\n}\n"
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.org",
             "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.org"}
 
@@ -56,7 +58,7 @@ def test_publication_from_key_to_package(tmp_path):
     for name in ("lancer.bat", "lancer-noeud.sh", "requirements.txt", "requirements-node.txt",
                  "LICENSE", "NOTICE", "README.md"):
         shutil.copyfile(APP_ROOT / name, repo / name)
-    (repo / "aiodos" / "updates" / "keys.py").write_text("TRUSTED_KEYS = {\n}\n", encoding="utf-8")
+    (repo / "aiodos" / "updates" / "keys.py").write_text(KEYS_FILE, encoding="utf-8")
     set_version(repo, "3.0.0-dev")
     git(repo, "init", "-q")
     git(repo, "add", "-A")
@@ -109,7 +111,7 @@ def prepared(tmp_path):
     for name in ("lancer.bat", "lancer-noeud.sh", "requirements.txt", "requirements-node.txt",
                  "LICENSE", "NOTICE", "README.md"):
         shutil.copyfile(APP_ROOT / name, repo / name)
-    (repo / "aiodos" / "updates" / "keys.py").write_text("TRUSTED_KEYS = {\n}\n", encoding="utf-8")
+    (repo / "aiodos" / "updates" / "keys.py").write_text(KEYS_FILE, encoding="utf-8")
     git(repo, "init", "-q")
     key = tmp_path / "cle.pem"
     assert tool(repo, key, "key").returncode == 0
@@ -147,6 +149,32 @@ def test_the_llama_engine_is_joined_or_left_out(tmp_path):
     assert kinds == ["source"] and "moteur llama.cpp non joint (windows-x86_64)" in done.stdout
     _, kinds = publish("3.0.2", "--no-engine", assets={"windows-x86_64": asset})
     assert kinds == ["source"]
+
+
+def test_with_an_approval_device_the_release_waits(tmp_path):
+    """Un appareil d'approbation déclaré dans keys.py : la version publiée est gardée,
+    signée par l'auteur, mais attend son approbation avant d'être proposée."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    repo, key, trusted = prepared(tmp_path)
+    phone = Ed25519PrivateKey.generate()
+    raw = manifests.raw_public(phone)
+    approvers = {manifests.key_id(raw): __import__("base64").b64encode(raw).decode("ascii")}
+    keys_file = repo / "aiodos" / "updates" / "keys.py"
+    line = "".join(f'    "{k}": "{v}",\n' for k, v in approvers.items())
+    keys_file.write_text(keys_file.read_text(encoding="utf-8").replace(
+        "APPROVER_KEYS = {\n", "APPROVER_KEYS = {\n" + line), encoding="utf-8")
+    set_version(repo, "3.0.0")
+    git(repo, "commit", "-qam", "version 3.0.0, téléphone d'approbation")
+    data = tmp_path / "data"
+    done = tool(repo, key, "release", "--data-dir", str(data), "--no-companion")
+    assert done.returncode == 0, done.stderr
+    assert "EN ATTENTE D'APPROBATION" in done.stdout
+    store = Store(data / "updates")
+    assert [v for v, _ in store.pending(trusted, approvers)] == ["3.0.0"]
+    with pytest.raises(manifests.UpdateError, match="pas encore approuvée"):
+        manifests.verify(store.signed("3.0.0"), trusted, approvers)
+    approved = manifests.approve(store.signed("3.0.0"), phone)
+    assert manifests.verify(approved, trusted, approvers)["version"] == "3.0.0"
 
 
 # --------------------------------------------------------------------- compagnon
@@ -212,7 +240,7 @@ def test_companion_built_from_the_published_commit_is_joined(tmp_path):
         shutil.copyfile(APP_ROOT / name, repo / name)
     shutil.copytree(APP_ROOT / "compagnon", repo / "compagnon",
                     ignore=shutil.ignore_patterns("target"))
-    (repo / "aiodos" / "updates" / "keys.py").write_text("TRUSTED_KEYS = {\n}\n", encoding="utf-8")
+    (repo / "aiodos" / "updates" / "keys.py").write_text(KEYS_FILE, encoding="utf-8")
     git(repo, "init", "-q")
     key = tmp_path / "cle.pem"
     assert tool(repo, key, "key").returncode == 0
