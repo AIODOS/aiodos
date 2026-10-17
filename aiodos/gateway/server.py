@@ -196,7 +196,7 @@ def _port() -> int:
         port = int(settings.get("gateway_port"))
     except (TypeError, ValueError):
         port = settings.DEFAULTS["gateway_port"]
-    return port if 1 <= port <= 65535 else settings.DEFAULTS["gateway_port"]
+    return port if 1024 <= port <= 65535 else settings.DEFAULTS["gateway_port"]
 
 
 def stdio_config() -> dict:

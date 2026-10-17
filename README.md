@@ -237,6 +237,10 @@ Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais ver
 python -m pytest tests
 ```
 
+Les essais de la passerelle avec les clients officiels d'OpenAI et de MCP demandent en plus
+`pip install -r requirements-dev.txt` (de préférence dans un environnement à part) ; sans eux,
+ils sont ignorés.
+
 ## Licence
 
 Apache-2.0 — voir [LICENSE](LICENSE) et [NOTICE](NOTICE). Chacun peut utiliser, modifier et

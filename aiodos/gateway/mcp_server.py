@@ -13,7 +13,9 @@ spécification (modelcontextprotocol.io) :
 Les assistants qui lancent un programme (Claude Desktop…) passent par le pont mcp_stdio.py.
 
 Outils : lister_bibliotheques, rechercher_bibliotheques, converser. Les passages trouvés
-partent vers l'assistant, et de là vers son modèle : dans le cloud si c'en est un.
+partent vers l'assistant, et de là vers son modèle : dans le cloud si c'en est un. D'où :
+seules les bibliothèques actives qui ne sont pas gardées sur ce PC (le cadenas, portée
+« local ») lui sont montrées ; une conversation ne les envoie pas même à mes machines.
 """
 import asyncio
 import base64
@@ -39,6 +41,8 @@ WITHOUT_HEADER = "2025-03-26"
 META = "io.modelcontextprotocol/"
 TTL_MS = 300_000                    # liste des outils : la même pendant 5 min au moins
 
+_running = {}                       # identifiant JSON-RPC -> réponse de « converser » en cours
+
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600, -32601, -32602
 HEADER_MISMATCH, UNSUPPORTED_VERSION = -32020, -32022
 
@@ -53,9 +57,10 @@ READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": T
 
 TOOLS = [
     {"name": "lister_bibliotheques", "title": "Bibliothèques d'AIODOS",
-     "description": "Liste les bibliothèques de connaissance actives d'AIODOS (documents de "
-                    "l'utilisateur indexés sur sa machine) : nom, nombre d'éléments et de "
-                    "passages. Utile pour limiter une recherche à une bibliothèque.",
+     "description": "Liste les bibliothèques de connaissance d'AIODOS ouvertes aux assistants "
+                    "(documents de l'utilisateur indexés sur sa machine) : nom, nombre "
+                    "d'éléments et de passages. Utile pour limiter une recherche à une "
+                    "bibliothèque.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
      "annotations": READ_ONLY},
     {"name": "rechercher_bibliotheques", "title": "Rechercher dans les bibliothèques d'AIODOS",
@@ -162,16 +167,23 @@ async def _handle(request: Request, message, header) -> tuple:
             raise RpcError(INVALID_PARAMS, "« params » doit être un objet.")
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         version = meta.get(META + "protocolVersion")
+        if method == "notifications/cancelled":     # l'assistant n'attend plus la réponse
+            running = _running.get(str(params.get("requestId")))
+            if running is not None:
+                running.close()
+            return None, 202
         if method == "initialize":
             result = _initialize(params)
         elif version is not None or header == MODERN:
             _check_modern(request, method, params, meta, version)
+            request.state.rpc_id = message_id
             result = await _modern(request, method, params)
         else:
             if header is not None and header not in LEGACY:
                 raise RpcError(UNSUPPORTED_VERSION, f"Version du protocole MCP inconnue : "
                                f"{header}.", {"supported": list(SUPPORTED), "requested": header},
                                status=400)
+            request.state.rpc_id = message_id
             result = await _legacy(request, method, params)
     except RpcError as exc:
         return (None, 202) if notification else (_error(message_id, exc), exc.status)
@@ -271,7 +283,8 @@ async def _call(request: Request, params: dict) -> dict:
 
 
 def _active_libraries() -> list:
-    return [c for c in store.list_collections() if c["enabled"]]
+    """Bibliothèques montrées aux assistants : actives, et pas gardées sur ce PC."""
+    return [c for c in store.list_collections() if c["enabled"] and c["scope"] != "local"]
 
 
 async def _list(request: Request, arguments: dict):
@@ -284,13 +297,16 @@ async def _list(request: Request, arguments: dict):
 
 
 def _find(question: str, library, count: int) -> list:
-    only = None
+    shown = _active_libraries()
+    only = {c["id"] for c in shown}
     if library:
-        match = [c for c in _active_libraries() if c["name"] == library]
+        match = [c for c in shown if c["name"] == library]
         if not match:
-            raise ToolError(f"Bibliothèque inconnue ou désactivée : « {library} » "
-                            "(voir lister_bibliotheques).")
+            raise ToolError(f"Bibliothèque inconnue, désactivée ou gardée sur ce PC : "
+                            f"« {library} » (voir lister_bibliotheques).")
         only = {match[0]["id"]}
+    if not only:
+        return []
     try:
         vector = ollama.embed([question])[0]
     except Exception as exc:
@@ -352,9 +368,11 @@ async def _converse(request: Request, arguments: dict):
         yield from pipeline.generate(model, messages, think, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
+    key = str(getattr(request.state, "rpc_id", None))
+    _running[key] = stream            # notifications/cancelled l'arrête
     parts, used = [], models[0]
     try:
-        while (item := await stream.next()) is not None:
+        while (item := await stream.next(request)) is not None:
             if item[0] == "route":
                 used = item[1]
             elif item[0] == "content":
@@ -363,6 +381,10 @@ async def _converse(request: Request, arguments: dict):
         raise ToolError(f"Le modèle n'a pas pu répondre : {exc}") from exc
     finally:
         stream.close()
+        if _running.get(key) is stream:
+            del _running[key]
+    if stream.stop.is_set() and not parts:
+        raise ToolError("Réponse annulée.")
     machine = await asyncio.to_thread(placement.machine_of, used)
     reply = "".join(parts).strip()
     return reply or "(réponse vide)", {"reponse": reply, "modele": used,

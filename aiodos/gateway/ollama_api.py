@@ -92,6 +92,7 @@ async def show(request: Request):
     name = placement.parse(model) or model
     if not remote_models.parse(model):
         tags = await asyncio.to_thread(_local_names)
+        name = next((t for t in tags if placement.same_model(t, name)), name)
         if name in tags:
             try:
                 status, content, kind = await asyncio.to_thread(
@@ -218,7 +219,7 @@ def _ndjson(obj) -> bytes:
 
 
 async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
-                   streaming: bool):
+                   streaming: bool, request: Request):
     """Réponse HTTP une fois la machine engagée : relais tel quel (cette machine) ou mise
     au format d'Ollama (machine appairée)."""
     raw = next((value for kind, value in head if kind == "head"), None)
@@ -242,7 +243,7 @@ async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
         try:
             for item in head:
                 remote.take(*item)
-            while (item := await stream.next()) is not None:
+            while (item := await stream.next(request)) is not None:
                 remote.take(*item)
         except Exception as exc:
             return _error(exc)
@@ -291,7 +292,7 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
-        head = await stream.head()
+        head = await stream.head(request)
     except Exception as exc:
         stream.close()
         return _error(exc)
@@ -302,7 +303,7 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
         line.update(done_reason="unload" if unload else "load", total_duration=0,
                     eval_duration=0)
         return JSONResponse(line)
-    return await _respond(stream, head, model_id, chat, streaming)
+    return await _respond(stream, head, model_id, chat, streaming, request)
 
 
 def raw_head(head):

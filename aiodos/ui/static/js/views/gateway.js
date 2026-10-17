@@ -32,7 +32,8 @@ export function gatewayCard() {
       <small>Open WebUI, AnythingLLM, Continue, un éditeur de code ou un assistant MCP (Claude Desktop…)
       utilisent alors les modèles de cette machine et ceux que te prêtent tes machines appairées, et
       cherchent dans tes bibliothèques. Les passages trouvés partent vers l'assistant, et vers son modèle :
-      dans le cloud si c'en est un.</small>
+      dans le cloud si c'en est un. Les bibliothèques gardées sur ce PC (le cadenas) ne leur sont jamais
+      montrées.</small>
       ${stateLine(g)}</div>
       <label class="switch"><input type="checkbox" id="gateway-enabled" ${g.enabled ? 'checked' : ''}><span></span></label></div>
     <div class="field"><label for="gateway-port">Port (sur 127.0.0.1)</label>

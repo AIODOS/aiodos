@@ -43,9 +43,12 @@ lancement à l'autre ; **« Renouveler »** en crée une nouvelle, et l'ancienne
 de marcher.
 
 **Ce qui part, et où.** Une conversation envoyée par un outil est calculée par cette machine
-ou par une de tes machines (voir § 2) : rien ne sort de chez toi. Mais les passages qu'un
-assistant MCP trouve dans tes bibliothèques partent vers lui, puis vers *son* modèle : si
-c'est un modèle dans le cloud (Claude, GPT…), ces passages y partent aussi.
+ou par une de tes machines (voir § 2). Elle ne passe chez un ami que si tu désignes sa machine
+(`peer:…`) ou si tu as accepté ses machines en mode automatique : elle y passe alors le temps de
+la réponse, sans y être enregistrée. Les passages qu'un assistant MCP trouve dans tes
+bibliothèques partent vers lui, puis vers *son* modèle : si c'est un modèle dans le cloud
+(Claude, GPT…), ces passages y partent aussi. C'est pourquoi les bibliothèques gardées sur ce
+PC (le cadenas) ne sont jamais montrées aux assistants.
 
 ## 2. Les modèles et la machine qui répond
 
@@ -187,8 +190,8 @@ Le serveur MCP d'AIODOS donne trois outils :
 
 | Outil | Ce qu'il fait |
 |---|---|
-| `rechercher_bibliotheques` | recherche par le sens dans tes bibliothèques actives : les passages les plus proches d'une question, avec leur source et un score (seuil de pertinence des Réglages) ; `bibliotheque` pour se limiter à une, `nombre` de passages (5 par défaut) |
-| `lister_bibliotheques` | les bibliothèques actives, avec leur nombre d'éléments et de passages |
+| `rechercher_bibliotheques` | recherche par le sens dans tes bibliothèques actives, sauf celles gardées sur ce PC : les passages les plus proches d'une question, avec leur source et un score (seuil de pertinence des Réglages) ; `bibliotheque` pour se limiter à une, `nombre` de passages (5 par défaut) |
+| `lister_bibliotheques` | ces mêmes bibliothèques, avec leur nombre d'éléments et de passages |
 | `converser` | fait répondre un modèle du cercle (choix automatique de la machine, ou `peer:…`), sans historique |
 
 Il parle la version actuelle de la spécification, **2026-07-28** (sans état : chaque requête

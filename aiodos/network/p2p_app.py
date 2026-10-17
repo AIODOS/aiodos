@@ -30,12 +30,13 @@ PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par
 
 def _ping(manager, sender, payload):
     # Charge de cette machine si elle prête ses modèles (mode automatique, placement.py)
-    return {"name": manager.name(), "time": time.time(), **placement.load_field(manager)}
+    return {"name": manager.name(), "time": time.time(),
+            **placement.load_field(manager, sender)}
 
 
 def _profile(manager, sender, payload):
     profile = sharing.profile_for(sender, identity.profile())    # allégé pour un ami
-    return {**profile, **placement.load_field(manager)}
+    return {**profile, **placement.load_field(manager, sender)}
 
 
 def _unpair(manager, sender, payload):

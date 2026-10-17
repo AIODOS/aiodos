@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 
 import requests
 
@@ -20,12 +21,13 @@ from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
 from aiodos.network import placement, remote_models
 from aiodos.network.client import PeerError
-from aiodos.services import ollama
+from aiodos.services import cloud, ollama
 
 log = logging.getLogger("aiodos.gateway")
 
 QUIET = placement.QUIET | {"head"}
 UPSTREAM_TIMEOUT = (10, 900)
+WATCH_EVERY = 1.0             # outil encore là ? (réponse attendue sans flux)
 
 
 class GatewayError(Exception):
@@ -34,6 +36,13 @@ class GatewayError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status = status
+
+
+class Disconnected(GatewayError):
+    """L'outil est parti avant la réponse : le calcul est arrêté."""
+
+    def __init__(self):
+        super().__init__(499, "Outil déconnecté avant la réponse.")
 
 
 class Upstream(Exception):
@@ -59,6 +68,11 @@ def plan(model_id, executor, *, local_only=False, prefer_local=False) -> list:
         raise GatewayError(404, str(exc)) from exc
     except placement.NoMachine as exc:
         raise GatewayError(404, str(exc)) from exc
+    # Rien vers le cloud par ici, quel que soit le chemin : son envoi se valide dans
+    # l'interface, message par message
+    models = [m for m in models if not cloud.provider_of(m)]
+    if not models:
+        raise GatewayError(404, f"« {model_id} » n'est pas un modèle du cercle AIODOS.")
     if local_only:
         models = [m for m in models if is_local(m)]
         if not models:
@@ -167,7 +181,8 @@ def remote(model, messages, think, options, stop):
     appairée, qui donne ensuite ("stats", …) si elle sait le dire, ou un gros modèle
     réparti entre mes machines."""
     if cluster.parse(model):
-        yield from cluster.chat_stream(model, messages, think, stop)
+        yield from cluster.chat_stream(model, messages, think, stop, options=options,
+                                       stats=True)
     else:
         yield from remote_models.chat_stream(model, messages, think, stop, options=options,
                                              stats=True)
@@ -189,6 +204,7 @@ class Stream:
     def __init__(self, produce):
         self.stop = threading.Event()
         self._inbox = asyncio.Queue()
+        self._watched = time.monotonic()
         loop = asyncio.get_running_loop()
 
         def pump():
@@ -207,19 +223,34 @@ class Stream:
                     pass
         threading.Thread(target=pump, daemon=True, name="aiodos-passerelle").start()
 
-    async def next(self):
-        """Élément suivant ; None à la fin. L'erreur du calcul remonte ici."""
-        kind, value = await self._inbox.get()
+    async def next(self, request=None):
+        """Élément suivant ; None à la fin. L'erreur du calcul remonte ici. request : la
+        demande d'un outil qui attend sans flux (rien ne lui est encore parti) ; s'il se
+        déconnecte, le calcul s'arrête (Disconnected). Une réponse en flux, elle, est
+        coupée par Starlette, qui ferme alors le générateur. Un relais vers l'Ollama d'ici
+        sans flux ne s'arrête pas en route : Ollama n'envoie rien avant la fin."""
+        while True:
+            if request is not None and time.monotonic() - self._watched >= WATCH_EVERY:
+                self._watched = time.monotonic()      # même quand les mots arrivent vite
+                if await request.is_disconnected():
+                    self.close()
+                    raise Disconnected()
+            try:
+                kind, value = await asyncio.wait_for(
+                    self._inbox.get(), None if request is None else WATCH_EVERY)
+                break
+            except TimeoutError:
+                continue
         if kind == "error":
             raise value
         return value if kind == "item" else None
 
-    async def head(self) -> list:
+    async def head(self, request=None) -> list:
         """Éléments jusqu'au premier qui engage la réponse (inclus) : tant qu'il n'est pas
         là, rien n'est parti vers l'outil, et une erreur garde son vrai statut HTTP."""
         items = []
         while True:
-            item = await self.next()
+            item = await self.next(request)
             if item is None:
                 return items
             items.append(item)

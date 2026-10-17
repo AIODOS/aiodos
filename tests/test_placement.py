@@ -159,12 +159,17 @@ def test_reported_loads_are_checked_and_forgotten(monkeypatch):
     assert placement._reported("b") is None
 
 
-def test_a_machine_tells_its_load_only_when_it_lends(monkeypatch):
+def test_a_machine_tells_its_load_only_when_it_lends_and_only_to_my_machines(monkeypatch):
+    """Un ami ne voit pas l'activité de cette machine (sharing.FRIEND_PROFILE)."""
     class Manager:
         executor = Executor(interactive=1, busy={"gpu": 1, "embed": 2})
-    assert placement.load_field(Manager()) == {}
+    peers.save("mine", "PC fixe", KEY, "127.0.0.1", 1)
+    peers.save("ami", "PC de Léa", KEY, "127.0.0.1", 1, trust="friend")
+    assert placement.load_field(Manager(), "mine") == {}
     settings.set_value("lend_models", True)
-    assert placement.load_field(Manager()) == {"load": {"chats": 1, "units": 3}}
+    assert placement.load_field(Manager(), "mine") == {"load": {"chats": 1, "units": 3}}
+    assert placement.load_field(Manager(), "ami") == {}
+    assert placement.load_field(Manager(), "inconnue") == {}
 
 
 def test_pings_and_profiles_carry_the_load(monkeypatch):
@@ -175,10 +180,28 @@ def test_pings_and_profiles_carry_the_load(monkeypatch):
 
         def name(self):
             return "PC fixe"
+    peers.save("a", "PC portable", KEY, "127.0.0.1", 1)
+    peers.save("ami", "PC de Léa", KEY, "127.0.0.1", 1, trust="friend")
     settings.set_value("lend_models", True)
     monkeypatch.setattr(p2p_app.identity, "profile", lambda: {"name": "PC fixe"})
     assert p2p_app._ping(Manager(), "a", {})["load"] == {"chats": 1, "units": 0}
     assert p2p_app._profile(Manager(), "a", {})["load"] == {"chats": 1, "units": 0}
+    assert "load" not in p2p_app._ping(Manager(), "ami", {})
+    assert "load" not in p2p_app._profile(Manager(), "ami", {})
+
+
+def test_untagged_names_and_reserved_prefixes(monkeypatch):
+    """« llama3 » trouve « llama3:latest », comme pour Ollama ; un modèle d'Ollama nommé
+    comme un identifiant d'AIODOS (« cloud:x ») n'est jamais choisi d'office."""
+    local_models(monkeypatch, "llama3:latest", "cloud:mistral")
+    lender("fixe", "PC fixe", "llama3:latest")
+    assert placement.plan("auto:llama3", Executor()) == [
+        "llama3:latest", remote_models.model_id("fixe", "llama3:latest")]
+    with pytest.raises(placement.NoMachine):
+        placement.plan("auto:cloud:mistral", Executor())
+    assert placement.same_model("qwen3.5:9b", "qwen3.5:9b")
+    assert not placement.same_model("qwen3.5:9b", "qwen3.5")
+    assert placement.same_model("moi/modele:latest", "moi/modele")
 
 
 # ------------------------------------------------------------------ la relève
@@ -326,3 +349,24 @@ def test_a_large_model_split_between_my_machines_passes_as_it_is(monkeypatch):
         yield "content", str(executor.interactive)
     assert list(placement.run(["reparti:qwen3.6"], attempt, executor))[-1] == ("content", "0")
     assert placement.machine_of("reparti:qwen3.6") == "réparti entre mes machines"
+
+
+def test_a_request_refused_by_its_content_is_not_tried_elsewhere():
+    """404 (modèle parti), 5xx, machine injoignable : la suivante essaie ; 400 (la demande
+    elle-même) : ailleurs, elle serait refusée aussi."""
+    from aiodos.gateway.answer import GatewayError
+    tried = []
+
+    def failing(status):
+        def attempt(model):
+            tried.append(model)
+            raise GatewayError(status, "refus")
+            yield
+        return attempt
+    with pytest.raises(GatewayError):
+        list(placement.run(["m", "peer:a:m"], failing(400)))
+    assert tried == ["m"]
+    tried.clear()
+    with pytest.raises(GatewayError):
+        list(placement.run(["m", "peer:a:m"], failing(404)))
+    assert tried == ["m", "peer:a:m"]

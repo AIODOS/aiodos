@@ -113,8 +113,10 @@ function fillModels() {
     el.model.append(g);
   };
   // Chaque modèle une fois, même s'il est sur plusieurs machines : la machine se choisit à côté
+  // Sans mode automatique (prêté seulement par un ami…), l'option dit qui le prête
   group(remote.length ? 'Modèles · la machine qui répond se choisit seule' : 'Sur cette machine',
-    entries.map(e => [e.name, `${e.name} · ${bytes(e.size)}`]));
+    entries.map(e => [e.name, e.auto ? `${e.name} · ${bytes(e.size)}`
+      : `${e.name} · ${e.machines.map(m => m.label).join(', ')} · ${bytes(e.size)}`]));
   group('Réparti entre mes machines · cartes graphiques réunies', cluster.map(m => [m.id,
     `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`]));
   group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));

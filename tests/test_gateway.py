@@ -593,19 +593,129 @@ def test_large_models_split_between_my_machines(gateway, monkeypatch):
          "machines": ["PC fixe"], "complete": True, "size": 22}])
     asked = []
 
-    def fake_group(model, messages, think=True, stop=None):
-        asked.append((model, messages))
+    def fake_group(model, messages, think=True, stop=None, options=None, stats=False):
+        asked.append((model, messages, options))
         yield "content", "Réponse du groupe"
+        if stats:
+            yield "stats", {"prompt_tokens": 4, "completion_tokens": 2, "done_reason": "length"}
     monkeypatch.setattr(cluster, "chat_stream", fake_group)
     listed = {m["id"]: m for m in gateway.get("/v1/models").json()["data"]}
     assert listed["reparti:qwen3.6"]["owned_by"] == "réparti"
     reply = gateway.post("/v1/chat/completions", {"model": "reparti:qwen3.6", "messages": [
-        {"role": "user", "content": "Salut"}]})
-    assert reply.json()["choices"][0]["message"]["content"] == "Réponse du groupe"
-    assert asked == [("reparti:qwen3.6", [{"role": "user", "content": "Salut"}])]
+        {"role": "user", "content": "Salut"}], "max_tokens": 20, "stop": ["FIN"]}).json()
+    assert reply["choices"][0]["message"]["content"] == "Réponse du groupe"
+    assert reply["choices"][0]["finish_reason"] == "length"
+    assert reply["usage"] == {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6}
+    assert asked == [("reparti:qwen3.6", [{"role": "user", "content": "Salut"}],
+                      {"num_predict": 20, "stop": ["FIN"]})]
     lines = [json.loads(l) for l in gateway.post("/api/chat", {
         "model": "reparti:qwen3.6", "messages": [{"role": "user", "content": "Salut"}]}
     ).text.splitlines() if l]
     assert "".join(l["message"]["content"] for l in lines) == "Réponse du groupe"
     assert gateway.post("/v1/embeddings", {"model": "reparti:qwen3.6",
                                            "input": "x"}).status_code == 400
+
+
+def test_cloud_models_never_pass_even_disguised(gateway, monkeypatch):
+    """Un modèle du cloud ne passe pas par la passerelle, même déguisé (« local:cloud:… ») :
+    son envoi se valide dans l'interface, message par message."""
+    from aiodos.services import cloud
+    settings.set_value("mistral_key", "sk-test-12345678")
+    sent = []
+    monkeypatch.setattr(cloud, "chat_stream",
+                        lambda *a, **k: sent.append(a) or iter([("content", "parti !")]))
+    question = [{"role": "user", "content": "Salut"}]
+    for model in ("cloud:mistral", "local:cloud:mistral", "auto:cloud:mistral",
+                  "local:peer:x:y", "local:auto:x", "local:reparti:x"):
+        reply = gateway.post("/v1/chat/completions", {"model": model, "messages": question})
+        assert reply.status_code == 404, model
+        assert gateway.post("/api/chat", {"model": model,
+                                          "messages": question}).status_code == 404, model
+    version = {"MCP-Protocol-Version": "2025-11-25"}
+    refused = _rpc(gateway, "tools/call", {"name": "converser", "arguments": {
+        "message": "Salut", "modele": "local:cloud:mistral"}}, headers=version).json()["result"]
+    assert refused["isError"]
+    assert sent == []
+
+
+def test_libraries_kept_on_this_pc_are_never_shown_to_assistants(gateway):
+    """Le cadenas (portée « local ») : ni listée, ni cherchée, ni nommable par un assistant,
+    dont le modèle est souvent dans le cloud."""
+    _library(DOCS)
+    secret = store.create_collection("Secret")
+    store.set_scope(secret, "local")
+    pieces = ["Le code du coffre-fort du budget 2024 est 1234."]
+    store.upsert_entry(secret, "coffre.txt", "file", None, list(zip(pieces, _bag_of_words(pieces))))
+    version = {"MCP-Protocol-Version": "2025-11-25"}
+    listed = _rpc(gateway, "tools/call", {"name": "lister_bibliotheques", "arguments": {}},
+                  headers=version).json()["result"]["structuredContent"]["bibliotheques"]
+    assert [b["nom"] for b in listed] == [store.DEFAULT_COLLECTION]
+    found = _rpc(gateway, "tools/call", {"name": "rechercher_bibliotheques", "arguments": {
+        "question": "code du coffre-fort du budget 2024", "nombre": 10}},
+        headers=version).json()["result"]["structuredContent"]["passages"]
+    assert found and all(p["source"] != "coffre.txt" for p in found)
+    named = _rpc(gateway, "tools/call", {"name": "rechercher_bibliotheques", "arguments": {
+        "question": "code du coffre", "bibliotheque": "Secret"}}, headers=version).json()
+    assert named["result"]["isError"] and "gardée sur ce PC" in named["result"]["content"][0]["text"]
+
+
+def test_untagged_model_names_like_ollama(gateway):
+    """« petit » désigne « petit:latest » comme pour Ollama (ici, le faux Ollama n'a que
+    « petit:1b » : « petit » n'existe donc pas)."""
+    assert gateway.get("/v1/models/plongement").json()["id"] == EMBEDDING
+    assert gateway.post("/api/show", {"model": "plongement"}).status_code == 200
+    missing = gateway.post("/v1/chat/completions", {"model": "petit", "messages": [
+        {"role": "user", "content": "Salut"}]})
+    assert missing.status_code == 404
+
+
+@pytest.fixture
+def slow_lender(monkeypatch):
+    """Machine appairée qui répond lentement, mot à mot, et dit quand on l'a arrêtée."""
+    import threading
+    import time
+    peers.save(PEER, "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    peers.set_profile(PEER, {"lends_models": True, "ollama": {"models": [
+        {"name": LENT, "caps": ["completion"], "size": 7}]}})
+    stopped = threading.Event()
+
+    def fake_stream(my_id, peer, action, payload, stop=None, **kw):
+        finished = False
+        try:                              # arrêtée : stop levé, ou flux fermé en route
+            for word in ("Un", " deux", " trois", " quatre", " cinq", " six"):
+                if stop is not None and stop.is_set():
+                    return
+                time.sleep(0.5)
+                yield {"content": word}
+            finished = True
+        finally:
+            if not finished:
+                stopped.set()
+    monkeypatch.setattr(client, "stream", fake_stream)
+    return stopped
+
+
+def test_a_tool_that_leaves_before_a_whole_answer_stops_it(gateway, slow_lender):
+    """Réponse attendue sans flux : l'outil part, la machine qui calcule est arrêtée."""
+    with pytest.raises(requests.Timeout):
+        requests.post(gateway.base + "/v1/chat/completions", headers=gateway.auth, timeout=0.8,
+                      json={"model": LENT, "messages": [{"role": "user", "content": "Salut"}]})
+    assert slow_lender.wait(8), "la génération n'a pas été arrêtée"
+
+
+def test_mcp_cancelled_notification_stops_the_conversation(gateway, slow_lender):
+    import threading
+    version = {"MCP-Protocol-Version": "2025-11-25"}
+    result = {}
+    call = threading.Thread(target=lambda: result.update(reply=_rpc(
+        gateway, "tools/call", {"name": "converser", "arguments": {
+            "message": "Compte", "modele": LENT}}, headers=version, message_id=41).json()))
+    call.start()
+    import time
+    time.sleep(1.2)                                   # quelques mots sont partis
+    cancel = _rpc(gateway, "notifications/cancelled", {"requestId": 41, "reason": "assez"},
+                  headers=version, message_id=None)
+    assert cancel.status_code == 202
+    call.join(10)
+    assert slow_lender.is_set()
+    assert result["reply"]["result"]["structuredContent"]["reponse"].startswith("Un")

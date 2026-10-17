@@ -238,13 +238,14 @@ def _sse_error(exc) -> str:
                                  ensure_ascii=False) + "\n\n"
 
 
-async def _formatted(stream: answer.Stream, head: list, chunks: Chunks, streaming: bool):
+async def _formatted(stream: answer.Stream, head: list, chunks: Chunks, streaming: bool,
+                     request: Request):
     headers = _route_headers(head)
     if not streaming:
         try:
             for item in head:
                 chunks.take(*item)
-            while (item := await stream.next()) is not None:
+            while (item := await stream.next(request)) is not None:
                 chunks.take(*item)
         except Exception as exc:
             return _failure(exc)
@@ -325,14 +326,15 @@ async def chat_completions(request: Request):
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
-        head = await stream.head()
+        head = await stream.head(request)
     except Exception as exc:
         stream.close()
         return _failure(exc)
     raw = next((value for kind, value in head if kind == "head"), None)
     if raw is not None:
         return _relay(stream, head, raw)
-    return await _formatted(stream, head, Chunks(model_id, "chat", include_usage), streaming)
+    return await _formatted(stream, head, Chunks(model_id, "chat", include_usage), streaming,
+                            request)
 
 
 @router.post("/completions")
@@ -371,11 +373,12 @@ async def completions(request: Request):
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
-        head = await stream.head()
+        head = await stream.head(request)
     except Exception as exc:
         stream.close()
         return _failure(exc)
-    return await _formatted(stream, head, Chunks(model_id, "text", include_usage), streaming)
+    return await _formatted(stream, head, Chunks(model_id, "text", include_usage), streaming,
+                            request)
 
 
 # --------------------------------------------------------------- embeddings

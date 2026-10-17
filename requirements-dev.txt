@@ -1,0 +1,9 @@
+# Essais de la passerelle avec les clients officiels (tests/test_gateway*.py) :
+#   pip install -r requirements-dev.txt
+# Sans eux, ces essais-là sont ignorés ; tout le reste passe avec requirements.txt.
+# Versions épinglées, celles essayées le 17/10/2026. Elles tirent httpx2 (BSD-3), et mcp
+# tire aussi starlette et sse-starlette : dans un environnement à part (venv) de
+# préférence, pour ne pas toucher à la version de starlette dont dépend FastAPI. Avec
+# httpx2 installé, le TestClient de Starlette passe par lui (les essais passent ainsi aussi).
+openai==3.33.0     # client officiel d'OpenAI (Apache-2.0)
+mcp==2.3.0         # SDK officiel de MCP (MIT)

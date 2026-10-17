@@ -32,7 +32,8 @@ class UnknownModel(Exception):
 
 def internal(model_id) -> str:
     """Identifiant donné par un outil → identifiant d'AIODOS (« auto:… », nom seul pour
-    cette machine, « peer:… »)."""
+    cette machine, « peer:… », « reparti:… »). Jamais un modèle du cloud, même déguisé
+    (« local:cloud:… ») : son envoi se valide dans l'interface, message par message."""
     name = str(model_id or "").strip()
     if not name:
         raise UnknownModel("Modèle manquant.")
@@ -41,9 +42,12 @@ def internal(model_id) -> str:
     if remote_models.parse(name) or placement.parse(name) or cluster.parse(name):
         return name
     if name.startswith(LOCAL):
-        if not name[len(LOCAL):]:
+        rest = name[len(LOCAL):]
+        if not rest:
             raise UnknownModel("Modèle manquant après « local: ».")
-        return name[len(LOCAL):]
+        if placement.reserved(rest):
+            raise UnknownModel(f"« {name} » n'est pas un modèle de cette machine.")
+        return rest
     return placement.auto_id(name)
 
 
@@ -120,8 +124,13 @@ def _remote_entry(m: dict, model_id: str, machine) -> dict:
 
 
 def find(model_id) -> dict | None:
-    for entry in entries():
+    """Le modèle proposé sous cet identifiant (« llama3 » trouve « llama3:latest »)."""
+    listed = entries()
+    for entry in listed:
         if entry["id"] == model_id:
+            return entry
+    for entry in listed:
+        if not entry["machine"] and placement.same_model(entry["id"], str(model_id)):
             return entry
     return None
 

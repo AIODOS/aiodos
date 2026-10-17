@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from aiodos import settings
 from aiodos.cluster import group as cluster
 from aiodos.jobs import queue
-from aiodos.network import peers, remote_models
+from aiodos.network import peers, remote_models, sharing
 from aiodos.node import identity
 
 log = logging.getLogger("aiodos.placement")
@@ -66,12 +66,31 @@ def parse(model) -> str | None:
     return name or None
 
 
+# Préfixes qui ont un sens pour AIODOS : un modèle d'Ollama qui en porterait un (« cloud:x »
+# serait pris pour un modèle du cloud) n'est jamais choisi d'office.
+RESERVED = ("auto:", "peer:", "cloud:", "reparti:", "local:")
+
+
+def reserved(name) -> bool:
+    return str(name or "").startswith(RESERVED)
+
+
+def same_model(installed: str, wanted: str) -> bool:
+    """« llama3 » désigne « llama3:latest », comme pour Ollama."""
+    if installed == wanted:
+        return True
+    tagged = ":" in wanted.rsplit("/", 1)[-1]
+    return not tagged and installed == f"{wanted}:latest"
+
+
 # ----------------------------------------------------------- charge des machines
-def load_field(manager) -> dict:
+def load_field(manager, sender) -> dict:
     """{"load": …} à joindre aux nouvelles de cette machine (ping, profil), seulement si
-    elle prête ses modèles : c'est ce qui permet de lui envoyer une conversation."""
+    elle prête ses modèles (c'est ce qui permet de lui envoyer une conversation), et pour
+    une de mes machines : un ami ne voit pas l'activité de celle-ci (sharing.FRIEND_PROFILE)."""
     executor = getattr(manager, "executor", None)
-    if executor is None or not settings.get("lend_models"):
+    if executor is None or not settings.get("lend_models") \
+            or sharing.level(sender) != sharing.MINE:
         return {}
     return {"load": {"chats": int(executor.interactive),
                      "units": int(sum(executor.busy.values()))}}
@@ -151,9 +170,10 @@ def _gpu_load(profile: dict) -> int:
 def _local(name: str, executor) -> Candidate | None:
     profile = _local_profile()
     for m in (profile.get("ollama") or {}).get("models") or []:
-        if m.get("name") == name and _chat_capable(m.get("caps")):
+        if (same_model(m.get("name") or "", name) and not reserved(m.get("name"))
+                and _chat_capable(m.get("caps"))):
             return Candidate(
-                model=name, node_id=None, machine=profile.get("name") or "cette machine",
+                model=m["name"], node_id=None, machine=profile.get("name") or "cette machine",
                 trust="local",
                 chats=int(executor.interactive) if executor else 0,
                 units=int(sum(executor.busy.values())) if executor else 0,
@@ -184,7 +204,8 @@ def _remote(name: str) -> list:
             continue
         profile = peer.get("profile") or {}
         model = next((m for m in (profile.get("ollama") or {}).get("models") or []
-                      if m.get("name") == name and _chat_capable(m.get("caps"))), None)
+                      if same_model(m.get("name") or "", name) and not reserved(m.get("name"))
+                      and _chat_capable(m.get("caps"))), None)
         if model is None:
             continue
         node_id = peer["node_id"]
@@ -192,7 +213,7 @@ def _remote(name: str) -> list:
         with _lock:
             sent = _sent.get(node_id, 0)
         out.append(Candidate(
-            model=remote_models.model_id(node_id, name), node_id=node_id,
+            model=remote_models.model_id(node_id, model["name"]), node_id=node_id,
             machine=peer["name"], trust=peer.get("trust") or "mine",
             chats=max(sent, reported["chats"] if reported else 0),
             units=reported["units"] if reported else working.get(node_id, 0),
@@ -277,12 +298,22 @@ def _occupy(model, executor):
 QUIET = {"route", "sources"}    # ce qui n'engage pas encore la réponse
 
 
+def _hands_over(exc) -> bool:
+    """Une autre machine peut-elle répondre à la place ? Oui si celle-ci est injoignable,
+    refuse ou n'a plus le modèle (404), ou a failli (5xx) ; non si c'est la demande elle-même
+    qui est refusée (400…) : ailleurs, elle le serait aussi."""
+    status = getattr(exc, "status", None)
+    return not (isinstance(status, int) and 400 <= status < 500
+                and status not in (404, 408, 429))
+
+
 def run(models: list, attempt, executor=None, stop=None):
     """Couples (genre, valeur) de la réponse, par la première machine du plan qui répond.
 
     attempt(modèle) produit les couples d'un essai. Avant chacun vient ("route", modèle).
     Tant que l'essai n'a produit que des couples QUIET, un échec fait passer à la machine
-    suivante ; après, ou au dernier essai, ou si la réponse a été arrêtée, il remonte."""
+    suivante (cf. _hands_over) ; après, ou au dernier essai, ou si la réponse a été
+    arrêtée, il remonte."""
     for i, model in enumerate(models):
         yield "route", model
         started = False
@@ -294,7 +325,8 @@ def run(models: list, attempt, executor=None, stop=None):
                     yield kind, value
             return
         except Exception as exc:
-            if started or i + 1 == len(models) or (stop is not None and stop.is_set()):
+            if (started or i + 1 == len(models) or (stop is not None and stop.is_set())
+                    or not _hands_over(exc)):
                 raise
             log.info("« %s » n'a pas pu répondre (%s) : essai de la machine suivante",
                      model, exc)

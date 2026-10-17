@@ -309,3 +309,41 @@ def test_the_server_stream_reads_like_ollama():
         assert _SSE.seen["body"]["chat_template_kwargs"] == {"enable_thinking": False}
     finally:
         server.shutdown()
+
+
+def test_sampling_options_and_token_count_reach_llama_server(monkeypatch):
+    """Passerelle : max_tokens, stop… vont à llama-server, qui donne le nombre de jetons."""
+    import json as _json
+
+    from aiodos.cluster import group as cluster_group
+    sent = {}
+
+    class Reply:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def iter_lines(self, decode_unicode=False):
+            chunks = [{"choices": [{"delta": {"content": "Bon"}, "finish_reason": None}]},
+                      {"choices": [{"delta": {}, "finish_reason": "length"}]},
+                      {"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 1}}]
+            return iter([f"data: {_json.dumps(c)}" for c in chunks] + ["data: [DONE]"])
+
+    def fake_post(url, json=None, **kw):
+        sent.update(json)
+        return Reply()
+    monkeypatch.setattr(cluster_group.requests, "post", fake_post)
+    group = cluster_group.Group.__new__(cluster_group.Group)
+    group.api_key, group.last_used = "clé", 0
+    group.server = type("Server", (), {"port": 1})()
+    out = list(group.chat_stream([{"role": "user", "content": "x"}], think=False,
+                                 options={"num_predict": 5, "stop": ["\n"], "num_ctx": 9},
+                                 stats=True))
+    assert out == [("content", "Bon"), ("stats", {"prompt_tokens": 7, "completion_tokens": 1,
+                                                 "done_reason": "length"})]
+    assert sent["max_tokens"] == 5 and sent["stop"] == ["\n"] and "num_ctx" not in sent
+    assert sent["stream_options"] == {"include_usage": True}
