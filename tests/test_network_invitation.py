@@ -1,11 +1,11 @@
 """Invitation à distance (étape 2.4), avec deux vrais nœuds et leurs compagnons en essai
 local (--internet-local) : ils ne se connaissent pas sur le réseau local (pas de
 découverte, pas d'ajout par adresse), et s'appairent uniquement par Internet, sur
-invitation. Il faut le compagnon compilé."""
+invitation ; la séparation passe aussi par Internet. Il faut le compagnon compilé."""
 import pytest
 
 from aiodos.network import companion
-from tests.nodes import Node
+from tests.nodes import Node, pair_by_invitation
 
 pytestmark = pytest.mark.skipif(companion.find_binary() is None,
                                 reason="compagnon aiodos-net non compilé (voir compagnon/README.md)")
@@ -27,6 +27,13 @@ def _ready(node):
 
 def _peers(node):
     return node.api("GET", "/network")["peers"]
+
+
+def _seen_by_companion(node, other) -> dict:
+    """Ce que le compagnon de `node` sait de la machine `other` (liste blanche, connexion)."""
+    key = other.api("GET", "/network/internet")["id"]
+    known = node.api("GET", "/network/internet")["companion"]["peers"]
+    return next((p for p in known if p["id"] == key), {})
 
 
 def test_a_friend_far_away_pairs_by_invitation_only(two_strangers):
@@ -64,3 +71,22 @@ def test_a_friend_far_away_pairs_by_invitation_only(two_strangers):
     # Une invitation déjà utilisée n'ouvre plus rien
     assert b.api("POST", "/network/invitations/accept", {"code": invitation["code"]},
                  expect=400)["detail"].startswith("Cette invitation a déjà servi")
+
+
+def test_a_friend_far_away_is_told_of_the_separation(two_strangers):
+    """A ne connaît de B que sa clé Internet (pas d'adresse sur le réseau local) : elle la
+    prévient quand même de la séparation, par les compagnons, et chacune retire l'autre
+    de la liste blanche du sien."""
+    a, b = two_strangers
+    _, b_id = pair_by_invitation(a, b)
+    assert not next(p for p in _peers(a) if p["node_id"] == b_id)["address"]
+    for node, other in ((a, b), (b, a)):
+        node.wait_for(lambda: _seen_by_companion(node, other).get("allowed"),
+                      what="admise dans la liste blanche")
+
+    a.api("DELETE", f"/network/peers/{b_id}")
+    assert _peers(a) == []
+    b.wait_for(lambda: _peers(b) == [], what="séparation prévenue chez B")
+    for node, other in ((a, b), (b, a)):
+        node.wait_for(lambda: not _seen_by_companion(node, other).get("allowed"),
+                      what="retirée de la liste blanche")

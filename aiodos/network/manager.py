@@ -251,7 +251,8 @@ class NetworkManager:
 
     async def unpair(self, node_id: str):
         peer = await asyncio.to_thread(peers.get, node_id)
-        if peer and peer.get("address"):
+        # Jointe sur le réseau local ou par Internet (appairée sur invitation : clé seule)
+        if peer and (peer.get("address") or peer.get("net_id")):
             try:                # on prévient l'autre machine, sans l'exiger
                 await asyncio.to_thread(client.call, self.node_id, peer, "unpair", {}, None, 4)
             except Exception:
