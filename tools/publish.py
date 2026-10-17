@@ -37,6 +37,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey 
 
 import companion_build  # noqa: E402
 import engine_release  # noqa: E402
+from aiodos.updates import keys  # noqa: E402
 from aiodos.updates import manifest as manifests  # noqa: E402
 from aiodos.updates import platforms  # noqa: E402
 from aiodos.updates import version as versions  # noqa: E402
@@ -215,10 +216,10 @@ def cmd_release(args):
             "format": manifests.FORMAT, "app": manifests.APP, "version": number,
             "published": int(time.time()), "commit": commit, "min_python": MIN_PYTHON,
             "notes": args.notes or "", "files": [item for _, item in files]}, private)
-        manifests.verify(signed, trusted)
+        manifests.verify(signed, trusted, approvers={})   # l'approbation viendra après
         for path, item in files:                        # le manifeste en dernier : le paquet
             store.save_file(number, item, path)         # n'est proposé qu'une fois complet
-        store.add_manifest(signed, trusted)
+        store.add_manifest(signed, trusted, approvers={})
         if args.out:
             out = Path(args.out)
             out.mkdir(parents=True, exist_ok=True)
@@ -240,7 +241,12 @@ def cmd_release(args):
     for where, reason in skipped_engines:
         print(f"ATTENTION : moteur llama.cpp non joint ({where}) : {reason}. Les machines de "
               "cette plateforme garderont celui qu'elles ont déjà.")
-    print("Le nœud de cette machine la propose à ses machines appairées, qui se la passent.")
+    if getattr(keys, "APPROVER_KEYS", None):      # absent d'un keys.py plus ancien
+        print(f"EN ATTENTE D'APPROBATION : ouvre la vue Mises à jour de ton appareil "
+              f"d'approbation (ton téléphone) et approuve la version {number}. D'ici là, elle "
+              "n'est proposée à personne.")
+    else:
+        print("Le nœud de cette machine la propose à ses machines appairées, qui se la passent.")
     if args.out:
         print(f"Copie pour une installation à la main : {Path(args.out) / archive.name}")
 

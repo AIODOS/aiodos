@@ -72,10 +72,12 @@ def zip_folder(folder: Path, archive: Path) -> Path:
 
 
 def publish(store: Store, archive: Path, version: str, private, trusted: dict,
-            companions: dict | None = None, engines: dict | None = None, **extra) -> dict:
+            companions: dict | None = None, engines: dict | None = None, approvers=None,
+            **extra) -> dict:
     """Range dans `store` un paquet signé (comme tools/publish.py) ; le manifeste lu.
     companions : {plateforme : chemin du programme} à joindre (aiodos-net-<plateforme>) ;
-    engines : {plateforme : archive} du moteur llama.cpp (llama.cpp-<plateforme>)."""
+    engines : {plateforme : archive} du moteur llama.cpp (llama.cpp-<plateforme>) ;
+    approvers={} : gardé sans approbation (version qui attend la sienne)."""
     files = [(archive, {"kind": "source", "name": f"aiodos-{version}.zip",
                         "size": archive.stat().st_size, "sha256": sha256_of(archive)})]
     for where, path in (companions or {}).items():
@@ -90,7 +92,7 @@ def publish(store: Store, archive: Path, version: str, private, trusted: dict,
     signed = manifests.sign(data, private)
     for path, item in files:
         store.save_file(version, item, path)
-    return store.add_manifest(signed, trusted)
+    return store.add_manifest(signed, trusted, approvers)
 
 
 def fake_program(path: Path, content: bytes = b"") -> Path:

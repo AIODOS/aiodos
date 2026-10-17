@@ -22,8 +22,8 @@ def copy_code(dest: Path, version: str, trusted: dict) -> Path:
     init = dest / "aiodos" / "__init__.py"
     init.write_text(re.sub(r'__version__ = "[^"]+"', f'__version__ = "{version}"',
                            init.read_text(encoding="utf-8")), encoding="utf-8")
-    (dest / "aiodos" / "updates" / "keys.py").write_text(f"TRUSTED_KEYS = {trusted!r}\n",
-                                                          encoding="utf-8")
+    (dest / "aiodos" / "updates" / "keys.py").write_text(
+        f"TRUSTED_KEYS = {trusted!r}\nAPPROVER_KEYS = {{}}\n", encoding="utf-8")
     return dest
 
 
