@@ -125,6 +125,12 @@ def test_the_end_of_the_model_stays_here():
     # Trop gros pour toutes les cartes : les premières couches restent en mémoire vive ici
     cut = plan.make(60 * gib, 32, card, lenders)
     assert not cut["complete"] and 0 < cut["layers"] < 32
+    # Une carte du réseau local passe avant une plus grande jointe par Internet
+    lenders = [{"node_id": "loin", "free_mib": 24000}, {"node_id": "pres", "free_mib": 12000,
+                                                         "near": True}]
+    assert [h["node_id"] for h in plan.make(15 * gib, 32, card, lenders)["helpers"]] == ["pres"]
+    assert [h["node_id"] for h in plan.make(25 * gib, 32, card, lenders)["helpers"]] == \
+        ["pres", "loin"]
 
 
 # ------------------------------------------------------------------ prêt de la carte

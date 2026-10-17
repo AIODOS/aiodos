@@ -68,7 +68,9 @@ def lenders(version: str) -> list:
                 and cluster.get("version") == version
                 and sharing.level(peer["node_id"]) == sharing.MINE):
             found.append({"node_id": peer["node_id"], "name": peer["name"],
-                          "free_mib": int(cluster.get("free_mib") or 0)})
+                          "free_mib": int(cluster.get("free_mib") or 0),
+                          # sur le réseau local : ~1 ms par mot, contre 20 à 50 par Internet
+                          "near": route.lan_first(peer)})
     return found
 
 

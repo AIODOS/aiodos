@@ -5,7 +5,8 @@ aller-retour réseau par mot écrit ; le dernier étage du modèle, qui note tou
 vocabulaire (~1 Mo par mot pour Qwen), doit rester sur la machine qui pose la question,
 sinon un débit Internet ordinaire suffit à tout ralentir. D'où :
 
-- le moins de machines possible : les plus grandes cartes d'abord ;
+- les machines du réseau local d'abord (un aller-retour y coûte ~1 ms par mot, contre 20 à
+  50 par Internet), puis le moins de machines possible : les plus grandes cartes d'abord ;
 - les machines qui prêtent gardent les premières couches, dans l'ordre ; la carte de cette
   machine garde les dernières et le dernier étage ;
 - sans carte ici, le dernier étage reste sur le processeur de cette machine.
@@ -21,7 +22,7 @@ def _usable(device) -> int:
 def make(model_bytes: int, layers: int, local: dict | None, helpers: list) -> dict | None:
     """Découpage d'un modèle de `model_bytes` octets et `layers` couches entre la carte de
     cette machine (`local` : {"name", "free_mib"} ou None) et des machines qui prêtent la
-    leur (`helpers` : [{"node_id", "free_mib", …}]).
+    leur (`helpers` : [{"node_id", "free_mib", "near" (réseau local), …}]).
 
     Rend {"helpers": [machines retenues, dans l'ordre], "devices": "RPC0/RPC1/Vulkan1",
     "split": "6144/4096/5632", "layers": couches confiées aux cartes, "complete": tout
@@ -34,7 +35,7 @@ def make(model_bytes: int, layers: int, local: dict | None, helpers: list) -> di
     if here >= need:
         return None                              # tient ici : rien à répartir
     chosen, total = [], here
-    for helper in sorted(helpers, key=_usable, reverse=True):
+    for helper in sorted(helpers, key=lambda h: (not h.get("near"), -_usable(h))):
         if _usable(helper) <= 0:
             continue
         chosen.append(helper)
