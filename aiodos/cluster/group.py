@@ -37,6 +37,11 @@ LOAD_TIMEOUT = 1800           # premier chargement : les poids traversent le ré
 CONTEXT = 8192
 NO_PROXY = {"http": None, "https": None}
 PARAGRAPH = "\n\n"            # entre deux consignes réunies
+# Réglages d'échantillonnage d'Ollama (lending.SAMPLING) → champs de llama-server
+SAMPLING = {"num_predict": "max_tokens", "temperature": "temperature", "top_p": "top_p",
+            "top_k": "top_k", "min_p": "min_p", "seed": "seed", "stop": "stop",
+            "repeat_penalty": "repeat_penalty", "presence_penalty": "presence_penalty",
+            "frequency_penalty": "frequency_penalty"}
 
 _lock = threading.Lock()
 _groups = {}                  # modèle -> Group
@@ -204,10 +209,18 @@ class Group:
         self.loans = []
 
     # ------------------------------------------------------------- conversation
-    def chat_stream(self, messages, think=True, stop=None):
+    def chat_stream(self, messages, think=True, stop=None, options=None, stats=False):
+        """options : réglages d'échantillonnage à la façon d'Ollama ; stats : à la fin,
+        ("stats", {"prompt_tokens", "completion_tokens", "done_reason"}) (passerelle)."""
         self.last_used = time.monotonic()
         body = {"messages": for_template(messages), "stream": True,
                 "chat_template_kwargs": {"enable_thinking": bool(think)}}
+        for key, value in (options or {}).items():
+            if key in SAMPLING:
+                body[SAMPLING[key]] = value
+        if stats:
+            body["stream_options"] = {"include_usage": True}
+        finish = "stop"
         headers = {"Authorization": f"Bearer {self.api_key}"}
         url = f"http://127.0.0.1:{self.server.port}/v1/chat/completions"
         try:
@@ -224,9 +237,18 @@ class Group:
                     if data == "[DONE]":
                         break
                     try:
-                        delta = (json.loads(data).get("choices") or [{}])[0].get("delta") or {}
+                        chunk = json.loads(data)
                     except ValueError:
                         continue
+                    choice = (chunk.get("choices") or [{}])[0]
+                    delta = choice.get("delta") or {}
+                    if choice.get("finish_reason"):
+                        finish = choice["finish_reason"]
+                    usage = chunk.get("usage")
+                    if stats and isinstance(usage, dict):
+                        yield "stats", {"prompt_tokens": usage.get("prompt_tokens") or 0,
+                                        "completion_tokens": usage.get("completion_tokens") or 0,
+                                        "done_reason": finish}
                     self.last_used = time.monotonic()
                     if delta.get("reasoning_content"):
                         yield "thinking", delta["reasoning_content"]
@@ -295,12 +317,13 @@ def _group(name: str, retry: bool = True, stop=None) -> Group:
     return group
 
 
-def chat_stream(model, messages, think=True, stop=None):
-    """Couples (genre, texte), comme ollama.chat_stream, calculés par le groupe."""
+def chat_stream(model, messages, think=True, stop=None, options=None, stats=False):
+    """Couples (genre, texte), comme ollama.chat_stream, calculés par le groupe (options,
+    stats : cf. Group.chat_stream)."""
     name = parse(model)
     if not name:
         raise RuntimeError("Modèle réparti inconnu.")
-    yield from _group(name, stop=stop).chat_stream(messages, think, stop)
+    yield from _group(name, stop=stop).chat_stream(messages, think, stop, options, stats)
 
 
 def stop_all():

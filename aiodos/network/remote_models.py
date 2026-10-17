@@ -26,12 +26,15 @@ def parse(model) -> tuple | None:
 
 
 def available() -> list:
-    """Modèles de conversation prêtés par mes machines en ligne."""
+    """Modèles de conversation prêtés par mes machines en ligne. auto : la machine peut
+    aussi répondre d'office en mode automatique (cf. placement.eligible)."""
+    from aiodos.network import placement           # placement s'appuie sur ce module
     models = []
     for peer in peers.list_peers():
         profile = peer.get("profile") or {}
         if not peer["online"] or not profile.get("lends_models"):
             continue
+        auto = placement.eligible(peer)
         for m in (profile.get("ollama") or {}).get("models") or []:
             caps = m.get("caps") or []
             if caps and "completion" not in caps:          # modèle d'embedding seul
@@ -39,7 +42,12 @@ def available() -> list:
             models.append({"id": model_id(peer["node_id"], m["name"]), "label": m["name"],
                            "group": "remote", "peer": peer["name"], "size": m.get("size", 0),
                            "caps": caps, "fits_vram": m.get("fits_vram"),
-                           "loaded": m.get("loaded")})
+                           "loaded": m.get("loaded"), "node_id": peer["node_id"],
+                           "trust": peer.get("trust") or "mine", "auto": auto,
+                           # pour les autres outils (gateway/catalog.py)
+                           "digest": m.get("digest", ""), "family": m.get("family", ""),
+                           "parameters": m.get("parameters", ""),
+                           "quantization": m.get("quantization", "")})
     return models
 
 
@@ -49,11 +57,12 @@ def peer_name(model) -> str | None:
     return peer["name"] if peer else None
 
 
-def chat_stream(model, messages, think=True, stop=None):
+def chat_stream(model, messages, think=True, stop=None, options=None, stats=False):
     """Couples (genre, texte), comme ollama.chat_stream, mais calculés par une autre
     machine, jointe sur le réseau local ou par Internet (une machine appairée sur
     invitation n'a qu'une clé Internet). Machine injoignable, refus ou réponse altérée :
-    PeerError (message lisible)."""
+    PeerError (message lisible). options, stats : cf. lending.py (une machine d'une
+    version précédente les ignore : pas de couple « stats » alors)."""
     node_id, name = parse(model)
     peer = peers.get(node_id)
     if not peer:
@@ -61,9 +70,14 @@ def chat_stream(model, messages, think=True, stop=None):
     if not (peer.get("address") or peer.get("net_id")):
         raise PeerError(f"« {peer['name']} » est injoignable pour l'instant (ni adresse sur "
                         "le réseau local, ni clé Internet).")
-    for frame in client.stream(identity.node_id(), peer, "chat",
-                               {"model": name, "messages": messages, "think": bool(think)},
-                               stop=stop):
+    payload = {"model": name, "messages": messages, "think": bool(think)}
+    if options:
+        payload["options"] = options
+    if stats:
+        payload["stats"] = True
+    for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop):
         for kind in ("thinking", "content"):
             if frame.get(kind):
                 yield kind, frame[kind]
+        if stats and isinstance(frame.get("stats"), dict):
+            yield "stats", frame["stats"]

@@ -37,6 +37,23 @@ class Node:
         self.process = None
         self.output = []
 
+    def preset(self, **values):
+        """Réglages écrits dans la base du nœud avant son démarrage (adresse d'un faux
+        Ollama, passerelle ouverte…) : il démarre directement avec."""
+        from aiodos import db, settings
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        previous = os.environ.get("AIODOS_DATA_DIR")
+        os.environ["AIODOS_DATA_DIR"] = str(self.data_dir)
+        try:
+            settings.set_many(values)
+        finally:
+            db.close()
+            if previous is None:
+                os.environ.pop("AIODOS_DATA_DIR", None)
+            else:
+                os.environ["AIODOS_DATA_DIR"] = previous
+        return self
+
     def start(self, timeout=40):
         # Jamais de fenêtre d'erreur sur le bureau : un nœud d'essai n'a personne devant lui
         env = dict(os.environ, AIODOS_DATA_DIR=str(self.data_dir), PYTHONIOENCODING="utf-8",

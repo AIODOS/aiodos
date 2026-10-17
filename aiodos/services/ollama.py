@@ -98,15 +98,20 @@ def capabilities_many(models) -> dict:
     return {m: capabilities(m) for m in models}
 
 
-def chat_stream(model, messages, think=None, stop=None):
+def chat_stream(model, messages, think=None, stop=None, options=None, stats=False):
     """Génère des couples (genre, texte) : genre = "thinking" ou "content".
 
-    think : None = comportement par défaut du modèle, False = pas de réflexion.
-    stop  : threading.Event ; s'il est levé, on coupe le flux (bouton Stop).
+    think   : None = comportement par défaut du modèle, False = pas de réflexion.
+    stop    : threading.Event ; s'il est levé, on coupe le flux (bouton Stop).
+    options : réglages d'échantillonnage d'Ollama (temperature, num_predict…).
+    stats   : à la fin, un couple ("stats", {"prompt_tokens", "completion_tokens",
+              "done_reason"}) en plus (passerelle vers les autres outils).
     """
     payload = {"model": model, "messages": messages, "stream": True}
     if think is False and "thinking" in capabilities(model):
         payload["think"] = False
+    if options:
+        payload["options"] = options
     with requests.post(base() + "/api/chat", json=payload,
                        stream=True, timeout=(10, 900)) as r:
         if r.status_code >= 400:
@@ -128,6 +133,10 @@ def chat_stream(model, messages, think=None, stop=None):
             if msg.get("content"):
                 yield "content", msg["content"]
             if obj.get("done"):
+                if stats:
+                    yield "stats", {"prompt_tokens": obj.get("prompt_eval_count") or 0,
+                                    "completion_tokens": obj.get("eval_count") or 0,
+                                    "done_reason": obj.get("done_reason") or "stop"}
                 break
 
 

@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
 from aiodos.cluster import helper as cluster
-from aiodos.network import consult, envelope, lending, netinfo, peers, sharing, work
+from aiodos.network import consult, envelope, lending, netinfo, peers, placement, sharing, work
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -29,14 +29,18 @@ PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par
 
 
 def _ping(manager, sender, payload):
-    return {"name": manager.name(), "time": time.time()}
+    # Charge de cette machine si elle prête ses modèles (mode automatique, placement.py)
+    return {"name": manager.name(), "time": time.time(),
+            **placement.load_field(manager, sender)}
 
 
 def _profile(manager, sender, payload):
     # Allégé pour un ami ; avec, pour chacune, le nombre de bibliothèques qui lui sont
-    # ouvertes (elle n'envoie ses questions qu'aux machines qui ont quelque chose pour elle)
+    # ouvertes (elle n'envoie ses questions qu'aux machines qui ont quelque chose pour elle),
+    # et la charge de cette machine pour mes machines (mode automatique, placement.py)
     return dict(sharing.profile_for(sender, identity.profile()),
-                consult={"open": consult.open_count(sender)})
+                consult={"open": consult.open_count(sender)},
+                **placement.load_field(manager, sender))
 
 
 def _unpair(manager, sender, payload):

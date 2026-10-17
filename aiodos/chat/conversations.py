@@ -57,7 +57,11 @@ def delete(conv_id):
     store.remove_by_origin(store.conversation_collection_id(), str(conv_id))
 
 
-def add_message(conv_id, role, content, thinking=None, model=None, sources=None) -> int:
+def add_message(conv_id, role, content, thinking=None, model=None, sources=None,
+                conversation_model=None) -> int:
+    """model : le modèle qui a répondu ; conversation_model : celui que la conversation
+    garde pour la suite, s'il diffère (mode automatique : « auto:… », alors que la
+    réponse retient la machine qui l'a calculée)."""
     now = db.now()
     with db.transaction() as c:
         message_id = c.execute(
@@ -66,7 +70,7 @@ def add_message(conv_id, role, content, thinking=None, model=None, sources=None)
             (conv_id, role, content, thinking, model,
              json.dumps(sources or [], ensure_ascii=False), now)).lastrowid
         c.execute("UPDATE conversations SET updated=?, model=COALESCE(?, model) WHERE id=?",
-                  (now, model, conv_id))
+                  (now, conversation_model or model, conv_id))
     return message_id
 
 

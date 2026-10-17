@@ -9,14 +9,19 @@ Les extraits peuvent venir aussi des bibliothèques que mes machines et mes amis
 m'ouvrent (network/remote_search.py), si la conversation nomme ces machines : à part
 des miens, dans un bloc marqué non vérifié, et seulement pour un modèle autorisé
 (peers_allowed).
+
+Quand la réponse est calculée par une autre machine (modèle prêté, choisi à la main ou
+par le mode automatique, cf. network/placement.py), le sommaire et les extraits ne
+viennent que des bibliothèques qui peuvent aller chez elle (visible_libraries) : rien
+d'une bibliothèque gardée sur ce PC, ni de la mémoire des conversations.
 """
 import logging
 import re
 
 from aiodos import settings
-from aiodos.knowledge import search
 from aiodos.cluster import group as cluster
-from aiodos.network import remote_models, remote_search, sharing
+from aiodos.knowledge import search, store
+from aiodos.network import placement, remote_models, remote_search, sharing
 from aiodos.services import cloud, ollama, web
 
 log = logging.getLogger("aiodos.chat")
@@ -81,9 +86,11 @@ def _consult_targets() -> list:
 
 
 def runs_here(model) -> bool:
-    """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ?"""
-    return (not cloud.provider_of(model) and not remote_models.parse(model)
-            and not cluster.parse(model))
+    """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ? Pour le mode
+    automatique, on ne le sait qu'une fois la machine choisie (placement.run) ; un gros
+    modèle réparti ne tourne pas seulement ici."""
+    return not (cloud.provider_of(model) or remote_models.parse(model)
+                or placement.parse(model) or cluster.parse(model))
 
 
 def peers_allowed(model) -> bool:
@@ -94,7 +101,14 @@ def peers_allowed(model) -> bool:
     - un modèle installé ici (Ollama) ;
     - un gros modèle réparti : il tourne ici, avec les cartes de mes seules machines
       (cluster/group.py) ;
-    - un modèle prêté par une de mes machines."""
+    - un modèle prêté par une de mes machines.
+    En mode automatique (« auto: »), chaque machine essayée est jugée à son tour (routes/
+    chat.py) : ici, vrai si au moins une de celles qui peuvent répondre est autorisée."""
+    if placement.parse(model):
+        try:
+            return any(peers_allowed(m) for m in placement.plan(model))
+        except placement.NoMachine:
+            return False
     lent = remote_models.parse(model)
     if lent:
         return sharing.level(lent[0]) == sharing.MINE
@@ -107,8 +121,8 @@ def peers_allowed(model) -> bool:
 
 
 def available_models() -> list:
-    """Modèles de conversation : locaux (Ollama), ceux de mes machines, les gros
-    modèles répartis entre elles, puis cloud."""
+    """Modèles de conversation : en mode automatique (une fois chacun), locaux (Ollama),
+    ceux de mes machines, les gros modèles répartis entre elles, puis cloud."""
     models = []
     try:
         installed = ollama.list_models()
@@ -129,6 +143,7 @@ def available_models() -> list:
         models.extend(cluster.available())             # gros modèles répartis
     except Exception as exc:
         log.warning("Modèles répartis indisponibles : %s", exc)
+    models[:0] = placement.auto_entries(models)
     for name, spec in cloud.PROVIDERS.items():
         models.append({"id": cloud.MODEL_PREFIX + name, "label": spec["label"],
                        "group": "cloud", "caps": [], "has_key": cloud.has_key(name)})
@@ -151,6 +166,25 @@ def _web_context(question, max_results, sources):
     return blocks
 
 
+def web_context(question) -> tuple:
+    """Recherche web pour la question : (blocs pour le modèle, sources citées). Faite une
+    fois par message, même si la réponse change de machine en route (placement.run)."""
+    sources = []
+    return _web_context(question, settings.get("web_results") or 3, sources), sources
+
+
+def visible_libraries(destination) -> set | None:
+    """Bibliothèques dont le sommaire et les extraits peuvent accompagner une conversation,
+    selon la machine qui répond (placement.destination) : None, cette machine (ou le
+    cloud, après validation) : toutes ; « mine », une de mes machines : toutes sauf celles
+    gardées sur ce PC ; « friend », la machine d'un ami : celles partagées avec mes amis."""
+    if destination is None:
+        return None
+    if destination == "mine":
+        return {c["id"] for c in store.list_collections() if c["scope"] != "local"}
+    return store.shareable_ids()
+
+
 def select_relevant(hits, min_score, limit=4) -> list:
     """Ne garde que les extraits vraiment liés à la question.
 
@@ -167,11 +201,12 @@ def select_relevant(hits, min_score, limit=4) -> list:
     return [h for h in hits if h["score"] >= min_score][:limit]
 
 
-def _knowledge_context(question, libraries, conversations, sources, conversation_id=None):
+def _knowledge_context(question, libraries, conversations, sources, conversation_id=None,
+                       only=None):
     try:
         vector = ollama.embed([question])[0]
         hits = search.search(vector, k=8, libraries=libraries, conversations=conversations,
-                             exclude_conversation=conversation_id)
+                             exclude_conversation=conversation_id, only=only)
     except Exception as exc:
         log.warning("Recherche dans les connaissances impossible : %s", exc)
         return []
@@ -217,29 +252,34 @@ def _peer_context(question, sources, accepted):
 
 
 def build_messages(history, question, *, libraries, conversations, web_search,
-                   conversation_id=None, peers=None):
+                   conversation_id=None, destination=None, web=None, peers=None):
     """Construit les messages pour le modèle. → (messages, sources citées)
 
+    destination : machine qui répondra (cf. visible_libraries) ; web : résultats déjà
+    obtenus par web_context, sinon la recherche est faite ici si web_search.
     peers : identifiants des machines où chercher aussi, parmi celles qui m'ouvrent des
     bibliothèques (la question part chez elles) : celles que l'utilisateur a acceptées.
     Aucune par défaut."""
+    only = visible_libraries(destination)
+    conversations = conversations and destination is None    # la mémoire reste ici
     messages = [{"role": "system", "content": settings.get("system_prompt")}]
     sources = []
     if libraries or conversations:
-        summary = search.manifest(libraries, conversations)
+        summary = search.manifest(libraries, conversations, only=only)
         if summary:
             messages.append({"role": "system", "content": _MANIFEST.format(summary)})
     messages.extend(history)
 
     web_ok = False
     if web_search:
-        blocks = _web_context(question, settings.get("web_results") or 3, sources)
+        blocks, found = web if web is not None else web_context(question)
+        sources.extend(found)
         web_ok = bool(blocks)
         messages.append({"role": "system", "content": _WEB_RESULTS.format(
             "\n\n".join(blocks)) if web_ok else _WEB_EMPTY})
     if libraries or conversations:
         extracts = _knowledge_context(question, libraries, conversations, sources,
-                                      conversation_id)
+                                      conversation_id, only)
         if extracts:
             messages.append({"role": "system", "content": _RAG.format("\n\n".join(extracts))})
     remote = _peer_context(question, sources, peers) if peers else []
