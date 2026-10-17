@@ -123,12 +123,18 @@ class Group:
         self.lock = threading.Lock()
         self.closed = False
         self.loading = False      # premier chargement en cours : jamais « inactif »
+        self.status = None        # où en est la mise en place (relayé à qui l'attend)
+        self.ready = False        # mise en place finie : llama-server a chargé le modèle
 
     # ------------------------------------------------------------- mise en place
     def start(self, stop=None, progress=None):
         """Réunit les cartes et lance llama-server. `stop` (bouton Stop) interrompt la mise
         en place : tout ce qui était pris est rendu. `progress(texte)` dit où elle en est."""
-        progress = progress or (lambda text: None)
+        report = progress or (lambda text: None)
+
+        def progress(text):
+            self.status = text
+            report(text)
         found = engine.info(max_age=0)
         if not found:
             raise RuntimeError("llama.cpp n'est pas installé sur cette machine "
@@ -176,6 +182,7 @@ class Group:
             raise
         finally:
             self.loading = False
+        self.ready = True
         self.last_used = time.monotonic()
         log.info("Modèle %s réparti : %s, découpage %s", self.name, cut["devices"], cut["split"])
 
@@ -319,7 +326,16 @@ def _group(name: str, retry: bool = True, stop=None, progress=None) -> Group:
         group = _groups.get(name)
         if group is None or group.closed:
             group = _groups[name] = Group(name)
-    with group.lock:                      # un seul lancement à la fois par modèle
+    # Un seul lancement à la fois par modèle : si une autre conversation (ou la
+    # préparation d'avance) le met déjà en place, on l'attend en relayant ses nouvelles
+    said = None
+    while not group.lock.acquire(timeout=1):
+        if stop is not None and stop.is_set():
+            raise RuntimeError("Mise en place du modèle réparti interrompue.")
+        if progress is not None and group.status and group.status != said:
+            said = group.status
+            progress(said)
+    try:
         if not group.closed and group.server is None:
             try:
                 group.start(stop, progress)
@@ -332,7 +348,61 @@ def _group(name: str, retry: bool = True, stop=None, progress=None) -> Group:
             if retry:
                 return _group(name, retry=False, stop=stop, progress=progress)
             raise RuntimeError("Le modèle réparti ne démarre pas : réessaie plus tard.")
+    finally:
+        group.lock.release()
     return group
+
+
+_prepared = {}                    # nom -> préparation d'avance : {"state", "status", "error"}
+
+
+def prepare(model, changed=None) -> dict:
+    """Réunit le groupe d'avance, dès que le modèle est choisi dans la conversation : le
+    temps d'écrire la question, les cartes sont prêtées et le modèle chargé. `changed()` à
+    chaque nouvelle. Sans conversation ensuite, le groupe se défait IDLE_S après, comme
+    après une réponse. → {"state": "preparing" | "ready" | "error", "status", "error"}."""
+    name = parse(model)
+    if not name:
+        raise RuntimeError("Modèle réparti inconnu.")
+    with _lock:
+        if _usable(_groups.get(name)):
+            return {"state": "ready", "status": None, "error": None}
+        current = _prepared.get(name)
+        if current and current["state"] == "preparing":
+            return dict(current)
+        record = _prepared[name] = {"state": "preparing", "status": None, "error": None}
+
+    def note(text):
+        record["status"] = text
+        if changed:
+            changed()
+
+    def run():
+        try:
+            _group(name, progress=note)
+            record.update(state="ready", status=None)
+        except Exception as exc:
+            log.info("Préparation de %s impossible : %s", name, exc)
+            record.update(state="error", error=str(exc))
+        if changed:
+            changed()
+    threading.Thread(target=run, daemon=True, name=f"aiodos-groupe-{name}-avance").start()
+    return dict(record)
+
+
+def preparation(model) -> dict:
+    """Où en est la préparation d'avance de ce modèle (vue Conversation)."""
+    name = parse(model) or ""
+    with _lock:
+        if _usable(_groups.get(name)):
+            return {"state": "ready", "status": None, "error": None}
+        return dict(_prepared.get(name) or {"state": "none", "status": None, "error": None})
+
+
+def _usable(group) -> bool:
+    """Groupe en place : modèle chargé (pas seulement llama-server lancé), toujours là."""
+    return (group is not None and group.ready and not group.closed
+            and group.server is not None and group.server.alive)
 
 
 def chat_stream(model, messages, think=True, stop=None, options=None, stats=False):

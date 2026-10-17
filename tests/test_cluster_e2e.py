@@ -93,3 +93,25 @@ def test_a_machine_without_a_card_borrows_one(machines):
     b.wait_for(lambda: not ((b.api("GET", "/network/internet").get("companion") or {})
                             .get("tunnels") or {}).get("exposed"),
                timeout=60, what="carte de B reprise")
+
+
+def test_the_model_is_ready_before_the_question(machines):
+    """Choisi dans la conversation, le modèle réparti se met en place d'avance : la
+    question qui suit répond sans nouvelle mise en place."""
+    a, b = machines
+    b.api("PUT", "/settings", {"lend_gpu": True, "llamacpp_dir": LLAMA})
+    a.api("PUT", "/settings", {"llamacpp_dir": LLAMA})
+    _, b_id = pair_by_invitation(a, b, trust="mine")
+    model_id = f"reparti:{MODEL}"
+
+    def offered():
+        a.api("POST", f"/network/peers/{b_id}/refresh")
+        return {m["id"]: m for m in a.api("GET", "/models")}.get(model_id)
+    a.wait_for(offered, timeout=60, what="modèle réparti proposé")
+    assert a.api("POST", "/cluster/prepare", {"model": model_id})["state"] == "preparing"
+    state = a.wait_for(lambda: (s := a.api("GET", f"/cluster/prepare?model={model_id}"))[
+        "state"] != "preparing" and s, timeout=600, what="modèle préparé d'avance")
+    assert state["state"] == "ready", state
+    events = _chat_events(a, model_id, "Réponds seulement par le mot : bonjour")
+    assert events[-1]["type"] == "done" and events[-1]["error"] is None, events[-1]
+    assert not [e for e in events if e["type"] == "status"]       # déjà en place

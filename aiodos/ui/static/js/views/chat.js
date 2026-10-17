@@ -32,6 +32,7 @@ export function mountChat(container) {
         </div>
       </header>
       <div id="chat-banner"></div>
+      <div id="cluster-prep" hidden></div>
       <div class="messages" id="messages"><div class="messages-inner" id="messages-inner"></div></div>
       <footer class="composer">
         <div class="composer-box">
@@ -50,6 +51,7 @@ export function mountChat(container) {
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
   el.model.onchange = onModelChange;
+  on('cluster:changed', showPreparation);
   el.machine.onchange = rememberModel;
   el.input.addEventListener('input', autoresize);
   el.input.addEventListener('keydown', e => {
@@ -164,6 +166,28 @@ function fillMachines(wanted) {
 function onModelChange() {
   fillMachines(null);                     // mode automatique par défaut
   rememberModel();
+  prepareCluster();
+}
+
+/** Modèle réparti choisi : le groupe se forme et le modèle se charge pendant qu'on écrit
+ *  (cluster/group.py, prepare). Une question envoyée avant la fin reprend où il en est. */
+async function prepareCluster() {
+  const model = selectedModel();
+  if (!model.startsWith('reparti:')) { showPreparation(null); return; }
+  try { showPreparation({ model, ...await post('/cluster/prepare', { model }) }); }
+  catch (err) { showPreparation({ model, state: 'error', error: err.message }); }
+}
+
+function showPreparation(ev) {
+  const box = $('#cluster-prep');
+  if (!ev || ev.model !== selectedModel() || ev.state === 'none') { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = `banner ${ev.state === 'error' ? 'warn' : 'info'}`;
+  box.innerHTML = ev.state === 'ready'
+    ? `${icon('check')}<div>Modèle réparti prêt sur tes machines.</div>`
+    : ev.state === 'error' ? `${icon('warn')}<div>Préparation impossible : ${esc(ev.error || '')}</div>`
+    : `${icon('network')}<div>Préparation du modèle réparti pendant que tu écris : ${esc(ev.status || 'cartes demandées…')}</div>`;
+  if (ev.state === 'ready') setTimeout(() => { if (box.innerHTML.includes('prêt')) box.hidden = true; }, 6000);
 }
 
 async function rememberModel() {

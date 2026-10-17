@@ -87,6 +87,7 @@ function onEvent(ev) {
     case 'updates': loadUpdates(); break;
     case 'gateway': if (state.view === 'settings') loadGateway(); break;
     case 'images': emit('images:changed'); break;
+    case 'cluster': emit('cluster:changed', ev); break;
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
     case 'pair_result':
       toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`

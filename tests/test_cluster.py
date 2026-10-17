@@ -5,6 +5,7 @@ sont remplacés par des doublures."""
 import json
 import struct
 import threading
+import time
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -409,3 +410,61 @@ def test_sampling_options_and_token_count_reach_llama_server(monkeypatch):
                                                  "done_reason": "length"})]
     assert sent["max_tokens"] == 5 and sent["stop"] == ["\n"] and "num_ctx" not in sent
     assert sent["stream_options"] == {"include_usage": True}
+
+
+def test_a_distributed_model_is_prepared_while_typing(monkeypatch):
+    """Choisi dans la conversation, le modèle se met en place d'avance ; une question qui
+    arrive avant la fin attend cette mise en place, en relayant ses nouvelles, sans en
+    lancer une deuxième."""
+    import threading
+    started, go_on = [], threading.Event()
+
+    class Server:
+        alive = True
+
+    def start(self, stop=None, progress=None):
+        started.append(self.name)
+        self.status = "Demande de la carte graphique de « PC fixe »…"
+        progress(self.status)
+        self.server = Server()            # lancé, mais pas encore chargé
+        go_on.wait(10)
+        self.ready = True
+    monkeypatch.setattr(group.Group, "start", start)
+    monkeypatch.setattr(group, "_groups", {})
+    monkeypatch.setattr(group, "_prepared", {})
+    changes = []
+    model = "reparti:grand:70b"
+    assert group.prepare(model, changed=lambda: changes.append(1))["state"] == "preparing"
+    deadline = time.time() + 5
+    while not group.preparation(model)["status"] and time.time() < deadline:
+        time.sleep(0.05)
+    assert group.preparation(model)["status"].startswith("Demande de la carte")
+    assert group.prepare(model)["state"] == "preparing"            # pas une deuxième fois
+    assert group.preparation(model)["state"] == "preparing"        # lancé n'est pas chargé
+    relayed, found = [], {}
+    asking = threading.Thread(target=lambda: found.update(
+        group=group._group("grand:70b", progress=relayed.append)))
+    asking.start()
+    time.sleep(1.5)
+    assert relayed == ["Demande de la carte graphique de « PC fixe »…"]   # la question attend
+    go_on.set()
+    asking.join(10)
+    assert started == ["grand:70b"] and found["group"].server.alive
+    assert group.preparation(model)["state"] == "ready" and changes
+    assert group.prepare(model)["state"] == "ready"                # déjà prêt : rien à faire
+
+
+def test_a_failed_preparation_says_why(monkeypatch):
+    def start(self, stop=None, progress=None):
+        raise RuntimeError("Aucune de mes machines ne prête sa carte graphique en ce moment.")
+    monkeypatch.setattr(group.Group, "start", start)
+    monkeypatch.setattr(group, "_groups", {})
+    monkeypatch.setattr(group, "_prepared", {})
+    group.prepare("reparti:grand:70b")
+    deadline = time.time() + 5
+    while group.preparation("reparti:grand:70b")["state"] == "preparing" and time.time() < deadline:
+        time.sleep(0.05)
+    state = group.preparation("reparti:grand:70b")
+    assert state["state"] == "error" and "prête sa carte" in state["error"]
+    with pytest.raises(RuntimeError):
+        group.prepare("grand:70b")                                 # pas un modèle réparti

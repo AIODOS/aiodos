@@ -151,6 +151,11 @@ relais de n0, pas en direct.
   dernières et le dernier étage. Au premier message, AIODOS demande les cartes, ouvre les
   tunnels et lance `llama-server` sur le fichier d'Ollama. Le groupe reste prêt 10 minutes
   après la dernière réponse.
+- **Préparé pendant qu'on écrit** (`group.prepare`, `POST /api/cluster/prepare`) : dès
+  qu'un modèle réparti est choisi dans la conversation, le groupe se forme en arrière-plan,
+  et un bandeau dit où il en est. Une question envoyée avant la fin attend cette mise en
+  place en relayant ses nouvelles, sans en lancer une deuxième ; sans question, le groupe
+  se défait 10 minutes après, comme après une réponse.
 - **Le moteur** (`aiodos/cluster/engine.py`) cherche llama.cpp dans le réglage « Dossier de
   llama.cpp », sinon celui livré avec les versions, sinon un llama.cpp posé à la main dans
   `data/engines/llama.cpp`. Sous Windows, llama-server et le serveur
