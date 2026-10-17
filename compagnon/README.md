@@ -1,6 +1,6 @@
 # aiodos-net — le compagnon réseau d'AIODOS
 
-Petit programme Rust (GPL-3.0) qui relie **par Internet** les machines appairées
+Petit programme Rust (Apache-2.0) qui relie **par Internet** les machines appairées
 d'AIODOS, avec [Iroh](https://www.iroh.computer) 1.3.0 (version épinglée). C'est
 l'étape 2.2 de [docs/phase2-internet.md](../docs/phase2-internet.md). Le nœud Python le
 lance, le surveille et lui confie ses requêtes quand le réseau local ne répond pas ;

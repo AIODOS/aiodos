@@ -68,10 +68,11 @@ Les licences marquées « ? » sont à vérifier avant de reprendre le moindre c
 
 - **Se brancher plutôt que copier.** On utilise déjà llama.cpp (par Ollama) et Iroh. exo
   peut devenir un fournisseur de modèles par son API, sans fusionner son code.
-- **Reprendre du code seulement sous une licence compatible.** MIT, BSD et Apache-2.0 vont
-  dans une GPL-3.0, et ne gênent pas notre permission pour les boutiques. Le code d'un autre
-  projet sous GPL (exo) ne porte pas cette permission : s'en servir comme programme à part,
-  pas comme code fusionné. Éviter l'AGPL.
+- **Reprendre du code seulement sous une licence compatible.** AIODOS est sous Apache-2.0 :
+  on peut y fusionner du code MIT, BSD, ISC ou Apache-2.0, en gardant ses mentions d'auteur
+  (et son fichier `NOTICE` s'il en a un). Du code GPL ou AGPL (exo, par exemple) ferait
+  passer tout AIODOS sous sa licence : s'en servir seulement comme programme à part, lancé
+  et piloté par AIODOS, jamais comme code fusionné.
 - **Reprendre les idées, qui n'ont pas de licence** : unités et validation de BOINC, kudos
   d'AI Horde, présentateurs et relais de Syncthing, routage en chaîne de Petals.
 - **Se mesurer à eux.** Faire des essais comparatifs sur nos machines (exo,

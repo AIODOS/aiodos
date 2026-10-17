@@ -44,7 +44,7 @@ def test_publication_from_key_to_package(tmp_path):
     for name in ("tools", "assets"):
         shutil.copytree(APP_ROOT / name, repo / name, ignore=shutil.ignore_patterns("__pycache__"))
     for name in ("lancer.bat", "lancer-noeud.sh", "requirements.txt", "requirements-node.txt",
-                 "LICENSE", "LICENSE-EXCEPTION.md", "README.md"):
+                 "LICENSE", "NOTICE", "README.md"):
         shutil.copyfile(APP_ROOT / name, repo / name)
     (repo / "aiodos" / "updates" / "keys.py").write_text("TRUSTED_KEYS = {\n}\n", encoding="utf-8")
     set_version(repo, "3.0.0-dev")
@@ -149,7 +149,7 @@ def test_companion_built_from_the_published_commit_is_joined(tmp_path):
     for name in ("aiodos", "tools", "assets"):
         shutil.copytree(APP_ROOT / name, repo / name, ignore=shutil.ignore_patterns("__pycache__"))
     for name in ("lancer.bat", "lancer-noeud.sh", "requirements.txt", "requirements-node.txt",
-                 "LICENSE", "LICENSE-EXCEPTION.md", "README.md"):
+                 "LICENSE", "NOTICE", "README.md"):
         shutil.copyfile(APP_ROOT / name, repo / name)
     shutil.copytree(APP_ROOT / "compagnon", repo / "compagnon",
                     ignore=shutil.ignore_patterns("target"))

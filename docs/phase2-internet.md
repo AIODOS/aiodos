@@ -142,7 +142,7 @@ rendez-vous et de repli chiffré.
   corrigés). Android est géré en Rust, Kotlin et Node ; un binaire nu sous Termux
   demande des précautions de compilation (résolution DNS par JNI, restrictions
   netlink), que la recette Termux de dumbpipe applique déjà.
-- **Licence** : MIT OR Apache-2.0, compatible GPL-3.0. Point à surveiller :
+- **Licence** : MIT OR Apache-2.0, comme AIODOS. Point à surveiller :
   `webpki-roots` (CDLA-Permissive-2.0), licence dont la FSF ne parle pas.
 - **Sécurité** : pas d'audit tiers. En 2026, des failles corrigées vite : déni de
   service du relais avant authentification (1.0.2), trois avis côté client (1.1.0),
@@ -201,8 +201,8 @@ Kademlia, GossipSub, relais, perçage de NAT (DCUtR).
   illisible, ce qui est le cas sur Android (#3537, correctifs non fusionnés). UPnP et
   NAT-PMP ne marchent plus depuis Android 12. rust-libp2p a deux bugs ouverts sous
   Android (WebSocket, DNS).
-- **Licences** : MIT, Apache-2.0, BSD ; zeroconf (mDNS de py-libp2p) en LGPL-2.1+.
-  Toutes compatibles avec la GPL-3.0.
+- **Licences** : MIT, Apache-2.0, BSD ; zeroconf (mDNS de py-libp2p) en LGPL-2.1+,
+  utilisable par AIODOS (Apache-2.0) comme bibliothèque à part, sans copier son code.
 - **Sécurité** : aucun audit tiers public trouvé ; des avis réguliers, surtout des
   dénis de service (côté rust : gossipsub et yamux en mars 2026, libp2p-quic en
   septembre 2026 ; quic-go de 2023 à 2026). La DHT publique d'IPFS reste attaquable :
@@ -242,8 +242,8 @@ ouvertes par perçage de NAT.
   précompilés pour Windows x64 et Android arm64 ; Node 24 et 26 existent sous Termux
   (non testé avec hyperswarm).
 - **Licences** : MIT (hyperdht, hyperswarm, dht-rpc), Apache-2.0 (secret-stream,
-  blind-relay, Bare), ISC : compatibles avec la GPL-3.0, en gardant les fichiers
-  `NOTICE`. Holesail, un outil voisin, est en AGPL-3.0 : ne pas copier son code.
+  blind-relay, Bare), ISC : compatibles avec l'Apache-2.0 d'AIODOS, en gardant les
+  fichiers `NOTICE`. Holesail, un outil voisin, est en AGPL-3.0 : ne pas copier son code.
 - **Sécurité** : on peut filtrer par clé avant toute réponse (`firewall`), mais
   l'adresse que reçoit ce filtre peut être falsifiée. L'IP est échangée avec les pairs
   (la FAQ de Pear conseille un VPN). Aucun avis de sécurité publié, pas de politique de
@@ -323,8 +323,8 @@ serait énumérable par construction : à n'ouvrir qu'avec l'accord explicite de
   bibliothèque Python (i2plib) n'est plus maintenue depuis 2019. Yggdrasil : cf. § 2.6.
 - **Reticulum : exclu.** Depuis le 15/04/2025, sa licence (passée du MIT à une
   « Reticulum License ») interdit tout usage qui contribue à l'entraînement ou au
-  développement de modèles d'IA : incompatible avec la GPL-3.0, et vise directement un
-  projet comme AIODOS.
+  développement de modèles d'IA : ce n'est plus une licence libre, et elle vise
+  directement un projet comme AIODOS.
 
 ### 2.6 Pour comparaison : les réseaux privés virtuels type WireGuard
 
@@ -428,7 +428,7 @@ Ce que ça implique :
 
 ## 4. Recommandation
 
-**Iroh 1.x, utilisé par un petit programme compagnon en Rust (`aiodos-net`, GPL-3.0)
+**Iroh 1.x, utilisé par un petit programme compagnon en Rust (`aiodos-net`, Apache-2.0)
 que le nœud Python lance et pilote en local. Le protocole de travail `aiodos/1` passe
 dans ce tuyau presque sans changement. Relais et annuaire restent configurables, pour
 qu'aucun ne soit obligatoire.** C'est une recommandation technique : le choix des
@@ -807,7 +807,7 @@ heures.
 | **Q16** Relais | **Relais publics de n0 pour commencer**, remplaçables dans les réglages (relais du projet ou d'un membre du cercle plus tard). |
 | **Q16 bis** Annuaire | **Les deux** : DNS de n0 d'abord, DHT Mainline (pkarr) en secours. |
 
-**2.2 Le compagnon `aiodos-net`.** Programme Rust (GPL-3.0) sur Iroh 1.x, à version
+**2.2 Le compagnon `aiodos-net`.** Programme Rust (Apache-2.0) sur Iroh 1.x, à version
 épinglée : protocole `aiodos/2` (ALPN), liste blanche de clés, tunnels vers `p2p_app`,
 API locale de contrôle, relais et annuaire configurables, ouverture de port
 automatique. Compilé pour Windows x64 et Android arm64 (Termux). Côté Python, un
