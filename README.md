@@ -18,7 +18,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
-| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques |
+| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques approuvées sur un deuxième appareil, gros modèles répartis entre mes machines (prototype) |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | plus tard |
 
 ## Ce que fait la phase 0
@@ -136,6 +136,18 @@ machine, en direct ou par un relais, qui n'accepte que les machines appairées. 
 désactivé par défaut (réglage `internet_enabled`) ; le réseau local reste le premier
 chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
 
+**Un modèle trop gros pour une seule machine (prototype)** se découpe entre mes machines
+avec [llama.cpp] : chacune en garde une tranche de couches sur sa carte graphique le temps
+de la conversation, la machine qui pose la question gardant la fin du modèle. Il apparaît
+alors en « réparti » dans le choix du modèle. Il faut, sur les machines qui prêtent,
+« Prêter ma carte graphique pour les gros modèles » (vue « Cette machine », coupé par
+défaut), et partout le compagnon : les tranches passent par ses tunnels chiffrés, entre
+mes machines seulement, jamais chez un ami. llama.cpp est livré avec les mises à jour
+signées, la même version partout. Au premier message, la conversation montre la mise en
+place (cartes demandées, chargement) ; ensuite, chaque machine garde les poids en cache.
+Mesures, choix et limites : [docs/gros-modeles.md](docs/gros-modeles.md) ; images et
+vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
+
 ## Installation
 
 1. Installer [Ollama] et quelques modèles, par exemple :
@@ -172,7 +184,14 @@ une version publiée est **signée** par la clé de publication de l'auteur, pas
 machine appairée en machine appairée, s'installe **à côté** de la version actuelle, et
 AIODOS redémarre dessus quand la machine est libre. Si elle ne démarre pas, la
 précédente reprend la main aussitôt. Réglage : Réglages → Mises à jour (activé par
-défaut). Une copie de développement (dépôt git) n'est jamais remplacée.
+défaut). Une copie de développement (dépôt git) n'est jamais remplacée. Une version
+emporte aussi le compagnon Internet et llama.cpp, vérifiés par leur empreinte.
+
+**Approbation sur un deuxième appareil** : une fois les appareils déclarés (téléphone de
+l'auteur et appareil de secours), une version publiée attend d'être approuvée sur l'un
+d'eux (Réglages → Mises à jour → « Versions en attente ») avant de partir. Une clé de
+publication volée ne suffit plus à pousser une version chez les amis. Tant qu'aucun
+appareil n'est déclaré, rien ne change.
 
 Publier : `python tools/publish.py release --notes "…"` après avoir écrit le numéro dans
 `aiodos/__init__.py`. Détails, sécurité et limites : [docs/mises-a-jour.md](docs/mises-a-jour.md).
@@ -189,6 +208,9 @@ aiodos/
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
 │                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses
+├── cluster/           gros modèles répartis entre mes machines (llama.cpp RPC) :
+│                      découpage (plan.py), carte prêtée (helper.py), groupe (group.py),
+│                      moteur livré avec les versions (delivery.py), docs/gros-modeles.md
 ├── gateway/           AIODOS ouvert aux autres outils (docs/autres-outils.md)
 │   ├── server.py      serveur sur 127.0.0.1, port fixe, clé d'accès (access.py)
 │   ├── openai_api.py  API compatible OpenAI (/v1/…)
@@ -221,16 +243,19 @@ aiodos/
 │   ├── internet.py    le compagnon vu du réseau : liste blanche, état par machine
 │   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
-│                      priorité du travail de fond (priority.py), Android (android.py)
+│                      priorité du travail de fond (priority.py), Android (android.py),
+│                      programmes lancés arrêtés avec AIODOS (children.py)
 ├── updates/           mises à jour signées : transmission entre machines, installation
-│                      à côté, lanceur avec retour en arrière (docs/mises-a-jour.md)
+│                      à côté, lanceur avec retour en arrière, approbation sur un deuxième
+│                      appareil (approval.py) — docs/mises-a-jour.md
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native, icône de la zone de notification (tray.py),
                        interface web (HTML/CSS/JS, sans compilation)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
 tests/                 tests automatisés (pytest)
-tools/                 publication des versions, outils de mesure (modèle d'embedding,
-                       coût du travail de fond : bench_background.py)
+tools/                 publication des versions (llama.cpp joint : engine_release.py),
+                       outils de mesure (modèle d'embedding, coût du travail de fond :
+                       bench_background.py, modèles répartis : bench_repartition.py)
 docs/                  notes de mesures et de choix techniques, téléphone Android
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```
@@ -253,7 +278,9 @@ python -m pytest tests
 
 Les essais de la passerelle avec les clients officiels d'OpenAI et de MCP demandent en plus
 `pip install -r requirements-dev.txt` (de préférence dans un environnement à part) ; sans eux,
-ils sont ignorés.
+ils sont ignorés. L'essai réel des gros modèles répartis (`tests/test_cluster_e2e.py`) demande
+llama.cpp (variable `AIODOS_LLAMACPP_DIR` : son dossier), le compagnon compilé et
+`mistral:7b` ; sinon, il est ignoré.
 
 ## Licence
 
@@ -264,3 +291,4 @@ modifiés. Chaque contributeur accorde aussi ses brevets éventuels sur le code 
 Les contributions sont acceptées sous cette même licence.
 
 [Ollama]: https://ollama.com
+[llama.cpp]: https://github.com/ggml-org/llama.cpp

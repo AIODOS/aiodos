@@ -55,7 +55,6 @@ def folder() -> Path | None:
         return delivered
     manual = delivery.root()
     return manual if delivery.complete(manual) else None
-    return None
 
 
 def parse_version(text: str) -> str | None:
