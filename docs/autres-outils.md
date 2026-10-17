@@ -48,7 +48,9 @@ ou par une de tes machines (voir § 2). Elle ne passe chez un ami que si tu dés
 la réponse, sans y être enregistrée. Les passages qu'un assistant MCP trouve dans tes
 bibliothèques partent vers lui, puis vers *son* modèle : si c'est un modèle dans le cloud
 (Claude, GPT…), ces passages y partent aussi. C'est pourquoi les bibliothèques gardées sur ce
-PC (le cadenas) ne sont jamais montrées aux assistants.
+PC (le cadenas) ne sont jamais montrées aux assistants, ni les bibliothèques que tes machines
+et tes amis t'ouvrent (« Chez les autres ») : leurs passages ne vont ni au cloud, ni chez un
+ami.
 
 ## 2. Les modèles et la machine qui répond
 

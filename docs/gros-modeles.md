@@ -179,7 +179,9 @@ relais de n0, pas en direct.
    aujourd'hui, les poids passent par le tunnel à la première conversation.
 3. **Essai réel à deux PC** (M5), puis avec un ami, quand le serveur RPC de llama.cpp sera
    sorti du stade du prototype.
-4. **Images et vidéo** : répartir par composants (encodeur de texte, cœur, décodeur).
+4. **Images et vidéo** : étude dans [generation-repartie.md](generation-repartie.md). Couper
+   le cœur ne sert qu'à la mémoire ; d'abord des unités indépendantes avec
+   stable-diffusion.cpp, puis l'encodeur de texte sur une autre machine.
 
 ## Sources
 

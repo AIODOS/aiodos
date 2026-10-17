@@ -7,7 +7,8 @@ import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 
-const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think'];
+const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think',
+  'peer_libraries_enabled'];
 let el = {};
 let busy = false;
 let controller = null;
@@ -24,6 +25,7 @@ export function mountChat(container) {
           title="Machine qui répond. Automatique : cette machine si elle est libre, sinon la moins occupée de tes machines qui prêtent ce modèle."></select>
         <div class="chips">
           <button class="chip" data-flag="knowledge_enabled" title="Utiliser tes bibliothèques de connaissance">${icon('book')}Bibliothèques</button>
+          <button class="chip" data-flag="peer_libraries_enabled" title="Chercher aussi dans les bibliothèques de mes machines et de mes amis (ta question part chez eux)">${icon('network')}Chez les autres</button>
           <button class="chip" data-flag="conversations_enabled" title="Se souvenir de tes autres conversations">${icon('memory')}Mémoire</button>
           <button class="chip" data-flag="web_search_enabled" title="Chercher sur le web (validation avant chaque envoi)">${icon('globe')}Web</button>
           <button class="chip" data-flag="think" title="Laisser le modèle réfléchir avant de répondre (plus lent, souvent meilleur)">${icon('think')}Réflexion</button>
@@ -334,6 +336,9 @@ function appendAssistant(model, here = false) {
       for (const s of list || []) {
         if (s.type === 'web') {
           box.append(h(`<a class="source" href="${esc(s.url)}" title="${esc(s.title || s.url)}">${icon('globe')}${esc(s.label)}</a>`));
+        } else if (s.type === 'remote') {         // trouvé dans la bibliothèque d'une autre machine
+          box.append(h(`<span class="source remote" title="Bibliothèque « ${esc(s.collection)} », chez « ${esc(s.peer)} »">`
+            + `${icon('network')}${esc(s.label)} · chez ${esc(s.peer)}</span>`));
         } else {
           const ico = s.type === 'conversation' ? 'memory' : 'file';
           box.append(h(`<span class="source" title="${esc(s.collection || '')}">${icon(ico)}${esc(s.label)}</span>`));
@@ -424,6 +429,8 @@ async function confirmOutgoing(text, model, pre) {
     if (r.ok && r.checked) session.webConsent = true;
   }
 
+  const peers = await confirmPeers(text, pre);
+
   let cloudConfirmed = false;
   if (pre.cloud) {
     const label = state.models.find(m => m.id === model)?.label || pre.cloud;
@@ -454,7 +461,33 @@ async function confirmOutgoing(text, model, pre) {
     }
     cloudConfirmed = true;
   }
-  return { web, cloudConfirmed };
+  return { web, cloudConfirmed, peers };
+}
+
+// « Chez les autres » : la question part chez les machines qui m'ouvrent leurs bibliothèques
+// (preflight.consult) ; chez un ami, seulement après accord (network/remote_search.py).
+// → identifiants des machines acceptées : le serveur ne cherche que chez elles.
+async function confirmPeers(text, pre) {
+  if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return [];
+  if (!pre.consult_allowed) {
+    toast('Les passages trouvés chez tes machines et tes amis ne vont ni au cloud, ni à un modèle '
+      + 'prêté par un ami : cette réponse s\'en passera.', 'info', 7000);
+    return [];
+  }
+  const ids = pre.consult.map(m => m.node_id);
+  const unasked = pre.consult.filter(m => m.friend && !session.peerConsent.has(m.node_id));
+  if (!unasked.length) return ids;
+  const r = await modal({
+    title: 'Chercher aussi chez tes amis ?', iconName: 'network',
+    text: `Ta question va partir chez ${pre.consult.map(m => `« ${m.name} »`).join(', ')} : chaque machine `
+      + 'cherche dans les bibliothèques qu\'elle t\'ouvre, et seuls les passages trouvés reviennent. AIODOS n\'y garde '
+      + 'pas ta question, mais chaque machine note dans son journal que tu as cherché, et combien de passages elle '
+      + 't\'a rendus.',
+    quote: text.slice(0, 300), confirm: 'Chercher chez eux', cancel: 'Répondre sans',
+    check: 'Ne plus redemander pour ces amis pendant cette session',
+  });
+  if (r.ok && r.checked) pre.consult.forEach(m => session.peerConsent.add(m.node_id));
+  return r.ok ? ids : [];
 }
 
 async function send() {
@@ -482,7 +515,7 @@ async function send() {
   controller = new AbortController();
   try {
     await streamChat({
-      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed,
+      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
       conversation_id: state.currentConversation?.id ?? null,
     }, ev => {
       if (ev.type === 'start') {

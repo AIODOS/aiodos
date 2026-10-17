@@ -370,3 +370,35 @@ def test_a_request_refused_by_its_content_is_not_tried_elsewhere():
     with pytest.raises(GatewayError):
         list(placement.run(["m", "peer:a:m"], failing(404)))
     assert tried == ["m", "peer:a:m"]
+
+
+def test_passages_from_other_machines_follow_the_machine_that_answers(monkeypatch, fake_embed):
+    """Chercher chez les autres en mode automatique : une machine autorisée passe d'abord
+    (ici, celle-ci, bien que plus lente), et la machine d'un ami qui prend le relais ne
+    reçoit ni leurs passages, ni les réponses qui s'en servaient (pipeline.peers_allowed)."""
+    from aiodos.network import remote_search
+    from aiodos.services import ollama
+    store.ensure_defaults()
+    settings.set_value("auto_route_friends", True)
+    local_models(monkeypatch, MODEL, fits=False)                  # lent ici
+    friend = lender("ami", "PC de Léa", MODEL, trust="friend")    # rapide chez l'ami
+    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": MODEL}])
+    assert placement.plan(AUTO, Executor()) == [friend, HERE]     # sans recherche ailleurs
+    monkeypatch.setattr(remote_search, "search", lambda question, accepted: ([{
+        "node_id": "fixe", "library": "Notes", "document": "plan.txt", "text": "passage ouvert",
+        "rank": 0, "score": 0.9, "peer": "PC fixe"}], []))
+    seen = []
+
+    def fake_generate(model, messages, think=True, stop=None):
+        seen.append((model, any("passage ouvert" in m["content"] for m in messages)))
+        if model == HERE:
+            raise RuntimeError("Ollama ne répond pas")            # relève par l'ami
+        yield "content", "Bonjour"
+    monkeypatch.setattr(pipeline, "generate", fake_generate)
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        with ui.stream("POST", "/api/chat", headers=AUTH, json={
+                "text": "Salut", "model": AUTO, "libraries": False,
+                "peer_libraries": ["fixe"]}) as response:
+            events = _events(response)
+    assert seen == [(HERE, True), (friend, False)]
+    assert events[-1]["error"] is None

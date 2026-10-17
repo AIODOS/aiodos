@@ -60,6 +60,14 @@ def set_profile(node_id, profile: dict):
                (json.dumps(profile, ensure_ascii=False), node_id))
 
 
+def update_profile(node_id, key: str, value):
+    """Change une seule clé du profil enregistré, dans la base même : un profil plus récent,
+    reçu entre-temps, n'est pas écrasé. Sans profil (ou s'il n'est pas un objet) : rien."""
+    db.execute("UPDATE peers SET profile=json_set(profile, ?, json(?)) WHERE node_id=? "
+               "AND json_valid(profile) AND json_type(profile)='object'",
+               (f"$.{key}", json.dumps(value, ensure_ascii=False), node_id))
+
+
 def trust_of(node_id) -> str | None:
     """Niveau de confiance de cette machine appairée (None : pas appairée)."""
     row = db.query_one("SELECT trust FROM peers WHERE node_id=?", (node_id,))

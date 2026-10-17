@@ -43,6 +43,11 @@ class ChatIn(BaseModel):
     libraries: bool | None = None
     conversations: bool | None = None
     think: bool | None = None
+    # Chercher aussi chez ces machines (identifiants que l'utilisateur a acceptés, parmi
+    # celles que le preflight annonçait) : la question part chez elles. Seulement si la
+    # demande les nomme, jamais d'après un réglage, ni chez une machine arrivée après
+    # l'accord (une autre application cliente ne l'enverra pas sans le savoir)
+    peer_libraries: list[str] = []
 
 
 @router.get("/models")
@@ -80,7 +85,15 @@ async def chat(body: ChatIn, request: Request):
     conv_id = body.conversation_id
     if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
-    history = await asyncio.to_thread(conversations.history, conv_id)
+    # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
+    # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
+    # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
+    # celles qui peuvent recevoir leurs passages passent d'abord.
+    allowed = {m: await asyncio.to_thread(pipeline.peers_allowed, m) for m in plan}
+    if body.peer_libraries:
+        plan.sort(key=lambda m: not allowed[m])
+    histories = {ok: await asyncio.to_thread(conversations.history, conv_id, 30, ok)
+                 for ok in set(allowed.values())}
     user_message_id = await asyncio.to_thread(conversations.add_message, conv_id, "user", text)
     title = await asyncio.to_thread(conversations.auto_title, conv_id, text)
     if title:
@@ -103,12 +116,13 @@ async def chat(body: ChatIn, request: Request):
 
             def attempt(model):
                 level = placement.destination(model)
-                if level not in built:
-                    built[level] = pipeline.build_messages(
-                        history, text, libraries=libraries, conversations=memory,
+                ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
+                if (level, ok) not in built:
+                    built[level, ok] = pipeline.build_messages(
+                        histories[ok], text, libraries=libraries, conversations=memory,
                         web_search=body.web, conversation_id=conv_id, destination=level,
-                        web=web)
-                messages, sources = built[level]
+                        web=web, peers=body.peer_libraries if ok else None)
+                messages, sources = built[level, ok]
                 yield "sources", sources
                 yield from pipeline.generate(model, messages, think, stop)
 

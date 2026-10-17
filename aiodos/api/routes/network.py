@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.network import invitations, peers, sharing
+from aiodos.network import consult, invitations, peers, sharing
 from aiodos.network.client import PeerError
 
 router = APIRouter(prefix="/api/network")
@@ -181,6 +181,12 @@ async def restore(node_id: str, request: Request):
 def shared(node_id: str):
     """Journal de ce qui est parti chez cette machine (fichiers et pages confiés)."""
     return {"entries": sharing.sent_log(node_id)}
+
+
+@router.get("/peers/{node_id}/consulted")
+def consulted(node_id: str):
+    """Journal des recherches de cette machine dans mes bibliothèques ouvertes."""
+    return {"entries": consult.entries(node_id)}
 
 
 @router.delete("/peers/{node_id}")

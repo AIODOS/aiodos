@@ -171,8 +171,9 @@ def embed_options(model: str) -> dict:
     return {"num_thread": int(limit)} if limit and _on_cpu(model) else {}
 
 
-def embed(texts, model=None) -> list:
-    """Vecteurs d'embedding d'une liste de textes (envoyés par lots)."""
+def embed(texts, model=None, timeout=180) -> list:
+    """Vecteurs d'embedding d'une liste de textes (envoyés par lots). timeout : délai de
+    chaque lot (plus court pour une recherche venue d'une autre machine)."""
     model = model or settings.get("embed_model")
     vectors = []
     for start in range(0, len(texts), 16):
@@ -181,7 +182,7 @@ def embed(texts, model=None) -> list:
         options = embed_options(model)
         if options:
             body["options"] = options
-        r = requests.post(base() + "/api/embed", json=body, timeout=180)
+        r = requests.post(base() + "/api/embed", json=body, timeout=timeout)
         if r.status_code >= 400:
             raise RuntimeError(_error_text(r))
         vectors.extend(r.json().get("embeddings") or [])

@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from aiodos import db, settings
+from aiodos.chat import conversations
 from aiodos.jobs import pacing
 from aiodos.jobs.registry import (Interrupted, SampleMismatch, UnitSpec, register_job_kind,
                                  register_portable, task)
@@ -266,10 +267,12 @@ def run_index_conversation(payload):
     if rebuild and entry is None:
         return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
     last_message = store.max_chunk_index(entry["id"]) // 1000 if entry and not rebuild else -1
-    messages = db.query("SELECT id, role, content FROM messages WHERE conversation_id=? "
-                        "AND id > ? ORDER BY id", (conv_id, last_message))
+    messages = db.query("SELECT id, role, content, sources FROM messages "
+                        "WHERE conversation_id=? AND id > ? ORDER BY id", (conv_id, last_message))
     pieces = []
     for m in messages:
+        if m["role"] == "assistant" and conversations.cites_others(m["sources"]):
+            continue          # appuyée sur des passages d'autres machines : pas en mémoire
         who = "Utilisateur" if m["role"] == "user" else "Assistant"
         for n, piece in enumerate(chunking.chunk_text(f"{who} : {m['content']}")[:999]):
             pieces.append((m["id"] * 1000 + n, piece))

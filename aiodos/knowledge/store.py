@@ -27,14 +27,16 @@ def ensure_defaults():
 # ----------------------------------------------------------------- collections
 def list_collections(include_system=False) -> list:
     rows = db.query("""
-        SELECT c.id, c.name, c.enabled, c.system, c.local_only, c.share_friends,
+        SELECT c.id, c.name, c.enabled, c.system, c.local_only, c.share_friends, c.open_to,
                (SELECT COUNT(*) FROM entries e WHERE e.collection_id = c.id) AS entries,
                (SELECT COUNT(*) FROM chunks k JOIN entries e ON e.id = k.entry_id
                  WHERE e.collection_id = c.id) AS chunks
         FROM collections c ORDER BY c.system, c.name COLLATE NOCASE""")
     return [dict(r, enabled=bool(r["enabled"]), system=bool(r["system"]),
                  local_only=bool(r["local_only"]), share_friends=bool(r["share_friends"]),
-                 scope=_scope(r))
+                 scope=_scope(r),
+                 # consultable par (knowledge/visibility.py) : jamais avec le cadenas
+                 open_to="none" if r["local_only"] or r["system"] else r["open_to"])
             for r in rows if include_system or not r["system"]]
 
 
@@ -106,10 +108,12 @@ def set_enabled(collection_id, enabled: bool):
 
 def set_local_only(collection_id, local_only: bool):
     """Bibliothèque « sur cette machine seulement » : ses fichiers ne sont jamais
-    confiés à une autre machine pour le calcul."""
+    confiés à une autre machine pour le calcul, et personne n'y cherche (le retrait du
+    cadenas ne la rouvre pas d'office à la consultation)."""
     _ensure_editable(collection_id)
-    db.execute("UPDATE collections SET local_only=? WHERE id=?",
-               (1 if local_only else 0, collection_id))
+    db.execute("UPDATE collections SET local_only=?, "
+               "open_to=CASE WHEN ? THEN 'none' ELSE open_to END WHERE id=?",
+               (1 if local_only else 0, 1 if local_only else 0, collection_id))
 
 
 def local_only_ids() -> set:
@@ -121,12 +125,15 @@ SCOPES = ("local", "mine", "friends")
 
 def set_scope(collection_id, scope: str):
     """Portée d'une bibliothèque (cf. _scope) : ce PC seulement, mes machines, ou mes
-    machines et mes amis (étape 2.5, network/sharing.py)."""
+    machines et mes amis (étape 2.5, network/sharing.py). Ce PC seulement la ferme aussi
+    à la consultation (knowledge/visibility.py)."""
     if scope not in SCOPES:
         raise ValueError(f"Portée inconnue : {scope!r}")
     _ensure_editable(collection_id)
-    db.execute("UPDATE collections SET local_only=?, share_friends=? WHERE id=?",
-               (1 if scope == "local" else 0, 1 if scope == "friends" else 0, collection_id))
+    local = 1 if scope == "local" else 0
+    db.execute("UPDATE collections SET local_only=?, share_friends=?, "
+               "open_to=CASE WHEN ? THEN 'none' ELSE open_to END WHERE id=?",
+               (local, 1 if scope == "friends" else 0, local, collection_id))
 
 
 def shareable_ids() -> set:

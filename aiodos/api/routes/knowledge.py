@@ -1,4 +1,5 @@
-"""Bibliothèques de connaissance : collections, entrées, lancement d'indexations."""
+"""Bibliothèques de connaissance : collections, entrées, lancement d'indexations, ce qui
+en est consultable par mes machines et mes amis, et la recherche dans ce qu'ils m'ouvrent."""
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
@@ -6,9 +7,11 @@ from pydantic import BaseModel
 
 from aiodos.jobs import queue
 from aiodos.jobs.models import NORMAL
-from aiodos.knowledge import store
+from aiodos.knowledge import store, visibility
+from aiodos.network import remote_search
 
 router = APIRouter(prefix="/api")
+VIEW_PER_PEER = 5             # passages demandés à chaque machine depuis la vue Bibliothèques
 
 
 class CollectionIn(BaseModel):
@@ -20,6 +23,18 @@ class CollectionPatch(BaseModel):
     enabled: bool | None = None
     local_only: bool | None = None
     scope: str | None = None              # local | mine | friends (cf. store.set_scope)
+    open_to: str | None = None            # none | mine | friends (cf. visibility.set_open_to)
+
+
+class ClosedIn(BaseModel):
+    path: str
+    folder: bool = False                  # un dossier entier, ou ce seul document
+    closed: bool = True                   # fermer, ou rouvrir
+
+
+class ConsultIn(BaseModel):
+    question: str
+    machines: list[str] = []              # celles que la vue annonçait : la question ne part que là
 
 
 class IndexPathsIn(BaseModel):
@@ -53,7 +68,9 @@ def _guard(fn, *args):
 @router.get("/collections")
 def collections():
     memory = [c for c in store.list_collections(include_system=True) if c["system"]]
-    return {"collections": store.list_collections(),
+    closed = visibility.closed_parts()
+    return {"collections": [dict(c, closed=closed.get(c["id"], []))
+                            for c in store.list_collections()],
             "memory": memory[0] if memory else None}
 
 
@@ -74,6 +91,17 @@ def update_collection(collection_id: int, body: CollectionPatch, request: Reques
         _guard(store.set_local_only, collection_id, body.local_only)
     if body.scope is not None:
         _guard(store.set_scope, collection_id, body.scope)
+    if body.open_to is not None:
+        _guard(visibility.set_open_to, collection_id, body.open_to)
+    _notify(request)
+    return {"ok": True}
+
+
+@router.post("/collections/{collection_id}/closed")
+def set_closed(collection_id: int, body: ClosedIn, request: Request):
+    """Ferme (ou rouvre) à la consultation un dossier ou un document de la bibliothèque."""
+    action = visibility.close if body.closed else visibility.reopen
+    _guard(action, collection_id, body.path, body.folder)
     _notify(request)
     return {"ok": True}
 
@@ -102,6 +130,25 @@ def delete_folder(body: PrefixIn, request: Request):
     removed = store.remove_prefix(body.collection_id, body.prefix)
     _notify(request)
     return {"removed": removed}
+
+
+@router.get("/consult")
+def consult_targets():
+    """Chez qui partirait une recherche : les machines qui ont quelque chose d'ouvert ici."""
+    return {"machines": remote_search.describe()}
+
+
+@router.post("/consult")
+async def consult(body: ConsultIn):
+    """Recherche dans les bibliothèques que mes machines et mes amis m'ouvrent : la question
+    part chez celles que la vue annonçait (body.machines), seuls les passages reviennent."""
+    question = body.question.strip()
+    if not question:
+        raise HTTPException(400, "Question vide.")
+    passages, machines = await asyncio.to_thread(
+        remote_search.search, question, body.machines, VIEW_PER_PEER,
+        remote_search.VIEW_TIMEOUT, remote_search.VIEW_GRACE)
+    return {"passages": passages, "machines": machines}
 
 
 @router.post("/memory/clear")

@@ -5,6 +5,7 @@ sont remplacés par des doublures."""
 import json
 import struct
 import threading
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -90,6 +91,21 @@ def test_engine_output_is_parsed():
     assert engine.best_device([]) is None
 
 
+def test_stop_interrupts_a_long_loading(tmp_path):
+    """Bouton Stop pendant le premier chargement (les poids traversent le réseau) : le
+    programme est arrêté aussitôt, sans attendre la fin du délai."""
+    import sys
+    import time
+    stop = threading.Event()
+    slow = engine.Process("essai-lent", Path(sys.executable),
+                          ["-c", "import time; time.sleep(60)"], engine.free_port())
+    threading.Timer(0.5, stop.set).start()
+    began = time.monotonic()
+    with pytest.raises(engine.EngineError, match="interrompu"):
+        slow.start(timeout=60, stop=stop)
+    assert time.monotonic() - began < 10 and not slow.alive
+
+
 def test_the_end_of_the_model_stays_here():
     gib = 2 ** 30
     card = {"name": "Vulkan1", "free_mib": 8000}                        # 6 464 Mio utiles
@@ -109,6 +125,12 @@ def test_the_end_of_the_model_stays_here():
     # Trop gros pour toutes les cartes : les premières couches restent en mémoire vive ici
     cut = plan.make(60 * gib, 32, card, lenders)
     assert not cut["complete"] and 0 < cut["layers"] < 32
+    # Une carte du réseau local passe avant une plus grande jointe par Internet
+    lenders = [{"node_id": "loin", "free_mib": 24000}, {"node_id": "pres", "free_mib": 12000,
+                                                         "near": True}]
+    assert [h["node_id"] for h in plan.make(15 * gib, 32, card, lenders)["helpers"]] == ["pres"]
+    assert [h["node_id"] for h in plan.make(25 * gib, 32, card, lenders)["helpers"]] == \
+        ["pres", "loin"]
 
 
 # ------------------------------------------------------------------ prêt de la carte

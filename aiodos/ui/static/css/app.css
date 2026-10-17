@@ -225,6 +225,7 @@ main { min-width: 0; height: 100vh; overflow: hidden; }
   color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .source .icon { width: 13px; height: 13px; }
+.source.remote { color: #c4f1fa; border-color: rgba(79, 216, 235, .3); }
 a.source { text-decoration: none; }
 a.source:hover { color: var(--text); border-color: var(--line-2); }
 
@@ -324,6 +325,17 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .ktree .k-children { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--line); }
 .kind-file { color: #8fb3ff; } .kind-url { color: var(--cyan); } .kind-image { color: #f0a6ff; }
 .kind-media { color: var(--warn); } .kind-dir { color: #c3ccff; }
+.coll .open-to { color: var(--cyan); display: inline-flex; }
+.ktree .closed-mark { color: var(--warn); display: inline-flex; }
+.ktree .closed-mark .icon { width: 16px; height: 16px; }
+.consult-status { font-size: 12.5px; color: var(--muted); margin: 14px 0 10px; display: flex; gap: 6px 10px; flex-wrap: wrap; }
+.consult-hits { display: flex; flex-direction: column; gap: 8px; }
+.consult-hit { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.consult-hit .where { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.consult-hit .where b { color: var(--text); font-weight: 600; }
+.consult-hit .where .icon { width: 15px; height: 15px; }
+.consult-hit .text { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; }
+.consult-hit .btn { margin-top: 4px; }
 .job-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .job-strip .mini { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .job-strip .mini .top { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 6px; }

@@ -18,7 +18,7 @@ unités indépendantes, que tes PC appairés se partagent sur le réseau local.
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
-| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), mises à jour automatiques |
+| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | plus tard |
 
 ## Ce que fait la phase 0
@@ -118,6 +118,17 @@ confié. Un ami qui n'est pas sur ton réseau s'appaire sur invitation (vue Rés
 même code à 6 chiffres. Détails : [docs/phase2-internet.md](docs/phase2-internet.md), étapes 2.4
 et 2.5.
 
+**Chercher dans les bibliothèques des autres, sans copier leurs fichiers** : une bibliothèque
+peut être « consultable par » mes machines, ou mes machines et mes amis (menu ⋯ ; personne
+par défaut). Dans une bibliothèque ouverte, on ferme un dossier ou un document précis (œil
+barré), et une bibliothèque gardée sur ce PC n'est jamais consultable. Côté demandeur,
+l'option « Chez les autres » de la conversation, ou la recherche de la vue Bibliothèques,
+envoie la question aux machines qui lui ouvrent quelque chose (avec son accord pour un ami) :
+chacune cherche chez elle, avec son propre modèle, et ne rend que quelques passages, cités
+avec le nom de la machine. Au plus 8 passages par recherche et 10 recherches par minute ; chaque
+recherche reçue est notée dans la vue Réseau, sans la question. Détails :
+[docs/phase2-internet.md](docs/phase2-internet.md), « Bibliothèques consultables ».
+
 **Par Internet (phase 2, en cours)** : un petit programme compagnon,
 [`aiodos-net`](compagnon/README.md) (Rust, Iroh), relie les machines appairées quand
 elles ne sont plus sur le même réseau (téléphone en 4G…) : une connexion chiffrée par
@@ -175,7 +186,8 @@ aiodos/
 ├── settings.py        réglages (les clés API ne sortent jamais en clair)
 ├── render.py          Markdown → HTML sûr, coloration Pygments
 ├── services/          Ollama, extraction de fichiers, médias, web, cloud
-├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle
+├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
+│                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses
 ├── gateway/           AIODOS ouvert aux autres outils (docs/autres-outils.md)
 │   ├── server.py      serveur sur 127.0.0.1, port fixe, clé d'accès (access.py)
@@ -202,6 +214,8 @@ aiodos/
 │   ├── lending.py     prêter ses modèles pour les conversations des autres machines
 │   ├── remote_models.py  utiliser dans ses conversations les modèles prêtés
 │   ├── placement.py   choisir seul la machine qui répond (mode automatique)
+│   ├── consult.py     être consulté : recherche dans mes bibliothèques ouvertes, limites, journal
+│   ├── remote_search.py  chercher dans les bibliothèques que mes machines et mes amis m'ouvrent
 │   ├── route.py       chemin vers une machine : réseau local s'il répond, Internet sinon
 │   ├── companion.py   lancer et surveiller le compagnon Internet aiodos-net
 │   ├── internet.py    le compagnon vu du réseau : liste blanche, état par machine

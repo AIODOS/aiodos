@@ -38,4 +38,5 @@ export const prefs = {
 };
 
 // Consentements valables le temps de la session (cases « ne plus demander »)
-export const session = { webConsent: false, cloudConsent: new Set() };
+// peerConsent : les amis chez qui la question peut partir sans redemander (« Chez les autres »)
+export const session = { webConsent: false, cloudConsent: new Set(), peerConsent: new Set() };

@@ -15,7 +15,9 @@ Les assistants qui lancent un programme (Claude Desktop…) passent par le pont 
 Outils : lister_bibliotheques, rechercher_bibliotheques, converser. Les passages trouvés
 partent vers l'assistant, et de là vers son modèle : dans le cloud si c'en est un. D'où :
 seules les bibliothèques actives qui ne sont pas gardées sur ce PC (le cadenas, portée
-« local ») lui sont montrées ; une conversation ne les envoie pas même à mes machines.
+« local ») lui sont montrées ; une conversation ne les envoie pas même à mes machines. Et
+jamais celles que mes machines et mes amis m'ouvrent (network/remote_search.py) : leurs
+passages ne vont ni au cloud, ni chez un ami.
 """
 import asyncio
 import base64
