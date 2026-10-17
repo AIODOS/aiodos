@@ -99,10 +99,14 @@ cache chez la deuxième machine :
 
 | Ordre | Sans plafond | 40 Mbit/s | 10 Mbit/s |
 |---|---|---|---|
-| Le 2e PC calcule la fin | MESURE_LOCAL_0 | MESURE_LOCAL_40 | MESURE_LOCAL_10 |
-| La fin reste sur la machine qui pose la question | MESURE_DISTANT_0 | MESURE_DISTANT_40 | MESURE_DISTANT_10 |
+| Le 2e PC calcule la fin | 21,5 | 3,3 | 1,1 |
+| La fin reste sur la machine qui pose la question | 22,1 | 15,3 | 8,6 |
 
 (jetons écrits par seconde)
+
+Garder la fin ici rend l'écriture 5 à 8 fois plus rapide quand le débit est plafonné. En
+contrepartie, la lecture d'un long texte est plus lente (69 jetons/s contre 214 à 40 Mbit/s) :
+le paquet de mots lus traverse alors deux fois le réseau.
 
 **Mélange d'experts.** qwen3.6 avec llama.cpp, experts en mémoire vive et le reste sur la
 carte : 161 jetons/s en lecture et 16,8 en écriture. Ollama place mieux ce modèle sur ce PC
@@ -110,7 +114,11 @@ carte : 161 jetons/s en lecture et 16,8 en écriture. Ollama place mieux ce mod�
 graphique, on tombe à 34 et 5,2 : **prêter un processeur et sa mémoire vive ne sert à
 rien, seules les cartes graphiques valent la peine d'être prêtées.**
 
-**M4, le tunnel chiffré (Iroh, comme le compagnon) :** MESURE_IROH
+**M4, le tunnel chiffré (Iroh, comme le compagnon).** À travers un tunnel dumbpipe, la moitié
+du modèle chez le deuxième PC écrit 19,1 jetons/s, contre 35,0 en TCP direct ; tout chez
+lui, 17,9 contre 34,0. Le surcoût, environ 24 ms par mot, ressemble au passage par un relais
+de n0 plutôt qu'à une connexion directe : à remesurer avec le compagnon, relais coupés
+(`--internet-local`).
 
 ## 4. Ce qu'AIODOS fait maintenant (prototype du 17/10/2026)
 
