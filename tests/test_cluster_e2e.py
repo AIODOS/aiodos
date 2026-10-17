@@ -69,10 +69,10 @@ def test_a_machine_without_a_card_borrows_one(machines):
     again = _chat(a, model_id, "Et en anglais ?")
     assert again["error"] is None
 
-    # B ne prête plus : sa carte est reprise, et A ne propose plus le modèle
+    # B ne prête plus : sa carte est reprise, et A ne propose plus le modèle (le profil
+    # que B envoie est gardé 5 s : A le voit au plus tard au rafraîchissement suivant)
     b.api("PUT", "/settings", {"lend_gpu": False})
-    a.api("POST", f"/network/peers/{b_id}/refresh")
-    assert model_id not in {m["id"] for m in a.api("GET", "/models")}
+    a.wait_for(lambda: not offered(), timeout=30, what="modèle réparti retiré")
     b.wait_for(lambda: not ((b.api("GET", "/network/internet").get("companion") or {})
                             .get("tunnels") or {}).get("exposed"),
                timeout=60, what="carte de B reprise")

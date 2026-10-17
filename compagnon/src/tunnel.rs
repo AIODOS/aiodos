@@ -28,13 +28,16 @@ use hyper::{
     Method, Request, Response, StatusCode,
     body::Incoming,
     header::{CONNECTION, HOST, HeaderMap, HeaderValue, UPGRADE},
-    upgrade::Upgraded,
+    upgrade::{OnUpgrade, Upgraded},
 };
 use hyper_util::rt::TokioIo;
 use iroh::EndpointId;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    io::AsyncWriteExt,
+    net::{TcpListener, TcpStream},
+};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
@@ -163,14 +166,14 @@ pub fn set_exposed(pool: &Pool, wanted: ExposedIn) -> Result<usize, String> {
 /// « Upgrade ») : si le service lui est exposé et répond, l'échange devient un flux brut.
 pub async fn accept(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> Response<Body> {
     let name = req.uri().path()[PATH_PREFIX.len()..].to_string();
+    // Pris dès le début : hyper confie le flux à la mise à niveau même quand elle est
+    // refusée ; un refus doit alors fermer ce flux proprement, sinon la réponse se perd.
+    let upgrade = hyper::upgrade::on(&mut req);
     if req.method() != Method::GET || !wants_tunnel(req.headers()) {
-        return reply::detail(StatusCode::BAD_REQUEST, "Tunnel : échange « Upgrade » attendu.");
+        return refuse(upgrade, StatusCode::BAD_REQUEST, "Tunnel : échange « Upgrade » attendu.");
     }
     let Some(port) = pool.tunnels.exposed_to(&name, &peer) else {
-        return reply::detail(
-            StatusCode::FORBIDDEN,
-            "Ce service n'est pas ouvert à cette machine.",
-        );
+        return refuse(upgrade, StatusCode::FORBIDDEN, "Ce service n'est pas ouvert à cette machine.");
     };
     let local = match tokio::time::timeout(
         LOCAL_CONNECT_TIMEOUT,
@@ -180,14 +183,14 @@ pub async fn accept(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -
     {
         Ok(Ok(tcp)) => tcp,
         _ => {
-            return reply::detail(
+            return refuse(
+                upgrade,
                 StatusCode::BAD_GATEWAY,
                 "Le service ne répond pas sur la machine jointe.",
             );
         }
     };
     let _ = local.set_nodelay(true);
-    let upgrade = hyper::upgrade::on(&mut req);
     tokio::spawn(async move {
         match upgrade.await {
             Ok(upgraded) => splice(upgraded, local).await,
@@ -200,6 +203,16 @@ pub async fn accept(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -
     headers.insert(CONNECTION, HeaderValue::from_static("upgrade"));
     headers.insert(UPGRADE, HeaderValue::from_static(PROTOCOL));
     response
+}
+
+/// Refus lisible : la réponse part, puis le flux se ferme normalement.
+fn refuse(upgrade: OnUpgrade, status: StatusCode, message: &str) -> Response<Body> {
+    tokio::spawn(async move {
+        if let Ok(upgraded) = upgrade.await {
+            let _ = TokioIo::new(upgraded).shutdown().await;
+        }
+    });
+    reply::detail(status, message)
 }
 
 fn wants_tunnel(headers: &HeaderMap) -> bool {

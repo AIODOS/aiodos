@@ -21,6 +21,7 @@ from pathlib import Path
 import requests
 
 from aiodos import paths, settings
+from aiodos.node import children
 
 log = logging.getLogger("aiodos.cluster")
 
@@ -160,6 +161,7 @@ class Process:
             log_file.close()
             raise EngineError(f"{self.program.name} ne démarre pas : {exc}") from exc
         log_file.close()                  # le programme garde sa propre copie
+        children.bind(self.process.pid)   # arrêté avec AIODOS, même si AIODOS est tué
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             if self.process.poll() is not None:

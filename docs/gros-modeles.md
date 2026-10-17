@@ -146,7 +146,16 @@ de n0 plutôt qu'à une connexion directe : à remesurer avec le compagnon, rela
   tunnels et lance `llama-server` sur le fichier d'Ollama. Le groupe reste prêt 10 minutes
   après la dernière réponse.
 - **Le moteur** (`aiodos/cluster/engine.py`) cherche llama.cpp dans le réglage « Dossier de
-  llama.cpp », sinon dans `data/engines/llama.cpp`.
+  llama.cpp », sinon dans `data/engines/llama.cpp`. Sous Windows, llama-server et le serveur
+  RPC sont rangés dans un objet de travail (`aiodos/node/children.py`) : ils s'arrêtent avec
+  AIODOS, même s'il est tué, au lieu de garder la mémoire de la carte graphique.
+- **Les conversations** passent par l'API de llama-server. Les consignes données au milieu
+  de la conversation (résultats web, rappel juste avant la question) rejoignent le message
+  de l'utilisateur qui les suit : certains modèles (Mistral) refusent tout ce qui n'alterne
+  pas utilisateur et assistant, ce qu'Ollama cachait.
+- **Essai de bout en bout** (`tests/test_cluster_e2e.py`, variable `AIODOS_LLAMACPP_DIR`) :
+  deux nœuds sur ce PC, appairés sur invitation. La carte graphique de A est cachée à
+  llama.cpp ; A converse avec mistral:7b, calculé par la carte de B à travers le tunnel.
 
 ## 5. Suite
 

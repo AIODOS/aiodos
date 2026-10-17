@@ -36,6 +36,7 @@ KEEP_EVERY = 30               # nouvelles données aux machines qui prêtent (cf
 LOAD_TIMEOUT = 1800           # premier chargement : les poids traversent le réseau
 CONTEXT = 8192
 NO_PROXY = {"http": None, "https": None}
+PARAGRAPH = "\n\n"            # entre deux consignes réunies
 
 _lock = threading.Lock()
 _groups = {}                  # modèle -> Group
@@ -198,7 +199,7 @@ class Group:
     # ------------------------------------------------------------- conversation
     def chat_stream(self, messages, think=True, stop=None):
         self.last_used = time.monotonic()
-        body = {"messages": messages, "stream": True,
+        body = {"messages": for_template(messages), "stream": True,
                 "chat_template_kwargs": {"enable_thinking": bool(think)}}
         headers = {"Authorization": f"Bearer {self.api_key}"}
         url = f"http://127.0.0.1:{self.server.port}/v1/chat/completions"
@@ -231,6 +232,33 @@ class Group:
                                "peut-être partie. Réessaie, il sera remonté.") from exc
         finally:
             self.last_used = time.monotonic()
+
+
+def for_template(messages) -> list:
+    """Messages acceptés par les modèles de conversation les plus stricts (Mistral exige
+    l'alternance utilisateur / assistant, Ollama le cachait) : une seule consigne
+    « system », en tête ; les consignes données plus loin (résultats web, rappel juste
+    avant la question) rejoignent le message de l'utilisateur qui les suit ; deux messages
+    de suite du même rôle sont réunis."""
+    head, rest, pending = [], [], []
+    for message in messages:
+        role, content = message["role"], message.get("content") or ""
+        if role == "system":
+            (pending if rest else head).append(content)
+            continue
+        if pending and role == "user":
+            content = PARAGRAPH.join(pending + [content])
+            pending = []
+        if rest and rest[-1]["role"] == role:
+            rest[-1]["content"] += PARAGRAPH + content
+        else:
+            rest.append({"role": role, "content": content})
+    if pending:
+        if rest and rest[-1]["role"] == "user":
+            rest[-1]["content"] += PARAGRAPH + PARAGRAPH.join(pending)
+        else:
+            head.extend(pending)
+    return ([{"role": "system", "content": PARAGRAPH.join(head)}] if head else []) + rest
 
 
 def _forget(group: Group):

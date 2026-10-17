@@ -261,6 +261,23 @@ def test_pipeline_sends_distributed_models_to_the_group(monkeypatch):
     assert group.parse("reparti:gros:70b") == "gros:70b" and group.parse("gros:70b") is None
 
 
+def test_messages_suit_strict_chat_templates():
+    """Mistral exige l'alternance utilisateur / assistant : les consignes du milieu
+    rejoignent la question qui les suit, celles du début restent une seule consigne."""
+    def m(role, content):
+        return {"role": role, "content": content}
+    reshaped = group.for_template([
+        m("system", "Tu es AIODOS."), m("system", "Sommaire."), m("user", "Q1"),
+        m("assistant", "R1"), m("system", "Résultats web."), m("system", "RAPPEL."),
+        m("user", "Q2")])
+    assert reshaped == [m("system", "Tu es AIODOS.\n\nSommaire."), m("user", "Q1"),
+                        m("assistant", "R1"), m("user", "Résultats web.\n\nRAPPEL.\n\nQ2")]
+    assert group.for_template([m("system", "A"), m("system", "B"), m("user", "Q")]) == \
+        [m("system", "A\n\nB"), m("user", "Q")]
+    assert group.for_template([m("user", "Q"), m("user", "suite"), m("system", "fin")]) == \
+        [m("user", "Q\n\nsuite\n\nfin")]
+
+
 class _SSE(BaseHTTPRequestHandler):
     """Faux llama-server : réflexion, puis réponse, en événements « data: »."""
     seen = {}
