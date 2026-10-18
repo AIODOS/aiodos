@@ -260,3 +260,30 @@ def test_names_are_recognized_in_their_usual_forms():
     assert pipeline.summary_mentioned(shown, "Ta conversation « Divorce » parlait de…") == [2]
     assert pipeline.summary_mentioned(shown, "Un fichier a.c, ou une tarte ?") == []
     assert pipeline.summary_mentioned(shown, "Ta recette tarte.txt") == [3]
+
+
+# ------------------------------------------------- réponse arrêtée, puis la suite
+def test_the_next_question_waits_for_the_stopped_answer(api, monkeypatch):
+    """Après Stop, la réponse partielle s'enregistre hors de la boucle du serveur ; la
+    question suivante, « Modifier » ou « Régénérer » attendent qu'elle soit en place."""
+    from aiodos.chat import pending
+    conv = conversations.create()
+    done = pending.begin(conv)
+    order = []
+
+    def late_save():
+        time.sleep(0.5)
+        order.append(conversations.add_message(conv, "user", "Première question"))
+        order.append(conversations.add_message(conv, "assistant", "Réponse arrê"))
+        pending.end(conv, done)
+    import threading
+    threading.Thread(target=late_save).start()
+    sent = []
+    monkeypatch.setattr(pipeline, "generate", lambda model, messages, *a, **k:
+                        sent.append(messages) or iter([("content", "Suite.")]))
+    _chat(api, text="Et ensuite ?", conversation_id=conv)
+    said = [m["content"] for m in sent[0] if m["role"] != "system"]
+    assert said == ["Première question", "Réponse arrê", "Et ensuite ?"]
+    assert [m["content"] for m in conversations.get(conv)["messages"]] == [
+        "Première question", "Réponse arrê", "Et ensuite ?", "Suite."]
+    assert pending.wait(conv, 0)                   # plus rien en attente

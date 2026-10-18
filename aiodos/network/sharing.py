@@ -30,7 +30,7 @@ FRIEND = "friend"
 LEVELS = (MINE, FRIEND)
 # Profil de cette machine montré à un ami : de quoi calculer, converser et se mettre à
 # jour, rien de plus (les modèles seulement s'ils lui sont prêtés)
-FRIEND_PROFILE = ("node_id", "name", "version", "lends_models", "updates")
+FRIEND_PROFILE = ("node_id", "name", "version", "lends_models", "updates", "stream_alive")
 _SUFFIX = re.compile(r"\.[a-z0-9]{1,10}")
 
 

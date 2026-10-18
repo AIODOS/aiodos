@@ -5,11 +5,15 @@ prête. Ils apparaissent dans le choix du modèle sous « Sur mes machines » ;
 choisir l'un d'eux fait répondre la conversation par cette machine, en flux
 chiffré (cf. lending.py chez elle). Identifiant : « peer:<machine>:<modèle> ».
 """
+import json
+
 from aiodos.network import activity, client, peers
 from aiodos.network.client import PeerError
 from aiodos.node import identity
 
 PREFIX = "peer:"
+READ_ALIVE_S = 180        # la machine envoie un signe de vie toutes les 10 s : 3 minutes sans
+READ_SILENT_S = 600       # une version précédente : rien pendant qu'un gros modèle se charge
 
 
 def model_id(node_id: str, name: str) -> str:
@@ -75,8 +79,15 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
         payload["options"] = options
     if stats:
         payload["stats"] = True
+    # Une machine qui envoie des signes de vie se lit avec un délai court ; une version
+    # précédente se tait pendant qu'un gros modèle se charge : le délai d'avant
+    try:
+        alive = bool((json.loads(peer.get("profile") or "null") or {}).get("stream_alive"))
+    except (ValueError, AttributeError):
+        alive = False
     with activity.chat("by", node_id, stop):         # « répond à ta conversation »
-        for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop):
+        for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop,
+                                   read_timeout=READ_ALIVE_S if alive else READ_SILENT_S):
             for kind in ("thinking", "content"):
                 if frame.get(kind):
                     yield kind, frame[kind]

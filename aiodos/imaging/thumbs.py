@@ -10,6 +10,7 @@ après une suppression ne ressert pas l'ancienne.
 import hashlib
 import os
 import threading
+import zlib
 from pathlib import Path
 
 from aiodos import paths
@@ -17,8 +18,9 @@ from aiodos.imaging import gallery
 
 SIZES = (384, 768)
 QUALITY = 82
-_guard = threading.Lock()
-_making = {}                      # vignette en cours → son verrou (plusieurs à la fois)
+# Un verrou par vignette, choisi par son nom parmi quelques-uns : la même vignette n'est
+# jamais faite deux fois à la fois, des vignettes différentes le sont presque toujours
+_locks = [threading.Lock() for _ in range(32)]
 
 
 def folder() -> Path:
@@ -45,27 +47,26 @@ def thumbnail(row: dict, wanted: int) -> Path | None:
     if target.is_file():
         return target
     try:
-        from PIL import Image, UnidentifiedImageError
+        from PIL import Image
     except ImportError:              # sans Pillow (Termux sans le paquet) : l'image entière
         return None
-    with _guard:
-        lock = _making.setdefault(target.name, threading.Lock())
-    with lock:                       # deux demandes de la même vignette : faite une fois
+    with _locks[zlib.crc32(target.name.encode("utf-8")) % len(_locks)]:
+        if target.is_file():         # faite pendant qu'on attendait
+            return target
+        part = target.with_name(f"{target.name}.{threading.get_ident()}.part")
         try:
-            if target.is_file():
-                return target
             with Image.open(gallery.path_of(row)) as image:
                 image = image.convert("RGB")
                 image.thumbnail((size, size), Image.LANCZOS)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                part = target.with_name(f"{target.name}.{threading.get_ident()}.part")
                 image.save(part, "WEBP", quality=QUALITY, method=4)
             os.replace(part, target)
-        except (OSError, UnidentifiedImageError, ValueError):
+        except Exception:            # PNG abîmé, Pillow sans WebP, disque plein… : l'image entière
+            try:
+                part.unlink(missing_ok=True)
+            except OSError:
+                pass
             return None
-        finally:
-            with _guard:
-                _making.pop(target.name, None)
     return target
 
 

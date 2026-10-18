@@ -105,3 +105,37 @@ def test_without_pillow_the_whole_image_is_served(client, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_pillow)
     reply = _get(client, row["id"], 384)
     assert reply.status_code == 200 and reply.headers["content-type"] == "image/png"
+
+
+def test_a_broken_png_or_a_pillow_without_webp_falls_back_without_leftovers(client,
+                                                                            monkeypatch):
+    row = _add()
+    for error in (SyntaxError("broken PNG file"), KeyError("WEBP")):
+        def failing(self, *args, error=error, **kwargs):
+            raise error
+        monkeypatch.setattr(Image.Image, "save", failing)
+        reply = _get(client, row["id"], 384)
+        assert reply.status_code == 200 and reply.headers["content-type"] == "image/png"
+    assert not thumbs.folder().exists() or not list(thumbs.folder().iterdir())
+
+
+def test_the_same_thumbnail_asked_four_times_at_once_is_made_once(monkeypatch):
+    import threading
+    import time
+    row = _add()
+    made = []
+    real = Image.Image.save
+
+    def slow(self, *args, **kwargs):
+        made.append(1)
+        time.sleep(0.3)
+        return real(self, *args, **kwargs)
+    monkeypatch.setattr(Image.Image, "save", slow)
+    found = []
+    askers = [threading.Thread(target=lambda: found.append(thumbs.thumbnail(row, 384)))
+              for _ in range(4)]
+    for asker in askers:
+        asker.start()
+    for asker in askers:
+        asker.join()
+    assert len(made) == 1 and len(set(found)) == 1 and found[0].is_file()

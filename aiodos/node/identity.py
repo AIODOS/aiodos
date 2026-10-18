@@ -213,6 +213,9 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         "ollama": {"version": ollama.version(), "models": _models(vram_total)},
         "lends_models": bool(settings.get("lend_models")),
+        # Réponses en flux avec signes de vie (network/p2p_app.ALIVE_S) : la machine qui
+        # attend peut lire avec un délai court (remote_models.chat_stream)
+        "stream_alive": True,
         "cluster": _cluster(),                   # gros modèles répartis (cluster/)
         "images": _images(),                     # images réparties (imaging/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)

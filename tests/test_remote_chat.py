@@ -287,3 +287,20 @@ def test_a_silent_stream_sends_signs_of_life_the_requester_ignores(server, monke
         [{"alive": True}, {"content": "Bon"}, {"alive": True}, {"content": "jour"}]))
     assert list(pipeline.generate("peer:machine-b:qwen3.6:latest", QUESTION, think=False)) == [
         ("content", "Bon"), ("content", "jour")]
+
+
+def test_a_previous_version_is_read_with_the_long_delay(monkeypatch):
+    """Une machine qui annonce des signes de vie (profil « stream_alive ») se lit avec un
+    délai de 3 minutes ; une version précédente, qui se tait pendant qu'un gros modèle se
+    charge, garde les 10 minutes d'avant."""
+    delays = []
+    monkeypatch.setattr(client, "stream", lambda *a, read_timeout=None, **k:
+                        delays.append(read_timeout) or iter([{"content": "Oui"}]))
+    _peer_with_models()
+    list(pipeline.generate("peer:machine-b:qwen3.6:latest", QUESTION, think=False))
+    peers.update_profile(B, "stream_alive", True)
+    list(pipeline.generate("peer:machine-b:qwen3.6:latest", QUESTION, think=False))
+    assert delays == [remote_models.READ_SILENT_S, remote_models.READ_ALIVE_S]
+    from aiodos.node import identity
+    from aiodos.network import sharing
+    assert identity.profile()["stream_alive"] is True and "stream_alive" in sharing.FRIEND_PROFILE

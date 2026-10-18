@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from aiodos import render, settings
 from aiodos.api.events import sse
-from aiodos.chat import conversations, pipeline
+from aiodos.chat import conversations, pending, pipeline
 from aiodos.jobs.kinds import index
 from aiodos.network import placement
 from aiodos.services import cloud
@@ -83,6 +83,8 @@ async def chat(body: ChatIn, request: Request):
     except placement.NoMachine as exc:
         raise HTTPException(400, str(exc))
     conv_id = body.conversation_id
+    if conv_id is not None:               # la réponse arrêtée juste avant : en place d'abord
+        await asyncio.to_thread(pending.wait, conv_id)
     if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
@@ -225,7 +227,15 @@ async def chat(body: ChatIn, request: Request):
         finally:
             stop.set()                    # client parti ou fin : on coupe le modèle
             if state["saved"] is None:    # interruption (bouton Stop) : hors de la boucle
-                threading.Thread(target=save, daemon=True, name="aiodos-chat-save").start()
+                done = pending.begin(conv_id)
+
+                def save_stopped():
+                    try:
+                        save()
+                    finally:
+                        pending.end(conv_id, done)
+                threading.Thread(target=save_stopped, daemon=True,
+                                 name="aiodos-chat-save").start()
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})

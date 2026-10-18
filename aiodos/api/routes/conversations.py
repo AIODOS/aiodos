@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import render
-from aiodos.chat import conversations, creations
+from aiodos.chat import conversations, creations, pending
 
 router = APIRouter(prefix="/api")
 
@@ -67,6 +67,7 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
     """« Régénérer » une réponse, « Modifier » un message : la conversation reprend à ce
     message de l'utilisateur, qui en est retiré avec tout ce qui suit ; l'interface le
     renvoie ensuite (tel quel, ou modifié) comme un nouveau message. → son texte."""
+    pending.wait(conv_id)                 # une réponse arrêtée juste avant : retirée aussi
     text = conversations.rewind(conv_id, body.message_id)
     if text is None:
         raise HTTPException(404, "Message introuvable dans cette conversation.")

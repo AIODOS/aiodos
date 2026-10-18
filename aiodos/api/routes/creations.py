@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from aiodos.chat import creations
+from aiodos.chat import creations, pending
 
 router = APIRouter(prefix="/api/chat")
 
@@ -46,6 +46,8 @@ async def undo(message_id: int, request: Request):
 
 @router.post("/create")
 async def create(body: CreateIn, request: Request):
+    if body.conversation_id is not None:  # une réponse arrêtée juste avant : en place d'abord
+        await asyncio.to_thread(pending.wait, body.conversation_id)
     try:
         made = await asyncio.to_thread(creations.start, body.text, body.model_dump(),
                                        body.conversation_id, body.chat_model)
