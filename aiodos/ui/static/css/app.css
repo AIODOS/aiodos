@@ -499,6 +499,8 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .peer-ledger { font-size: 12px; margin-top: 4px; }
 .peer-aside { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--warn); }
 .peer-aside > div { flex: 1; }
+.peer-offline { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.peer-offline > div { flex: 1; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.on { background: var(--ok); box-shadow: 0 0 8px rgba(63, 214, 154, .6); }
 .pair-code { margin: 16px 0 4px; padding: 16px; text-align: center; border-radius: 12px; background: var(--bg-2);

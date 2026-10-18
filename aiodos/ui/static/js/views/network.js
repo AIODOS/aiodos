@@ -245,6 +245,7 @@ function renderPeers(net) {
           <button class="icon-btn danger" data-act="unpair" title="Retirer l'appairage">${icon('x')}</button>
         </div>
         <div class="peer-facts">${peerFacts(peer)}${netFact(peer)}</div>
+        ${offlineHint(peer, net)}
         ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>Mise de côté ${ago(peer.set_aside_at)} :
           ${esc(peer.set_aside_reason || 'contrôle échoué')}. Plus rien ne lui est confié.</div>
           <button class="btn sm" data-act="restore">Rétablir</button></div>` : ''}
@@ -291,6 +292,17 @@ function renderPeers(net) {
     };
     list.append(row);
   }
+}
+
+/** Une machine appairée hors ligne : ce qu'il faut vérifier pour la retrouver. */
+function offlineHint(peer, net) {
+  if (peer.online || peer.set_aside_at) return '';
+  const internet = !net.internet?.enabled
+    ? ' ; ou active « Internet » plus haut, pour la joindre même hors du réseau local'
+    : !peer.net_id ? ' ; par Internet, il faut aussi activer « Internet » sur elle' : '';
+  return `<div class="peer-offline">${icon('info')}<div>Hors ligne : vérifie qu'elle est allumée et
+    qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local
+    (dans NordVPN, par exemple : autoriser le réseau local)${internet}.</div></div>`;
 }
 
 function netFact(peer) {
