@@ -44,7 +44,10 @@ def thumbnail(row: dict, wanted: int) -> Path | None:
     target = folder() / _name(row, size)
     if target.is_file():
         return target
-    from PIL import Image, UnidentifiedImageError
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError:              # sans Pillow (Termux sans le paquet) : l'image entière
+        return None
     with _guard:
         lock = _making.setdefault(target.name, threading.Lock())
     with lock:                       # deux demandes de la même vignette : faite une fois

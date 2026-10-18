@@ -90,3 +90,18 @@ def test_an_unreadable_image_falls_back_to_the_file(client):
     gallery.path_of(row).write_bytes(b"\x89PNG\r\n\x1a\n" + b"abime" * 10)
     reply = _get(client, row["id"], 384)
     assert reply.status_code == 200 and reply.headers["content-type"] == "image/png"
+
+
+def test_without_pillow_the_whole_image_is_served(client, monkeypatch):
+    """Un téléphone (Termux) sans le paquet Pillow : la tuile reçoit l'image entière."""
+    import builtins
+    real = builtins.__import__
+
+    def no_pillow(name, *args, **kwargs):
+        if name == "PIL" or name.startswith("PIL."):
+            raise ImportError("pas de Pillow")
+        return real(name, *args, **kwargs)
+    row = _add()
+    monkeypatch.setattr(builtins, "__import__", no_pillow)
+    reply = _get(client, row["id"], 384)
+    assert reply.status_code == 200 and reply.headers["content-type"] == "image/png"
