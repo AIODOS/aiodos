@@ -79,6 +79,13 @@ function exchanged(peer) {
   if (peer.given_chats) chats.push(`${peer.given_chats} pour elle`);
   const lines = [];
   if (compute.length) lines.push(compute.join(' · '));
+  // Fiabilité : ses résultats refusés (faux ou illisibles), les unités qu'elle n'a pas pu calculer
+  const trouble = [];
+  if (peer.refused_units) trouble.push(`${plural(peer.refused_units, 'résultat')} refusé${peer.refused_units > 1 ? 's' : ''}`);
+  if (peer.failed_units) trouble.push(`${plural(peer.failed_units, 'échec')}`);
+  if (trouble.length) {
+    lines.push(`<span class="live-trouble" title="Résultats qu'elle t'a rendus et qui ont été refusés (faux ou illisibles), et unités qu'elle n'a pas pu calculer pour toi">${trouble.join(' · ')}</span>`);
+  }
   if (chats.length) {
     lines.push(`<span title="Réponses de ses modèles à tes conversations, et des tiens aux siennes">${
       peer.received_chats + peer.given_chats > 1 ? 'conversations' : 'conversation'} : ${chats.join(' · ')}</span>`);

@@ -33,23 +33,24 @@ class CreationError(Exception):
 
 
 # ------------------------------------------------------------- la demande, dans le texte
-_STRONG = (r"cr[ée]e|cr[ée]er|cr[ée]ez|cr[ée]es|g[ée]n[èée]re|g[ée]n[ée]rer|g[ée]n[ée]rez|"
+_STRONG = (r"cr[ée]e|cr[ée]é|cr[ée]er|cr[ée]ez|cr[ée]es|g[ée]n[èée]re|g[ée]n[ée]rer|g[ée]n[ée]rez|"
            r"dessine|dessiner|dessinez|peins|peindre|peignez|imagine|imaginer|imaginez|"
            r"create|generate|draw|paint|render")
 _WEAK = (r"fais|faites|faire|fabrique|fabriquer|fabriquez|r[ée]alise|r[ée]aliser|r[ée]alisez|"
          r"produis|produire|produisez|donne|donner|donnez|envoie|envoyer|envoyez|montre|"
          r"montrer|montrez|j'aimerais|je voudrais|je veux|il me faut|make|give|show|send|"
          r"i want|i'd like|i would like")
-_DRAW = re.compile(r"^(dessine\w*|peins|peindre|peignez|draw|paint)$", re.IGNORECASE)
 _ARTICLE = (r"une?|des|quelques|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|seize|"
             r"\d{1,2}|l'|la|le|les|ma|mon|mes|an?|some|two|three|four|five|six|eight|ten")
 _ADJECTIVE = (r"petite?s?|belles?|beaux?|jolie?s?|nouvelles?|nouveaux?|autres?|courtes?|"
               r"superbes?|magnifiques?|grandes?|grands?|vraie?s?|r[ée]alistes?|simples?|nice|"
               r"beautiful|short|new|quick|little|small|cool|great|realistic")
 _IMAGES = (r"images?|photos?|photographies?|dessins?|logos?|fonds? d'[ée]cran|wallpapers?|"
-           r"pictures?|drawings?")
-_IMAGES_STRONG = (r"illustrations?|peintures?|portraits?|affiches?|posters?|ic[ôo]nes?|"
-                  r"visuels?|croquis|esquisses?|aquarelles?|paintings?|icons?|sketch(?:es)?")
+           r"pictures?|drawings?|affiches?|posters?|ic[ôo]nes?|visuels?|croquis|esquisses?|"
+           r"aquarelles?|icons?|sketch(?:es)?")
+# Noms qui ont aussi un sens figuré (« donne-moi une illustration de ce principe », « un
+# portrait de Napoléon ») : seulement avec un verbe de création sans ambiguïté
+_IMAGES_STRONG = r"illustrations?|peintures?|portraits?|paintings?"
 _VIDEOS = r"vid[ée]os?|clips?|animations?|videos?"
 
 _REQUEST = re.compile(
@@ -75,13 +76,24 @@ _TECHNICAL = re.compile(
     re.IGNORECASE)
 _NOT_A_DRAWING = re.compile(r"^(?:\S+\s+)?(tableaux?|graphiques?|plans?|arbres?|courbes?|"
                             r"cartes? mentales?)\b", re.IGNORECASE)
-_LINK = re.compile(r"^\s*(?:[:—–-]\s*|de\s+|d'|du\s+|des\s+|of\s+|avec\s+|with\s+|"
+_LINK = re.compile(r"^\s*(?:[:—–-]\s*|de\s+|d'|d\s+(?=une?\b)|du\s+|des\s+|of\s+|avec\s+|with\s+|"
                    r"qui\s+(?:montre|repr[ée]sente)\w*\s+|montrant\s+|repr[ée]sentant\s+|"
                    r"showing\s+|o[ùu]\s+|where\s+|sur\s+laquelle\s+|sur\s+lequel\s+)",
+                   re.IGNORECASE)
+# Le format dit dans la phrase sert à choisir la taille (shape_of), pas à décrire l'image
+_FORMAT = re.compile(r"\s*\b(?:en|au|format)\s+(?:format\s+)?(?:16[:/]9|9[:/]16|1[:/]1|4[:/]3|"
+                     r"3[:/]4|portrait|paysage|carr[ée]e?|vertical\w*|horizontal\w*)\b",
+                     re.IGNORECASE)
+# « J'ai créé une image hier » : un récit, pas une demande (l'auxiliaire juste avant le verbe)
+_PAST = re.compile(r"\b(?:ai|as|a|avons|avez|ont)\s+(?:d[ée]j[àa]\s+|bien\s+|aussi\s+)?$",
                    re.IGNORECASE)
 _POLITE = re.compile(r"[\s,]*(s'il (?:te|vous) pla[iî]t|stp|svp|please|merci)\s*[.!?]*\s*$",
                      re.IGNORECASE)
 _MEDIUM = re.compile(r"^(images?|pictures?|vid[ée]os?|videos?|clips?)$", re.IGNORECASE)
+# Noms qui servent aussi au figuré : avec « donne-moi », « je voudrais »…, il faut dire ce
+# qu'ils montrent (« une image de… ») ; une affiche ou un logo se demandent sans détour
+_LOOSE = re.compile(r"^(images?|photos?|photographies?|pictures?|vid[ée]os?|videos?|clips?|"
+                    r"animations?)$", re.IGNORECASE)
 _EMPTY = re.compile(r"^(ça|ca|cela|ceci|it|this|that|quelque chose|something)$", re.IGNORECASE)
 _NUMBERS = {"un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6,
             "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "douze": 12, "seize": 16, "two": 2,
@@ -128,16 +140,19 @@ def intent(text: str) -> dict | None:
     if not text or len(text) > 2000 or _QUESTION.match(text) or technical(text):
         return None
     found = _REQUEST.search(text)
+    if found is not None and _PAST.search(text[:found.start("verb")]):
+        return None
+    found = found or _elliptic(text)
     if found:
         verb, noun = found["verb"].lower(), found["noun"].lower()
         strong = re.fullmatch(_STRONG, verb, re.IGNORECASE) is not None
         if not strong and re.fullmatch(_IMAGES_STRONG, noun, re.IGNORECASE):
             return None               # « donne-moi une illustration de ce principe » : un exemple
-        rest = found["rest"]
+        rest = _FORMAT.sub("", found["rest"], count=1)
         link = _LINK.match(rest)
         if not _subject(rest):
             return None               # « Envoie-moi une photo », « Tu sais créer des images ? »
-        if not strong and not link:
+        if not strong and not link and _LOOSE.match(noun):
             return None               # « donne-moi une image claire de la situation »
         video = re.fullmatch(_VIDEOS, noun, re.IGNORECASE) is not None
         if video:
@@ -166,6 +181,20 @@ def intent(text: str) -> dict | None:
             "count": min(count, MAX_VIDEOS if video else kind.MAX_COUNT),
             "shape": shape_of(text),
             "seconds": float(seconds[1].replace(",", ".")) if seconds else None}
+
+
+_ELLIPTIC = re.compile(
+    rf"^\s*(?P<n>une?|des|deux|trois|quatre|cinq|six|\d{{1,2}})\s+(?:(?:{_ADJECTIVE})\s+){{0,2}}"
+    rf"(?P<noun>{_IMAGES}|{_VIDEOS})\b(?P<rest>.*)$", re.IGNORECASE | re.DOTALL)
+
+
+def _elliptic(text: str):
+    """« Une image de chat, stp » : une demande sans verbe, au début du message, qui dit ce
+    qu'il faut montrer (« Une image vaut mille mots » n'en est pas une, ni une question)."""
+    found = _ELLIPTIC.match(text)
+    if found is None or text.rstrip().endswith("?") or not _LINK.match(found["rest"]):
+        return None
+    return {"verb": "crée", "n": found["n"], "noun": found["noun"], "rest": found["rest"]}
 
 
 def _count(word: str, plural: bool) -> int:

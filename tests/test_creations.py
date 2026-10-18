@@ -38,6 +38,15 @@ AUTH = {"X-Aiodos-Token": TOKEN}
     ("Génère une image d'un paysage de montagne", {"shape": "landscape"}),
     ("create an image of a cat wearing a hat", {"prompt": "a cat wearing a hat"}),
     ("Génère 30 vidéos d'un chat", {"kind": "video", "count": creations.MAX_VIDEOS}),
+    # Sans accents ni apostrophe, avec la faute « créé », sans verbe, format dans la phrase
+    ("genere une image d un chat", {"prompt": "un chat"}),
+    ("Créé une image d'un chat", {"prompt": "un chat"}),
+    ("Une image de chat stp", {"prompt": "chat"}),
+    ("J'aimerais une affiche pour mon concert", {"prompt": "affiche pour mon concert"}),
+    ("Génère une image en 16:9 d'une ville futuriste",
+     {"prompt": "une ville futuriste", "shape": "landscape"}),
+    ("Crée une image au format portrait d'un vieux marin",
+     {"prompt": "un vieux marin", "shape": "portrait"}),
 ])
 def test_a_request_to_create_is_recognized(text, expected):
     found = creations.intent(text)
@@ -64,6 +73,10 @@ def test_a_request_to_create_is_recognized(text, expected):
     "Imagine un monde sans pétrole",
     "Quelle image crées-tu quand tu dors ?",
     "Bonjour !",
+    "J'ai créé une image hier, elle est floue",
+    "On a créé une image de marque",
+    "Une image vaut mille mots",
+    "Une photo de famille, ça te dit ?",
 ])
 def test_questions_code_and_vague_phrases_are_not_requests(text):
     assert creations.intent(text) is None
@@ -133,6 +146,9 @@ def test_an_image_is_created_in_the_conversation(client, can_draw):
                            "« un chat roux ».)"}
     batch = client.get(f"/api/images?batch={media['batch']}", headers=AUTH).json()
     assert [r["id"] for r in batch] == [r["id"] for r in answer["media"]["images"]]
+    # La galerie mène à la conversation où elles ont été demandées
+    assert {r["conversation_id"] for r in client.get("/api/images", headers=AUTH).json()} == \
+        {made["conversation_id"]}
 
 
 def test_a_chosen_format_and_an_explicit_request_are_kept(client, can_draw, monkeypatch):

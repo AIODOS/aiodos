@@ -254,6 +254,9 @@ function renderPeers(net) {
           · Tu as calculé pour elle : ${duration(peer.given_s)} (${peer.given_units} unité(s))</div>
         ${peer.received_chats || peer.given_chats ? `<div class="peer-ledger faint">Conversations servies par
           un modèle prêté : ${peer.received_chats || 0} pour toi · ${peer.given_chats || 0} pour elle</div>` : ''}
+        ${peer.checked_units || peer.refused_units || peer.failed_units ? `<div class="peer-ledger faint">Fiabilité :
+          ${peer.checked_units || 0} résultat(s) contrôlé(s) et conforme(s) · ${peer.refused_units || 0} refusé(s)
+          · ${peer.failed_units || 0} unité(s) qu'elle n'a pas pu calculer</div>` : ''}
         ${shared ? `<div class="peer-ledger faint">Confié à cette machine : ${shared.count} fichier(s) ou page(s)
           ${shared.bytes ? `(${bytes(shared.bytes)})` : ''}, le dernier ${ago(shared.last)}</div>` : ''}
         ${consulted ? `<div class="peer-ledger faint">A cherché dans tes bibliothèques : ${consulted.count} recherche(s),

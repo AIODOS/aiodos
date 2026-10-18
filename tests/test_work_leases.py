@@ -224,6 +224,7 @@ def test_failure_reported_by_the_machine_names_it(owner):
     order = _lease(owner)["unit"]
     assert work.fail(owner["manager"], B, {"unit": order["id"], "error": "PDF illisible"}) == {"ok": True}
     assert _unit(order["id"])["error"] == "Sur « PC fixe » : PDF illisible"
+    assert next(p for p in peers.list_peers() if p["node_id"] == B)["failed_units"] == 1
 
 
 def test_local_executor_and_remote_machine_never_get_the_same_unit(owner):

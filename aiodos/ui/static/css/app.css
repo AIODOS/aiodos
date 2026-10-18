@@ -499,6 +499,7 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .live-now > span { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
 .live-now .icon { width: 15px; height: 15px; }
 .live-in { color: var(--cyan); }
+.live-trouble { color: var(--err); }
 .live-out { color: var(--violet); }
 
 /* ------------------------------------------------------------------ réglages */

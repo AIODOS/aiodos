@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -154,6 +154,14 @@ MIGRATIONS = {
     # l'assistant garde sa demande (lot, travail, modèle, description), en JSON
     11: """
     ALTER TABLE messages ADD COLUMN media TEXT;
+    """,
+    # Fiabilité de chaque machine (docs/phase3-reseau-public.md, § 5) : résultats d'un ami
+    # contrôlés par échantillon et conformes, résultats refusés, unités qu'elle n'a pas pu
+    # calculer pour moi
+    12: """
+    ALTER TABLE ledger ADD COLUMN checked_units INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE ledger ADD COLUMN refused_units INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE ledger ADD COLUMN failed_units INTEGER NOT NULL DEFAULT 0;
     """,
 }
 

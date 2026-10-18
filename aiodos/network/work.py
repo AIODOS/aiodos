@@ -244,6 +244,7 @@ def result(manager, sender, payload):
     except registry.SampleMismatch as exc:
         reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
         peers.set_aside(sender, reason[:300])
+        peers.account(sender, refused_units=1)
         log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
         job_id, finished = queue.fail_unit(
             unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {reason}"[:500], compute_s)
@@ -253,12 +254,14 @@ def result(manager, sender, payload):
                                              "échoué, plus rien ne te sera confié."}
     except Exception as exc:
         log.warning("Résultat de %s refusé pour l'unité %s : %s", _peer_name(sender), unit_id, exc)
+        peers.account(sender, refused_units=1)
         job_id, finished = queue.fail_unit(
             unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {exc}"[:500], compute_s)
         manager.executor.settle(job_id, finished)
         return {"accepted": False, "reason": str(exc)[:200]}
     job_id, finished = queue.finish_unit(unit_id, outcome, compute_s)
-    peers.account(sender, received_s=compute_s, received_units=1)
+    peers.account(sender, received_s=compute_s, received_units=1,
+                  checked_units=1 if friend and spec.sample else 0)
     manager.executor.settle(job_id, finished)
     manager.changed()
     return {"accepted": True}
@@ -287,6 +290,7 @@ def fail(manager, sender, payload):
     settled = leases.fail(_unit_id(payload), sender, f"Sur « {_peer_name(sender)} » : {error}",
                           max(0.0, float(payload.get("compute_s") or 0)))
     if settled:
+        peers.account(sender, failed_units=1)
         manager.executor.settle(*settled)
     return {"ok": bool(settled)}
 

@@ -73,6 +73,7 @@ def test_a_friend_result_is_checked_by_sample_and_the_real_name_restored(friend,
     text = db.query_one("SELECT text FROM chunks ORDER BY id DESC LIMIT 1")["text"]
     assert text == "Contenu de a.txt"
     assert peers.list_peers()[0]["received_units"] == 1
+    assert peers.list_peers()[0]["checked_units"] == 1                # fiabilité : contrôlé, conforme
 
 
 def test_a_friend_whose_result_does_not_match_is_set_aside(friend, monkeypatch):
@@ -82,6 +83,7 @@ def test_a_friend_whose_result_does_not_match_is_set_aside(friend, monkeypatch):
     reply = _result(friend, order, np.ones((1, 8)))
     assert reply["accepted"] is False and "échantillon" in reply["reason"]
     assert "ne correspond pas" in sharing.set_aside_reason(B)
+    assert peers.list_peers()[0]["refused_units"] == 1                # fiabilité : un résultat refusé
     assert _unit(order["id"])["status"] == "queued"                   # sera refaite ailleurs
     refused = _lease(friend)
     assert refused["unit"] is None and "ne te confie plus rien" in refused["reason"]
