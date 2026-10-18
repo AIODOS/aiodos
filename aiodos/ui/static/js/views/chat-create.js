@@ -191,11 +191,19 @@ export function appendNotice(list, message, { images = false, friends = [], retr
     </div>`);
   node.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
   node.querySelector('[data-as-text]')?.addEventListener('click', () => asText());
-  node.querySelector('[data-friends-ok]')?.addEventListener('click', async () => {
+  const friendsOk = node.querySelector('[data-friends-ok]');
+  friendsOk?.addEventListener('click', async () => {
+    friendsOk.disabled = true;                     // cliqué deux fois : une seule fois
     try { state.settings = await put('/settings', { images_from_friends: true }); }
-    catch (err) { errorToast(err); return; }
+    catch (err) { errorToast(err); friendsOk.disabled = false; return; }
+    node.hidden = true;
+    if (await retry() === false) {                // une autre création en route : plus tard
+      node.hidden = false;
+      friendsOk.disabled = false;
+      toast('Une création est déjà en route : réessaie dans un instant.');
+      return;
+    }
     node.remove();
-    retry();
   });
   list.append(node);
   return node;

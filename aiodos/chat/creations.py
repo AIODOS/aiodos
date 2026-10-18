@@ -362,14 +362,24 @@ def _first_image(media: dict):
 
 def start(text: str, request: dict, conversation_id=None, chat_model=None,
           replace_from=None, replace_text=None) -> dict:
-    """Ajoute la demande à la conversation (créée au besoin) et lance son travail.
+    """Ajoute la demande à la conversation (créée au besoin) et lance son travail :
+    prepare(), puis accept().
     request : kind, model, prompt, count, width, height, shape, frames, seconds, seed,
     negative (vides : tirés du message, du modèle et de ses réglages par défaut), et
     followup (retouche ou variante de la dernière création, chat/retouches.py).
     replace_from, replace_text : « Modifier » ; ce message de l'utilisateur et la suite
     sont retirés (replace), une fois la demande acceptée.
-    → {"conversation_id", "title", "user_message_id", "message_id", "job_id", "media"} ;
-    CreationError si rien ne peut la calculer, ou si elle est invalide."""
+    → {"conversation_id", "title", "user_message_id", "message_id", "job_id", "media",
+    "stopped"} ; CreationError si rien ne peut la calculer, ou si elle est invalide."""
+    return accept(prepare(text, request, conversation_id, chat_model, replace_from),
+                  replace_from, replace_text)
+
+
+def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
+            replace_from=None) -> dict:
+    """Tout ce qui précède l'acceptation, sans rien écrire : la description retouchée par
+    le modèle de conversation (jusqu'à 45 s), le modèle d'images, le format. → le plan
+    qu'accept() enregistre ; CreationError si la demande ne peut pas aboutir."""
     text = (text or "").strip()
     if not text:
         raise CreationError("Message vide.")
@@ -409,11 +419,21 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None,
             "strength": request.get("strength") if same else None})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
-    # D'un seul geste : l'échange remplacé, la question, le travail et la réponse
-    with db.transaction():
+    return {"text": text, "conv_id": conv_id, "chat_model": chat_model, "model_id": model_id,
+            "params": params, "auto": bool(request.get("auto"))}
+
+
+def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
+    """La demande acceptée, d'un seul geste : l'échange remplacé, la question, le travail
+    et la réponse. CreationError (412) si la conversation a disparu entre-temps."""
+    text, conv_id, model_id, params = plan["text"], plan["conv_id"], plan["model_id"], plan["params"]
+    with db.transaction() as c:
+        if conv_id is not None and c.execute("SELECT 1 FROM conversations WHERE id=?",
+                                             (conv_id,)).fetchone() is None:
+            raise CreationError(CHANGED, status=CHANGED_STATUS)
         stopped = replace(conv_id, replace_from, replace_text) if replace_from is not None else []
         if conv_id is None:
-            conv_id = conversations.create(model=chat_model or None)
+            conv_id = conversations.create(model=plan["chat_model"] or None)
         user_message_id = conversations.add_message(conv_id, "user", text)
         title = conversations.auto_title(conv_id, text)
         job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
@@ -424,7 +444,7 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None,
                  "width": params["width"], "height": params["height"], "seed": params["seed"]}
         if "frames" in params:
             media["frames"] = params["frames"]
-        if request.get("auto"):
+        if plan["auto"]:
             media["auto"] = True      # reconnue dans le message : « Répondre en texte » possible
         if params.get("init_path"):
             media["retouch"] = True   # partie de l'image précédente (dit sous l'image)

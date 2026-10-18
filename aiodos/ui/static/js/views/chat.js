@@ -19,6 +19,7 @@ let displayed = 0;         // change à chaque conversation affichée (création
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
 let editing = null;        // { node } : le dernier message de l'utilisateur, en cours de modification
+let opening = 0;           // ouvertures de conversation : seule la dernière s'affiche
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -276,16 +277,22 @@ function newConversation() {
   el.input.focus();
 }
 
-async function openConversation(id) {
+/** settled : l'écran se resynchronise (remplacement interrompu ou refusé) ; le nœud
+ *  répond une fois enregistrée la question en cours. Seule la dernière ouverture compte :
+ *  une réponse en retard ne ramène pas une conversation quittée entre-temps. */
+async function openConversation(id, { settled = false } = {}) {
   if (busy) {
     toast('Une réponse est en cours : arrête-la (Échap) avant de changer de conversation.');
     return;
   }
+  const mine = ++opening;
   let conv;
-  try { conv = await get(`/conversations/${id}`); } catch (e) {
+  try { conv = await get(`/conversations/${id}${settled ? '?settled=1' : ''}`); } catch (e) {
+    if (mine !== opening) return;
     if (e.status === 404) { newConversation(); return; }
     errorToast(e); return;
   }
+  if (mine !== opening || busy) return;
   stopEditing();
   displayed += 1;
   state.currentConversation = { id: conv.id, title: conv.title, model: conv.model };
@@ -392,10 +399,12 @@ function beginEditing(node) {
 /** Un envoi qui n'a pas été accepté (refus, Stop, réseau) ne perd pas le texte écrit : il
  *  revient dans la zone de saisie, et « Modifier » reprend s'il s'agissait d'une
  *  modification et que le message est toujours là. */
-function keepEdit(text, replace) {
-  const node = replace && el.list.querySelector('.msg.user.last-turn');
-  if (node && Number(node.dataset.id) === replace.id
-      && node.querySelector('.bubble').textContent === replace.text) beginEditing(node);
+function keepEdit(text, replace, convId) {
+  if (state.currentConversation?.id !== convId) return;     // une autre conversation entre-temps
+  const last = el.list.querySelector('.msg.user.last-turn');
+  if (last?.querySelector('.bubble').textContent === text) return;   // passé, finalement
+  if (replace && last && Number(last.dataset.id) === replace.id
+      && last.querySelector('.bubble').textContent === replace.text) beginEditing(last);
   if (!el.input.value.trim() || editing) {
     el.input.value = text;
     autoresize();
@@ -767,8 +776,9 @@ async function sendNow(asText, replace) {
   // l'ancien échange, ou pas ; la conversation est relue telle qu'il la garde
   if (replace && !started && state.currentConversation) {
     if (failure && failure.name !== 'AbortError') errorToast(failure);
-    await openConversation(state.currentConversation.id);
-    if (asText === null) keepEdit(text, replace);
+    const id = state.currentConversation.id;
+    await openConversation(id, { settled: true });
+    if (asText === null) keepEdit(text, replace, id);
   }
   return true;
 }
@@ -777,7 +787,7 @@ async function sendNow(asText, replace) {
 // images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
 // remplacé (« Modifier »), retiré une fois la demande acceptée
 async function create(text, request, again = false, replace = null, askedNode = null) {
-  if (creating) return;              // « Autoriser mes amis » cliqué deux fois : une seule
+  if (creating) return false;        // une création déjà en route : pas une deuxième
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
   let asked = askedNode;             // une nouvelle tentative garde la question d'origine
@@ -800,8 +810,9 @@ async function create(text, request, again = false, replace = null, askedNode = 
     if (seen !== displayed) return;
     if (e.status === 412) {          // la conversation a changé (autre fenêtre) : relue
       errorToast(e);
-      if (state.currentConversation) await openConversation(state.currentConversation.id);
-      keepEdit(text, replace);
+      const id = state.currentConversation?.id;
+      if (id) await openConversation(id, { settled: true });
+      keepEdit(text, replace, id);
       return;
     }
     // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être. Reconnue

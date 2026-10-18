@@ -90,17 +90,19 @@ async def chat(body: ChatIn, request: Request):
     conv_id = body.conversation_id
     if conv_id is not None:               # la réponse arrêtée juste avant : en place d'abord
         await asyncio.to_thread(pending.wait, conv_id)
-    if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
-        if body.replace_from is not None:
-            raise HTTPException(creations.CHANGED_STATUS, creations.CHANGED)
-        conv_id = await asyncio.to_thread(conversations.create, model=body.model)
-    # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation
-    # attend (pending) : l'écran qui se resynchronise après un Stop voit ce que le nœud garde
-    marker = pending.begin(conv_id)
+        if not await asyncio.to_thread(conversations.get, conv_id):
+            conv_id = None
+    if conv_id is None and body.replace_from is not None:
+        raise HTTPException(creations.CHANGED_STATUS, creations.CHANGED)
+    # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation pour
+    # se resynchroniser attend (pending) : l'écran voit ce que le nœud garde. Une
+    # conversation neuve n'est créée qu'à l'acceptation (ask)
+    marker = pending.begin(conv_id) if conv_id is not None else None
     try:
         return await _answer(body, request, text, plan, conv_id, executor, bus)
     finally:
-        pending.end(conv_id, marker)
+        if marker is not None:
+            pending.end(conv_id, marker)
 
 
 async def _answer(body, request, text, plan, conv_id, executor, bus):
@@ -118,16 +120,17 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
         échange sans la nouvelle question). Chaque machine qui peut répondre ne reçoit de
         l'historique que ce qu'elle peut recevoir (pipeline.history_filter)."""
         with db.transaction():
+            cid = conv_id if conv_id is not None else conversations.create(model=body.model)
             stopped = [] if body.replace_from is None else creations.replace(
-                conv_id, body.replace_from, body.replace_text)
-            rows = conversations.history_rows(conv_id, 30)
-            asked = conversations.add_message(conv_id, "user", text)
-            named = conversations.auto_title(conv_id, text)
-        return stopped, rows, asked, named
+                cid, body.replace_from, body.replace_text)
+            rows = conversations.history_rows(cid, 30)
+            asked = conversations.add_message(cid, "user", text)
+            named = conversations.auto_title(cid, text)
+        return cid, stopped, rows, asked, named
     if await request.is_disconnected():   # parti (Stop) avant l'acceptation : rien ne change
         raise HTTPException(400, "Demande abandonnée.")
     try:
-        stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
+        conv_id, stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
     except creations.CreationError as exc:
         raise HTTPException(exc.status, str(exc))
     for job_id in stopped:                # créations retirées : la vue des tâches le voit

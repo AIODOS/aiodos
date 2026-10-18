@@ -412,3 +412,22 @@ def test_replacing_a_creation_stops_its_job(client, can_draw, monkeypatch):
     assert queue.job_summary(made["job_id"])["status"] == "cancelled"
     gate.set()
     assert conversations.get(made["conversation_id"])["messages"] == []
+
+
+def test_a_retouch_waits_to_be_accepted_only_after_its_rewrite(client, can_draw, monkeypatch):
+    """La description d'une retouche se réécrit d'abord (le modèle de conversation, jusqu'à
+    45 s) : la conversation reste lisible pendant ce temps ; seule l'acceptation fait
+    attendre qui la relit pour se resynchroniser."""
+    from aiodos.chat import pending
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "width": 1024, "height": 1024}).json()
+    wait_for(lambda: queue.job_summary(first["job_id"])["status"] == "done")
+    order = []
+    monkeypatch.setattr(retouches, "rewrite",
+                        lambda prompt, text, model=None: order.append("réécrite") or prompt)
+    real = pending.begin
+    monkeypatch.setattr(pending, "begin", lambda conv: order.append("attente") or real(conv))
+    client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-la de nuit", "followup": "edit",
+        "conversation_id": first["conversation_id"]})
+    assert order[:2] == ["réécrite", "attente"]

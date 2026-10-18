@@ -38,8 +38,11 @@ def search(q: str = ""):
 
 
 @router.get("/conversations/{conv_id}")
-def read(conv_id: int):
-    pending.wait(conv_id)                 # une question en cours d'enregistrement : après elle
+def read(conv_id: int, settled: bool = False):
+    """settled : l'écran se resynchronise (remplacement interrompu ou refusé) ; une question
+    en cours d'enregistrement passe d'abord."""
+    if settled:
+        pending.wait(conv_id)
     conv = conversations.get(conv_id)
     if conv is None:
         raise HTTPException(404, "Conversation introuvable.")

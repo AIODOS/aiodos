@@ -257,9 +257,24 @@ def test_reading_a_conversation_waits_for_the_question_being_saved(talk):
         time.sleep(0.6)
         conversations.add_message(conv, "user", "Et son fleuve ?")
         pending.end(conv, marker)
-    threading.Thread(target=saved_later).start()
     with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        began = time.monotonic()                      # une lecture ordinaire n'attend pas
+        http.get(f"/api/conversations/{conv}", headers=TOKEN)
+        assert time.monotonic() - began < 0.4
+        threading.Thread(target=saved_later).start()
         began = time.monotonic()
-        read = http.get(f"/api/conversations/{conv}", headers=TOKEN).json()
+        read = http.get(f"/api/conversations/{conv}?settled=1", headers=TOKEN).json()
     assert time.monotonic() - began >= 0.5
     assert read["messages"][-1]["content"] == "Et son fleuve ?"
+
+
+def test_a_first_question_abandoned_leaves_no_empty_conversation(monkeypatch):
+    from starlette.requests import Request
+
+    async def gone(self):
+        return True
+    monkeypatch.setattr(Request, "is_disconnected", gone)
+    monkeypatch.setattr(pipeline, "generate", lambda *a, **k: iter([("content", "?")]))
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        status, _ = _stream(http, text="Bonjour", model="local-test")
+    assert status == 400 and conversations.list_tree()["conversations"] == []
