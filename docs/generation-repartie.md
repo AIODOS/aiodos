@@ -271,6 +271,17 @@ et les créations en cours.
   est-elle floue ? ») n'est pas une retouche. Essai réel : « Fais-la de nuit, avec la pleine
   lune » après la vidéo du renard a donné « Un renard roux qui trotte dans la neige fraîche
   sous la lumière de la pleine lune de nuit », même graine, même format.
+- **Prudence, et « Répondre en texte »** (relecture du 18/10) : après une création, la
+  conversation continue aussi en texte ; une retouche sans pronom (« avec un chien »,
+  « en noir et blanc ») doit être courte, et « Encore merci », « Change de sujet : … »,
+  « Plus précisément, explique… » n'en sont pas. Une question avec « je voudrais » ou « il
+  me faut » (« Je veux une vidéo de mon mariage, qui contacter ? ») n'est pas une demande,
+  ni « une image de marque ». Si une phrase est quand même prise pour une demande, la
+  réponse propose « Répondre en texte » : la création quitte la conversation (son travail
+  s'arrête) et le modèle de conversation reçoit le message.
+- **Les images gardent leur dossier** (migration 13) : changer de dossier, même d'un dossier
+  choisi à un autre, ne perd pas les précédentes ; un dossier sur un disque débranché ne
+  gêne que ses propres images.
 - **Un ami pourrait calculer** : si aucun modèle n'est prêt ici ni chez mes machines,
   mais qu'un ami propose le sien, la conversation le nomme, avec « Autoriser mes amis »
   (le réglage `images_from_friends`), et la création repart aussitôt.

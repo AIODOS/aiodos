@@ -7,17 +7,23 @@ Sous Windows, ils sont chiffrés par DPAPI pour le compte de l'utilisateur
 ne les livre pas. Ailleurs (Linux, Android), ils restent tels quels, dans les fichiers de
 l'utilisateur seul.
 
-Un secret protégé commence par MARK (octets) ou TEXT_MARK (texte). Une valeur sans marque
-(enregistrée avant) est rendue telle quelle : elle est protégée plus tard
-(peers.protect_keys, settings.protect_secrets), une fois la version en bonne santé, pour
-qu'une version précédente relancée par les mises à jour sache encore la lire. Un secret
-illisible (base venue d'un autre compte ou d'une autre machine) lève Unreadable : la
-machine appairée est à appairer de nouveau, la clé d'API à saisir de nouveau.
+Un secret protégé commence par MARK (octets) ou TEXT_MARK (texte). Un secret enregistré par
+cette version est protégé tout de suite. Une valeur sans marque (enregistrée avant) est
+rendue telle quelle : elle est protégée plus tard (peers.protect_keys,
+settings.protect_secrets), une fois la version en bonne santé, pour qu'une version
+précédente relancée par les mises à jour sache encore lire les clés qu'elle avait
+enregistrées (pas celles des appairages faits entre-temps). DPAPI indisponible : le
+secret est gardé tel quel, et protégé au prochain démarrage. Un secret illisible (base
+venue d'un autre compte ou d'une autre machine) lève Unreadable : la machine appairée est à
+appairer de nouveau, la clé d'API à saisir de nouveau.
 """
 import base64
 import binascii
+import logging
 import sys
 import threading
+
+log = logging.getLogger("aiodos")
 
 MARK = b"dpapi1:"
 TEXT_MARK = "dpapi1:"
@@ -70,7 +76,11 @@ def protect(data: bytes) -> bytes:
     data = bytes(data)
     if not available() or data.startswith(MARK):
         return data
-    sealed = MARK + _call("protect", data)
+    try:
+        sealed = MARK + _call("protect", data)
+    except (Unreadable, OSError) as exc:       # DPAPI indisponible : gardé tel quel, protégé
+        log.warning("Secret gardé sans protection pour l'instant : %s", exc)   # plus tard
+        return data
     with _lock:
         _opened[sealed] = data
     return sealed
@@ -125,6 +135,8 @@ def protect_text(text: str) -> str:
     if not text or not available() or text.startswith(TEXT_MARK):
         return text
     sealed = protect(text.encode("utf-8"))
+    if not sealed.startswith(MARK):             # DPAPI indisponible : tel quel
+        return text
     return TEXT_MARK + base64.b64encode(sealed[len(MARK):]).decode("ascii")
 
 

@@ -94,6 +94,9 @@ _MEDIUM = re.compile(r"^(images?|pictures?|vid[ée]os?|videos?|clips?)$", re.IGN
 # qu'ils montrent (« une image de… ») ; une affiche ou un logo se demandent sans détour
 _LOOSE = re.compile(r"^(images?|photos?|photographies?|pictures?|vid[ée]os?|videos?|clips?|"
                     r"animations?)$", re.IGNORECASE)
+# Des expressions où « image » ou « photo » ne demandent rien à dessiner
+_FIGURATIVE = re.compile(r"\b(?:images? de marque|photos? d'identit[ée]|images? publique)",
+                         re.IGNORECASE)
 _EMPTY = re.compile(r"^(ça|ca|cela|ceci|it|this|that|quelque chose|something)$", re.IGNORECASE)
 _NUMBERS = {"un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6,
             "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "douze": 12, "seize": 16, "two": 2,
@@ -137,7 +140,8 @@ def intent(text: str) -> dict | None:
     """{"kind": "image" | "video", "prompt", "count", "shape", "seconds"} si le message
     demande de créer une image ou une vidéo ; None sinon (question, code, simple mention)."""
     text = _clean(text or "")
-    if not text or len(text) > 2000 or _QUESTION.match(text) or technical(text):
+    if not text or len(text) > 2000 or _QUESTION.match(text) or technical(text) \
+            or _FIGURATIVE.search(text):
         return None
     found = _REQUEST.search(text)
     if found is not None and _PAST.search(text[:found.start("verb")]):
@@ -146,6 +150,8 @@ def intent(text: str) -> dict | None:
     if found:
         verb, noun = found["verb"].lower(), found["noun"].lower()
         strong = re.fullmatch(_STRONG, verb, re.IGNORECASE) is not None
+        if not strong and text.rstrip().endswith("?"):
+            return None               # « Je veux une vidéo de mon mariage, qui contacter ? »
         if not strong and re.fullmatch(_IMAGES_STRONG, noun, re.IGNORECASE):
             return None               # « donne-moi une illustration de ce principe » : un exemple
         rest = _FORMAT.sub("", found["rest"], count=1)
@@ -286,8 +292,11 @@ def preflight(text: str, conversation_id=None) -> dict | None:
         last = conversations.last_media(conversation_id)
         followup = retouches.detect(text) if last else None
         if followup:
+            count = last.get("count") or 1
+            if followup == retouches.VARIATION:      # « Encore une » après quatre : une
+                count = retouches.variation_count(text, count)
             found = {"kind": last.get("kind") or "image", "prompt": None,
-                     "count": last.get("count") or 1, "shape": None, "seconds": None,
+                     "count": count, "shape": None, "seconds": None,
                      "followup": followup, "model_wanted": last.get("model")}
     if found is None:
         return None
@@ -324,9 +333,11 @@ def _followed(request: dict, text: str, conv_id, chat_model) -> dict:
         return request
     edit = request.get("followup") == retouches.EDIT
     prompt = retouches.rewrite(last["prompt"], text, chat_model) if edit else last["prompt"]
+    count = request.get("count") or (last.get("count") if edit
+                                     else retouches.variation_count(text, last.get("count")))
     return {**request, "kind": last.get("kind") or "image", "model": last.get("model"),
             "prompt": prompt, "width": last.get("width"), "height": last.get("height"),
-            "frames": last.get("frames"), "count": request.get("count") or last.get("count"),
+            "frames": last.get("frames"), "count": count,
             "shape": None, "seconds": None,
             # Retouche : même graine, la composition reste ; variante : une autre
             "seed": last.get("seed") if edit else None}
@@ -385,9 +396,39 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
              "width": params["width"], "height": params["height"], "seed": params["seed"]}
     if "frames" in params:
         media["frames"] = params["frames"]
+    if request.get("auto"):
+        media["auto"] = True          # reconnue dans le message : « Répondre en texte » possible
     message_id = conversations.add_message(conv_id, "assistant", describe(media), media=media)
     return {"conversation_id": conv_id, "title": title, "user_message_id": user_message_id,
             "message_id": message_id, "job_id": job_id, "media": view(media)}
+
+
+def undo(message_id: int) -> dict:
+    """« Répondre en texte » : une création reconnue au vol qui n'en était pas une. Elle
+    quitte la conversation avec le message qui l'a demandée (que le modèle de conversation
+    reçoit à la place), et son travail s'arrête. Seulement la dernière réponse de la
+    conversation. → {"conversation_id", "text", "job_id"} ; CreationError sinon."""
+    found = conversations.creation_message(message_id)
+    if found is None:
+        raise CreationError("Création introuvable.", status=404)
+    if not found["last"]:
+        raise CreationError("La conversation a continué depuis : seule la dernière création "
+                            "peut céder la place à une réponse en texte.", status=409)
+    media = found["media"]
+    job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
+    if same_job(job, media) and job["status"] in ("queued", "running", "paused"):
+        queue.cancel_job(job["id"])
+    conversations.remove_messages(found["conversation_id"],
+                                  [message_id] + ([found["asked_id"]] if found["asked_id"] else []))
+    return {"conversation_id": found["conversation_id"], "text": found["asked"] or "",
+            "job_id": job["id"] if same_job(job, media) else None}
+
+
+def same_job(job: dict | None, media: dict) -> bool:
+    """Ce travail est-il bien celui de cette création ? Les numéros des travaux retirés de
+    la liste (« Retirer les terminés ») sont repris par les suivants."""
+    return bool(job) and job.get("kind") == "generate_images" \
+        and (job.get("params") or {}).get("batch") == media.get("batch")
 
 
 def view(media: dict | None) -> dict | None:
@@ -398,6 +439,8 @@ def view(media: dict | None) -> dict | None:
     images = [dict(row, path=str(gallery.path_of(row)))
               for row in gallery.batch(str(media.get("batch") or ""))]
     job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
+    if not same_job(job, media):
+        job = None                    # travail retiré de la liste, numéro repris depuis
     expected = gallery.typical_seconds(media.get("model"), media.get("width"),
                                        media.get("height"), media.get("frames"))
     return {**media, "images": images, "job": job, "expected_s": expected}

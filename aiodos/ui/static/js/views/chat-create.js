@@ -178,16 +178,19 @@ export function resetMedia() {
 
 /** Une réponse qui ne vient pas d'un modèle (« aucun modèle d'images prêt »…), non gardée.
  *  friends : amis qui pourraient calculer, et retry() pour recommencer une fois autorisés. */
-export function appendNotice(list, message, { images = false, friends = [], retry = null } = {}) {
+export function appendNotice(list, message, { images = false, friends = [], retry = null,
+  asText = null } = {}) {
   list.querySelector('.welcome')?.remove();
   const node = h(`
     <div class="msg assistant notice">
       <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body"><div class="banner warn">${icon('warn')}<div>${esc(message)}</div>
         ${friends.length && retry ? `<button class="btn sm" data-friends-ok>${icon('network')}Autoriser mes amis</button>` : ''}
-        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}Images et vidéos</button>` : ''}</div></div>
+        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}Images et vidéos</button>` : ''}
+        ${asText ? `<button class="btn sm ghost" data-as-text>${icon('chat')}Répondre en texte</button>` : ''}</div></div>
     </div>`);
   node.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
+  node.querySelector('[data-as-text]')?.addEventListener('click', () => asText());
   node.querySelector('[data-friends-ok]')?.addEventListener('click', async () => {
     try { state.settings = await put('/settings', { images_from_friends: true }); }
     catch (err) { errorToast(err); return; }
@@ -195,6 +198,7 @@ export function appendNotice(list, message, { images = false, friends = [], retr
     retry();
   });
   list.append(node);
+  return node;
 }
 
 /** En attendant la réponse du nœud (une retouche réécrit d'abord la description). */
@@ -210,8 +214,9 @@ export function appendWaiting(list, label = '') {
   return () => node.remove();
 }
 
-/** La réponse qui montre une création (media : chat/creations.py, view). */
-export function appendMedia(list, media) {
+/** La réponse qui montre une création (media : chat/creations.py, view ; messageId : son
+ *  message, pour « Répondre en texte » quand elle a été reconnue au vol). */
+export function appendMedia(list, media, messageId = null) {
   list.querySelector('.welcome')?.remove();
   const orientation = media.width > media.height ? 'wide' : media.width < media.height ? 'tall' : 'square';
   const node = h(`
@@ -222,6 +227,8 @@ export function appendMedia(list, media) {
         <div class="creation-state"></div>
         <div class="meta">
           <span class="model-tag"></span>
+          ${media.auto && messageId ? `<button class="link-btn as-text" data-act="as-text"
+            title="Ce n'était pas une demande d'image : la retirer, et répondre en texte">Répondre en texte</button>` : ''}
           <span class="actions">
             <button class="icon-btn" data-act="reuse" title="Reprendre cette description">${icon('retry')}</button>
             <button class="icon-btn" data-act="copy-prompt" title="Copier la description">${icon('copy')}</button>
@@ -230,18 +237,30 @@ export function appendMedia(list, media) {
       </div>
     </div>`);
   list.append(node);
-  const view = { media, node, images: media.images || [], job: media.job || null };
-  if (view.job) state.jobs.set(view.job.id, { ...view.job, ...state.jobs.get(view.job.id) });
+  const view = { media, node, images: media.images || [], job: sameJob(media.job, media) ? media.job : null };
+  if (view.job) {                 // l'état le plus récent l'emporte, s'il est connu
+    const known = state.jobs.get(view.job.id);
+    state.jobs.set(view.job.id, sameJob(known, media) ? { ...view.job, ...known } : view.job);
+  }
   live.set(media.batch, view);
   node.querySelector('[data-act="reuse"]').onclick = () => setMode(media.kind, {
     model: media.model, prompt: media.prompt, width: media.width, height: media.height,
     frames: media.frames });
   node.querySelector('[data-act="copy-prompt"]').onclick = () => navigator.clipboard
     .writeText(media.prompt).then(() => toast('Description copiée.', 'ok', 1800));
+  node.querySelector('[data-act="as-text"]')?.addEventListener('click', () => {
+    live.delete(media.batch);
+    emit('chat:as-text', { messageId, node });
+  });
   paintGrid(view);
   paintState(view);
   return view;
 }
+
+/** Ce travail est-il celui de cette création ? Les numéros des travaux retirés de la liste
+ *  sont repris par les suivants (le serveur fait la même vérification). */
+const sameJob = (job, media) => !!job && job.kind === 'generate_images'
+  && job.params?.batch === media.batch;
 
 const active = view => !!view.job && ACTIVE.includes(view.job.status);
 
@@ -281,7 +300,7 @@ function paintState(view) {
   const noun = KINDS[media.kind]?.noun || 'image';
   let text = '';
   let kind = 'faint';
-  if (job && ACTIVE.includes(job.status)) {
+  if (job && sameJob(job, media) && ACTIVE.includes(job.status)) {
     const names = new Map((state.network?.peers || []).map(p => [p.node_id, p.name]));
     const away = Object.keys(job.remote || {}).map(id => names.get(id) || 'une autre machine');
     const doing = job.status === 'paused' ? 'En pause'
@@ -292,12 +311,16 @@ function paintState(view) {
     // D'après les précédentes, de ce modèle à cette taille (la première est plus longue)
     const usual = media.expected_s && job.status !== 'paused'
       ? ` · d'habitude ${duration(media.expected_s)}${media.count > 1 ? ` par ${noun}` : ''}` : '';
-    text = `${doing}${count}${since}${usual}`;
-    box.innerHTML = `<span class="typing"><i></i><i></i><i></i></span><span class="faint">${esc(text)}</span>
-      <button class="icon-btn" data-stop title="Arrêter">${icon('stop')}</button>`;
-    box.querySelector('[data-stop]').onclick = async () => {
-      try { await post(`/jobs/${job.id}/cancel`); } catch (err) { errorToast(err); }
-    };
+    // Construit une fois, puis seul le texte change : un clic sur « Arrêter » n'est pas
+    // perdu quand l'état se redessine (chaque seconde)
+    if (!box.querySelector('[data-stop]')) {
+      box.innerHTML = `<span class="typing"><i></i><i></i><i></i></span><span class="faint state-text"></span>
+        <button class="icon-btn" data-stop title="Arrêter">${icon('stop')}</button>`;
+      box.querySelector('[data-stop]').onclick = async () => {
+        try { await post(`/jobs/${job.id}/cancel`); } catch (err) { errorToast(err); }
+      };
+    }
+    box.querySelector('.state-text').textContent = `${doing}${count}${since}${usual}`;
     return;
   }
   if (job?.status === 'cancelled') {
@@ -318,7 +341,7 @@ function follow() {
   for (const view of live.values()) {
     if (!view.job) continue;
     const job = state.jobs.get(view.job.id);
-    if (!job) continue;
+    if (!sameJob(job, view.media)) continue;          // numéro repris par un autre travail
     const before = view.job;
     view.job = job;
     if (job.done !== before.done || job.status !== before.status) reload(view);

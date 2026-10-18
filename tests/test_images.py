@@ -343,6 +343,13 @@ def test_new_images_go_to_the_chosen_folder_and_older_ones_stay_found(tiny_model
     new = gallery.get(kind.assimilate_image(_payload(seed=43), made)["image_id"])
     assert gallery.path_of(new).parent == chosen and gallery.path_of(new).is_file()
     assert gallery.path_of(old).read_bytes() == png(256, 384)     # toujours là où elle a été écrite
+    other = tmp_path / "Autres créations"                        # d'un dossier choisi à un autre
+    settings.set_value("images_out_dir", str(other))
+    assert gallery.path_of(gallery.get(new["id"])).read_bytes() == png(256, 384)
+    blocker = tmp_path / "un-fichier"
+    blocker.write_text("pas un dossier")
+    settings.set_value("images_out_dir", str(blocker / "dessous"))   # disque débranché…
+    assert gallery.list_images() and gallery.path_of(gallery.get(new["id"])).is_file()
 
 
 # -------------------------------------------------------------------- API

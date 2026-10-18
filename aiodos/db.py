@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -163,6 +163,11 @@ MIGRATIONS = {
     ALTER TABLE ledger ADD COLUMN refused_units INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE ledger ADD COLUMN failed_units INTEGER NOT NULL DEFAULT 0;
     """,
+    # Le dossier où chaque image a été écrite : changer de dossier ne perd pas les
+    # précédentes (imaging/gallery.py, path_of)
+    13: """
+    ALTER TABLE images ADD COLUMN folder TEXT;
+    """,
 }
 
 SCHEMA = """
@@ -283,6 +288,10 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(path, timeout=15, check_same_thread=False,
                            isolation_level=None)
     conn.row_factory = sqlite3.Row
+    # Minuscules de tout l'Unicode (« École » → « école ») : lower() de SQLite ne connaît
+    # que l'ASCII (recherche dans les conversations)
+    conn.create_function("aiodos_fold", 1, lambda text: text.casefold()
+                         if isinstance(text, str) else text, deterministic=True)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=15000")

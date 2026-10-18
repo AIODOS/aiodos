@@ -115,7 +115,8 @@ def capabilities_many(models) -> dict:
     return {m: capabilities(m) for m in models}
 
 
-def chat_stream(model, messages, think=None, stop=None, options=None, stats=False):
+def chat_stream(model, messages, think=None, stop=None, options=None, stats=False,
+                timeout=(10, 900)):
     """Génère des couples (genre, texte) : genre = "thinking" ou "content".
 
     think   : None = comportement par défaut du modèle, False = pas de réflexion.
@@ -130,7 +131,7 @@ def chat_stream(model, messages, think=None, stop=None, options=None, stats=Fals
     if options:
         payload["options"] = options
     with requests.post(base() + "/api/chat", json=payload,
-                       stream=True, timeout=(10, 900)) as r:
+                       stream=True, timeout=timeout) as r:
         if r.status_code >= 400:
             raise RuntimeError(_error_text(r))
         for line in r.iter_lines(decode_unicode=True):

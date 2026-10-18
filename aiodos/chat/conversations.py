@@ -48,11 +48,12 @@ def search(query: str, limit: int = 50) -> list:
     query = " ".join(str(query or "").split())
     if len(query) < 2:
         return []
-    # « ! » protège les jokers de LIKE (% et _) tapés dans la recherche
-    pattern = "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+    # instr, pas LIKE : ni jokers à protéger, et les capitales accentuées comptent
+    # (« école » trouve « École », db.aiodos_fold)
     found, seen = [], set()
-    for row in db.query("SELECT conversation_id, content FROM messages WHERE content LIKE ? "
-                        "ESCAPE '!' ORDER BY id DESC LIMIT 2000", (pattern,)):
+    for row in db.query("SELECT conversation_id, content FROM messages WHERE "
+                        "instr(aiodos_fold(content), ?) > 0 ORDER BY id DESC LIMIT 2000",
+                        (query.casefold(),)):
         if row["conversation_id"] in seen:
             continue
         seen.add(row["conversation_id"])
@@ -120,6 +121,36 @@ def last_media(conv_id) -> dict | None:
     except ValueError:
         return None
     return media if isinstance(media, dict) and media.get("prompt") else None
+
+
+def creation_message(message_id) -> dict | None:
+    """Une réponse de création (colonne media), le message qui l'a demandée, et si elle est
+    la dernière de sa conversation (« Répondre en texte », chat/creations.py)."""
+    row = db.query_one("SELECT id, conversation_id, media FROM messages WHERE id=? "
+                       "AND role='assistant'", (int(message_id),))
+    if row is None or not row["media"]:
+        return None
+    try:
+        media = json.loads(row["media"])
+    except ValueError:
+        return None
+    last = db.query_one("SELECT MAX(id) AS id FROM messages WHERE conversation_id=?",
+                        (row["conversation_id"],))["id"]
+    asked = db.query_one("SELECT id, content FROM messages WHERE conversation_id=? AND id<? "
+                         "AND role='user' ORDER BY id DESC LIMIT 1",
+                         (row["conversation_id"], row["id"]))
+    return {"conversation_id": row["conversation_id"], "media": media, "last": last == row["id"],
+            "asked_id": asked["id"] if asked else None,
+            "asked": asked["content"] if asked else None}
+
+
+def remove_messages(conv_id, ids):
+    """Retire ces messages de la conversation."""
+    ids = [int(i) for i in ids]
+    if ids:
+        marks = ",".join("?" * len(ids))
+        db.execute(f"DELETE FROM messages WHERE conversation_id=? AND id IN ({marks})",
+                   (conv_id, *ids))
 
 
 def by_batch(batches) -> dict:

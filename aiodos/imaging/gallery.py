@@ -56,11 +56,12 @@ def default_dir() -> Path:
     return _internal()
 
 
-def out_dir() -> Path:
-    """Le dossier où vont les nouvelles images et vidéos."""
+def out_dir(create: bool = True) -> Path:
+    """Le dossier où vont les nouvelles images et vidéos (créé au besoin : create)."""
     chosen = str(settings.get("images_out_dir") or "").strip()
     folder = Path(os.path.expandvars(os.path.expanduser(chosen))) if chosen else default_dir()
-    folder.mkdir(parents=True, exist_ok=True)
+    if create:
+        folder.mkdir(parents=True, exist_ok=True)
     return folder
 
 
@@ -75,21 +76,22 @@ def add(payload: dict, data: bytes, machine: str = "", seconds: float | None = N
         (width, height), ext = png_size(data), "png"
     batch = _SAFE.sub("", str(payload.get("batch") or "lot").lower())[:32] or "lot"
     name = f"{batch}-{int(payload.get('index') or 0):02d}-{int(payload['seed'])}.{ext}"
-    target = out_dir() / name
+    folder = out_dir()
+    target = folder / name
     part = target.with_name(target.name + ".part")
     part.write_bytes(data)
     os.replace(part, target)
     with db.transaction() as c:
         image_id = c.execute(
             "INSERT INTO images(batch, model, prompt, negative, seed, width, height, steps, "
-            "cfg, file, machine, seconds, created, media, frames, fps) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "cfg, file, machine, seconds, created, media, frames, fps, folder) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (batch, payload["model"], payload["prompt"], payload.get("negative") or "",
              int(payload["seed"]), width, height, int(payload.get("steps") or 0),
              float(payload.get("cfg") or 0), name, machine or None,
              round(seconds, 2) if seconds is not None else None, db.now(),
              "video" if video else "image", frames if video else None,
-             fps if video else None)).lastrowid
+             fps if video else None, str(folder))).lastrowid
     return get(image_id)
 
 
@@ -127,14 +129,20 @@ def typical_seconds(model: str, width: int, height: int, frames: int | None = No
 
 
 def path_of(row: dict) -> Path:
-    """Le fichier d'une image : dans le dossier actuel, ou dans celui où elle a été écrite
-    avant un changement de dossier."""
+    """Le fichier d'une image : dans le dossier où elle a été écrite (colonne folder), sinon
+    (images d'avant la migration 13) dans le dossier actuel, celui par défaut ou celui des
+    données. Rien n'est créé ici : un dossier choisi sur un disque débranché ne gêne que
+    les images qu'il contient."""
     name = Path(row["file"]).name
-    current = out_dir()
-    for folder in (current, default_dir(), _internal()):
-        if (folder / name).exists():
-            return folder / name
-    return current / name
+    folders = [Path(row["folder"])] if row.get("folder") else []
+    folders += [out_dir(create=False), default_dir(), _internal()]
+    for folder in folders:
+        try:
+            if (folder / name).exists():
+                return folder / name
+        except OSError:
+            continue
+    return folders[0] / name
 
 
 def delete(image_id: int) -> bool:

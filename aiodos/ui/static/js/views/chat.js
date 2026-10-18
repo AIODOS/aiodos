@@ -14,6 +14,7 @@ const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled
 let el = {};
 let busy = false;
 let creating = false;      // une création d'image en route vers le nœud
+let displayed = 0;         // change à chaque conversation affichée (créations en route)
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
 
@@ -94,6 +95,7 @@ export function mountChat(container) {
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
+  on('chat:as-text', answerAsText);
   on('chat:renamed', title => setTitle(title));
   on('settings:loaded', syncChips);
   on('models:loaded', fillModels);
@@ -247,6 +249,7 @@ async function renameCurrent() {
 // --------------------------------------------------------- conversation courante
 function newConversation() {
   if (busy) stop();
+  displayed += 1;
   state.currentConversation = null;
   prefs.set('lastConversation', null);
   setTitle(null);
@@ -266,6 +269,7 @@ async function openConversation(id) {
     if (e.status === 404) { newConversation(); return; }
     errorToast(e); return;
   }
+  displayed += 1;
   state.currentConversation = { id: conv.id, title: conv.title, model: conv.model };
   prefs.set('lastConversation', conv.id);
   setTitle(conv.title);
@@ -274,7 +278,7 @@ async function openConversation(id) {
   const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
     if (m.role === 'user') { appendUser(m.content); continue; }
-    if (m.media) { appendMedia(el.list, m.media); continue; }    // image ou vidéo créée
+    if (m.media) { appendMedia(el.list, m.media, m.id); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
     if (m.thinking) view.restoreThinking(m.thinking);
     view.sources(m.sources);
@@ -300,7 +304,9 @@ function showWelcome() {
 // ------------------------------------------------------------------- messages
 function appendUser(text) {
   el.list.querySelector('.welcome')?.remove();
-  el.list.append(h(`<div class="msg user"><div class="bubble">${esc(text)}</div></div>`));
+  const node = h(`<div class="msg user"><div class="bubble">${esc(text)}</div></div>`);
+  el.list.append(node);
+  return node;
 }
 
 function appendAssistant(model, here = false) {
@@ -553,11 +559,13 @@ async function confirmPeers(text, pre) {
   return r.ok ? ids : [];
 }
 
-async function send() {
+/** asText : un message envoyé au modèle de conversation tel quel, sans chercher d'image à
+ *  créer (« Répondre en texte » sur une création qui n'en était pas une). */
+async function send(asText = null) {
   if (busy || creating) return;
-  const text = el.input.value.trim();
+  const text = asText ?? el.input.value.trim();
   if (!text) return;
-  const explicit = creationRequest(text);          // mode « Créer » ouvert
+  const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
   if (explicit) { await create(text, explicit); return; }
   const model = selectedModel();
 
@@ -566,7 +574,10 @@ async function send() {
     pre = await post('/chat/preflight', {
       text, model, conversation_id: state.currentConversation?.id ?? null });
   } catch (e) { errorToast(e); return; }
-  if (pre.create) { await create(text, autoRequest(pre.create)); return; }   // « Crée une image de… »
+  if (pre.create && asText === null) {             // « Crée une image de… », reconnu au vol
+    await create(text, { ...autoRequest(pre.create), auto: true });
+    return;
+  }
   if (!model) {
     if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
     else toast('Les modèles se chargent, un instant…');
@@ -575,8 +586,10 @@ async function send() {
   const go = await confirmOutgoing(text, model, pre);
   if (!go) return;
 
-  el.input.value = '';
-  autoresize();
+  if (asText === null) {
+    el.input.value = '';
+    autoresize();
+  }
   appendUser(text);
   const view = appendAssistant(model);
   scrollBottom(true);
@@ -616,10 +629,12 @@ async function send() {
 // images s'ajoutent à la conversation, le calcul part dans la file
 async function create(text, request, again = false) {
   creating = true;
+  const seen = displayed;            // la conversation affichée au départ
+  let asked = null;
   if (!again) {                  // une nouvelle tentative (amis autorisés) ne répète pas le message
     el.input.value = '';
     autoresize();
-    appendUser(text);
+    asked = appendUser(text);
   }
   const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…' : '');
   scrollBottom(true);
@@ -631,15 +646,24 @@ async function create(text, request, again = false) {
     });
   } catch (e) {
     done();
-    // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être
-    appendNotice(el.list, e.message, { images: e.status === 409, friends: e.data?.friends || [],
-      retry: () => create(text, request, true) });
+    if (seen !== displayed) return;
+    // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être. Reconnue
+    // au vol, la demande n'en était peut-être pas une : « Répondre en texte »
+    const notice = appendNotice(el.list, e.message, {
+      images: e.status === 409, friends: e.data?.friends || [],
+      retry: () => create(text, request, true),
+      asText: request.auto ? () => { asked?.remove(); notice?.remove(); send(text); } : null });
     scrollBottom(true);
     return;
   } finally {
     creating = false;
   }
   done();
+  if (seen !== displayed) {          // une autre conversation entre-temps : celle-ci reste à sa place
+    refreshTree();
+    toast(`Création lancée dans « ${made.title || 'sa conversation'} ».`, 'info', 5000);
+    return;
+  }
   if (state.currentConversation?.id !== made.conversation_id) {
     state.currentConversation = { id: made.conversation_id, title: made.title || 'Nouvelle conversation',
       model: selectedModel() };
@@ -647,8 +671,21 @@ async function create(text, request, again = false) {
   }
   if (made.title) { state.currentConversation.title = made.title; setTitle(made.title); }
   emit('chat:current');
-  appendMedia(el.list, made.media);
+  appendMedia(el.list, made.media, made.message_id);
   scrollBottom(true);
   refreshTree();
   el.input.focus();
+}
+
+// « Répondre en texte » : la création reconnue au vol n'en était pas une. Elle quitte la
+// conversation (avec le message, que le modèle de conversation reçoit à la place)
+async function answerAsText({ messageId, node }) {
+  if (busy || creating) return;
+  let undone;
+  try { undone = await post(`/chat/create/${messageId}/undo`); } catch (e) { errorToast(e); return; }
+  const asked = node.previousElementSibling;
+  if (asked?.classList.contains('user')) asked.remove();
+  node.remove();
+  refreshTree();
+  send(undone.text);
 }

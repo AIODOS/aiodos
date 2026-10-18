@@ -334,6 +334,10 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .creation-state .icon-btn { width: 26px; height: 26px; }
 .creation-state .icon-btn .icon { width: 15px; height: 15px; }
 .msg.notice .banner { margin: 0; flex-wrap: wrap; }
+/* « Répondre en texte » : sur la dernière réponse seulement, quand la création a été reconnue au vol */
+.link-btn { border: 0; background: none; padding: 0; color: var(--cyan); font-size: 12px; cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.msg.creation:not(:last-child) .as-text { display: none; }
 .msg.notice .banner > div { flex: 1 1 220px; }
 
 .welcome { max-width: 680px; margin: 0 auto; text-align: center; }

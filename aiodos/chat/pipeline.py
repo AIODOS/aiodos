@@ -32,8 +32,8 @@ log = logging.getLogger("aiodos.chat")
 WEB_INTENT = re.compile(
     r"(cherch\w*|recherch\w*|trouv\w*|google|navigu\w*|sur le web|sur internet|"
     r"en ligne|actualit[ée]s?\w*|site officiel|documentation (en ligne|web|à jour)|"
-    r"derni[èe]re?s? (version|nouvelle|info)|m[ée]t[ée]o|qui a gagn\w*|en ce moment|"
-    r"cette semaine|\bnews\b|taux de change|cours (de l'action|du bitcoin|de bourse))",
+    r"derni[èe]re?s? (version|nouvelle|info)|m[ée]t[ée]o|qui a gagn\w*|"
+    r"\bnews\b|taux de change|cours (de l'action|du bitcoin|de bourse))",
     re.IGNORECASE)
 
 _MANIFEST = ("Tu disposes d'une base de connaissance locale. Contenu disponible :\n\n{}\n\n"

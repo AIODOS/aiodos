@@ -208,7 +208,7 @@ def test_the_chat_model_rewrites_the_description(monkeypatch):
     monkeypatch.setattr(retouches.ollama, "list_models", lambda *a, **k: [{"name": "qwen3.5:9b"}])
     monkeypatch.setattr(retouches.ollama, "capabilities_many", lambda names: {n: ["completion"] for n in names})
 
-    def fake_stream(model, messages, think=None, stop=None, options=None):
+    def fake_stream(model, messages, think=None, stop=None, options=None, **kwargs):
         asked.append((model, messages[-1]["content"]))
         yield "content", "« Un phare sous l'orage, la nuit, "
         yield "content", "éclairé par la lune. »"
@@ -257,3 +257,67 @@ def test_a_creation_says_how_long_it_usually_takes(tiny_model):  # noqa: F811
     assert gallery.typical_seconds("essai", 1024, 1024) is None
     assert creations.view({"model": "essai", "width": 256, "height": 384, "batch": "abc123",
                            "count": 1})["expected_s"] == 22.0
+
+
+# ------------------------------------------------------- relecture du 18/10 : faux positifs
+@pytest.mark.parametrize("text", [
+    "Encore merci pour ton aide", "Encore une fois, merci !",
+    "Une autre question : explique-moi la photosynthèse.", "Change de sujet : parle-moi de Rome.",
+    "Plus précisément, explique le fonctionnement.", "Sans vouloir te déranger, résume-moi ce texte.",
+    "Supprimer les doublons d'une liste", "Le même jour j'ai vu Paul", "Retirement planning tips",
+    "De rien", "En fait je préfère les chiens", "Ajoute une conclusion à mon texte",
+])
+def test_ordinary_messages_after_a_creation_are_not_follow_ups(text):
+    assert retouches.detect(text) is None
+
+
+@pytest.mark.parametrize("text", [
+    "Je voudrais une image de marque plus forte pour mon entreprise, des idées ?",
+    "Je dois créer une image de marque pour ma boîte",
+    "Il me faut une photo d'identité, tu sais où en faire ?",
+    "Je veux une vidéo de mon mariage, qui contacter ?",
+])
+def test_questions_about_images_are_not_requests(text):
+    assert creations.intent(text) is None
+
+
+def test_a_variation_of_several_makes_one_when_asked_for_one():
+    assert retouches.variation_count("Encore une", 4) == 1
+    assert retouches.variation_count("Refais-les", 4) == 4
+
+
+def test_a_description_never_grows_past_the_limit():
+    long = "un phare " * 300
+    grown = retouches._appended(long, "Fais-la de nuit")
+    assert len(grown) <= 2000 and grown.endswith(", de nuit")
+
+
+def test_an_old_creation_does_not_take_the_job_that_reused_its_number(client, can_draw):
+    made = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux"}).json()
+    wait_for(lambda: queue.job_summary(made["job_id"])["status"] == "done")
+    queue.clear_finished()                       # « Retirer les terminés » : le numéro se libère
+    other = queue.create_job("generate_images", __import__(
+        "aiodos.jobs.kinds.images", fromlist=["x"]).normalize({"model": "essai", "prompt": "autre"}))
+    assert other == made["job_id"]               # SQLite reprend le numéro
+    conv = client.get(f"/api/conversations/{made['conversation_id']}", headers=AUTH).json()
+    assert conv["messages"][-1]["media"]["job"] is None
+
+
+def test_answering_as_text_removes_the_creation(client, can_draw):
+    made = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "auto": True}).json()
+    assert made["media"]["auto"] is True
+    undone = client.post(f"/api/chat/create/{made['message_id']}/undo", headers=AUTH).json()
+    assert undone["text"] == "Crée une image d'un chat roux"
+    assert conversations.get(made["conversation_id"])["messages"] == []
+    assert client.post(f"/api/chat/create/{made['message_id']}/undo",
+                       headers=AUTH).status_code == 404
+
+
+def test_only_the_last_creation_can_become_a_text_answer(client, can_draw):
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "auto": True}).json()
+    conversations.add_message(first["conversation_id"], "user", "Merci !")
+    reply = client.post(f"/api/chat/create/{first['message_id']}/undo", headers=AUTH)
+    assert reply.status_code == 409

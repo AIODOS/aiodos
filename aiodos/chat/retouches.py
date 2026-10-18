@@ -24,32 +24,57 @@ log = logging.getLogger("aiodos.chat")
 
 VARIATION, EDIT = "variation", "edit"
 MAX_TEXT = 300
+MAX_WORDS = 8                  # une retouche sans pronom (« avec un chien ») est courte
 REWRITE_S = 45                 # au-delà, la demande s'ajoute simplement à la description
 
-_VARIATION = re.compile(
-    r"^\s*(?:et\s+)?(?:encore(?:\s+une?)?|une autre|un autre|d'autres|refais[- ](?:la|le|les)|"
-    r"refais|recommence|again|another|one more)\b(?P<rest>.*)$", re.IGNORECASE | re.DOTALL)
-_EDIT = re.compile(
+# Les tournures sont prises au plus juste : après une image, la conversation continue
+# aussi en texte (« Encore merci », « Change de sujet », « Plus précisément, explique… »),
+# et chaque retouche de trop en ajouterait une autre. « Répondre en texte » rattrape le reste.
+_POLITE_END = r"(?:\s*,?\s*(?:stp|svp|s'il (?:te|vous) pla[iî]t|please))?\s*[.!]*\s*$"
+_AGAIN = (r"(?:et\s+)?(?:encore(?:\s+une?)?|une autre|un autre|d'autres|refais[- ](?:la|le|les)|"
+          r"refais|recommence|again|another(?:\s+one)?|one more)")
+_VARIATION = re.compile(rf"^\s*{_AGAIN}{_POLITE_END}", re.IGNORECASE)
+# « Encore une, mais de nuit » : une variante qui change quelque chose est une retouche
+_VARIATION_EDIT = re.compile(rf"^\s*{_AGAIN}\s*,?\s*(?:mais\s+|but\s+)?"
+                             r"(?:avec|sans|en|de|plus|moins|with|without)\s+\S", re.IGNORECASE)
+_SAME = re.compile(rf"^\s*(?:pareil|la même|le même|les mêmes|même chose|same){_POLITE_END}",
+                   re.IGNORECASE)
+_SAME_EDIT = re.compile(r"^\s*(?:pareil|la même|le même|les mêmes|même chose|same)\s*,?\s*"
+                        r"(?:mais|avec|sans|en|but|with|without)\b", re.IGNORECASE)
+# Un pronom qui renvoie à la création : « Fais-la de nuit », « Peux-tu la rendre plus claire ? »
+_PRONOUN = re.compile(
     r"^\s*(?:(?:et\s+)?(?:maintenant|puis|ensuite)\s*,?\s*)?(?:(?:peux-tu|tu peux|pourrais-tu|"
-    r"tu pourrais)\s+)?(?:(?:fais|faire|rends|rendre|mets|mettre)[- ](?:la|le|les|en)\b|"
-    r"(?:la|le|les)\s+(?:faire|rendre|mettre|refaire)\b|ajoute|rajoute|enlève|retire|"
-    r"supprime|change|remplace|transforme|plus\s|moins\s|avec\s|sans\s|en noir et blanc|"
-    r"en couleurs?\b|en style\b|façon\s|style\s|de nuit\b|de jour\b|la même|le même|"
-    r"les mêmes|pareil|même (?:chose|image|photo|vidéo|scène)|make it|add\s|remove\s|"
-    r"without\s|with\s|same\s)", re.IGNORECASE)
+    r"tu pourrais)\s+)?(?:(?:fais|refais|rends|mets)[- ](?:la|le|les)\b|"
+    r"(?:la|le|les)\s+(?:faire|refaire|rendre|mettre)\b|make it\b)", re.IGNORECASE)
+# Sans pronom, une retouche courte : un verbe à l'impératif, ou ce qui change
+_SHORT = re.compile(
+    r"^\s*(?:(?:ajoute|rajoute|enlève|enleve|retire|remplace|change|transforme|mets|add|remove)\s|"
+    r"(?:plus|moins|more|less)\s+\w|(?:avec|sans|with|without)\s+\S|"
+    r"en (?:noir et blanc|couleurs?|hiver|été|automne|printemps|pleine nuit|plein jour|"
+    r"aquarelle|dessin|pixel art|3d|style\s+\S)|de (?:nuit|jour)\b|"
+    r"(?:style|façon|version)\s+\S|à la manière de\s+\S)", re.IGNORECASE)
 _QUESTION = re.compile(r"^\s*(comment|pourquoi|quel|quelle|quels|quelles|combien|qui|où|"
                        r"est-ce|qu'est-ce|explique|how|why|what|which|who|where)\b", re.IGNORECASE)
+_POLITE_ASK = re.compile(r"^\s*(?:peux-tu|tu peux|pourrais-tu|tu pourrais)\s+(?:la|le|les)\b",
+                         re.IGNORECASE)
+# Une demande de texte, pas d'image (« Change de sujet : parle-moi de Rome »)
+_TEXT_TASK = re.compile(
+    r"\b(explique\w*|parle\w*|résume\w*|resume\w*|raconte\w*|dis-moi|écris|ecris|écrire|"
+    r"traduis|tradui\w*|réponds|reponds|sujet|question|texte|phrase|paragraphe|conclusion|"
+    r"introduction|liste|doublons|mail|e-mail|courriel|lettre|fonction|tableau)\b",
+    re.IGNORECASE)
 # Des tournures qui commencent comme une retouche sans en être une
-_NOT_EDIT = re.compile(r"^\s*(sans (rire|blague|doute|problème|souci)|avec plaisir|plus tard|"
-                       r"plus jamais|même pas|pareil pour moi)\b", re.IGNORECASE)
-_SAME = re.compile(r"^\s*(pareil|la même|le même|les mêmes|même chose|same)\s*[.!]*\s*$",
-                   re.IGNORECASE)
+_NOT_EDIT = re.compile(r"^\s*(sans (rire|blague|doute|problème|souci|vouloir)|avec plaisir|"
+                       r"plus tard|plus jamais|plus ou moins|même pas|pareil pour moi|"
+                       r"de rien|en effet|en fait|en tout cas|en gros|plus précisément|"
+                       r"change de sujet)\b", re.IGNORECASE)
+_ONE = re.compile(r"^\s*(?:et\s+)?(?:encore une?|une autre|un autre|another|one more)\b",
+                  re.IGNORECASE)
 _POLITE = re.compile(r"[\s,]*(s'il (?:te|vous) pla[iî]t|stp|svp|please|merci)\s*[.!?]*\s*$",
                      re.IGNORECASE)
 _LEAD = re.compile(r"^\s*(?:(?:et\s+)?(?:maintenant|puis|ensuite)\s*,?\s*)?(?:(?:peux-tu|tu peux|"
-                   r"pourrais-tu|tu pourrais)\s+)?(?:(?:fais|faire|rends|rendre|mets|mettre)"
-                   r"[- ](?:la|le|les|en)|(?:la|le|les)\s+(?:faire|rendre|mettre|refaire))\s*",
-                   re.IGNORECASE)
+                   r"pourrais-tu|tu pourrais)\s+)?(?:(?:fais|refais|rends|mets)[- ](?:la|le|les)|"
+                   r"(?:la|le|les)\s+(?:faire|refaire|rendre|mettre))\s*", re.IGNORECASE)
 
 _REWRITE = ("Tu réécris des descriptions d'images et de vidéos pour un modèle qui les crée. "
             "On te donne la description actuelle et une modification demandée : écris la "
@@ -63,21 +88,24 @@ def detect(text: str) -> str | None:
     text = " ".join((text or "").replace("’", "'").split())
     if not text or len(text) > MAX_TEXT or _QUESTION.match(text):
         return None
-    if text.endswith("?") and not re.match(r"^\s*(peux-tu|tu peux|pourrais-tu|tu pourrais)\b",
-                                           text, re.IGNORECASE):
+    if text.endswith("?") and not _POLITE_ASK.match(text):
         return None
+    core = _POLITE.sub("", text).strip()          # « Encore une, merci ! » → « Encore une »
     from aiodos.chat.creations import technical      # même liste de sujets de code
-    if technical(text) or _NOT_EDIT.match(text):
+    if not core or technical(text) or _NOT_EDIT.match(core) or _TEXT_TASK.search(core):
         return None
-    if _SAME.match(text):
+    if _VARIATION.match(core) or _SAME.match(core):
         return VARIATION
-    found = _VARIATION.match(text)
-    if found:
-        # « Encore une, mais de nuit » : une retouche ; « Encore une ! » : une variante
-        rest = _POLITE.sub("", found["rest"]).strip(" ,.!")
-        return EDIT if re.match(r"(mais|avec|sans|en|de|plus|moins|but|with|without)\b",
-                                rest, re.IGNORECASE) else VARIATION
-    return EDIT if _EDIT.match(text) else None
+    if _VARIATION_EDIT.match(core) or _SAME_EDIT.match(core) or _PRONOUN.match(core):
+        return EDIT
+    if _SHORT.match(core) and len(core.split()) <= MAX_WORDS:
+        return EDIT
+    return None
+
+
+def variation_count(text: str, last_count: int) -> int:
+    """« Encore une », « Une autre » : une seule ; « Encore », « Refais-les » : autant qu'avant."""
+    return 1 if _ONE.match(text or "") else max(1, int(last_count or 1))
 
 
 def _rewriter(conversation_model: str | None) -> str | None:
@@ -97,10 +125,15 @@ def _rewriter(conversation_model: str | None) -> str | None:
     return next((n for n in installed if "completion" in (caps.get(n) or ["completion"])), None)
 
 
-def _appended(prompt: str, text: str) -> str:
-    """Sans modèle de conversation : la demande, sans « fais-la », après la description."""
+def _appended(prompt: str, text: str, limit: int = 2000) -> str:
+    """Sans modèle de conversation : la demande, sans « fais-la », après la description ;
+    au-delà de la longueur permise, le début de la description cède la place, jamais la
+    demande."""
     extra = _POLITE.sub("", _LEAD.sub("", text)).strip(" ,.!")
-    return f"{prompt}, {extra}" if extra else prompt
+    if not extra:
+        return prompt[:limit]
+    room = max(0, limit - len(extra) - 2)
+    return f"{prompt[:room].rstrip(' ,')}, {extra}"[:limit]
 
 
 def rewrite(prompt: str, text: str, conversation_model: str | None = None) -> str:
@@ -117,7 +150,8 @@ def rewrite(prompt: str, text: str, conversation_model: str | None = None) -> st
                 model, [{"role": "system", "content": _REWRITE},
                         {"role": "user", "content": f"Description actuelle : {prompt}\n"
                                                     f"Modification demandée : {text}"}],
-                think=False, stop=stop, options={"temperature": 0.3, "num_predict": 300}):
+                think=False, stop=stop, options={"temperature": 0.3, "num_predict": 300},
+                timeout=(10, REWRITE_S)):     # un modèle long à charger ne bloque pas plus
             if kind == "content":
                 parts.append(piece)
     except Exception as exc:

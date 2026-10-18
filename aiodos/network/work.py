@@ -231,6 +231,7 @@ def result(manager, sender, payload):
         return {"accepted": False, "reason": "Unité reprise ou annulée entre-temps."}
     spec = registry.TASKS[unit["task"]]
     friend = sharing.is_friend(sender)
+    checked = False                   # résultat lu et contrôlé : une erreur ensuite est d'ici
     try:
         output = wire.unpack(payload.get("output") or {})
         if spec.validate:
@@ -240,6 +241,7 @@ def result(manager, sender, payload):
                 return {"accepted": False, "reason": "Vérification impossible pour l'instant "
                                                      "chez le propriétaire : unité remise en file."}
             output = sharing.restore_names(output, unit, spec)
+        checked = True
         outcome = spec.assimilate(unit["payload"], output) or {}
     except registry.SampleMismatch as exc:
         reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
@@ -254,7 +256,8 @@ def result(manager, sender, payload):
                                              "échoué, plus rien ne te sera confié."}
     except Exception as exc:
         log.warning("Résultat de %s refusé pour l'unité %s : %s", _peer_name(sender), unit_id, exc)
-        peers.account(sender, refused_units=1)
+        if not checked:               # sa fiabilité ne compte que ses résultats, pas nos pannes
+            peers.account(sender, refused_units=1)
         job_id, finished = queue.fail_unit(
             unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {exc}"[:500], compute_s)
         manager.executor.settle(job_id, finished)

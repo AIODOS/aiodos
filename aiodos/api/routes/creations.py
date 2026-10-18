@@ -28,6 +28,20 @@ class CreateIn(BaseModel):
     seed: int | None = None
     negative: str | None = None
     followup: str | None = None         # « edit » ou « variation » de la dernière création
+    auto: bool = False                  # reconnue dans le message (et non demandée au bouton)
+
+
+@router.post("/create/{message_id}/undo")
+async def undo(message_id: int, request: Request):
+    """« Répondre en texte » : la création reconnue au vol n'en était pas une."""
+    try:
+        undone = await asyncio.to_thread(creations.undo, message_id)
+    except creations.CreationError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+    if undone.get("job_id"):
+        request.app.state.executor.publish_job(undone["job_id"], force=True)
+    request.app.state.bus.publish({"type": "conversations"})
+    return undone
 
 
 @router.post("/create")

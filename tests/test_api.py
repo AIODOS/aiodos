@@ -165,3 +165,7 @@ def test_conversations_are_found_by_what_their_messages_say(client):
     assert [f["id"] for f in client.get("/api/conversations/search?q=100%25",
                                         headers=AUTH).json()] == [other]
     assert client.get("/api/conversations/search?q=_", headers=AUTH).json() == []
+    third = conversations.create(title="Rentrée")
+    conversations.add_message(third, "user", "L'École de Paris ouvre lundi")
+    found = client.get("/api/conversations/search?q=école", headers=AUTH).json()
+    assert [f["id"] for f in found] == [third]          # capitale accentuée comprise
