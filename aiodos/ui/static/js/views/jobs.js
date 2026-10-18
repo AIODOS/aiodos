@@ -195,6 +195,13 @@ function card(j) {
     b.onclick = fn;
     actions.append(b);
   };
+  // Images ou vidéos demandées dans une conversation : y revenir
+  if (j.params?.conversation_id) {
+    button('chat', 'Ouvrir sa conversation', () => {
+      emit('view:show', 'chat');
+      emit('chat:open', j.params.conversation_id);
+    });
+  }
   if (j.status === 'paused') button('play', 'Reprendre', () => act(j, 'resume'));
   else if (active) button('pause', 'Mettre en pause', () => act(j, 'pause'));
   if (active) button('x', 'Annuler', () => cancel(j), 'danger');

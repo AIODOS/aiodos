@@ -76,7 +76,7 @@ const SECTIONS = [
       min: 1, max: 512, help: 'Au-delà, le fichier reste aux machines du réseau local.' },
   ] },
   { title: 'Gros modèles répartis (llama.cpp)', icon: 'network', fields: [
-    { key: 'llamacpp_dir', label: 'Dossier de llama.cpp', type: 'text',
+    { key: 'llamacpp_dir', label: 'Dossier de llama.cpp', type: 'folder',
       help: 'Le dossier qui contient llama-server et ggml-rpc-server, de la même version sur toutes '
         + 'tes machines. Vide : celui livré avec les mises à jour. Le réglage « Prêter ma carte graphique » est '
         + 'dans la vue « Cette machine ».' },
@@ -85,16 +85,16 @@ const SECTIONS = [
         + 'ou « CPU » pour prêter la mémoire vive (bien plus lent).' },
   ] },
   { title: 'Images (stable-diffusion.cpp)', icon: 'image', fields: [
-    { key: 'sdcpp_dir', label: 'Dossier de stable-diffusion.cpp', type: 'text',
+    { key: 'sdcpp_dir', label: 'Dossier de stable-diffusion.cpp', type: 'folder',
       help: 'Le dossier qui contient sd-server. Vide : data/engines/stable-diffusion.cpp (il sera bientôt '
         + 'livré avec les mises à jour, comme llama.cpp).' },
-    { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'text',
+    { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'folder',
       help: 'Vide : data/images/models. Les modèles se téléchargent depuis la vue Images.' },
     { key: 'images_other_dirs', label: 'Autres dossiers de modèles sur ce PC', type: 'textarea',
       help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
         + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
         + 'téléchargé, sans prendre de place en plus sur le même disque.' },
-    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'text',
+    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'folder',
       help: 'Vide : Images\\AIODOS (le dossier Images de Windows) pour AIODOS installé. Les images déjà créées '
         + 'restent où elles sont et s’affichent toujours.' },
     { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
@@ -135,6 +135,7 @@ export function mountSettings(container) {
   const refresh = () => { if (state.view !== 'settings' || !Object.keys(draft).length) render(); };
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
+  window.addEventListener('pywebviewready', refresh);     // les boutons « Choisir… » des dossiers
   on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); } });
   on('updates:loaded', () => {
     const box = root && $('#updates-status', root);
@@ -170,6 +171,10 @@ function field(f) {
     control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
       autocomplete="off" placeholder="${esc(placeholder)}">${s[`${f.key}_set`]
         ? `<button class="btn" data-clear="${f.key}" type="button">Effacer</button>` : ''}</div>`;
+  } else if (f.type === 'folder') {       // un dossier : tapé, ou choisi dans la fenêtre d'AIODOS
+    control = `<div class="folder-field"><input class="input" type="text" id="${id}" data-key="${f.key}"
+      value="${esc(s[f.key])}">${window.pywebview?.api?.pick_folder
+        ? `<button class="btn" type="button" data-pick="${id}">${icon('folder')}Choisir…</button>` : ''}</div>`;
   } else if (f.type === 'list') {         // une liste : les valeurs séparées par des virgules
     control = `<input class="input" type="text" id="${id}" data-key="${f.key}" data-list="1"
       value="${esc((s[f.key] || []).join(', '))}">`;
@@ -214,6 +219,16 @@ function render() {
   });
   form.querySelectorAll('[data-clear]').forEach(b => {
     b.onclick = () => { draft[b.dataset.clear] = null; save(); };
+  });
+  form.querySelectorAll('[data-pick]').forEach(b => {
+    b.onclick = async () => {
+      let chosen;
+      try { chosen = await window.pywebview.api.pick_folder(); } catch (err) { errorToast(err); return; }
+      if (!chosen?.[0]) return;
+      const input = $(`#${b.dataset.pick}`, form);
+      input.value = chosen[0];
+      input.dispatchEvent(new Event('input'));            // comme une saisie : à enregistrer
+    };
   });
   bindUpdates(form);
   bindGateway(form);
