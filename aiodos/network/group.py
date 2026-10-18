@@ -15,14 +15,15 @@ Une machine P présente une de ses machines F (« mine » pour elle) à la machi
    sa partie publique ;
 3. P → F « group/key » : F termine l'échange. F et A tirent la clé de leur paire comme à
    l'appairage (crypto.pair_secrets) ; P ne voit que des clés publiques.
-Si une étape échoue, P le dit à celle qui attendait (« group/cancel ») et la réponse de
-l'ami attend la fin : aucune ne garde une paire à moitié faite, et une paire déjà connue
-n'est jamais remplacée.
+Si une étape échoue, P le dit à celles qui attendaient (« group/cancel »), la réponse de
+l'ami attend la fin, et une paire défaite est signalée à l'autre côté (« unpair ») :
+aucune ne garde une paire à moitié faite, et une paire déjà connue n'est jamais remplacée.
 
 Le niveau de confiance ne monte jamais : F prend A pour un ami ; A prend F au niveau
 qu'elle donne à P. On ne présente que ses propres machines (pas d'amis d'amis). Par
 Internet, P donne à chacune la clé du compagnon de l'autre et de quoi la joindre : chaque
-compagnon l'ajoute à sa liste blanche, sans invitation.
+compagnon l'ajoute à sa liste blanche, sans invitation. L'adresse sur le réseau local
+n'est donnée que si P joint les deux par le réseau local.
 
 De proche en proche : toute machine qui gagne la machine d'un ami (appairée, choisie comme
 amie ou présentée) lui présente ses propres machines ; ainsi le téléphone de l'ami
@@ -30,7 +31,14 @@ rencontre aussi mes autres machines. Deux présentations de la même paire peuve
 croiser, une de chaque côté : les deux machines de la paire appliquent la même règle
 (celle de la machine qui présente au plus petit identifiant continue), donc une seule
 aboutit, avec une seule clé.
+
+Ce qui est refusé ou retiré ici ne revient pas par une présentation (group_declined :
+seul un nouvel appairage par code l'efface) ; « toujours accepter » s'arrête après 8
+machines par jour d'une même machine (au-delà, on demande) ; un retrait ou une mise de
+côté qu'une de mes machines n'a pas reçus lui sont redits quand elle revient
+(group_outbox).
 """
+import ipaddress
 import json
 import logging
 import secrets
@@ -40,15 +48,19 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from aiodos import db
-from aiodos.network import client, crypto, envelope, netinfo, peers, sharing
+from aiodos.network import client, crypto, envelope, netinfo, peers, route, sharing
 from aiodos.network.client import PeerError
 
 log = logging.getLogger("aiodos.network")
 
 TTL = 180                  # une présentation non conclue expire au bout de 3 minutes
 MARGIN = 30                # … un peu plus tard chez celles qui relaient la réponse
-MAX_OFFERS = 5             # présentations en attente de réponse chez l'ami
+MAX_OFFERS = 10            # présentations en attente de réponse chez l'ami, en tout
+MAX_OFFERS_EACH = 3        # … et venues d'une même machine
+AUTO_LIMIT = 8             # machines acceptées d'office par jour d'une même machine
 ANSWER_TIMEOUT = 25        # la réponse de l'ami attend que la machine présentée ait fini
+CASCADE_DELAY = 5          # de proche en proche, après que l'autre côté a fini
+OUTBOX_TTL = 30 * 86400    # un retrait non transmis est redit pendant 30 jours
 
 
 @dataclass
@@ -70,11 +82,12 @@ class Offer:
     created: float = field(default_factory=time.time)
 
 
-def card(peer: dict) -> dict:
+def card(peer: dict, lan: bool = True) -> dict:
     """Ce que la machine présentée doit savoir de l'autre : son nom, où la joindre sur le
-    réseau local, et sa clé Internet avec ses indices (s'ils sont connus)."""
-    found = {"node_id": peer["node_id"], "name": peer["name"], "address": peer.get("address"),
-             "port": peer.get("port")}
+    réseau local (seulement s'il est commun, `lan`), et sa clé Internet avec ses indices."""
+    found = {"node_id": peer["node_id"], "name": peer["name"]}
+    if lan and peer.get("address") and peer.get("port"):
+        found.update(address=peer["address"], port=peer["port"])
     if peer.get("net_id"):
         hints = peer.get("net_addrs")
         try:
@@ -86,16 +99,23 @@ def card(peer: dict) -> dict:
     return found
 
 
+def _ip(value) -> str | None:
+    """Une adresse IP, sinon rien : jamais un nom ni un chemin, elle sert à composer une URL."""
+    if not isinstance(value, str) or len(value) > 45:
+        return None
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return None
+
+
 def _read_card(raw) -> dict:
-    if not isinstance(raw, dict):
+    if not isinstance(raw, dict) or not peers.valid_id(raw.get("node_id")):
         raise PeerError("Présentation illisible.")
-    node_id = str(raw.get("node_id") or "")
-    if not node_id or len(node_id) > 64:
-        raise PeerError("Présentation illisible.")
-    port = raw.get("port")
-    return {"node_id": node_id, "name": str(raw.get("name") or "Machine sans nom")[:60],
-            "address": str(raw["address"])[:64] if raw.get("address") else None,
-            "port": int(port) if isinstance(port, int) and 0 < port < 65536 else None,
+    address, port = _ip(raw.get("address")), raw.get("port")
+    return {"node_id": raw["node_id"], "name": str(raw.get("name") or "Machine sans nom")[:60],
+            "address": address,
+            "port": port if address and isinstance(port, int) and 0 < port < 65536 else None,
             "net": netinfo.clean(raw.get("net"))}
 
 
@@ -106,6 +126,24 @@ def _intro(payload) -> str:
     return intro
 
 
+def _pub(value) -> bytes:
+    """La partie publique d'une clé éphémère X25519 reçue : 32 octets, ou rien."""
+    try:
+        pub = envelope.b64d(value)
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise PeerError("Présentation illisible.") from exc
+    if len(pub) != 32:
+        raise PeerError("Présentation illisible.")
+    return pub
+
+
+def _pair_secrets(private, pub: bytes, me: str, other: str):
+    try:
+        return crypto.pair_secrets(private, pub, me, other)
+    except ValueError as exc:                    # clé faible (secret commun nul)
+        raise PeerError("Présentation illisible.") from exc
+
+
 class Group:
     def __init__(self, manager):
         self.m = manager
@@ -114,6 +152,7 @@ class Group:
         self._offers = {}         # chez A : intro -> Offer
         self._kept = {}           # chez A : intro -> paire gardée d'office, à défaire si P échoue
         self._sent = {}           # chez P : intro -> {"friend", "machine", "created"}
+        self._storing = set()     # machines dont la paire s'enregistre en ce moment
         self._presenting = defaultdict(threading.Lock)     # une présentation par ami à la fois
 
     def _purge(self):
@@ -134,6 +173,8 @@ class Group:
         deux machines de la paire appliquent la même règle : celle de la machine qui
         présente au plus petit identifiant continue (puis la plus petite présentation).
         → "busy" (celle-ci s'arrête), "replaced" (l'autre est abandonnée) ou None."""
+        if machine in self._storing:
+            return "busy"
         replaced = None
         for table in (self._waiting, self._offers):
             for other, item in list(table.items()):
@@ -179,11 +220,15 @@ class Group:
 
     def _present_one(self, friend: dict, mine: dict) -> str:
         intro = secrets.token_hex(12)
+        # L'adresse sur le réseau local ne vaut que si les trois machines le partagent
+        lan = route.lan_first(friend) and route.lan_first(mine)
         try:
             ready = client.call(self.m.node_id, mine, "group/introduce",
-                                {"intro": intro, "machine": card(friend)}, timeout=8)
+                                {"intro": intro, "machine": card(friend, lan)}, timeout=8)
         except PeerError:
             return "unreachable"
+        if ready.get("declined"):
+            return "refused"               # retirée ou refusée sur cette machine-là
         if ready.get("known") or ready.get("busy") or not ready.get("pub"):
             return "known"                 # déjà appairées, ou une autre présentation en cours
         with self._lock:
@@ -192,7 +237,7 @@ class Group:
                                  "created": time.time()}
         try:
             reply = client.call(self.m.node_id, friend, "group/propose",
-                                {"intro": intro, "machine": card(mine), "pub": ready["pub"]})
+                                {"intro": intro, "machine": card(mine, lan), "pub": ready["pub"]})
         except PeerError:
             reply = None
         if reply and reply.get("accept") and reply.get("pub"):
@@ -206,6 +251,8 @@ class Group:
             self._sent.pop(intro, None)
         self._cancel(mine, intro)             # ma machine n'attend plus
         if reply is None:
+            # Gardée d'office peut-être, mais la réponse s'est perdue : l'ami l'oublie aussi
+            self._cancel(friend, intro)
             return "unreachable"
         return "known" if reply.get("known") or reply.get("busy") else "refused"
 
@@ -265,6 +312,8 @@ class Group:
             raise PeerError("Présentation illisible.")
         if peers.trust_of(found["node_id"]):
             return {"known": True}
+        if declined(found["node_id"]):
+            return {"declined": True}         # retirée ou refusée ici : elle ne revient pas
         private, public = crypto.new_exchange()
         with self._lock:
             self._purge()
@@ -280,23 +329,27 @@ class Group:
     def keyed(self, sender: str, payload: dict) -> dict:
         """« group/key » : la partie publique de l'ami, relayée par la machine qui présente."""
         intro = _intro(payload)
+        pub = _pub(payload.get("pub"))
         with self._lock:
             self._purge()
             waiting = self._waiting.get(intro)
             if waiting is None or waiting.presenter != sender:
                 raise PeerError("Présentation inconnue ou expirée.")
+            machine = waiting.card["node_id"]
+            if machine in self._storing:
+                raise PeerError("Une autre présentation de cette machine se termine.")
             del self._waiting[intro]
-            found = waiting.card
-            try:
-                pub = envelope.b64d(payload.get("pub"))
-            except (TypeError, ValueError) as exc:
-                raise PeerError("Présentation illisible.") from exc
-            key, _code = crypto.pair_secrets(waiting.private, pub, self.m.node_id,
-                                             found["node_id"])
+            self._storing.add(machine)
+        found = waiting.card
+        try:
+            key, _code = _pair_secrets(waiting.private, pub, self.m.node_id, machine)
             # Le niveau ne monte jamais : la machine d'un ami reste celle d'un ami
             self._store(found, key, sharing.FRIEND, sender)
             if payload.get("group_ok"):       # « toujours accepter ce groupe », dit chez P
-                set_group_ok(found["node_id"], True)
+                set_group_ok(machine, True)
+        finally:
+            with self._lock:
+                self._storing.discard(machine)
         self._announce(found, sender, sharing.FRIEND)
         return {"ok": True}
 
@@ -311,60 +364,80 @@ class Group:
             raise PeerError("Machine mise de côté ici.")
         intro = _intro(payload)
         found = _read_card(payload.get("machine"))
-        if found["node_id"] == self.m.node_id:
+        machine = found["node_id"]
+        if machine == self.m.node_id:
             raise PeerError("Présentation illisible.")
-        if peers.trust_of(found["node_id"]):
+        if peers.trust_of(machine):
             return {"known": True}
-        try:
-            pub = envelope.b64d(payload.get("pub"))
-        except (TypeError, ValueError) as exc:
-            raise PeerError("Présentation illisible.") from exc
-        offer = Offer(intro, sender, found, pub)
-        auto = group_ok(sender)
+        if declined(machine):
+            return {"accept": False}          # refusée ou retirée ici : pas de nouvelle question
+        offer = Offer(intro, sender, found, _pub(payload.get("pub")))
+        auto = group_ok(sender) and auto_accepted_today(sender) < AUTO_LIMIT
         with self._lock:
             self._purge()
-            crossing = self._crossing(found["node_id"], intro, sender)
+            crossing = self._crossing(machine, intro, sender)
             if crossing == "busy":
                 return {"busy": True}
             if auto:
-                public, trust = self._take(offer)
-                self._kept[intro] = {"machine": found["node_id"], "presenter": sender,
-                                     "created": time.time()}
-            elif len(self._offers) >= MAX_OFFERS:
+                self._storing.add(machine)
+            elif (len(self._offers) >= MAX_OFFERS
+                  or sum(o.presenter == sender for o in self._offers.values()) >= MAX_OFFERS_EACH):
                 raise PeerError("Trop de présentations en attente, réessaie plus tard.")
             else:
                 self._offers[intro] = offer
-        if auto:
-            self._announce(found, sender, trust)
-            return {"accept": True, "pub": public}
-        self.m.publish({"type": "group_request", "intro": intro, "machine": found["name"],
-                        "presenter": _name(sender)})
-        self.m.changed()
-        return {"pending": True}
+        if not auto:
+            self.m.publish({"type": "group_request", "intro": intro, "machine": found["name"],
+                            "presenter": _name(sender)})
+            self.m.changed()
+            return {"pending": True}
+        try:
+            public, trust = self._take(offer)
+        finally:
+            with self._lock:
+                self._storing.discard(machine)
+        with self._lock:
+            self._kept[intro] = {"machine": machine, "presenter": sender, "created": time.time()}
+        self._announce(found, sender, trust)
+        return {"accept": True, "pub": public}
 
     def answer(self, intro: str, accept: bool, always: bool = False):
         """Réponse de l'utilisateur d'ici à une présentation (toujours : les prochaines
         machines du même groupe seront acceptées d'office, ici et sur mes autres machines).
-        La paire n'est gardée que si la machine présentée a terminé de son côté."""
+        La paire n'est gardée que si la machine présentée a terminé de son côté ; une
+        présentation refusée ne reviendra pas."""
         with self._lock:
             self._purge()
             offer = self._offers.pop(intro, None)
+            machine = offer.card["node_id"] if offer else None
+            reserved = bool(accept and offer and machine not in self._storing)
+            if reserved:
+                self._storing.add(machine)
         if offer is None:
             raise PeerError("Cette présentation a expiré.")
+        try:
+            return self._answer(offer, accept, always, reserved)
+        finally:
+            if reserved:
+                with self._lock:
+                    self._storing.discard(machine)
+
+    def _answer(self, offer: Offer, accept: bool, always: bool, reserved: bool):
+        machine = offer.card["node_id"]
         presenter = peers.get(offer.presenter)
         if presenter is None:
             self.m.changed()
             raise PeerError("La machine qui présentait n'est plus appairée.")
-        if accept and always:
+        if not accept:
+            decline(machine, f"présentation de « {presenter['name']} » refusée")
+        elif always:
             set_group_ok(offer.presenter, True)
         taken = None
-        if accept:
+        if accept and reserved:
             try:
-                with self._lock:
-                    taken = self._take(offer)
+                taken = self._take(offer)
             except PeerError:
-                pass                          # appairée entre-temps : rien de plus à faire
-        reply = {"intro": intro, "accept": taken is not None}
+                pass                          # appairée entre-temps, ou clé illisible
+        reply = {"intro": offer.intro, "accept": taken is not None}
         if taken:
             reply["pub"] = taken[0]
         try:
@@ -372,7 +445,6 @@ class Group:
                                     timeout=ANSWER_TIMEOUT).get("ok"))
         except PeerError:
             done = False
-        machine = offer.card["node_id"]
         if taken and not done:
             self._drop(machine)
             self.m.changed()
@@ -391,19 +463,20 @@ class Group:
         """« Toujours accepter ce groupe » : les autres présentations du même groupe déjà
         affichées sont acceptées aussi."""
         with self._lock:
-            ready = [o.intro for o in self._offers.values() if group_ok(o.presenter)]
-        for intro in ready:
+            waiting = [(o.intro, o.presenter) for o in self._offers.values()]
+        for intro, presenter in waiting:
+            if not group_ok(presenter):
+                continue
             try:
                 self.answer(intro, True)
-            except PeerError as exc:
+            except Exception as exc:          # une présentation ratée n'arrête pas les autres
                 log.info("Présentation non acceptée : %s", exc)
 
     def _take(self, offer: Offer) -> tuple:
-        """Termine l'échange chez A et garde la paire (sous self._lock), au niveau donné à
-        la machine qui présente, jamais plus haut. → (partie publique, niveau)."""
+        """Termine l'échange chez A et garde la paire, au niveau donné à la machine qui
+        présente, jamais plus haut. → (partie publique, niveau)."""
         private, public = crypto.new_exchange()
-        key, _code = crypto.pair_secrets(private, offer.pub, self.m.node_id,
-                                         offer.card["node_id"])
+        key, _code = _pair_secrets(private, offer.pub, self.m.node_id, offer.card["node_id"])
         trust = peers.trust_of(offer.presenter) or sharing.FRIEND
         self._store(offer.card, key, trust, offer.presenter)
         return envelope.b64e(public), trust
@@ -434,8 +507,8 @@ class Group:
 
     # ------------------------------------------------------------ des deux côtés
     def _store(self, found: dict, key: bytes, trust: str, presenter: str):
-        """Garde la nouvelle paire (sous self._lock) ; une paire déjà connue n'est jamais
-        remplacée : ce serait une clé différente de celle de l'autre côté."""
+        """Garde la nouvelle paire (la machine est réservée dans self._storing) ; une paire
+        déjà connue n'est jamais remplacée : ce serait une clé différente de l'autre côté."""
         if peers.trust_of(found["node_id"]):
             raise PeerError("Machine déjà appairée.")
         peers.save(found["node_id"], found["name"], key, found.get("address"),
@@ -447,7 +520,14 @@ class Group:
             self.m.net_changed()              # liste blanche du compagnon
 
     def _drop(self, machine: str):
-        """Défait une paire gardée alors que la présentation n'a pas abouti."""
+        """Défait une paire gardée alors que la présentation n'a pas abouti ; l'autre côté,
+        s'il l'avait gardée (réponse perdue), en est prévenu avec la clé de cette paire."""
+        peer = peers.get(machine)
+        if peer and peer.get("key") and (peer.get("address") or peer.get("net_id")):
+            try:
+                client.call(self.m.node_id, peer, "unpair", {}, None, 4)
+            except PeerError:
+                pass
         peers.remove(machine)
         self.m.net_changed(machine)
 
@@ -457,8 +537,9 @@ class Group:
         self.m.on_paired(found["node_id"])
         self.m.changed()
         if trust == sharing.FRIEND:
-            # De proche en proche : la machine d'un ami rencontre aussi mes autres machines
-            self.m.present_later(found["node_id"])
+            # De proche en proche : la machine d'un ami rencontre aussi mes autres machines,
+            # une fois que l'autre côté a fini (sinon elle ne connaîtrait pas encore celle-ci)
+            self.m.present_later(found["node_id"], delay=CASCADE_DELAY)
 
     @staticmethod
     def _background(target, *args):
@@ -468,7 +549,8 @@ class Group:
     # ------------------------------------------------ prévenir toutes mes machines
     def spread(self, action: str, payload: dict) -> list:
         """Prévient mes autres machines (« group/remove », « group/set_aside »,
-        « group/ok »). → les noms de celles qui n'ont pas pu l'être."""
+        « group/ok »). Celles qui ne répondent pas l'apprendront à leur retour (outbox).
+        → les noms de celles qui n'ont pas pu l'être tout de suite."""
         missed = []
         for listed in peers.list_peers():
             if listed["trust"] != sharing.MINE:
@@ -480,7 +562,29 @@ class Group:
                 client.call(self.m.node_id, mine, action, payload, timeout=6)
             except PeerError:
                 missed.append(mine["name"])
+                db.execute("INSERT INTO group_outbox(target, action, payload, at) "
+                           "VALUES(?, ?, ?, ?)", (mine["node_id"], action,
+                                                  json.dumps(payload), time.time()))
         return missed
+
+    def flush(self, node_id: str):
+        """Une de mes machines répond de nouveau : ce qu'elle n'a pas reçu lui est redit."""
+        rows = db.query("SELECT id, action, payload, at FROM group_outbox WHERE target=? "
+                        "ORDER BY id", (node_id,))
+        if not rows:
+            return
+        peer = peers.get(node_id)
+        if not peer or not peer.get("key") or peer.get("trust") != sharing.MINE:
+            db.execute("DELETE FROM group_outbox WHERE target=?", (node_id,))
+            return
+        for row in rows:
+            if time.time() - row["at"] < OUTBOX_TTL:
+                try:
+                    client.call(self.m.node_id, peer, row["action"], json.loads(row["payload"]),
+                                timeout=6)
+                except PeerError:
+                    return                    # plus tard
+            db.execute("DELETE FROM group_outbox WHERE id=?", (row["id"],))
 
 
 def _friend_of(sender: str, payload: dict) -> str:
@@ -495,9 +599,11 @@ def _friend_of(sender: str, payload: dict) -> str:
 
 
 def removed(manager, sender, payload) -> dict:
-    """« group/remove » : un ami retiré d'une de mes machines l'est aussi d'ici."""
+    """« group/remove » : un ami retiré d'une de mes machines l'est aussi d'ici, et ne
+    revient pas par une présentation."""
     node_id = _friend_of(sender, payload)
     if node_id:
+        decline(node_id, f"retirée sur « {_name(sender)} »")
         manager.remove_now(node_id)
     return {"ok": True}
 
@@ -539,6 +645,13 @@ def set_group_ok(node_id: str, value: bool):
     db.execute("UPDATE peers SET group_ok=? WHERE node_id=?", (1 if value else 0, node_id))
 
 
+def auto_accepted_today(presenter: str) -> int:
+    """Machines gardées d'office depuis 24 heures sur la présentation de celle-ci."""
+    row = db.query_one("SELECT COUNT(*) AS n FROM peers WHERE introduced_by=? AND paired_at>?",
+                       (presenter, db.now() - 86400))
+    return int(row["n"]) if row else 0
+
+
 def introduced_by(node_id: str) -> str | None:
     row = db.query_one("SELECT introduced_by FROM peers WHERE node_id=?", (node_id,))
     return row["introduced_by"] if row else None
@@ -546,6 +659,26 @@ def introduced_by(node_id: str) -> str | None:
 
 def set_introduced_by(node_id: str, presenter: str | None):
     db.execute("UPDATE peers SET introduced_by=? WHERE node_id=?", (presenter, node_id))
+
+
+def introduced_here_by(node_id: str) -> list:
+    """Les machines d'amis que celle-ci a présentées à cette machine-ci."""
+    return [r["node_id"] for r in db.query(
+        "SELECT node_id FROM peers WHERE introduced_by=? AND trust=?", (node_id, sharing.FRIEND))]
+
+
+def decline(node_id: str, reason: str):
+    """Refusée ou retirée ici : aucune présentation ne la ramène (un appairage par code, si)."""
+    db.execute("INSERT OR REPLACE INTO group_declined(node_id, at, reason) VALUES(?, ?, ?)",
+               (node_id, time.time(), reason[:200]))
+
+
+def declined(node_id: str) -> bool:
+    return db.query_one("SELECT 1 FROM group_declined WHERE node_id=?", (node_id,)) is not None
+
+
+def undecline(node_id: str):
+    db.execute("DELETE FROM group_declined WHERE node_id=?", (node_id,))
 
 
 HANDLERS = {

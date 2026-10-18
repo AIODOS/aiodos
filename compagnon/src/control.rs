@@ -182,10 +182,10 @@ async fn set_peers(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
         Ok(parsed) => parsed,
         Err(err) => return reply::detail(StatusCode::BAD_REQUEST, format!("Liste illisible : {err}.")),
     };
-    let entries = match allowlist::parse_entries(parsed.peers) {
-        Ok(entries) => entries,
-        Err(err) => return reply::detail(StatusCode::BAD_REQUEST, format!("Liste refusée : {err}.")),
-    };
+    let (entries, skipped) = allowlist::parse_entries(parsed.peers);
+    if !skipped.is_empty() {
+        warn!("Liste blanche : {} entrée(s) écartée(s) : {}", skipped.len(), skipped.join(" ; "));
+    }
     let allowed = entries.len();
     let before = ctx.pool.allowlist.ids();
     let removed = ctx.pool.allowlist.replace(entries);
@@ -193,7 +193,10 @@ async fn set_peers(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
     if before != ctx.pool.allowlist.ids() {
         info!("Liste blanche : {allowed} machine(s) autorisée(s)");
     }
-    reply::json(StatusCode::OK, json!({ "ok": true, "allowed": allowed, "removed": removed.len() }))
+    reply::json(
+        StatusCode::OK,
+        json!({ "ok": true, "allowed": allowed, "removed": removed.len(), "skipped": skipped }),
+    )
 }
 
 /// Comparaison du jeton en temps constant.

@@ -99,6 +99,9 @@ ce groupe » ; les autres reçoivent une demande.
 - **Retirer un ami** depuis une de mes machines le retire de **toutes** (proposition) :
   la machine où je le retire prévient mes autres machines, qui le retirent à leur tour et
   le lui disent. Une case permet de ne le retirer que de cette machine.
+- **Une de mes machines hors ligne** au moment d'un retrait ou d'une mise de côté
+  l'apprend à son retour (`group_outbox`, redit pendant 30 jours) ; la fenêtre de retrait
+  dit lesquelles n'ont pas pu être prévenues tout de suite.
 - **Mettre de côté** une machine d'ami après un contrôle échoué (un résultat faux) : la
   machine qui l'a vu prévient les autres, qui la mettent de côté aussi (proposition). Un
   résultat faux ne dépend pas de la machine à qui il a été rendu.
@@ -121,6 +124,11 @@ ce groupe » ; les autres reçoivent une demande.
 | Une présentation rejouée ou modifiée en route | Messages scellés et horodatés de l'appairage actuel ; présentation à usage unique, 3 minutes |
 | Avalanche de demandes | Quelques présentations en attente au plus, et l'accord de l'ami |
 | Une de mes machines compromise présente des machines pirates à mes amis | Le même risque existe déjà : elle a mes clés. L'ami voit « présentée par … » et peut tout retirer d'un geste |
+| Une de mes machines volée fait entrer des machines pirates chez moi (elle joue aussi le côté de l'ami) | En la retirant, je retire aussi, de toutes mes machines, les machines d'amis qu'elle a présentées (case cochée dans la fenêtre de retrait) |
+| Un identifiant ou une adresse piégés dans une présentation (chemin, URL) | Seul un identifiant de machine (32 caractères hexadécimaux) et une adresse IP passent ; l'interface encode les identifiants dans ses adresses. L'adresse sur le réseau local n'est donnée que si la machine qui présente joint les deux par lui |
+| « Toujours accepter » détourné pour faire entrer des machines sans fin | Au plus 8 machines par jour d'une même machine, ensuite on demande ; 3 questions en attente au plus par machine. Le compagnon écarte seule une clé Internet illisible, sans rejeter les autres |
+| Une présentation ramène une machine refusée ou retirée (de proche en proche) | Refus et retraits sont gardés (`group_declined`) : aucune présentation ne les ramène, seul un appairage par code |
+| Une question acceptée par mégarde (Entrée ou Espace tapés ailleurs) | Les questions venues d'une autre machine ne s'acceptent qu'au clic |
 
 ## 6. Interface
 

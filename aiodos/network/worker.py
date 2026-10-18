@@ -47,6 +47,11 @@ log = logging.getLogger("aiodos.worker")
 class _NotForFriends(Exception):
     """Un ordre d'une tâche réservée à mes machines, reçu d'un ami sans mon accord."""
 
+
+class _NotNow(Exception):
+    """Un téléphone débranché ou sorti du Wi-Fi ne calcule plus pour un ami."""
+
+
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
 # Délai d'une demande de travail. Sur le réseau local, une réponse vient en moins d'une
@@ -103,6 +108,14 @@ def sharing_state(previous=None) -> dict:
         return {"active": True, "state": "in_use",
                 "detail": f"Prêt à calculer pour tes autres machines, en priorité basse {when}."}
     return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
+
+
+def welcomes(peer_id: str) -> bool:
+    """Cette machine travaille-t-elle pour celle-ci en ce moment ? Toujours pour mes
+    machines ; pour un ami, un téléphone seulement en charge et en Wi-Fi."""
+    if not android.is_android() or sharing.level(peer_id) != sharing.FRIEND:
+        return True
+    return friends_welcome()
 
 
 def friends_welcome() -> bool:
@@ -341,6 +354,8 @@ class Worker:
                 continue
             if not reply.get("ok"):
                 a.stop.set()       # reprise ou annulée chez le propriétaire : inutile de continuer
+            elif not await asyncio.to_thread(welcomes, a.peer_id):
+                a.stop.set()       # téléphone débranché ou sorti du Wi-Fi : l'unité est rendue
 
     def _call(self, a: Assignment, action, payload, timeout=30) -> dict:
         peer = peers.get(a.peer_id)
@@ -364,6 +379,8 @@ class Worker:
             if sharing.level(a.peer_id) != sharing.MINE \
                     and not registry.may_compute_for_friend(spec):
                 raise _NotForFriends()
+            if not welcomes(a.peer_id):
+                raise _NotNow()
             file = self._download(a, folder) if a.order.get("blob") else None
             output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
@@ -380,6 +397,9 @@ class Worker:
         except _NotForFriends:
             self._quiet(a, "work/release")
             return "réservée à mes machines : rendue"
+        except _NotNow:
+            self._quiet(a, "work/release")
+            return "téléphone hors charge ou hors Wi-Fi : rendue à l'ami"
         except PeerError as exc:
             return f"propriétaire injoignable ({exc})"
         except Exception as exc:

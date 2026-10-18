@@ -100,12 +100,16 @@ def test_her_phone_meets_my_other_machines_too(nodes):
 
 
 # ---------------------------------------------------------------- les règles
+FIXE, LEA, NEW, OTHER = "f" * 32, "a" * 32, "1" * 32, "2" * 32
+
+
 class Manager:
-    node_id = "moi"
+    node_id = "e" * 32
 
     def __init__(self):
         self.events = []
         self.presented = []
+        self.removed = []
         self.group = None
 
     def name(self):
@@ -123,8 +127,12 @@ class Manager:
     def on_paired(self, node_id):
         pass
 
-    def present_later(self, friend_id, only=None):
+    def present_later(self, friend_id, only=None, delay=0):
         self.presented.append(friend_id)
+
+    def remove_now(self, node_id):
+        self.removed.append(node_id)
+        peers.remove(node_id)
 
 
 @pytest.fixture
@@ -133,12 +141,12 @@ def mine(monkeypatch):
     manager = Manager()
     manager.group = group.Group(manager)
     monkeypatch.setattr(group.Group, "_background", staticmethod(lambda f, *a: f(*a)))
-    peers.save("pc-fixe", "PC fixe", b"f" * 32, "127.0.0.1", 1, sharing.MINE)
-    peers.save("lea", "PC de Léa", b"a" * 32, "127.0.0.1", 2, sharing.FRIEND)
+    peers.save(FIXE, "PC fixe", b"f" * 32, "127.0.0.1", 1, sharing.MINE)
+    peers.save(LEA, "PC de Léa", b"a" * 32, "127.0.0.1", 2, sharing.FRIEND)
     return manager
 
 
-CARD = {"node_id": "inconnu", "name": "Machine inconnue", "address": "127.0.0.1", "port": 9}
+CARD = {"node_id": NEW, "name": "Machine inconnue", "address": "127.0.0.1", "port": 9}
 
 
 def _pub() -> str:
@@ -147,7 +155,7 @@ def _pub() -> str:
 
 def _calls(monkeypatch, reply=None) -> list:
     sent = []
-    monkeypatch.setattr(client, "call", lambda my_id, peer, action, payload, **k:
+    monkeypatch.setattr(client, "call", lambda my_id, peer, action, payload, *a, **k:
                         sent.append((peer["node_id"], action, payload)) or (reply or {"ok": True}))
     return sent
 
@@ -156,102 +164,174 @@ def test_only_my_machines_introduce_and_never_a_friend(mine):
     """Une machine d'ami ne me présente rien (pas d'amis d'amis) ; une de mes machines,
     oui ; une machine déjà connue n'est pas présentée de nouveau."""
     with pytest.raises(PeerError, match="une de mes machines"):
-        mine.group.introduced("lea", {"intro": "x", "machine": CARD})
-    assert "pub" in mine.group.introduced("pc-fixe", {"intro": "x", "machine": CARD})
-    assert mine.group.introduced("pc-fixe", {"intro": "y", "machine": {
-        **CARD, "node_id": "lea"}}) == {"known": True}
+        mine.group.introduced(LEA, {"intro": "x", "machine": CARD})
+    assert "pub" in mine.group.introduced(FIXE, {"intro": "x", "machine": CARD})
+    assert mine.group.introduced(FIXE, {"intro": "y", "machine": {
+        **CARD, "node_id": LEA}}) == {"known": True}
+
+
+def test_a_crafted_card_is_refused(mine, monkeypatch):
+    """L'identifiant sert à composer des chemins (API, interface) : seul un identifiant de
+    machine passe ; l'adresse ne peut être qu'une adresse IP, jamais un chemin."""
+    for node_id in ("../../collections/3#", "PC", "f" * 31, "F" * 32, None, 42):
+        with pytest.raises(PeerError, match="illisible"):
+            mine.group.proposed(LEA, {"intro": "x", "machine": {**CARD, "node_id": node_id},
+                                      "pub": _pub()})
+    tricky = {**CARD, "address": "192.168.1.1/cgi-bin/reboot?", "port": 80}
+    assert group._read_card(tricky)["address"] is None and group._read_card(tricky)["port"] is None
+    assert group._read_card({**CARD, "address": "::1"})["address"] == "::1"
+    for pub in (None, "", "AAAA", envelope.b64e(b"x" * 31)):
+        with pytest.raises(PeerError, match="illisible"):
+            mine.group.proposed(LEA, {"intro": "x", "machine": CARD, "pub": pub})
+    # Une clé nulle : l'échange échoue, la présentation est refusée, rien n'est gardé
+    sent = _calls(monkeypatch)
+    mine.group.proposed(LEA, {"intro": "z", "machine": CARD, "pub": envelope.b64e(bytes(32))})
+    mine.group.answer("z", True)
+    assert peers.trust_of(NEW) is None and sent[-1][2]["accept"] is False
 
 
 def test_a_key_relayed_by_another_machine_is_refused(mine):
-    mine.group.introduced("pc-fixe", {"intro": "x", "machine": CARD})
+    mine.group.introduced(FIXE, {"intro": "x", "machine": CARD})
     with pytest.raises(PeerError, match="inconnue ou expirée"):
-        mine.group.keyed("lea", {"intro": "x", "pub": _pub()})
-    mine.group.keyed("pc-fixe", {"intro": "x", "pub": _pub()})       # toujours valable
-    assert peers.trust_of("inconnu") == sharing.FRIEND
+        mine.group.keyed(LEA, {"intro": "x", "pub": _pub()})
+    mine.group.keyed(FIXE, {"intro": "x", "pub": _pub()})       # toujours valable
+    assert peers.trust_of(NEW) == sharing.FRIEND
 
 
 def test_a_friend_is_presented_only_by_a_machine_that_trusts_her_as_one(mine):
     with pytest.raises(PeerError, match="la machine d'un ami"):
-        mine.group.present("pc-fixe")
-    peers.set_aside("lea", "essai")
+        mine.group.present(FIXE)
+    peers.set_aside(LEA, "essai")
     with pytest.raises(PeerError):
-        mine.group.present("lea")                 # mise de côté : rien de plus
+        mine.group.present(LEA)                  # mise de côté : rien de plus
 
 
 def test_a_presentation_waits_for_an_answer_and_can_be_accepted_for_good(mine, monkeypatch):
-    reply = mine.group.proposed("lea", {"intro": "i1", "machine": CARD, "pub": _pub()})
+    reply = mine.group.proposed(LEA, {"intro": "i1", "machine": CARD, "pub": _pub()})
     assert reply == {"pending": True}
     assert mine.events[-1]["type"] == "group_request"
     assert [o["machine"] for o in mine.group.offers()] == ["Machine inconnue"]
     sent = _calls(monkeypatch)
     mine.group.answer("i1", True, always=True)
-    assert sent[0][:2] == ("lea", "group/answer") and sent[0][2]["accept"] is True
+    assert sent[0][:2] == (LEA, "group/answer") and sent[0][2]["accept"] is True
     # Au niveau donné à la machine qui présente (une amie), et présentée par elle
-    assert peers.trust_of("inconnu") == sharing.FRIEND and group.group_ok("lea")
-    assert group.introduced_by("inconnu") == "lea"
+    assert peers.trust_of(NEW) == sharing.FRIEND and group.group_ok(LEA)
+    assert group.introduced_by(NEW) == LEA
     # « Toujours » vaut aussi pour mes autres machines, et la nouvelle rencontre les miennes
-    assert ("pc-fixe", "group/ok", {"node_ids": ["lea", "inconnu"]}) in sent
-    assert mine.presented == ["inconnu"]
+    assert (FIXE, "group/ok", {"node_ids": [LEA, NEW]}) in sent
+    assert mine.presented == [NEW]
     # Désormais acceptée d'office
-    second = {**CARD, "node_id": "autre", "name": "Autre machine"}
-    assert mine.group.proposed("lea", {"intro": "i2", "machine": second,
-                                       "pub": _pub()})["accept"]
+    second = {**CARD, "node_id": OTHER, "name": "Autre machine"}
+    assert mine.group.proposed(LEA, {"intro": "i2", "machine": second,
+                                     "pub": _pub()})["accept"]
+
+
+def test_always_accept_has_a_daily_limit(mine):
+    """« Toujours accepter » ne laisse pas une machine en faire entrer sans fin : au-delà
+    de 8 par jour, on demande de nouveau."""
+    group.set_group_ok(LEA, True)
+    for i in range(group.AUTO_LIMIT):
+        card = {**CARD, "node_id": f"{i + 1:032x}", "name": f"Machine {i}"}
+        assert mine.group.proposed(LEA, {"intro": f"i{i}", "machine": card, "pub": _pub()})["accept"]
+    card = {**CARD, "node_id": "9" * 32, "name": "Une de trop"}
+    assert mine.group.proposed(LEA, {"intro": "trop", "machine": card, "pub": _pub()}) == {
+        "pending": True}
+
+
+def test_one_machine_cannot_fill_the_questions(mine):
+    for i in range(group.MAX_OFFERS_EACH):
+        card = {**CARD, "node_id": f"{i + 1:032x}"}
+        assert mine.group.proposed(LEA, {"intro": f"i{i}", "machine": card, "pub": _pub()})["pending"]
+    with pytest.raises(PeerError, match="Trop de présentations"):
+        mine.group.proposed(LEA, {"intro": "x", "machine": {**CARD, "node_id": "9" * 32},
+                                  "pub": _pub()})
+
+
+def test_a_refusal_or_a_removal_is_not_undone_by_a_presentation(mine, monkeypatch):
+    """Refusée ici, retirée ici (même « seulement de cette machine »), ou retirée sur une
+    autre de mes machines : aucune présentation ne la ramène ; un appairage par code, si."""
+    mine.group.proposed(LEA, {"intro": "i1", "machine": CARD, "pub": _pub()})
+    _calls(monkeypatch, reply={"ok": False})
+    mine.group.answer("i1", False)
+    assert group.declined(NEW)
+    assert mine.group.proposed(LEA, {"intro": "i2", "machine": CARD, "pub": _pub()}) == {
+        "accept": False}
+    assert mine.group.introduced(FIXE, {"intro": "i3", "machine": CARD}) == {"declined": True}
+    # Retirée sur une autre de mes machines : ici aussi, et pour de bon
+    group.removed(mine, FIXE, {"node_id": LEA})
+    assert mine.removed == [LEA] and group.declined(LEA)
+    group.undecline(NEW)                         # nouvel appairage par code
+    assert "pub" in mine.group.introduced(FIXE, {"intro": "i4", "machine": CARD})
 
 
 def test_nothing_is_kept_when_the_presentation_does_not_finish(mine, monkeypatch):
     """La machine présentée n'a pas terminé (injoignable) : l'ami ne garde pas une paire
-    à moitié faite, et le dit."""
-    mine.group.proposed("lea", {"intro": "i1", "machine": CARD, "pub": _pub()})
-    _calls(monkeypatch, reply={"ok": False})
+    à moitié faite, le dit, et prévient l'autre côté au cas où sa réponse se serait perdue."""
+    mine.group.proposed(LEA, {"intro": "i1", "machine": CARD, "pub": _pub()})
+    sent = _calls(monkeypatch, reply={"ok": False})
     with pytest.raises(PeerError, match="n'a pas abouti"):
         mine.group.answer("i1", True)
-    assert peers.trust_of("inconnu") is None and mine.presented == []
+    assert peers.trust_of(NEW) is None and mine.presented == []
+    assert (NEW, "unpair", {}) in sent
 
 
-def test_a_pair_kept_at_once_is_undone_when_the_presenter_cancels(mine):
-    group.set_group_ok("lea", True)
-    assert mine.group.proposed("lea", {"intro": "i1", "machine": CARD, "pub": _pub()})["accept"]
-    assert peers.trust_of("inconnu") == sharing.FRIEND
-    mine.group.cancelled("pc-fixe", {"intro": "i1"})             # pas celle qui présentait
-    assert peers.trust_of("inconnu") == sharing.FRIEND
-    mine.group.cancelled("lea", {"intro": "i1"})
-    assert peers.trust_of("inconnu") is None
+def test_a_pair_kept_at_once_is_undone_when_the_presenter_cancels(mine, monkeypatch):
+    group.set_group_ok(LEA, True)
+    assert mine.group.proposed(LEA, {"intro": "i1", "machine": CARD, "pub": _pub()})["accept"]
+    assert peers.trust_of(NEW) == sharing.FRIEND
+    _calls(monkeypatch)
+    mine.group.cancelled(FIXE, {"intro": "i1"})             # pas celle qui présentait
+    assert peers.trust_of(NEW) == sharing.FRIEND
+    mine.group.cancelled(LEA, {"intro": "i1"})
+    assert peers.trust_of(NEW) is None
 
 
 @pytest.mark.parametrize("first", ["introduce", "propose"])
 def test_crossing_presentations_of_the_same_pair_keep_the_same_one(mine, first):
     """La même paire présentée de chaque côté à la fois : quel que soit l'ordre d'arrivée,
-    c'est la présentation de la machine au plus petit identifiant qui continue (« lea » <
-    « pc-fixe ») ; l'autre machine de la paire applique la même règle."""
-    by_mine = lambda: mine.group.introduced("pc-fixe", {"intro": "b", "machine": CARD})
-    by_friend = lambda: mine.group.proposed("lea", {"intro": "a", "machine": CARD,
-                                                    "pub": _pub()})
+    c'est la présentation de la machine au plus petit identifiant qui continue (celle de
+    Léa, « aaa… » < « fff… ») ; l'autre machine de la paire applique la même règle."""
+    by_mine = lambda: mine.group.introduced(FIXE, {"intro": "b", "machine": CARD})
+    by_friend = lambda: mine.group.proposed(LEA, {"intro": "a", "machine": CARD,
+                                                  "pub": _pub()})
     if first == "introduce":
         assert "pub" in by_mine()
-        assert by_friend() == {"pending": True}      # celle de « lea » l'emporte
+        assert by_friend() == {"pending": True}      # celle de Léa l'emporte
     else:
         assert by_friend() == {"pending": True}
         assert by_mine() == {"busy": True}
     assert [o["intro"] for o in mine.group.offers()] == ["a"]
     with pytest.raises(PeerError):
-        mine.group.keyed("pc-fixe", {"intro": "b", "pub": _pub()})
+        mine.group.keyed(FIXE, {"intro": "b", "pub": _pub()})
 
 
 def test_a_known_pair_is_never_replaced(mine):
     with pytest.raises(PeerError, match="déjà appairée"):
-        mine.group._store({"node_id": "lea", "name": "PC de Léa"}, b"x" * 32,
-                          sharing.FRIEND, "pc-fixe")
-    assert peers.get("lea")["key"] == b"a" * 32
+        mine.group._store({"node_id": LEA, "name": "PC de Léa"}, b"x" * 32,
+                          sharing.FRIEND, FIXE)
+    assert peers.get(LEA)["key"] == b"a" * 32
 
 
 def test_always_from_another_of_my_machines(mine, monkeypatch):
     """« Toujours accepter ce groupe » dit sur une autre de mes machines vaut ici, pour les
     questions déjà affichées aussi ; jamais demandé par une machine d'ami."""
-    mine.group.proposed("lea", {"intro": "i1", "machine": CARD, "pub": _pub()})
+    mine.group.proposed(LEA, {"intro": "i1", "machine": CARD, "pub": _pub()})
     with pytest.raises(PeerError):
-        group.group_accepted(mine, "lea", {"node_ids": ["lea"]})
+        group.group_accepted(mine, LEA, {"node_ids": [LEA]})
     sent = _calls(monkeypatch)
-    group.group_accepted(mine, "pc-fixe", {"node_ids": ["lea", "pc-fixe"]})
-    assert group.group_ok("lea") and not group.group_ok("pc-fixe")
-    assert sent[0][:2] == ("lea", "group/answer") and peers.trust_of("inconnu")
+    group.group_accepted(mine, FIXE, {"node_ids": [LEA, FIXE]})
+    assert group.group_ok(LEA) and not group.group_ok(FIXE)
+    assert sent[0][:2] == (LEA, "group/answer") and peers.trust_of(NEW)
     assert mine.group.offers() == []
+
+
+def test_a_removal_my_machine_missed_is_told_when_it_comes_back(mine, monkeypatch):
+    def offline(my_id, peer, action, payload, *a, **k):
+        raise PeerError("injoignable")
+    monkeypatch.setattr(client, "call", offline)
+    assert mine.group.spread("group/remove", {"node_id": LEA}) == ["PC fixe"]
+    sent = _calls(monkeypatch)
+    mine.group.flush(FIXE)
+    assert sent == [(FIXE, "group/remove", {"node_id": LEA})]
+    mine.group.flush(FIXE)                       # dit une fois
+    assert len(sent) == 1

@@ -9,6 +9,7 @@ La clé de chaque paire est gardée protégée sous Windows (node/vault.py, DPAP
 """
 import json
 import logging
+import re
 
 from aiodos import db
 from aiodos.node import vault
@@ -105,6 +106,15 @@ def update_profile(node_id, key: str, value):
     db.execute("UPDATE peers SET profile=json_set(profile, ?, json(?)) WHERE node_id=? "
                "AND json_valid(profile) AND json_type(profile)='object'",
                (f"$.{key}", json.dumps(value, ensure_ascii=False), node_id))
+
+
+_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def valid_id(node_id) -> bool:
+    """Un identifiant de machine (uuid4 en hexadécimal) : rien d'autre n'est gardé d'une
+    autre machine, car il sert à composer des chemins (API locale, interface)."""
+    return isinstance(node_id, str) and _ID.fullmatch(node_id) is not None
 
 
 def trust_of(node_id) -> str | None:

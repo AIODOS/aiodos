@@ -63,6 +63,10 @@ def chat(manager, sender, payload, stop):
     if not settings.get("lend_models"):
         raise PeerError(f"« {manager.name()} » ne prête pas ses modèles pour les conversations "
                         "(réglage « Prêter mes modèles » sur cette machine).")
+    from aiodos.network import worker
+    if not worker.welcomes(sender):
+        raise PeerError(f"« {manager.name()} » est un téléphone : il ne prête à ses amis qu'en "
+                        "charge et en Wi-Fi.")
     model = str(payload.get("model") or "")
     messages = _clean(payload.get("messages"))
     try:

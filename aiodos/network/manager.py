@@ -242,6 +242,8 @@ class NetworkManager:
             self._last_profile[peer["node_id"]] = time.time()
             await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)
         await self.internet.exchange(full)                # clés Internet (compagnon)
+        if full.get("trust") == sharing.MINE:              # retrait ou mise de côté manqués
+            await asyncio.to_thread(self.group.flush, peer["node_id"])
         self.changed()
 
     def net_changed(self, removed: str | None = None):
@@ -278,11 +280,13 @@ class NetworkManager:
         self.net_changed(node_id)
         self.changed()
 
-    def present_later(self, friend_id: str, only=None):
+    def present_later(self, friend_id: str, only=None, delay: float = 0):
         """Appairage par groupe (décision de l'auteur) : un ami choisi ici est présenté
         d'office à mes autres machines ; une nouvelle machine à moi, aux amis. Hors du fil
-        appelant : il faut joindre trois machines."""
+        appelant : il faut joindre trois machines (après `delay` secondes)."""
         def run():
+            if delay:
+                time.sleep(delay)
             try:
                 self.group.present(friend_id, only)
             except Exception as exc:

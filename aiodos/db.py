@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -195,6 +195,23 @@ MIGRATIONS = {
     16: """
     ALTER TABLE peers ADD COLUMN introduced_by TEXT;
     ALTER TABLE peers ADD COLUMN group_ok INTEGER NOT NULL DEFAULT 0;
+    """,
+    # Appairage par groupe : machines refusées ou retirées ici, qu'aucune présentation ne
+    # ramène (seul un nouvel appairage par code les efface) ; messages à redire à une de
+    # mes machines hors ligne (retrait, mise de côté).
+    17: """
+    CREATE TABLE IF NOT EXISTS group_declined (
+        node_id TEXT PRIMARY KEY,
+        at      REAL NOT NULL,
+        reason  TEXT
+    );
+    CREATE TABLE IF NOT EXISTS group_outbox (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        target  TEXT NOT NULL,
+        action  TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        at      REAL NOT NULL
+    );
     """,
 }
 

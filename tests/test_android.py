@@ -65,3 +65,18 @@ def test_without_getprop_properties_are_empty(monkeypatch):
     monkeypatch.setattr(android.os.path, "exists", lambda path: False)
     monkeypatch.setattr(android.shutil, "which", lambda name: None)
     assert android.prop("ro.product.model") == ""
+
+
+def test_wifi_asks_termux_first_and_never_counts_a_hotspot(monkeypatch):
+    """Depuis Android 10, /sys/class/net n'est plus lisible par une appli : Termux:API
+    d'abord ; à défaut, « wlan0 » seulement (wlan1 ou swlan0 servent au partage de
+    connexion, qui passe par les données mobiles)."""
+    calls = []
+    monkeypatch.setattr(android, "_wifi_termux", lambda: calls.append("termux") or True)
+    monkeypatch.setattr(android, "_wifi_interface", lambda: calls.append("wlan0") or False)
+    android._wifi.update(at=None, value=None)
+    assert android.on_wifi() is True and calls == ["termux"]
+    android._wifi.update(at=None, value=None)
+    monkeypatch.setattr(android, "_wifi_termux", lambda: None)
+    assert android.on_wifi() is False
+    android._wifi.update(at=None, value=None)

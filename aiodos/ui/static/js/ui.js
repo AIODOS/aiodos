@@ -31,7 +31,7 @@ export function modal(opts) {
         <span><b>${esc(c.label)}</b>${c.help ? `<small>${esc(c.help)}</small>` : ''}</span></label>`).join('')}</div>` : '';
     const back = h(`
       <div class="modal-back" role="dialog" aria-modal="true">
-        <div class="modal">
+        <div class="modal" tabindex="-1">
           <h3>${opts.iconName ? icon(opts.iconName) : ''}${esc(opts.title || '')}</h3>
           ${opts.text ? `<div class="text">${esc(opts.text)}</div>` : ''}
           ${opts.code ? `<div class="pair-code">${esc(String(opts.code).replace(/^(\d{3})(\d{3})$/, '$1 $2'))}</div>` : ''}
@@ -61,7 +61,10 @@ export function modal(opts) {
     };
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); finish(false, 'dismiss'); }
-      if (e.key === 'Enter' && !yes.disabled && !(input && input.tagName === 'TEXTAREA')) {
+      // cautious : question venue d'une autre machine, jamais acceptée d'une touche tapée
+      // ailleurs (Entrée ou Espace pendant qu'on écrit un message)
+      if (e.key === 'Enter' && !yes.disabled && !opts.cautious
+          && !(input && input.tagName === 'TEXTAREA')) {
         e.preventDefault();
         finish(true);
       }
@@ -73,7 +76,8 @@ export function modal(opts) {
     });
     document.addEventListener('keydown', onKey, true);
     document.body.append(back);
-    (input || back.querySelector('.choice input') || yes).focus();
+    (opts.cautious ? back.querySelector('.modal')
+      : input || back.querySelector('.choice input') || yes).focus();
     if (input && input.tagName === 'INPUT') input.select();
   });
 }

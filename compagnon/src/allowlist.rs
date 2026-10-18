@@ -133,19 +133,29 @@ pub struct Entry {
 
 /// Lit la liste envoyée par AIODOS ; une entrée illisible fait refuser toute la liste
 /// (mieux vaut garder l'ancienne qu'en appliquer une moitié).
-pub fn parse_entries(entries: Vec<Entry>) -> Result<HashMap<EndpointId, Hints>, String> {
-    if entries.len() > MAX_ENTRIES {
-        return Err(format!("trop de machines (plus de {MAX_ENTRIES})"));
-    }
+/// La liste reçue d'AIODOS, et les entrées écartées avec leur raison. Une entrée illisible
+/// (clé qui n'est pas un point Ed25519, ticket abîmé) est écartée seule : venue d'une
+/// machine d'ami (appairage par groupe, échange des clés Internet), elle ne doit pas priver
+/// toutes les autres machines de leur place dans la liste.
+pub fn parse_entries(entries: Vec<Entry>) -> (HashMap<EndpointId, Hints>, Vec<String>) {
     let mut out: HashMap<EndpointId, Hints> = HashMap::new();
+    let mut skipped = Vec::new();
     for (i, entry) in entries.into_iter().enumerate() {
-        let (id, hints) = parse_entry(entry).map_err(|e| format!("machine n° {} : {e}", i + 1))?;
-        let merged = out.entry(id).or_default();
-        merged.relays.extend(hints.relays);
-        merged.addrs.extend(hints.addrs);
-        dedup(merged);
+        if i >= MAX_ENTRIES {
+            skipped.push(format!("au-delà de {MAX_ENTRIES} machines"));
+            break;
+        }
+        match parse_entry(entry) {
+            Ok((id, hints)) => {
+                let merged = out.entry(id).or_default();
+                merged.relays.extend(hints.relays);
+                merged.addrs.extend(hints.addrs);
+                dedup(merged);
+            }
+            Err(err) => skipped.push(format!("machine n° {} : {err}", i + 1)),
+        }
     }
-    Ok(out)
+    (out, skipped)
 }
 
 fn parse_entry(entry: Entry) -> Result<(EndpointId, Hints), String> {
@@ -264,23 +274,21 @@ mod tests {
             b,
             [TransportAddr::Ip("192.0.2.7:4242".parse().unwrap())],
         ));
-        let parsed = parse_entries(vec![
+        let (parsed, skipped) = parse_entries(vec![
             Entry {
                 id: Some(a.to_string()),
                 addrs: vec!["127.0.0.1:1234".into(), "127.0.0.1:1234".into()],
                 ..Default::default()
             },
             Entry { ticket: Some(ticket.to_string()), ..Default::default() },
-        ])
-        .unwrap();
+        ]);
+        assert!(skipped.is_empty());
         assert_eq!(parsed[&a].addrs, vec!["127.0.0.1:1234".parse::<SocketAddr>().unwrap()]);
         assert_eq!(parsed[&b].addrs, vec!["192.0.2.7:4242".parse::<SocketAddr>().unwrap()]);
     }
 
     #[test]
-    fn a_bad_key_rejects_the_whole_list_a_bad_hint_is_ignored() {
-        assert!(parse_entries(vec![Entry { id: Some("pas une clé".into()), ..Default::default() }]).is_err());
-        assert!(parse_entries(vec![Entry::default()]).is_err());
+    fn a_bad_key_is_set_aside_alone_a_bad_hint_is_ignored() {
         let a = key();
         let odd = Entry {
             id: Some(a.to_string()),
@@ -288,9 +296,20 @@ mod tests {
             relays: vec!["pas un relais".into()],
             ..Default::default()
         };
-        let parsed = parse_entries(vec![odd]).unwrap();
+        // Une clé illisible, une entrée vide, et une vraie : seule la vraie reste
+        let bad = Entry { id: Some("pas une clé".into()), ..Default::default() };
+        let (parsed, skipped) = parse_entries(vec![bad, Entry::default(), odd]);
+        assert_eq!(skipped.len(), 2);
+        assert!(skipped[0].starts_with("machine n° 1"));
+        assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[&a].addrs, vec!["127.0.0.1:9".parse::<SocketAddr>().unwrap()]);
         assert!(parsed[&a].relays.is_empty());
+        // Au-delà de la limite : le reste est écarté, pas toute la liste
+        let many: Vec<Entry> = (0..MAX_ENTRIES + 3)
+            .map(|_| Entry { id: Some(key().to_string()), ..Default::default() })
+            .collect();
+        let (parsed, skipped) = parse_entries(many);
+        assert_eq!((parsed.len(), skipped.len()), (MAX_ENTRIES, 1));
     }
 
     #[test]

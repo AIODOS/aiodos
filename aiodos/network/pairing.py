@@ -15,7 +15,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from aiodos.network import client, crypto, envelope, invitations, peers, sharing
+from aiodos.network import client, crypto, envelope, group, invitations, peers, sharing
 from aiodos.network.client import PeerError
 
 PENDING_TTL = 180          # une demande non conclue expire au bout de 3 minutes
@@ -78,10 +78,14 @@ class Pairing:
         info = client.hello(address, port)
         if info["node_id"] == self.m.node_id:
             raise PeerError("C'est cette machine-ci.")
+        if not peers.valid_id(info.get("node_id")):
+            raise PeerError("Cette machine ne donne pas un identifiant valable.")
         private, public = crypto.new_exchange()
         reply = client.pair_start(address, port, {
             "node_id": self.m.node_id, "name": self.m.name(),
             "port": self.m.p2p_port, "pub": envelope.b64e(public)})
+        if not peers.valid_id(reply.get("node_id")):
+            raise PeerError("Cette machine ne donne pas un identifiant valable.")
         key, code = crypto.pair_secrets(private, envelope.b64d(reply["pub"]),
                                         self.m.node_id, reply["node_id"])
         pending = Pending(reply["node_id"], reply["name"], address, int(port),
@@ -129,6 +133,8 @@ class Pairing:
             peer_public = envelope.b64d(payload["pub"])
         except (KeyError, TypeError, ValueError) as exc:
             raise PeerError("Demande d'appairage incomplète.") from exc
+        if not peers.valid_id(node_id):
+            raise PeerError("Identifiant de machine illisible.")
         if node_id == self.m.node_id:
             raise PeerError("Une machine ne s'appaire pas avec elle-même.")
         with self._lock:
@@ -198,6 +204,7 @@ class Pairing:
             self.m.publish({"type": "pair_result", "node_id": pending.node_id,
                             "name": pending.name, "outcome": outcome})
         if outcome == "paired":
+            group.undecline(pending.node_id)     # appairée par code : plus refusée ici
             self.m.on_paired(pending.node_id)
             # Appairage par groupe : un ami rencontre mes autres machines, une nouvelle
             # machine à moi rencontre mes amis (network/group.py)

@@ -352,26 +352,38 @@ function renderPeers(net) {
       ]);
     };
     row.querySelector('[data-act="restore"]')?.addEventListener('click', async () => {
-      try { state.network = await post(`/network/peers/${peer.node_id}/restore`); lastJson = ''; loadNetwork(); }
+      try { state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/restore`); lastJson = ''; loadNetwork(); }
       catch (e) { errorToast(e); }
     });
     row.querySelector('[data-act="refresh"]').onclick = async () => {
-      try { state.network = await post(`/network/peers/${peer.node_id}/refresh`); lastJson = ''; loadNetwork(); }
+      try { state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/refresh`); lastJson = ''; loadNetwork(); }
       catch (e) { errorToast(e); }
     };
     row.querySelector('[data-act="unpair"]').onclick = async () => {
-      // La machine d'un ami est retirée de toutes mes machines, sauf « seulement de celle-ci »
+      // La machine d'un ami est retirée de toutes mes machines, sauf « seulement de celle-ci » ;
+      // une de mes machines (perdue, volée) peut emporter les machines d'amis qu'elle a présentées
+      const introduced = net.peers.filter(p => p.introduced_by === peer.node_id && p.trust === 'friend');
       const r = friend
         ? await modal({ title: 'Retirer l\'appairage', iconName: 'warn', danger: true, confirm: 'Retirer',
           text: `« ${peer.name} » ne pourra plus échanger avec cette machine. Tes autres machines la retirent `
             + 'aussi, sauf si tu coches la case ci-dessous. Il faudra refaire l\'appairage pour la retrouver.',
           check: 'Seulement de cette machine' })
-        : { ok: await confirmDanger('Retirer l\'appairage',
-          `« ${peer.name} » ne pourra plus échanger avec cette machine. Il faudra refaire l'appairage pour la retrouver.`,
-          'Retirer'), checked: false };
+        : introduced.length
+          ? await modal({ title: 'Retirer l\'appairage', iconName: 'warn', danger: true, confirm: 'Retirer',
+            text: `« ${peer.name} » ne pourra plus échanger avec cette machine. Elle t'a présenté `
+              + `${introduced.length} machine(s) d'amis (${introduced.map(p => `« ${p.name} »`).join(', ')}) : si `
+              + 'elle est perdue ou volée, retire-les aussi, de toutes tes machines.',
+            check: 'Retirer aussi les machines d\'amis qu\'elle a présentées' })
+          : { ok: await confirmDanger('Retirer l\'appairage',
+            `« ${peer.name} » ne pourra plus échanger avec cette machine. Il faudra refaire l'appairage pour la retrouver.`,
+            'Retirer'), checked: false };
       if (!r.ok) return;
+      const query = friend ? `?only_here=${r.checked}` : r.checked ? '?with_introduced=true' : '';
       try {
-        await del(`/network/peers/${peer.node_id}${friend ? `?only_here=${r.checked}` : ''}`);
+        const done = await del(`/network/peers/${encodeURIComponent(peer.node_id)}${query}`);
+        if (done?.missed?.length) {
+          toast(`Hors ligne, à prévenir quand elles reviendront : ${names(done.missed)}.`, 'info', 10000);
+        }
         lastJson = '';
         loadNetwork();
       } catch (e) { errorToast(e); }
@@ -404,7 +416,7 @@ const names = list => list.map(n => `« ${n} »`).join(', ');
 async function presentMachines(peer) {
   toast(`Présentation de tes autres machines à « ${peer.name} »…`, 'info', 4000);
   let r;
-  try { r = await post(`/network/peers/${peer.node_id}/present`); } catch (e) { errorToast(e); return; }
+  try { r = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/present`); } catch (e) { errorToast(e); return; }
   const parts = [];
   if (r.introduced.length) parts.push(`appairée avec ${names(r.introduced)}`);
   if (r.asked.length) parts.push(`son accord est demandé pour ${names(r.asked)}`);
@@ -419,7 +431,7 @@ async function presentMachines(peer) {
 
 async function setTrust(peer, trust) {
   try {
-    state.network = await post(`/network/peers/${peer.node_id}/trust`, { trust });
+    state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/trust`, { trust });
     toast(trust === 'friend'
       ? `« ${peer.name} » est désormais la machine d'un ami : seules les bibliothèques partagées avec tes amis lui seront confiées.`
       : `« ${peer.name} » est désormais une de tes machines : confiance totale.`, 'ok', 7000);
@@ -430,7 +442,7 @@ async function setTrust(peer, trust) {
 
 async function showShared(peer) {
   let entries;
-  try { ({ entries } = await get(`/network/peers/${peer.node_id}/shared`)); } catch (e) { errorToast(e); return; }
+  try { ({ entries } = await get(`/network/peers/${encodeURIComponent(peer.node_id)}/shared`)); } catch (e) { errorToast(e); return; }
   const lines = entries.map(e => `${new Date(e.at * 1000).toLocaleString('fr-FR')} · ${e.what}`
     + `${e.sent_as && e.sent_as !== e.what ? ` → ${e.sent_as}` : ''}${e.size ? ` (${bytes(e.size)})` : ''}`);
   await modal({
@@ -443,7 +455,7 @@ async function showShared(peer) {
 
 async function showConsulted(peer) {
   let entries;
-  try { ({ entries } = await get(`/network/peers/${peer.node_id}/consulted`)); } catch (e) { errorToast(e); return; }
+  try { ({ entries } = await get(`/network/peers/${encodeURIComponent(peer.node_id)}/consulted`)); } catch (e) { errorToast(e); return; }
   const lines = entries.map(e => {
     const when = new Date(e.at * 1000).toLocaleString('fr-FR');
     if (e.refused) return `${when} · refusée : ${e.refused}`;
@@ -564,7 +576,7 @@ export async function answerIntroduction(ev) {
         + `acceptes, elle pourra échanger avec cette machine comme « ${ev.presenter} », au même niveau de `
         + 'confiance, sans code à comparer.',
       check: 'Accepter d\'office les prochaines machines de ce groupe',
-      confirm: 'Accepter', cancel: 'Refuser',
+      confirm: 'Accepter', cancel: 'Refuser', cautious: true,
     });
   } finally { introOpen = false; }
   if (r.how === 'dismiss') return;
@@ -584,7 +596,7 @@ export async function answerPairRequest(ev) {
     title: 'Demande d\'appairage', iconName: 'shield', code: ev.code,
     text: `« ${ev.name} » veut s'appairer avec cette machine. Accepte seulement si ce même code `
       + 's\'affiche sur son écran, et dis ce qu\'elle est pour toi.',
-    choices: TRUST_CHOICES, confirm: 'Accepter', cancel: 'Refuser',
+    choices: TRUST_CHOICES, confirm: 'Accepter', cancel: 'Refuser', cautious: true,
   });
   try {
     await post('/network/pair/answer', { node_id: ev.node_id, accept: r.ok, trust: r.choice || 'mine' });

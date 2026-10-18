@@ -138,10 +138,14 @@ class Internet:
         if state == self._sent:
             return
         try:
-            await asyncio.to_thread(companion.set_peers, entries)
+            reply = await asyncio.to_thread(companion.set_peers, entries)
         except CompanionError as exc:
             log.warning("Liste blanche du compagnon non mise à jour : %s", exc)
             return
+        skipped = (reply or {}).get("skipped") or []
+        if skipped:            # clé illisible : écartée seule, les autres machines restent
+            log.warning("Liste blanche : %d entrée(s) écartée(s) : %s", len(skipped),
+                        " ; ".join(map(str, skipped))[:500])
         self._sent = state
 
     def changed_from_thread(self, forget=None):

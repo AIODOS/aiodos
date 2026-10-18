@@ -11,7 +11,7 @@ import requests
 from aiodos import db, paths, settings
 from aiodos.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâches)
 from aiodos.knowledge import store
-from aiodos.network import peers, work, worker
+from aiodos.network import peers, sharing, work, worker
 from aiodos.network.client import PeerError
 from aiodos.network.worker import Assignment, Worker, sharing_state
 from aiodos.node import identity, power
@@ -488,3 +488,19 @@ def test_an_owner_reached_only_by_internet_sends_smaller_pieces(setup, monkeypat
     _compute_with(monkeypatch, _reading({}))
     assert lender._process(a).startswith("faite")
     assert sizes and set(sizes) == {10}
+
+
+def test_a_phone_works_for_a_friend_only_on_power_and_wifi(monkeypatch):
+    """Décision de l'auteur (appairage par groupe) : un téléphone calcule, prête ses modèles
+    et cherche dans ses bibliothèques pour un ami seulement en charge et en Wi-Fi ; pour mes
+    machines, toujours."""
+    peers.save("a" * 32, "PC de Léa", b"a" * 32, "127.0.0.1", 1, sharing.FRIEND)
+    peers.save("f" * 32, "PC fixe", b"f" * 32, "127.0.0.1", 2, sharing.MINE)
+    monkeypatch.setattr(worker.android, "is_android", lambda: True)
+    monkeypatch.setattr(worker, "friends_welcome", lambda: False)
+    assert not worker.welcomes("a" * 32) and worker.welcomes("f" * 32)
+    monkeypatch.setattr(worker, "friends_welcome", lambda: True)
+    assert worker.welcomes("a" * 32)
+    monkeypatch.setattr(worker.android, "is_android", lambda: False)
+    monkeypatch.setattr(worker, "friends_welcome", lambda: False)
+    assert worker.welcomes("a" * 32)             # un PC suit ses propres règles de prêt

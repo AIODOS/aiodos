@@ -155,6 +155,11 @@ def search(manager, sender, payload):
         log(sender, refused="machine mise de côté")
         raise PeerError(f"« {manager.name()} » ne te laisse plus chercher dans ses "
                         f"bibliothèques : {aside}.")
+    from aiodos.network import worker
+    if not worker.welcomes(sender):
+        log(sender, refused="téléphone hors charge ou hors Wi-Fi")
+        raise PeerError(f"« {manager.name()} » est un téléphone : il ne cherche pour ses amis "
+                        "qu'en charge et en Wi-Fi.")
     levels = levels_for(sender)
     opened = visibility.open_collections(levels)
     if not opened:                        # rien d'ouvert : la question n'est même pas lue

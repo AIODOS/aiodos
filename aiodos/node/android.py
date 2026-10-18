@@ -36,35 +36,28 @@ def prop(name: str) -> str:
 
 
 def on_wifi() -> bool | None:
-    """Le téléphone est-il sur un réseau Wi-Fi ? Une interface « wlan… » en service, ou, à
-    défaut, termux-wifi-connectioninfo (Termux:API) ; None si on ne peut pas le savoir.
-    Un téléphone ne calcule pour un ami qu'en Wi-Fi (network/worker.py)."""
+    """Le téléphone est-il connecté à un réseau Wi-Fi ? termux-wifi-connectioninfo
+    (Termux:API ; depuis Android 10, /sys/class/net n'est plus lisible par une appli), ou à
+    défaut l'interface « wlan0 » en service ; None si on ne peut pas le savoir. Le partage
+    de connexion n'est pas du Wi-Fi : il passe par les données mobiles. Un téléphone ne
+    calcule pour un ami qu'en Wi-Fi (network/worker.py)."""
     now = time.monotonic()
     if _wifi["at"] is not None and now - _wifi["at"] < WIFI_TTL:
         return _wifi["value"]
-    value = _wifi_interface()
+    value = _wifi_termux()
     if value is None:
-        value = _wifi_termux()
+        value = _wifi_interface()
     _wifi.update(at=now, value=value)
     return value
 
 
 def _wifi_interface() -> bool | None:
-    base = "/sys/class/net"
+    """wlan0 seulement : wlan1 ou swlan0 servent souvent au partage de connexion."""
     try:
-        names = [n for n in os.listdir(base) if n.startswith("wlan")]
+        with open("/sys/class/net/wlan0/operstate", encoding="ascii") as f:
+            return f.read().strip() == "up"
     except OSError:
-        return None
-    if not names:
-        return None                  # rien de visible : pas une preuve d'absence de Wi-Fi
-    for name in names:
-        try:
-            with open(os.path.join(base, name, "operstate"), encoding="ascii") as f:
-                if f.read().strip() == "up":
-                    return True
-        except OSError:
-            return None
-    return False
+        return None                  # illisible : pas une preuve d'absence de Wi-Fi
 
 
 def _wifi_termux() -> bool | None:

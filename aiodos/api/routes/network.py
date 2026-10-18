@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.network import consult, invitations, peers, sharing
+from aiodos.network import consult, group, invitations, peers, sharing
 from aiodos.network.client import PeerError
 
 router = APIRouter(prefix="/api/network")
@@ -240,12 +240,24 @@ def consulted(node_id: str):
 
 
 @router.delete("/peers/{node_id}")
-async def unpair(node_id: str, request: Request, only_here: bool = False):
-    """Retire une machine appairée. Celle d'un ami l'est aussi de toutes mes machines
-    (décision de l'auteur), sauf only_here : seulement de celle-ci."""
+async def unpair(node_id: str, request: Request, only_here: bool = False,
+                 with_introduced: bool = False):
+    """Retire une machine appairée ; aucune présentation ne la ramène ici (un appairage par
+    code, si). Celle d'un ami l'est aussi de toutes mes machines (décision de l'auteur),
+    sauf only_here : seulement de celle-ci. Une de mes machines retirée (perdue, volée) :
+    with_introduced retire aussi, partout, les machines d'amis qu'elle a présentées ici.
+    → l'état, et « missed » : mes machines à prévenir plus tard (hors ligne)."""
     manager = _manager(request)
-    friend = await asyncio.to_thread(peers.trust_of, node_id) == sharing.FRIEND
-    await manager.unpair(node_id)
-    if friend and not only_here:
-        await asyncio.to_thread(manager.group.spread, "group/remove", {"node_id": node_id})
-    return manager.snapshot()
+    trust = await asyncio.to_thread(peers.trust_of, node_id)
+    targets = [node_id]
+    if trust == sharing.MINE and with_introduced:
+        targets = await asyncio.to_thread(group.introduced_here_by, node_id) + targets
+    missed = set()
+    for target in targets:
+        friend = await asyncio.to_thread(peers.trust_of, target) == sharing.FRIEND
+        await asyncio.to_thread(group.decline, target, "retirée ici")
+        await manager.unpair(target)
+        if friend and not (only_here and target == node_id):
+            missed.update(await asyncio.to_thread(manager.group.spread, "group/remove",
+                                                  {"node_id": target}))
+    return {**manager.snapshot(), "missed": sorted(missed)}
