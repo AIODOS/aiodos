@@ -350,6 +350,7 @@ def test_an_image_retouch_starts_from_the_last_image(client, can_draw, monkeypat
     started = job["params"]["init_path"]
     assert started and started.endswith(".png") and (path is None or started == path)
     assert job["params"]["strength"] == retouches.AMBIANCE            # « de nuit » : une ambiance
+    assert edited["media"]["retouch"] is True                            # dit sous l'image
     assert retouches.strength_for("Ajoute un chat sur le toit") == retouches.KEEP
 
 

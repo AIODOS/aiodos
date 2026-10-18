@@ -416,6 +416,8 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
         media["frames"] = params["frames"]
     if request.get("auto"):
         media["auto"] = True          # reconnue dans le message : « Répondre en texte » possible
+    if params.get("init_path"):
+        media["retouch"] = True       # partie de l'image précédente (dit sous l'image)
     message_id = conversations.add_message(conv_id, "assistant", describe(media), media=media)
     return {"conversation_id": conv_id, "title": title, "user_message_id": user_message_id,
             "message_id": message_id, "job_id": job_id, "media": view(media)}

@@ -287,7 +287,8 @@ function paintGrid(view) {
   });
   const machines = [...new Set(images.map(i => i.machine || 'cette machine'))];
   const seconds = images.length ? Math.round(images.reduce((n, i) => n + (i.seconds || 0), 0) / images.length) : 0;
-  view.node.querySelector('.model-tag').textContent = [media.label, machines.join(', '),
+  view.node.querySelector('.model-tag').textContent = [media.label,
+    media.retouch ? "retouche de l'image précédente" : '', machines.join(', '),
     seconds ? `${seconds} s${images.length > 1 ? ' par ' + KINDS[media.kind].noun : ''}` : '']
     .filter(Boolean).join(' · ');
   onGrow();
