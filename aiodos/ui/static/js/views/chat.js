@@ -99,7 +99,8 @@ export function mountChat(container) {
     }
   });
   document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
+    // Échap déjà pris par une fenêtre de dialogue (validation du cloud…) : rien de plus
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (busy) stop();
     else if (editing) stopEditing();
   });
@@ -374,6 +375,10 @@ function regenerate(answer) {
 
 function startEditing(node) {
   if (busy || creating || sending || !node?.dataset.id) return;
+  beginEditing(node);
+}
+
+function beginEditing(node) {
   stopEditing();
   const text = node.querySelector('.bubble').textContent;
   editing = { node, text };
@@ -382,6 +387,19 @@ function startEditing(node) {
   autoresize();
   el.input.focus();
   el.editBar.hidden = false;
+}
+
+/** Un envoi qui n'a pas été accepté (refus, Stop, réseau) ne perd pas le texte écrit : il
+ *  revient dans la zone de saisie, et « Modifier » reprend s'il s'agissait d'une
+ *  modification et que le message est toujours là. */
+function keepEdit(text, replace) {
+  const node = replace && el.list.querySelector('.msg.user.last-turn');
+  if (node && Number(node.dataset.id) === replace.id
+      && node.querySelector('.bubble').textContent === replace.text) beginEditing(node);
+  if (!el.input.value.trim() || editing) {
+    el.input.value = text;
+    autoresize();
+  }
 }
 
 function stopEditing(clear = true) {
@@ -750,6 +768,7 @@ async function sendNow(asText, replace) {
   if (replace && !started && state.currentConversation) {
     if (failure && failure.name !== 'AbortError') errorToast(failure);
     await openConversation(state.currentConversation.id);
+    if (asText === null) keepEdit(text, replace);
   }
   return true;
 }
@@ -758,6 +777,7 @@ async function sendNow(asText, replace) {
 // images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
 // remplacé (« Modifier »), retiré une fois la demande acceptée
 async function create(text, request, again = false, replace = null, askedNode = null) {
+  if (creating) return;              // « Autoriser mes amis » cliqué deux fois : une seule
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
   let asked = askedNode;             // une nouvelle tentative garde la question d'origine
@@ -780,7 +800,8 @@ async function create(text, request, again = false, replace = null, askedNode = 
     if (seen !== displayed) return;
     if (e.status === 412) {          // la conversation a changé (autre fenêtre) : relue
       errorToast(e);
-      if (state.currentConversation) openConversation(state.currentConversation.id);
+      if (state.currentConversation) await openConversation(state.currentConversation.id);
+      keepEdit(text, replace);
       return;
     }
     // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être. Reconnue
@@ -832,7 +853,9 @@ async function answerAsText({ messageId, node }) {
   if (busy || creating || sending) return;
   stopEditing();
   let undone;
+  sending = true;                    // cliqué deux fois : une seule fois
   try { undone = await post(`/chat/create/${messageId}/undo`); } catch (e) { errorToast(e); return; }
+  finally { sending = false; }
   const asked = node.previousElementSibling;
   if (asked?.classList.contains('user')) asked.remove();
   node.remove();

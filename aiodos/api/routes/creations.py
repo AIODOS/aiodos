@@ -48,14 +48,21 @@ async def undo(message_id: int, request: Request):
 
 @router.post("/create")
 async def create(body: CreateIn, request: Request):
-    if body.conversation_id is not None:  # une réponse arrêtée juste avant : en place d'abord
-        await asyncio.to_thread(pending.wait, body.conversation_id)
+    conv_id = body.conversation_id
+    if conv_id is not None:               # une réponse arrêtée juste avant : en place d'abord
+        await asyncio.to_thread(pending.wait, conv_id)
+    marker = pending.begin(conv_id) if conv_id is not None else None
     try:
+        if await request.is_disconnected():     # parti avant l'acceptation : rien ne change
+            return JSONResponse({"detail": "Demande abandonnée."}, status_code=400)
         made = await asyncio.to_thread(creations.start, body.text, body.model_dump(),
-                                       body.conversation_id, body.chat_model,
+                                       conv_id, body.chat_model,
                                        body.replace_from, body.replace_text)
     except creations.CreationError as exc:     # avec les amis qui pourraient calculer
         return JSONResponse({"detail": str(exc), "friends": exc.friends}, status_code=exc.status)
+    finally:
+        if marker is not None:
+            pending.end(conv_id, marker)
     executor = request.app.state.executor
     executor.wake()
     for job_id in [made["job_id"], *made.pop("stopped", [])]:

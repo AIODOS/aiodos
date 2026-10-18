@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from aiodos import render
+from aiodos import db, render
 from aiodos.chat import conversations, creations, pending
 
 router = APIRouter(prefix="/api")
@@ -39,6 +39,7 @@ def search(q: str = ""):
 
 @router.get("/conversations/{conv_id}")
 def read(conv_id: int):
+    pending.wait(conv_id)                 # une question en cours d'enregistrement : après elle
     conv = conversations.get(conv_id)
     if conv is None:
         raise HTTPException(404, "Conversation introuvable.")
@@ -72,8 +73,9 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
     text = conversations.user_message(conv_id, body.message_id)
     if text is None:
         raise HTTPException(404, "Message introuvable dans cette conversation.")
-    try:                                  # ses créations en cours s'arrêtent
-        stopped = creations.replace(conv_id, body.message_id, body.expect)
+    try:                                  # ses créations en cours s'arrêtent ; d'un seul geste
+        with db.transaction():
+            stopped = creations.replace(conv_id, body.message_id, body.expect)
     except creations.CreationError as exc:
         raise HTTPException(exc.status, str(exc))
     for job_id in stopped:

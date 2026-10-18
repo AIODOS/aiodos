@@ -223,3 +223,43 @@ def test_only_the_last_exchange_can_be_replaced(talk, monkeypatch):
             "message_id": ids[0], "expect": "Quelle est la capitale du Portugal ?"})
     assert status == 412 and refused.status_code == 412
     assert [m["content"] for m in conversations.get(conv)["messages"]] == before
+
+
+def test_a_request_abandoned_before_it_is_accepted_changes_nothing(talk, monkeypatch):
+    """Stop pendant que le nœud prépare la réponse (la question n'est pas encore
+    enregistrée) : rien n'est retiré, rien n'est ajouté."""
+    from starlette.requests import Request
+
+    async def gone(self):
+        return True
+    conv, ids = talk
+    monkeypatch.setattr(pipeline, "generate", lambda *a, **k: iter([("content", "?")]))
+    monkeypatch.setattr(Request, "is_disconnected", gone)
+    before = [m["content"] for m in conversations.get(conv)["messages"]]
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        status, _ = _stream(http, text="Et sa population exacte ?", model="local-test",
+                            conversation_id=conv, replace_from=ids[2],
+                            replace_text="Et sa population ?")
+    assert status == 400
+    assert [m["content"] for m in conversations.get(conv)["messages"]] == before
+
+
+def test_reading_a_conversation_waits_for_the_question_being_saved(talk):
+    """L'écran qui se resynchronise relit la conversation telle que le nœud la garde : pas
+    avant que la question en cours soit enregistrée (ou refusée)."""
+    import threading
+    import time
+    from aiodos.chat import pending
+    conv, ids = talk
+    marker = pending.begin(conv)
+
+    def saved_later():
+        time.sleep(0.6)
+        conversations.add_message(conv, "user", "Et son fleuve ?")
+        pending.end(conv, marker)
+    threading.Thread(target=saved_later).start()
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        began = time.monotonic()
+        read = http.get(f"/api/conversations/{conv}", headers=TOKEN).json()
+    assert time.monotonic() - began >= 0.5
+    assert read["messages"][-1]["content"] == "Et son fleuve ?"

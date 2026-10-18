@@ -94,6 +94,17 @@ async def chat(body: ChatIn, request: Request):
         if body.replace_from is not None:
             raise HTTPException(creations.CHANGED_STATUS, creations.CHANGED)
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
+    # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation
+    # attend (pending) : l'écran qui se resynchronise après un Stop voit ce que le nœud garde
+    marker = pending.begin(conv_id)
+    try:
+        return await _answer(body, request, text, plan, conv_id, executor, bus)
+    finally:
+        pending.end(conv_id, marker)
+
+
+async def _answer(body, request, text, plan, conv_id, executor, bus):
+    """La suite de chat(), une fois la conversation connue."""
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -113,6 +124,8 @@ async def chat(body: ChatIn, request: Request):
             asked = conversations.add_message(conv_id, "user", text)
             named = conversations.auto_title(conv_id, text)
         return stopped, rows, asked, named
+    if await request.is_disconnected():   # parti (Stop) avant l'acceptation : rien ne change
+        raise HTTPException(400, "Demande abandonnée.")
     try:
         stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
     except creations.CreationError as exc:

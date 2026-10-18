@@ -183,8 +183,9 @@ MIGRATIONS = {
      WHERE role='assistant' AND substr(content, 1, 2)='⚠ '
        AND json_valid(sources) AND json_type(sources)='array'
        AND NOT EXISTS (SELECT 1 FROM json_each(messages.sources)
-                        WHERE json_extract(json_each.value, '$.type')='error');
-    DELETE FROM chunks WHERE substr(text, 1, 13)='Assistant : ⚠'
+                        WHERE json_extract(messages.sources, json_each.fullkey || '.type')
+                              = 'error');
+    DELETE FROM chunks WHERE substr(text, 1, 14)='Assistant : ⚠ '
        AND entry_id IN (SELECT e.id FROM entries e JOIN collections c ON c.id=e.collection_id
                          WHERE c.system=1);
     """,

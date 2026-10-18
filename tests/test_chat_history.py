@@ -136,9 +136,12 @@ def test_errors_saved_before_their_mark_receive_it_once_at_the_upgrade(fake_embe
     failed = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Modèle "
                                        "introuvable", sources=[WEB])
     fine = conversations.add_message(conv, "assistant", "Tout va bien.", sources=[WEB])
+    odd = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Coupé")
+    db.execute("UPDATE messages SET sources=? WHERE id=?", ('["web"]', odd))   # pas un objet
     memory = store.conversation_collection_id()
     store.upsert_entry(memory, "Essai · #1", "conversation", "1", [
         ("Assistant : ⚠ Ollama arrêté", fake_embed(["Ollama arrêté"])[0]),
+        ("Assistant : ⚠️ Attention aux champignons", fake_embed(["champignons"])[0]),
         ("Utilisateur : Bonjour", fake_embed(["Bonjour"])[0])])
     path = db.connect().execute("PRAGMA database_list").fetchone()[2]
     db.execute("PRAGMA user_version=13")
@@ -147,10 +150,13 @@ def test_errors_saved_before_their_mark_receive_it_once_at_the_upgrade(fake_embe
     rows = {r["id"]: json.loads(r["sources"]) for r in db.query("SELECT id, sources FROM messages")}
     assert rows[old] == [conversations.ERROR_SOURCE]
     assert rows[failed] == [WEB, conversations.ERROR_SOURCE] and rows[fine] == [WEB]
+    assert rows[odd] == ["web", conversations.ERROR_SOURCE]
     assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION
     assert conversations.history(conv) == [{"role": "user", "content": "Bonjour"},
                                            {"role": "assistant", "content": "Tout va bien."}]
-    assert store.chunk_texts(store.entry_by_origin(memory, "1")["id"]) == ["Utilisateur : Bonjour"]
+    # Une vraie réponse qui commence par l'émoji « ⚠️ » reste en mémoire
+    assert store.chunk_texts(store.entry_by_origin(memory, "1")["id"]) == [
+        "Assistant : ⚠️ Attention aux champignons", "Utilisateur : Bonjour"]
 
 
 # ------------------------------------------------------------- mémoire
