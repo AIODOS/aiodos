@@ -258,8 +258,10 @@ def machine_of(model) -> str | None:
 
 
 def destination(model) -> str | None:
-    """Niveau de confiance de la machine qui répond : None (cette machine, ou le cloud
-    après validation), « mine » ou « friend » (cf. pipeline.build_messages)."""
+    """Niveau de confiance de la machine qui répond : None (cette machine), « cloud » (un
+    modèle du cloud, après validation), « mine » ou « friend » (cf. pipeline.build_messages)."""
+    if str(model or "").startswith("cloud:"):
+        return "cloud"
     parsed = remote_models.parse(model)
     if not parsed:
         return None

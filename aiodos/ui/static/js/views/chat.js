@@ -643,14 +643,11 @@ async function confirmOutgoing(text, model, pre) {
     }
     if (pre.cloud_confirm && !session.cloudConsent.has(pre.cloud)) {
       const leaving = ['ton message', "l'historique de cette conversation"];
-      // Le cloud reçoit ce que reçoit cette machine (pipeline.visible_libraries) : le dire
+      // Ce que reçoit le cloud (pipeline.visible_libraries) : ni les bibliothèques gardées
+      // sur ce PC, ni la mémoire des conversations
       if (state.settings?.knowledge_enabled) {
-        leaving.push('la liste des fichiers de tes bibliothèques (même celles gardées sur ce PC) '
-          + 'et les extraits utilisés pour répondre');
-      }
-      if (state.settings?.conversations_enabled) {
-        leaving.push('les titres de tes autres conversations et les passages de ta mémoire '
-          + 'utilisés pour répondre');
+        leaving.push('la liste des fichiers de tes bibliothèques et les extraits utilisés pour '
+          + 'répondre (sauf les bibliothèques gardées sur ce PC, et ta mémoire des conversations)');
       }
       if (web) leaving.push('les résultats web');
       const r = await modal({

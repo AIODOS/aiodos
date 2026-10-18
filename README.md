@@ -97,7 +97,8 @@ Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC e
 des conversations ne la suivent jamais, ni les réponses qui s'en sont servies, ni celles qui
 ont pu les reprendre ensuite dans la même conversation (l'historique envoyé les remplace par
 une mention) ; chez un ami, seules les bibliothèques partagées avec tes amis donnent leurs
-extraits.
+extraits. Un modèle du cloud, après validation, ne reçoit ni les bibliothèques gardées sur ce
+PC, ni la mémoire des conversations.
 
 **Ouvrir AIODOS aux autres outils** (Réglages → Autres outils, désactivé par défaut) : une
 API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement

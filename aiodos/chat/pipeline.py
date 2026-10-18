@@ -198,12 +198,14 @@ def web_context(question) -> tuple:
 
 def visible_libraries(destination) -> set | None:
     """Bibliothèques dont le sommaire et les extraits peuvent accompagner une conversation,
-    selon la machine qui répond (placement.destination) : None, cette machine (ou le
-    cloud, après validation) : toutes ; « mine », une de mes machines : toutes sauf celles
-    gardées sur ce PC ; « friend », la machine d'un ami : celles partagées avec mes amis."""
+    selon la machine qui répond (placement.destination) : None, cette machine : toutes ;
+    « mine », une de mes machines, et « cloud », un modèle du cloud après validation
+    (décision de l'auteur, 18/10/2026) : toutes sauf celles gardées sur ce PC ; « friend »,
+    la machine d'un ami : celles partagées avec mes amis. La mémoire des conversations ne
+    va qu'à cette machine (build_messages)."""
     if destination is None:
         return None
-    if destination == "mine":
+    if destination in ("mine", "cloud"):
         return {c["id"] for c in store.list_collections() if c["scope"] != "local"}
     return store.shareable_ids()
 

@@ -297,6 +297,10 @@ def test_extracts_follow_the_machine_that_answers(fake_embed):
     assert mine == {"maison.txt", "partage.txt"} and "secret" not in text
     friend, text = seen("friend")
     assert friend == {"partage.txt"} and "maison" not in text
+    # Le cloud (décision du 18/10/2026) : ni ce qui est gardé sur ce PC, ni la mémoire
+    cloud, text = seen("cloud")
+    assert cloud == {"maison.txt", "partage.txt"} and "secret" not in text and "Conv" not in text
+    assert placement.destination("cloud:mistral") == "cloud"
 
 
 # ----------------------------------------------- la conversation de l'interface

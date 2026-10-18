@@ -65,6 +65,8 @@ def test_each_machine_receives_only_the_answers_it_may_see(answers):
     assert _received(answers, "mine", True) == ["autres", "projets", "recettes", "rien", "web"]
     # La machine d'un ami : seulement ce que je partage avec mes amis
     assert _received(answers, "friend", False) == ["recettes", "rien", "web"]
+    # Un modèle du cloud : ni la mémoire, ni ce qui reste sur ce PC (18/10/2026)
+    assert _received(answers, "cloud", False) == ["projets", "recettes", "rien", "web"]
 
 
 def test_a_renamed_library_or_a_reused_name_changes_nothing():
