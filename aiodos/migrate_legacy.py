@@ -10,8 +10,6 @@ from collections import OrderedDict
 from pathlib import Path
 
 from aiodos import db, paths, settings
-from aiodos.jobs import queue
-from aiodos.jobs.models import BACKGROUND
 from aiodos.knowledge import store
 
 log = logging.getLogger("aiodos.migration")
@@ -120,7 +118,7 @@ def migrate(source: Path) -> dict:
         stats["chunks"] += len(chunks)
 
     if settings.get("conversations_enabled"):
+        from aiodos.jobs.kinds import index          # enregistre « index_conversation »
         for conv_id in new_conversations:
-            queue.create_job("index_conversation", {"conversation_id": conv_id},
-                             priority=BACKGROUND)
+            index.queue_conversation(conv_id)
     return stats
