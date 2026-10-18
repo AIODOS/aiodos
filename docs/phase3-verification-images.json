@@ -1,0 +1,1194 @@
+{
+ "date": "2026-10-18 05:06",
+ "model": "z-image-turbo",
+ "size": 512,
+ "prompts": [
+  "une cabane en bois au bord d'un lac, au coucher du soleil, photo",
+  "portrait d'un vieux marin à la barbe blanche, lumière douce",
+  "un chat roux endormi sur le rebord d'une fenêtre, jour de pluie",
+  "une rue de ville futuriste la nuit, néons et reflets sur le sol mouillé"
+ ],
+ "seeds": [
+  42,
+  20261018
+ ],
+ "load_s": {
+  "vulkan": 3.0,
+  "cuda": 1.5,
+  "cpu": 2.1
+ },
+ "seconds": {
+  "vulkan_0_42": 8.2,
+  "vulkan_0_20261018": 4.6,
+  "vulkan_1_42": 5.2,
+  "vulkan_1_20261018": 4.6,
+  "vulkan_2_42": 5.1,
+  "vulkan_2_20261018": 4.6,
+  "vulkan_3_42": 5.1,
+  "vulkan_3_20261018": 4.6,
+  "vulkan2_0_42": 4.6,
+  "vulkan2_0_20261018": 4.6,
+  "steps4_0_42": 2.6,
+  "steps2_0_42": 1.6,
+  "small_0_42": 2.6,
+  "steps4_0_20261018": 2.6,
+  "steps2_0_20261018": 1.6,
+  "small_0_20261018": 1.6,
+  "steps4_1_42": 3.6,
+  "steps2_1_42": 1.6,
+  "small_1_42": 2.6,
+  "steps4_1_20261018": 2.6,
+  "steps2_1_20261018": 1.6,
+  "small_1_20261018": 1.6,
+  "steps4_2_42": 3.6,
+  "steps2_2_42": 1.5,
+  "small_2_42": 2.6,
+  "steps4_2_20261018": 2.6,
+  "steps2_2_20261018": 1.6,
+  "small_2_20261018": 1.5,
+  "steps4_3_42": 3.6,
+  "steps2_3_42": 2.1,
+  "small_3_42": 2.6,
+  "steps4_3_20261018": 2.6,
+  "steps2_3_20261018": 1.6,
+  "small_3_20261018": 1.5,
+  "cuda_0_42": 7.7,
+  "cuda_0_20261018": 3.5,
+  "cuda_1_42": 4.1,
+  "cuda_1_20261018": 3.5,
+  "cuda_2_42": 4.1,
+  "cuda_2_20261018": 3.6,
+  "cuda_3_42": 4.1,
+  "cuda_3_20261018": 3.6,
+  "cuda2_0_42": 4.1,
+  "cuda2_0_20261018": 3.6,
+  "cpu_0_42": 198.8,
+  "cpu_0_20261018": 183.7
+ },
+ "summary": {
+  "phash": {
+   "pire honnête": 10,
+   "tricherie la plus proche": {
+    "4 pas au lieu de 8": 4,
+    "2 pas au lieu de 8": 10,
+    "calculée en 256 puis agrandie": 14,
+    "autre graine": 12,
+    "autre consigne": 26,
+    "unie (couleur moyenne)": 22,
+    "bruit": 26,
+    "floue (réduite à 64 puis agrandie)": 0
+   }
+  },
+  "dhash": {
+   "pire honnête": 12,
+   "tricherie la plus proche": {
+    "4 pas au lieu de 8": 3,
+    "2 pas au lieu de 8": 10,
+    "calculée en 256 puis agrandie": 20,
+    "autre graine": 16,
+    "autre consigne": 23,
+    "unie (couleur moyenne)": 21,
+    "bruit": 23,
+    "floue (réduite à 64 puis agrandie)": 0
+   }
+  },
+  "ssim": {
+   "pire honnête": 0.7262,
+   "tricherie la plus proche": {
+    "4 pas au lieu de 8": 0.732,
+    "2 pas au lieu de 8": 0.4162,
+    "calculée en 256 puis agrandie": 0.3852,
+    "autre graine": 0.3863,
+    "autre consigne": 0.3431,
+    "unie (couleur moyenne)": 0.3948,
+    "bruit": 0.0211,
+    "floue (réduite à 64 puis agrandie)": 0.7377
+   }
+  },
+  "psnr": {
+   "pire honnête": 17.56,
+   "tricherie la plus proche": {
+    "4 pas au lieu de 8": 20.36,
+    "2 pas au lieu de 8": 15.95,
+    "calculée en 256 puis agrandie": 12.49,
+    "autre graine": 12.52,
+    "autre consigne": 10.45,
+    "unie (couleur moyenne)": 12.6,
+    "bruit": 8.51,
+    "floue (réduite à 64 puis agrandie)": 27.09
+   }
+  },
+  "même moteur": {
+   "identiques au pixel près": 4,
+   "sur": 4
+  }
+ },
+ "pairs": [
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 0,
+   "dhash": 2,
+   "ssim": 0.9237,
+   "psnr": 26.62
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cpu",
+   "phash": 2,
+   "dhash": 2,
+   "ssim": 0.789,
+   "psnr": 19.59
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "honnête",
+   "what": "cuda / cpu",
+   "phash": 2,
+   "dhash": 4,
+   "ssim": 0.8211,
+   "psnr": 20.49
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "même moteur",
+   "what": "vulkan, deux fois",
+   "identical": true,
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 1.0,
+   "psnr": 99.0
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "même moteur",
+   "what": "cuda, deux fois",
+   "identical": true,
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 1.0,
+   "psnr": 99.0
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 10,
+   "ssim": 0.6149,
+   "psnr": 16.14
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 17,
+   "ssim": 0.3843,
+   "psnr": 14.2
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 20,
+   "dhash": 24,
+   "ssim": 0.3808,
+   "psnr": 11.95
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 12,
+   "dhash": 23,
+   "ssim": 0.3863,
+   "psnr": 12.52
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 28,
+   "dhash": 32,
+   "ssim": 0.3431,
+   "psnr": 10.45
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 38,
+   "dhash": 21,
+   "ssim": 0.3786,
+   "psnr": 10.14
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 36,
+   "dhash": 31,
+   "ssim": 0.0162,
+   "psnr": 7.25
+  },
+  {
+   "case": [
+    0,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.6235,
+   "psnr": 23.33
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 2,
+   "dhash": 10,
+   "ssim": 0.7849,
+   "psnr": 19.8
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cpu",
+   "phash": 4,
+   "dhash": 6,
+   "ssim": 0.7854,
+   "psnr": 19.7
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "cuda / cpu",
+   "phash": 4,
+   "dhash": 12,
+   "ssim": 0.7262,
+   "psnr": 17.56
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "même moteur",
+   "what": "vulkan, deux fois",
+   "identical": true,
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 1.0,
+   "psnr": 99.0
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "même moteur",
+   "what": "cuda, deux fois",
+   "identical": true,
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 1.0,
+   "psnr": 99.0
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 8,
+   "dhash": 13,
+   "ssim": 0.6019,
+   "psnr": 14.67
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 11,
+   "ssim": 0.3604,
+   "psnr": 13.19
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 14,
+   "dhash": 26,
+   "ssim": 0.3852,
+   "psnr": 10.86
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 12,
+   "dhash": 23,
+   "ssim": 0.3863,
+   "psnr": 12.52
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 26,
+   "dhash": 28,
+   "ssim": 0.3329,
+   "psnr": 10.06
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 36,
+   "dhash": 24,
+   "ssim": 0.3836,
+   "psnr": 10.39
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 32,
+   "dhash": 30,
+   "ssim": 0.0172,
+   "psnr": 7.35
+  },
+  {
+   "case": [
+    0,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.6172,
+   "psnr": 23.13
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 6,
+   "dhash": 2,
+   "ssim": 0.9204,
+   "psnr": 26.15
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 11,
+   "ssim": 0.613,
+   "psnr": 17.78
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 13,
+   "ssim": 0.4162,
+   "psnr": 15.58
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 28,
+   "dhash": 33,
+   "ssim": 0.2147,
+   "psnr": 10.29
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 16,
+   "dhash": 21,
+   "ssim": 0.2605,
+   "psnr": 12.22
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 28,
+   "dhash": 23,
+   "ssim": 0.2797,
+   "psnr": 10.14
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 36,
+   "dhash": 27,
+   "ssim": 0.3869,
+   "psnr": 11.21
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 26,
+   "dhash": 23,
+   "ssim": 0.018,
+   "psnr": 7.97
+  },
+  {
+   "case": [
+    1,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.7377,
+   "psnr": 26.67
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 10,
+   "dhash": 8,
+   "ssim": 0.8458,
+   "psnr": 22.95
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 6,
+   "dhash": 3,
+   "ssim": 0.732,
+   "psnr": 20.36
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 12,
+   "dhash": 10,
+   "ssim": 0.3896,
+   "psnr": 15.95
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 14,
+   "dhash": 21,
+   "ssim": 0.3265,
+   "psnr": 12.49
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 16,
+   "dhash": 21,
+   "ssim": 0.2605,
+   "psnr": 12.22
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 38,
+   "dhash": 35,
+   "ssim": 0.302,
+   "psnr": 9.64
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 36,
+   "dhash": 28,
+   "ssim": 0.3591,
+   "psnr": 10.9
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 34,
+   "dhash": 28,
+   "ssim": 0.0204,
+   "psnr": 7.8
+  },
+  {
+   "case": [
+    1,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.7174,
+   "psnr": 27.09
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 2,
+   "dhash": 2,
+   "ssim": 0.7818,
+   "psnr": 20.81
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 16,
+   "dhash": 9,
+   "ssim": 0.5018,
+   "psnr": 14.57
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 20,
+   "dhash": 14,
+   "ssim": 0.2804,
+   "psnr": 13.4
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 36,
+   "dhash": 29,
+   "ssim": 0.167,
+   "psnr": 9.96
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 24,
+   "dhash": 21,
+   "ssim": 0.1963,
+   "psnr": 10.68
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 30,
+   "dhash": 25,
+   "ssim": 0.1657,
+   "psnr": 7.53
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 22,
+   "dhash": 30,
+   "ssim": 0.3436,
+   "psnr": 11.63
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 28,
+   "dhash": 29,
+   "ssim": 0.0166,
+   "psnr": 8.1
+  },
+  {
+   "case": [
+    2,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.5683,
+   "psnr": 23.12
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 0,
+   "dhash": 3,
+   "ssim": 0.9202,
+   "psnr": 26.99
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 4,
+   "dhash": 6,
+   "ssim": 0.6169,
+   "psnr": 17.44
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 10,
+   "dhash": 14,
+   "ssim": 0.2944,
+   "psnr": 14.19
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 22,
+   "dhash": 30,
+   "ssim": 0.2472,
+   "psnr": 11.77
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 24,
+   "dhash": 21,
+   "ssim": 0.1963,
+   "psnr": 10.68
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 28,
+   "dhash": 24,
+   "ssim": 0.1728,
+   "psnr": 7.5
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 34,
+   "dhash": 31,
+   "ssim": 0.3948,
+   "psnr": 12.49
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 28,
+   "dhash": 23,
+   "ssim": 0.0211,
+   "psnr": 8.51
+  },
+  {
+   "case": [
+    2,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 0,
+   "ssim": 0.6841,
+   "psnr": 24.28
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 4,
+   "dhash": 8,
+   "ssim": 0.8699,
+   "psnr": 21.5
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 8,
+   "dhash": 9,
+   "ssim": 0.6374,
+   "psnr": 16.9
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 16,
+   "dhash": 14,
+   "ssim": 0.2676,
+   "psnr": 12.63
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 20,
+   "dhash": 22,
+   "ssim": 0.2836,
+   "psnr": 11.53
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 22,
+   "dhash": 16,
+   "ssim": 0.2754,
+   "psnr": 11.23
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 32,
+   "dhash": 32,
+   "ssim": 0.1845,
+   "psnr": 6.54
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 36,
+   "dhash": 33,
+   "ssim": 0.3229,
+   "psnr": 12.6
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 32,
+   "dhash": 37,
+   "ssim": 0.0122,
+   "psnr": 6.87
+  },
+  {
+   "case": [
+    3,
+    42
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 0,
+   "dhash": 1,
+   "ssim": 0.5666,
+   "psnr": 20.06
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "honnête",
+   "what": "vulkan / cuda",
+   "phash": 4,
+   "dhash": 4,
+   "ssim": 0.8675,
+   "psnr": 21.91
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "4 pas au lieu de 8",
+   "phash": 12,
+   "dhash": 11,
+   "ssim": 0.5922,
+   "psnr": 15.42
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "2 pas au lieu de 8",
+   "phash": 20,
+   "dhash": 14,
+   "ssim": 0.2564,
+   "psnr": 12.22
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "calculée en 256 puis agrandie",
+   "phash": 28,
+   "dhash": 20,
+   "ssim": 0.2313,
+   "psnr": 10.63
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre graine",
+   "phash": 22,
+   "dhash": 16,
+   "ssim": 0.2754,
+   "psnr": 11.23
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "autre consigne",
+   "phash": 34,
+   "dhash": 37,
+   "ssim": 0.1904,
+   "psnr": 6.9
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "unie (couleur moyenne)",
+   "phash": 34,
+   "dhash": 35,
+   "ssim": 0.32,
+   "psnr": 12.42
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "bruit",
+   "phash": 32,
+   "dhash": 33,
+   "ssim": 0.0123,
+   "psnr": 6.96
+  },
+  {
+   "case": [
+    3,
+    20261018
+   ],
+   "kind": "tricherie",
+   "what": "floue (réduite à 64 puis agrandie)",
+   "phash": 2,
+   "dhash": 0,
+   "ssim": 0.5766,
+   "psnr": 20.15
+  }
+ ],
+ "content": {
+  "vulkan_0_42": {
+   "std": 74.99,
+   "compression": 0.718,
+   "high_freq": 0.082
+  },
+  "vulkan_0_20261018": {
+   "std": 72.38,
+   "compression": 0.734,
+   "high_freq": 0.086
+  },
+  "vulkan_1_42": {
+   "std": 68.75,
+   "compression": 0.809,
+   "high_freq": 0.063
+  },
+  "vulkan_1_20261018": {
+   "std": 71.2,
+   "compression": 0.828,
+   "high_freq": 0.061
+  },
+  "vulkan_2_42": {
+   "std": 65.68,
+   "compression": 0.85,
+   "high_freq": 0.102
+  },
+  "vulkan_2_20261018": {
+   "std": 58.47,
+   "compression": 0.832,
+   "high_freq": 0.092
+  },
+  "vulkan_3_42": {
+   "std": 50.21,
+   "compression": 0.776,
+   "high_freq": 0.199
+  },
+  "vulkan_3_20261018": {
+   "std": 49.25,
+   "compression": 0.773,
+   "high_freq": 0.202
+  },
+  "cuda_0_42": {
+   "std": 74.81,
+   "compression": 0.718,
+   "high_freq": 0.08
+  },
+  "cuda_0_20261018": {
+   "std": 72.05,
+   "compression": 0.734,
+   "high_freq": 0.088
+  },
+  "cuda_1_42": {
+   "std": 68.35,
+   "compression": 0.816,
+   "high_freq": 0.065
+  },
+  "cuda_1_20261018": {
+   "std": 70.7,
+   "compression": 0.83,
+   "high_freq": 0.062
+  },
+  "cuda_2_42": {
+   "std": 65.72,
+   "compression": 0.848,
+   "high_freq": 0.096
+  },
+  "cuda_2_20261018": {
+   "std": 58.0,
+   "compression": 0.834,
+   "high_freq": 0.092
+  },
+  "cuda_3_42": {
+   "std": 49.84,
+   "compression": 0.773,
+   "high_freq": 0.201
+  },
+  "cuda_3_20261018": {
+   "std": 49.09,
+   "compression": 0.769,
+   "high_freq": 0.203
+  },
+  "cpu_0_42": {
+   "std": 74.14,
+   "compression": 0.725,
+   "high_freq": 0.081
+  },
+  "cpu_0_20261018": {
+   "std": 72.69,
+   "compression": 0.732,
+   "high_freq": 0.089
+  },
+  "unie": {
+   "std": 0.0,
+   "compression": 0.001,
+   "high_freq": 0.0
+  },
+  "bruit": {
+   "std": 22.13,
+   "compression": 0.831,
+   "high_freq": 0.893
+  }
+ }
+}

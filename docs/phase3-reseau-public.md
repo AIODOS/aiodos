@@ -93,11 +93,14 @@ amis, puis le public.
     sûre, ou deux inconnus de réputation différente), comme BOINC ; un désaccord, et ses
     résultats sont jetés ;
   - **une fois connu** : un échantillon recalculé (5 %, puis 1 %), comme pour les amis.
-- **Images** : pas de recalcul possible à bas prix (une image prend 20 s, et deux cartes
-  ne donnent pas exactement les mêmes pixels). Ce qu'on contrôle : la taille, le format,
-  et que l'image n'est pas vide ou bruitée (une mesure simple de contenu). Pour un nouveau
-  venu, une image sur cinq refaite ailleurs et comparée de loin (petite empreinte
-  perceptuelle). À mesurer avant d'en faire une règle.
+- **Images** : mesuré le 18/10 ([phase3-verification-images.md](phase3-verification-images.md)).
+  Le même moteur refait une image au pixel près ; deux moteurs différents (Vulkan et
+  CUDA, ou la carte et le processeur) donnent la même scène, pas les mêmes pixels. D'où :
+  la taille, le format et le contenu toujours (une image unie ou du bruit se voient sans
+  rien recalculer) ; pour un nouveau venu, une image sur cinq refaite ailleurs, égale au
+  pixel près si le moteur est le même, sinon proche (SSIM ≥ 0,60 : honnête ≥ 0,73,
+  tricheries grossières ≤ 0,42). Une image faite en 4 pas au lieu de 8 ne se voit
+  qu'avec le même moteur.
 - **Réputation** : un score par clé, calculé ici (jamais reçu d'ailleurs) : unités
   rendues, unités vérifiées, écarts. Plus il est haut, moins on vérifie ; un écart le
   remet à zéro et met la clé de côté ; plusieurs écarts l'excluent. On peut le préparer
