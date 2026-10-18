@@ -253,9 +253,11 @@ def split_index_conversation(params):
 
 @task("index_conversation")
 def run_index_conversation(payload):
-    """Indexe seulement les nouveaux messages (pas de ré-embedding du début),
-    sauf en reconstruction (payload « rebuild », après un changement de modèle
-    d'embedding) : tous les messages sont recalculés et remplacent les anciens.
+    """Met la mémoire de la conversation à jour, message par message : un message déjà
+    là (même numéro, même premier passage) n'est pas recalculé ; un message retiré
+    (« Régénérer », « Modifier », « Répondre en texte ») perd ses passages, et un numéro
+    repris par SQLite pour un autre message est recalculé. En reconstruction (payload
+    « rebuild », après un changement de modèle d'embedding), tout est recalculé.
     Chaque passage porte l'id du message dans son index : idx = id×1000 + n."""
     conv_id = payload["conversation_id"]
     rebuild = bool(payload.get("rebuild"))
@@ -267,27 +269,37 @@ def run_index_conversation(payload):
     entry = store.entry_by_origin(collection_id, str(conv_id))
     if rebuild and entry is None:
         return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
-    last_message = store.max_chunk_index(entry["id"]) // 1000 if entry and not rebuild else -1
+    known = store.message_starts(entry["id"]) if entry and not rebuild else {}
     messages = db.query("SELECT id, role, content, sources FROM messages "
-                        "WHERE conversation_id=? AND id > ? ORDER BY id", (conv_id, last_message))
-    pieces = []
+                        "WHERE conversation_id=? ORDER BY id", (conv_id,))
+    pieces, kept, changed = [], set(), []
     for m in messages:
         if m["role"] == "assistant" and conversations.cites_others(m["sources"]):
             continue          # appuyée sur des passages d'autres machines : pas en mémoire
         if m["role"] == "assistant" and str(m["content"] or "").startswith(conversations.ERROR_MARK):
             continue          # une erreur, pas une réponse
         who = "Utilisateur" if m["role"] == "user" else "Assistant"
-        for n, piece in enumerate(chunking.chunk_text(f"{who} : {m['content']}")[:999]):
-            pieces.append((m["id"] * 1000 + n, piece))
+        texts = chunking.chunk_text(f"{who} : {m['content']}")[:999]
+        if not texts:
+            continue
+        kept.add(m["id"])
+        if m["id"] in known:
+            if known[m["id"]] == texts[0]:
+                continue                  # déjà en mémoire
+            changed.append(m["id"])       # numéro repris par un autre message
+        pieces.extend((m["id"] * 1000 + n, piece) for n, piece in enumerate(texts))
+    drop = changed + [mid for mid in known if mid not in kept]
     if not pieces:
         if rebuild:                       # plus aucun message : rien à garder en mémoire
             store.remove_by_origin(collection_id, str(conv_id))
+        elif drop:
+            store.drop_message_chunks(collection_id, str(conv_id), drop)
         return {"chunks": 0}
     vectors = pacing.embed([p for _, p in pieces])
     store.append_chunks(collection_id, f"{conv['title']} · #{conv_id}", "conversation",
                         str(conv_id), [(idx, text, vec)
                                        for (idx, text), vec in zip(pieces, vectors)],
-                        replace=rebuild)
+                        replace=rebuild, drop_messages=drop)
     return {"chunks": len(pieces)}
 
 

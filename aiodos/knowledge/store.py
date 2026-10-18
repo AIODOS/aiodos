@@ -192,15 +192,39 @@ def entry_by_origin(collection_id, origin):
     return dict(row) if row else None
 
 
-def max_chunk_index(entry_id) -> int:
-    row = db.query_one("SELECT MAX(idx) AS m FROM chunks WHERE entry_id=?", (entry_id,))
-    return row["m"] if row and row["m"] is not None else -1
+def message_starts(entry_id) -> dict:
+    """{numéro de message : texte de son premier passage} d'une mémoire de conversation
+    (idx = id du message × 1000 + n) : ce qui y est déjà, et pour quel texte."""
+    return {r["idx"] // 1000: r["text"] for r in db.query(
+        "SELECT idx, text FROM chunks WHERE entry_id=? AND idx % 1000 = 0", (entry_id,))}
 
 
-def append_chunks(collection_id, source, kind, origin, chunks_with_idx, replace=False):
+def drop_message_chunks(collection_id, origin, message_ids):
+    """Retire d'une mémoire de conversation les passages de ces messages (retirés de la
+    conversation, ou dont le numéro a été repris) ; une entrée vidée disparaît."""
+    with db.transaction() as c:
+        row = c.execute("SELECT id FROM entries WHERE collection_id=? AND origin=?",
+                        (collection_id, origin)).fetchone()
+        if row is None:
+            return
+        _drop_messages(c, row["id"], message_ids)
+        if c.execute("SELECT 1 FROM chunks WHERE entry_id=? LIMIT 1", (row["id"],)).fetchone() is None:
+            c.execute("DELETE FROM entries WHERE id=?", (row["id"],))
+    search.invalidate()
+
+
+def _drop_messages(c, entry_id, message_ids):
+    for mid in message_ids:
+        c.execute("DELETE FROM chunks WHERE entry_id=? AND idx BETWEEN ? AND ?",
+                  (entry_id, int(mid) * 1000, int(mid) * 1000 + 999))
+
+
+def append_chunks(collection_id, source, kind, origin, chunks_with_idx, replace=False,
+                  drop_messages=()):
     """Ajoute des passages à une entrée retrouvée par son origine (créée au besoin).
     Sert à la mémoire des conversations, indexée message par message.
-    replace=True : les passages déjà là sont d'abord retirés (reconstruction)."""
+    replace=True : les passages déjà là sont d'abord retirés (reconstruction) ;
+    drop_messages : ceux de ces messages aussi (cf. drop_message_chunks)."""
     with db.transaction() as c:
         row = c.execute("SELECT id FROM entries WHERE collection_id=? AND origin=?",
                         (collection_id, origin)).fetchone()
@@ -214,6 +238,7 @@ def append_chunks(collection_id, source, kind, origin, chunks_with_idx, replace=
             c.execute("UPDATE entries SET source=? WHERE id=?", (source, entry_id))
             if replace:
                 c.execute("DELETE FROM chunks WHERE entry_id=?", (entry_id,))
+            _drop_messages(c, entry_id, drop_messages)
         # Deux mises à jour de la même mémoire à la fois : la seconde ne double rien (la
         # transaction les fait passer l'une après l'autre)
         present = {r["idx"] for r in c.execute("SELECT idx FROM chunks WHERE entry_id=?",

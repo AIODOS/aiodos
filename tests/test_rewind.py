@@ -85,3 +85,36 @@ def test_regenerate_through_the_api(talk, monkeypatch):
     assert said == ["Quelle est la capitale du Portugal ?", "Lisbonne.", "Et sa population ?"]
     assert [m["content"] for m in conversations.get(conv)["messages"]][-2:] == [
         "Et sa population ?", "Plutôt 545 000."]
+
+
+# ------------------------------------------------- mémoire : numéros repris
+def test_a_number_taken_again_is_remembered_with_its_new_text(talk):
+    """Une mise à jour de la mémoire partie avant « Régénérer » finit après : elle remet
+    les passages de l'ancienne réponse, sous des numéros que SQLite redonne aux nouveaux
+    messages. La mise à jour suivante les remplace."""
+    conv, ids = talk
+    memory = store.conversation_collection_id()
+    conversations.rewind(conv, ids[2])
+    store.append_chunks(memory, "Essai", "conversation", str(conv),
+                        [(ids[2] * 1000, "Utilisateur : Et sa population ?", [1.0] * 64),
+                         (ids[3] * 1000, "Assistant : Environ 550 000 habitants.", [1.0] * 64)])
+    again = [conversations.add_message(conv, "user", "Et sa superficie ?"),
+             conversations.add_message(conv, "assistant", "Cent kilomètres carrés.")]
+    assert again == ids[2:]                         # SQLite reprend les numéros
+    index.run_index_conversation({"conversation_id": conv})
+    text = " ".join(_memory(conv))
+    assert "superficie" in text and "Cent kilomètres" in text
+    assert "population" not in text and "550" not in text
+
+
+def test_removed_messages_leave_the_memory_and_nothing_is_computed_twice(talk, monkeypatch):
+    conv, ids = talk
+    computed = []
+    real = index.pacing.embed
+    monkeypatch.setattr(index.pacing, "embed", lambda texts, **k: computed.extend(texts)
+                        or real(texts, **k))
+    assert index.run_index_conversation({"conversation_id": conv}) == {"chunks": 0}
+    assert computed == []                           # rien de changé, rien recalculé
+    conversations.remove_messages(conv, ids[2:])     # « Répondre en texte », par exemple
+    assert index.run_index_conversation({"conversation_id": conv}) == {"chunks": 0}
+    assert "population" not in " ".join(_memory(conv)) and "Lisbonne" in " ".join(_memory(conv))
