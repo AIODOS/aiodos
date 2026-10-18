@@ -17,7 +17,8 @@ from aiodos.imaging import gallery
 
 SIZES = (384, 768)
 QUALITY = 82
-_lock = threading.Lock()
+_guard = threading.Lock()
+_making = {}                      # vignette en cours → son verrou (plusieurs à la fois)
 
 
 def folder() -> Path:
@@ -44,19 +45,24 @@ def thumbnail(row: dict, wanted: int) -> Path | None:
     if target.is_file():
         return target
     from PIL import Image, UnidentifiedImageError
-    with _lock:                      # deux tuiles qui demandent la même : faite une fois
-        if target.is_file():
-            return target
+    with _guard:
+        lock = _making.setdefault(target.name, threading.Lock())
+    with lock:                       # deux demandes de la même vignette : faite une fois
         try:
+            if target.is_file():
+                return target
             with Image.open(gallery.path_of(row)) as image:
                 image = image.convert("RGB")
                 image.thumbnail((size, size), Image.LANCZOS)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                part = target.with_name(target.name + ".part")
+                part = target.with_name(f"{target.name}.{threading.get_ident()}.part")
                 image.save(part, "WEBP", quality=QUALITY, method=4)
             os.replace(part, target)
         except (OSError, UnidentifiedImageError, ValueError):
             return None
+        finally:
+            with _guard:
+                _making.pop(target.name, None)
     return target
 
 
