@@ -47,6 +47,8 @@ export function mountCreate(footer, input, grow) {
   box.before(ui.bar);
   ui.button.onclick = () => menu(ui.button, Object.entries(KINDS).map(([kind, k]) => ({
     label: `Créer une ${k.noun}`, icon: k.icon, action: () => setMode(kind) })));
+  // Les modèles se chargent dès que le pointeur approche du bouton : la barre est prête au clic
+  ui.button.addEventListener('pointerenter', () => { if (!info) load(); }, { once: true });
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   field('close').onclick = () => setMode(null);
   field('model').onchange = () => { prefs.set(`create.model.${mode}`, field('model').value); fill(); };
