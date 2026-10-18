@@ -75,7 +75,7 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
         payload["options"] = options
     if stats:
         payload["stats"] = True
-    with activity.chat("by", node_id):               # « répond à ta conversation »
+    with activity.chat("by", node_id, stop):         # « répond à ta conversation »
         for frame in client.stream(identity.node_id(), peer, "chat", payload, stop=stop):
             for kind in ("thinking", "content"):
                 if frame.get(kind):

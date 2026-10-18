@@ -43,6 +43,10 @@ from aiodos.services import extract
 
 log = logging.getLogger("aiodos.worker")
 
+
+class _NotForFriends(Exception):
+    """Un ordre d'une tâche réservée à mes machines, reçu d'un ami sans mon accord."""
+
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
 # Délai d'une demande de travail. Sur le réseau local, une réponse vient en moins d'une
@@ -276,9 +280,13 @@ class Worker:
         full = peers.get(peer["node_id"])
         if not full:
             return None
+        caps = self.capabilities()
+        if sharing.level(peer["node_id"]) != sharing.MINE and caps.get("images") \
+                and not settings.get("lend_images_friends"):
+            caps = {k: v for k, v in caps.items() if k != "images"}   # pas sans mon accord
         try:
             reply = client.call(self.m.node_id, full, "work/lease",
-                                {"resources": offered, "caps": self.capabilities()},
+                                {"resources": offered, "caps": caps},
                                 timeout=LEASE_TIMEOUT)
         except PeerError as exc:
             self._note(peer, f"demande de travail impossible ({exc})")
@@ -345,8 +353,9 @@ class Worker:
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
                 raise RuntimeError(f"tâche « {a.order['task']} » inconnue sur cette machine")
-            if sharing.level(a.peer_id) != sharing.MINE                     and not registry.may_compute_for_friend(spec):
-                raise RuntimeError("tâche réservée à mes machines")
+            if sharing.level(a.peer_id) != sharing.MINE \
+                    and not registry.may_compute_for_friend(spec):
+                raise _NotForFriends()
             file = self._download(a, folder) if a.order.get("blob") else None
             output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
@@ -360,6 +369,9 @@ class Worker:
         except registry.Interrupted:
             self._quiet(a, "work/release")
             return "interrompue et rendue"
+        except _NotForFriends:
+            self._quiet(a, "work/release")
+            return "réservée à mes machines : rendue"
         except PeerError as exc:
             return f"propriétaire injoignable ({exc})"
         except Exception as exc:

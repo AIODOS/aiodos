@@ -146,6 +146,12 @@ def create_p2p_app(manager) -> FastAPI:
                 put(("end", None))
             except Exception as exc:
                 put(("error", str(exc)[:300]))
+            finally:
+                # Arrêtée en route : la réponse se ferme tout de suite (sa place dans la file
+                # des conversations prêtées est rendue), sans attendre le ramasse-miettes
+                close = getattr(chunks, "close", None)
+                if close is not None:
+                    close()
 
         async def frames():
             threading.Thread(target=pump, daemon=True, name=f"aiodos-flux-{action}").start()

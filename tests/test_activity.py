@@ -133,3 +133,16 @@ def test_an_interrupted_answer_is_not_counted(owner, monkeypatch):
     answer.close()                                   # arrêtée par l'utilisateur
     assert _live()[B]["chats_for_me"] == 0
     assert _ledger(B) == (0, 0)
+
+
+def test_a_chat_stopped_on_the_way_is_not_counted():
+    import threading
+    from aiodos.network import activity, peers
+    peers.save("arretee", "Arrêtée", b"s" * 32, "127.0.0.1", 9, trust="friend")
+    stop = threading.Event()
+    with activity.chat("for", "arretee", stop):
+        stop.set()                                                   # bouton Stop, machine partie
+    with activity.chat("by", "arretee"):
+        pass
+    row = next(p for p in peers.list_peers() if p["node_id"] == "arretee")
+    assert (row["given_chats"], row["received_chats"]) == (0, 1)

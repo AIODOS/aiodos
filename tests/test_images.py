@@ -185,6 +185,8 @@ def test_a_friend_gets_images_only_if_the_owner_allows_it(tiny_model, monkeypatc
     ask = lambda: work.lease(_Manager(), FRIEND, {"resources": ["gpu"], "caps": caps})
     assert ask()["unit"] is None                                       # par défaut : non
     settings.set_value("images_from_friends", True)
+    assert ask()["unit"] is None                         # l'ami ne propose pas sa carte
+    peers.set_profile(FRIEND, {"images": {"engine": "f0aac52", "shares": True}})
     order = ask()["unit"]
     assert order["task"] == "generate_image"
     assert set(order["payload"]) <= {"model", "prompt", "negative", "width", "height", "steps",
@@ -707,7 +709,7 @@ def test_an_image_order_from_a_friend_is_refused(tiny_model, monkeypatch):
              "options": {}, "blob": None}
     outcome = w._process(worker_module.Assignment(FRIEND, "PC d'un ami", order))
     assert "réservée à mes machines" in outcome
-    assert sent and sent[0][0] == "work/fail"
+    assert sent and sent[0][0] == "work/release"           # rendue, pas un échec qui lui serait imputé
     # Avec le réglage « Prêter ma carte graphique à mes amis pour les images », calculée
     settings.set_value("lend_images_friends", True)
     monkeypatch.setattr(worker_module.Worker, "_send_result",
@@ -845,3 +847,25 @@ def test_a_video_does_not_start_from_an_image(tiny_video, tmp_path):
     start.write_bytes(png(832, 480))
     with pytest.raises(ValueError, match="vidéo"):
         kind.normalize({"model": "video", "prompt": "x", "init_path": str(start)})
+
+
+def test_a_friend_only_gets_what_this_machine_cannot_compute(tiny_model, monkeypatch, tmp_path):
+    """Le réglage le promet : un ami calcule mes images quand cette machine ne le peut pas ;
+    et l'image de départ d'une retouche ne part pas chez lui (la description seulement)."""
+    monkeypatch.setattr(work.ollama, "list_models", lambda max_age=10: [])
+    peers.save(FRIEND, "PC d'un ami", b"a" * 32, "127.0.0.1", 2, trust="friend")
+    peers.set_profile(FRIEND, {"images": {"engine": "f0aac52", "shares": True}})
+    settings.set_value("images_from_friends", True)
+    start = tmp_path / "depart.png"
+    start.write_bytes(png(256, 384))
+    queue.create_job("generate_images", kind.normalize({"model": "essai", "prompt": "un chat",
+                                                        "init_path": str(start)}))
+    caps = {"work_api": work.WORK_API, "images": {"engine": "f0aac52", "files": catalog.hashes("essai"),
+                                                  "img2img": True}}
+    ask = lambda: work.lease(_Manager(), FRIEND, {"resources": ["gpu"], "caps": caps})["unit"]
+    ready()
+    monkeypatch.setattr(engine, "folder", lambda: tiny_model["folder"])    # calculable ici
+    assert ask() is None
+    monkeypatch.setattr(engine, "folder", lambda: None)                     # plus ici
+    order = ask()
+    assert order is not None and order["blob"] is None and "strength" not in order["payload"]

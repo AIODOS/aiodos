@@ -188,6 +188,7 @@ def run(start, on_closed, quit_on_error: bool = False):
             url = start()
         except Exception as exc:
             log.exception("Démarrage du nœud impossible")
+            _state["quitting"] = True             # la croix ferme vraiment, sans repli
             if quit_on_error:
                 close()
             else:

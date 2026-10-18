@@ -139,6 +139,11 @@ class NodeError(Exception):
     pass
 
 
+class StartCancelled(NodeError):
+    """La fenêtre a été fermée pendant le démarrage : ce n'est pas un échec (une nouvelle
+    version à l'essai n'est pas écartée pour autant)."""
+
+
 class _Node:
     """Le nœud : la base, l'application et le serveur local de l'interface et de l'API.
     Avec une fenêtre, il démarre hors du fil graphique : elle s'ouvre aussitôt sur un écran
@@ -151,6 +156,7 @@ class _Node:
         self.ui_file = None
         self.failed = False
         self.done = threading.Event()              # démarrage fini, réussi ou non
+        self.cancelled = threading.Event()         # fenêtre fermée pendant le démarrage
 
     def start(self) -> str:
         """Démarre tout et rend l'adresse de l'interface (jeton compris) ; NodeError si le
@@ -163,11 +169,13 @@ class _Node:
             from aiodos.knowledge import store
 
             args, port = self.args, self.port
+            self._go_on()
             db.connect()
             store.ensure_defaults()
             migrated = None if args.no_migrate else migrate_legacy.run_if_needed()
             if migrated:
                 log.info("Import v1 : %s", migrated)
+            self._go_on()
             app = create_app(self.token, {f"127.0.0.1:{port}", f"localhost:{port}"}, {
                 "force": args.network, "host": args.p2p_host, "port": args.p2p_port,
                 "discovery": not args.no_discovery,
@@ -184,9 +192,12 @@ class _Node:
                                            name="aiodos-node")
             self.thread.start()
             deadline = time.monotonic() + 20
-            while not self.server.started and self.thread.is_alive()                     and time.monotonic() < deadline:
+            while not self.server.started and self.thread.is_alive() \
+                    and time.monotonic() < deadline and not self.cancelled.is_set():
                 time.sleep(0.05)
+            self._go_on()
             if not self.server.started:
+                self.server.should_exit = True     # il démarrerait sinon derrière l'erreur
                 raise NodeError("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
             launcher.confirm_when_healthy(self.alive)
             _protect_secrets_later(self.alive)
@@ -195,17 +206,27 @@ class _Node:
             if args.ui_file:
                 self.ui_file = _write_ui_file(args.ui_file, url)
             return url
+        except StartCancelled:
+            raise
         except Exception:
             self.failed = True
             raise
         finally:
             self.done.set()
 
+    def _go_on(self):
+        """Fenêtre fermée pendant le démarrage : on s'arrête là."""
+        if self.cancelled.is_set():
+            if self.server is not None:
+                self.server.should_exit = True
+            raise StartCancelled("Démarrage abandonné : la fenêtre a été fermée.")
+
     def alive(self) -> bool:
         return (self.thread is not None and self.thread.is_alive()
                 and not self.server.should_exit)
 
     def stop_soon(self):
+        self.cancelled.set()                       # pendant le démarrage : il s'interrompt
         if self.server is not None:
             self.server.should_exit = True
 
@@ -271,8 +292,8 @@ def _serve(args) -> int:
             restart.on_request(window.close)
             window.run(node.start, on_closed=node.stop_soon,
                        quit_on_error=os.environ.get(launcher.TRIAL_ENV) == "1")
-        node.stop()
     finally:
+        node.stop()                               # même après une erreur : le port est rendu
         instance.release()
     if node.failed:
         return 1

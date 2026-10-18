@@ -15,6 +15,7 @@ les bibliothèques partageables, sous des noms neutres, et ce qu'il rend est con
 Appelées dans un thread par le serveur réseau (cf. p2p_app.HANDLERS).
 """
 import hashlib
+import json
 import logging
 import os
 from pathlib import Path
@@ -111,6 +112,7 @@ def lease(manager, sender, payload):
                 "reason": f"« {manager.name()} » ne te confie plus rien : {aside}. Cela se "
                           "rétablit dans sa vue Réseau."}
     friend = sharing.is_friend(sender)
+    offers = friend and _offers_images(sender)
     shareable = store.shareable_ids() if friend else set()
     local_only = store.local_only_ids()
     max_blob = _max_blob(sender)
@@ -124,6 +126,11 @@ def lease(manager, sender, payload):
             return False
         if friend and not registry.friends_may_take(spec):
             return False                  # images : chez un ami seulement si je l'accepte
+        if friend and spec.mine_only:
+            if not offers:
+                return False              # ... et s'il les propose (son profil le dit)
+            if spec.here is not None and spec.here(unit["payload"].get("model")):
+                return False              # ... pour ce que cette machine ne calcule pas
         collection = unit["payload"].get("collection_id")
         if collection is not None:
             if collection in local_only or (friend and collection not in shareable):
@@ -156,6 +163,18 @@ def lease(manager, sender, payload):
     return _order(manager, sender, unit, options, friend, caps, max_blob)
 
 
+def _offers_images(node_id) -> bool:
+    """Cet ami prête-t-il sa carte pour les images ? Son profil, tel qu'il me le montre, ne
+    contient « images » qu'alors (sharing.profile_for, chez lui)."""
+    peer = peers.get(node_id) or {}
+    try:
+        profile = json.loads(peer.get("profile") or "null") or {}
+    except ValueError:
+        return False
+    images = profile.get("images") if isinstance(profile, dict) else None
+    return isinstance(images, dict) and bool(images.get("engine")) and bool(images.get("shares"))
+
+
 def _fits(unit, spec, max_blob) -> bool:
     """Le fichier de l'unité (s'il y en a un) n'est pas trop gros pour cette machine."""
     if spec.file_optional is not None:
@@ -177,7 +196,7 @@ def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB)
     if spec.file_key and unit["payload"].get(spec.file_key):
         path = Path(unit["payload"][spec.file_key])
         try:
-            if spec.file_optional is not None and (not spec.file_optional(caps or {})
+            if spec.file_optional is not None and (friend or not spec.file_optional(caps or {})
                                                    or path.stat().st_size > max_blob):
                 raise OSError("fichier facultatif gardé ici")
             order["blob"] = {"name": path.name, "size": path.stat().st_size,

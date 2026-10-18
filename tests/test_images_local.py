@@ -75,3 +75,29 @@ def test_aiodos_own_folder_is_not_a_source(comfy, tiny_model):
     assert all(os.path.normcase(str(f.resolve())) != os.path.normcase(str(tiny_model["folder"].resolve()))
                for f, _ in local_copies.folders())
     assert catalog.state("essai")["state"] == "missing"
+
+
+def test_a_different_copy_is_hashed_once_and_no_longer_offered(comfy, tiny_model, monkeypatch):
+    spec = tiny_model["files"]["vae"]
+    _put(comfy / "vae", spec["name"], b"x" * spec["size"])          # même nom, même taille
+    assert [f["name"] for f in local_copies.available("essai")] == [spec["name"]]
+    hashed = []
+    real = catalog.sha256_of
+    monkeypatch.setattr(catalog, "sha256_of", lambda path, stop=None: hashed.append(path) or real(path, stop))
+    target = tiny_model["folder"] / spec["name"]
+    assert local_copies.bring(spec, target) is None and not target.exists()
+    assert local_copies.bring(spec, target) is None and len(hashed) == 1   # pas rehachée
+    assert local_copies.available("essai") == []                            # plus proposée
+
+
+def test_an_unreadable_copy_lets_the_download_go_on(comfy, tiny_model, monkeypatch):
+    spec = tiny_model["files"]["vae"]
+    _put(comfy / "vae", spec["name"], tiny_model["contents"][spec["name"]])
+
+    def locked(*args, **kwargs):
+        raise PermissionError("fichier verrouillé")
+    monkeypatch.setattr(local_copies.os, "link", locked)
+    monkeypatch.setattr(local_copies, "_copy", locked)
+    target = tiny_model["folder"] / spec["name"]
+    assert local_copies.bring(spec, target) is None                  # pas d'exception
+    assert not target.with_name(target.name + ".part").exists()

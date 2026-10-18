@@ -52,9 +52,10 @@ def forget(node_id: str):
 
 
 @contextmanager
-def chat(direction: str, node_id: str):
+def chat(direction: str, node_id: str, stop=None):
     """Le temps d'une conversation servie pour cette machine (« for ») ou par elle (« by ») ;
-    une réponse menée à son terme s'ajoute au compte des échanges (peers.account)."""
+    une réponse menée à son terme s'ajoute au compte des échanges (peers.account). Arrêtée
+    en route (stop levé : bouton Stop, machine partie), elle ne compte pas."""
     with _lock:
         _chats[direction][node_id] += 1
     try:
@@ -65,6 +66,8 @@ def chat(direction: str, node_id: str):
             if _chats[direction][node_id] <= 0:
                 del _chats[direction][node_id]
     # Seulement sans erreur ni interruption (une exception ne passe pas par ici)
+    if stop is not None and stop.is_set():
+        return
     if direction == "for":
         peers.account(node_id, given_chats=1)
     else:

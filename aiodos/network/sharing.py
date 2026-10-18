@@ -61,7 +61,9 @@ def order_for_friend(order: dict, spec, unit: dict) -> dict:
     """L'ordre de calcul tel qu'un ami le reçoit : du payload, les seules clés que la
     tâche déclare nécessaires chez lui (spec.shared_keys), et le fichier sous un nom
     neutre (repris comme « source » pour ses messages d'erreur)."""
-    payload = {k: v for k, v in unit["payload"].items() if k in spec.shared_keys}
+    # Depuis l'ordre (et non l'unité) : ce que l'ordre a retiré (un fichier facultatif gardé
+    # ici, et ses clés) ne revient pas
+    payload = {k: v for k, v in order["payload"].items() if k in spec.shared_keys}
     reduced = dict(order, payload=payload)
     if order.get("blob"):
         neutral = neutral_name(unit["id"], order["blob"]["name"])

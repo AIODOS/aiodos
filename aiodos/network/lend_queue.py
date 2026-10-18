@@ -1,11 +1,17 @@
 """File d'attente des conversations que mes modèles servent pour d'autres machines
 (lending.py) : une à la fois, la carte graphique n'en répond qu'une ; quand plusieurs
-attendent, celle de la machine qui m'a le plus donné passe d'abord, puis la plus ancienne.
+attendent, celles de mes machines passent d'abord, puis celle de la machine qui m'a le plus
+donné, puis la plus ancienne.
 
 Réciprocité souple (décision de l'auteur, 18/10/2026) : personne n'est refusé, ceux qui
 participent passent devant. Ce qu'une machine m'a donné se lit dans le compte des échanges
 (peers.account) : son temps de calcul pour moi et les conversations auxquelles ses modèles
-ont répondu pour moi, moins ce que je lui ai donné.
+ont répondu pour moi, moins ce que je lui ai donné. Le solde compté est borné (BALANCE_CAP) :
+un gros contributeur passe devant, sans pouvoir écarter les autres indéfiniment.
+
+Une conversation qui attend reçoit un signe de vie toutes les quelques secondes (wait,
+tick) : la machine qui la demande peut partir (Cancelled ici), et l'attente se termine en
+« occupée » (Busy, MAX_WAIT_S) avant que sa propre patience (10 minutes) ne s'épuise.
 """
 import heapq
 import itertools
@@ -13,15 +19,16 @@ import threading
 import time
 from contextlib import contextmanager
 
-from aiodos.network import peers
+from aiodos.network import peers, sharing
 
 CHAT_AS_SECONDS = 30            # une conversation servie compte comme 30 s de calcul
-MAX_WAIT_S = 600
+BALANCE_CAP = 1800              # solde compté, au plus, dans un sens comme dans l'autre
+MAX_WAIT_S = 540                # avant les 600 s d'attente de lecture de la machine qui demande
 AT_ONCE = 1
 
 _cond = threading.Condition()
 _serving = 0
-_waiting = []                   # tas de (-solde, rang d'arrivée, jeton)
+_waiting = []                   # tas de (clé, rang d'arrivée, ticket)
 _order = itertools.count()
 
 
@@ -33,6 +40,11 @@ class Cancelled(Exception):
     pass
 
 
+class Ticket:
+    """Une place dans la file (enter), servie (wait), puis rendue (leave)."""
+    __slots__ = ("entry", "deadline", "serving")
+
+
 def balance(node_id: str) -> float:
     """Ce que cette machine m'a donné, moins ce que je lui ai donné (en secondes de calcul)."""
     row = next((p for p in peers.list_peers() if p["node_id"] == node_id), None) or {}
@@ -41,39 +53,91 @@ def balance(node_id: str) -> float:
     return float(gave_me - got)
 
 
+def _key(node_id: str) -> tuple:
+    """Mes machines d'abord (la réciprocité vaut entre amis), puis le solde, borné."""
+    clamped = max(-BALANCE_CAP, min(BALANCE_CAP, balance(node_id)))
+    return (0 if sharing.level(node_id) == sharing.MINE else 1, -clamped)
+
+
 def waiting() -> int:
     with _cond:
         return len(_waiting)
+
+
+def enter(node_id: str, max_wait: float = MAX_WAIT_S) -> Ticket:
+    ticket = Ticket()
+    ticket.entry = (_key(node_id), next(_order), ticket)
+    ticket.deadline = time.monotonic() + max_wait
+    ticket.serving = False
+    with _cond:
+        heapq.heappush(_waiting, ticket.entry)
+    return ticket
+
+
+def _drop(ticket: Ticket):
+    """Retire de la file une place qui n'est pas servie (sous _cond)."""
+    try:
+        _waiting.remove(ticket.entry)
+        heapq.heapify(_waiting)
+    except ValueError:
+        pass
+    _cond.notify_all()
+
+
+def wait(ticket: Ticket, stop=None, tick: float | None = None) -> bool:
+    """Attend son tour : True quand il est venu (la place est prise) ; False au bout de
+    `tick` secondes sans y être (le temps d'un signe de vie). Busy si l'attente dépasse le
+    délai, Cancelled si la machine est partie (stop) : la place est alors rendue."""
+    global _serving
+    end = None if tick is None else time.monotonic() + tick
+    with _cond:
+        while not (_serving < AT_ONCE and _waiting and _waiting[0][2] is ticket):
+            if stop is not None and stop.is_set():
+                _drop(ticket)
+                raise Cancelled()
+            now = time.monotonic()
+            remaining = ticket.deadline - now
+            if remaining <= 0:
+                _drop(ticket)
+                raise Busy()
+            if end is not None and now >= end:
+                return False
+            _cond.wait(timeout=min(1.0, remaining, end - now if end is not None else 1.0))
+        heapq.heappop(_waiting)
+        _serving += 1
+        ticket.serving = True
+        return True
+
+
+def position(ticket: Ticket) -> int:
+    """Combien passent avant elle (0 : la prochaine)."""
+    with _cond:
+        ahead = sorted(_waiting)
+        try:
+            return ahead.index(ticket.entry)
+        except ValueError:
+            return 0
+
+
+def leave(ticket: Ticket):
+    """Rend la place, servie ou non (toujours appelé, même après une erreur)."""
+    global _serving
+    with _cond:
+        if ticket.serving:
+            ticket.serving = False
+            _serving -= 1
+            _cond.notify_all()
+        else:
+            _drop(ticket)
 
 
 @contextmanager
 def turn(node_id: str, stop=None, max_wait: float = MAX_WAIT_S):
     """Le temps de servir une conversation de cette machine, à son tour. Busy si l'attente
     dépasse max_wait, Cancelled si elle a abandonné (stop)."""
-    global _serving
-    ticket = object()
-    entry = (-balance(node_id), next(_order), ticket)
-    deadline = time.monotonic() + max_wait
-    with _cond:
-        heapq.heappush(_waiting, entry)
-        try:
-            while not (_serving < AT_ONCE and _waiting[0][2] is ticket):
-                if stop is not None and stop.is_set():
-                    raise Cancelled()
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise Busy()
-                _cond.wait(timeout=min(1.0, remaining))
-        except BaseException:
-            _waiting.remove(entry)
-            heapq.heapify(_waiting)
-            _cond.notify_all()
-            raise
-        heapq.heappop(_waiting)
-        _serving += 1
+    ticket = enter(node_id, max_wait)
     try:
+        wait(ticket, stop)
         yield
     finally:
-        with _cond:
-            _serving -= 1
-            _cond.notify_all()
+        leave(ticket)
