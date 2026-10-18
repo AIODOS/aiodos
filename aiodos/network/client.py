@@ -122,7 +122,7 @@ def call(my_id, peer: dict, action: str, payload: dict, key: bytes = None,
 
 
 def stream(my_id, peer: dict, action: str, payload: dict, stop=None, connect_timeout=5,
-           read_timeout=600):
+           read_timeout=180):
     """Requête scellée dont la réponse arrive en flux (une conversation…) : génère
     les morceaux un à un. stop (threading.Event) coupe la connexion, ce qui arrête
     le calcul chez l'autre machine. Flux tronqué ou altéré : PeerError."""

@@ -5,6 +5,7 @@ from aiodos import db
 from aiodos.knowledge import store
 
 DEFAULT_TITLE = "Nouvelle conversation"
+ERROR_MARK = "⚠ "                 # une réponse qui n'est qu'une erreur : montrée, jamais réutilisée
 # À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
 # doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
 WITHHELD = ("(Réponse appuyée sur des passages trouvés chez d'autres machines : "
@@ -180,24 +181,53 @@ def cites_others(sources) -> bool:
 def history(conv_id, limit=30, with_others=True) -> list:
     """Derniers échanges, dans l'ordre, au format attendu par les modèles. with_others=False :
     une réponse appuyée sur des passages d'autres machines est remplacée par WITHHELD."""
+    return as_history(history_rows(conv_id, limit),
+                      None if with_others else (lambda sources: not cites_others(sources)))
+
+
+def history_rows(conv_id, limit=30) -> list:
+    """Les derniers messages, dans l'ordre, avec leurs sources (lus avant d'ajouter la
+    question : routes/chat.py en tire l'historique de chaque machine qui peut répondre)."""
     rows = db.query("SELECT role, content, sources FROM messages WHERE conversation_id=? "
                     "ORDER BY id DESC LIMIT ?", (conv_id, limit))
-    return [{"role": r["role"],
-             "content": WITHHELD if not with_others and r["role"] == "assistant"
-             and cites_others(r["sources"]) else r["content"]}
-            for r in reversed(rows)]
+    return [dict(r) for r in reversed(rows)]
+
+
+def as_history(rows, keep=None) -> list:
+    """Messages au format des modèles. keep(sources) faux : la réponse est remplacée par
+    WITHHELD (elle s'appuie sur ce que cette machine ne doit pas recevoir). Les réponses
+    qui ne sont qu'une erreur n'y vont pas."""
+    found = []
+    for r in rows:
+        if r["role"] == "assistant":
+            if str(r["content"] or "").startswith(ERROR_MARK):
+                continue
+            if keep is not None and not keep(_sources(r["sources"])):
+                found.append({"role": "assistant", "content": WITHHELD})
+                continue
+        found.append({"role": r["role"], "content": r["content"]})
+    return found
+
+
+def _sources(sources) -> list:
+    if isinstance(sources, str):
+        try:
+            sources = json.loads(sources or "[]")
+        except ValueError:
+            return []
+    return [s for s in sources or [] if isinstance(s, dict)]
 
 
 def auto_title(conv_id, text) -> str | None:
     """Donne un titre à une conversation neuve à partir du premier message."""
-    row = db.query_one("SELECT title FROM conversations WHERE id=?", (conv_id,))
-    if row is None or row["title"] != DEFAULT_TITLE:
-        return None
     line = " ".join((text or "").split())
     title = (line[:60] + "…") if len(line) > 60 else line
-    if title:
-        db.execute("UPDATE conversations SET title=? WHERE id=?", (title, conv_id))
-    return title
+    if not title:
+        return None
+    # D'un seul geste : deux messages à la fois ne se disputent pas le titre
+    changed = db.execute("UPDATE conversations SET title=? WHERE id=? AND title=?",
+                         (title, conv_id, DEFAULT_TITLE)).rowcount
+    return title if changed else None
 
 
 # --------------------------------------------------------------------- dossiers

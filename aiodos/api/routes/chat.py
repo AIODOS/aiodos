@@ -20,8 +20,7 @@ from pydantic import BaseModel
 from aiodos import render, settings
 from aiodos.api.events import sse
 from aiodos.chat import conversations, pipeline
-from aiodos.jobs import queue
-from aiodos.jobs.models import BACKGROUND
+from aiodos.jobs.kinds import index
 from aiodos.network import placement
 from aiodos.services import cloud
 
@@ -93,8 +92,9 @@ async def chat(body: ChatIn, request: Request):
     allowed = {m: await asyncio.to_thread(pipeline.peers_allowed, m) for m in plan}
     if body.peer_libraries:
         plan.sort(key=lambda m: not allowed[m])
-    histories = {ok: await asyncio.to_thread(conversations.history, conv_id, 30, ok)
-                 for ok in set(allowed.values())}
+    # L'historique, lu avant d'ajouter la question ; chaque machine qui peut répondre n'en
+    # reçoit que ce qu'elle peut recevoir (pipeline.history_filter)
+    rows = await asyncio.to_thread(conversations.history_rows, conv_id, 30)
     user_message_id = await asyncio.to_thread(conversations.add_message, conv_id, "user", text)
     title = await asyncio.to_thread(conversations.auto_title, conv_id, text)
     if title:
@@ -112,19 +112,26 @@ async def chat(body: ChatIn, request: Request):
         def put(item):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
-            web = pipeline.web_context(text) if body.web else None
+            # Arrêtée pendant la préparation (recherche web, bibliothèques des autres) : rien
+            # ne part ensuite, ni au cloud, ni à une autre machine
+            web = pipeline.web_context(text) if body.web and not stop.is_set() else None
             built = {}                    # messages selon la machine qui répond
 
             def attempt(model):
+                if stop.is_set():
+                    return
                 level = placement.destination(model)
                 ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
                 if (level, ok) not in built:
+                    history = conversations.as_history(rows, pipeline.history_filter(level, ok))
                     built[level, ok] = pipeline.build_messages(
-                        histories[ok], text, libraries=libraries, conversations=memory,
+                        history, text, libraries=libraries, conversations=memory,
                         web_search=body.web, conversation_id=conv_id, destination=level,
                         web=web, peers=body.peer_libraries if ok else None)
                 messages, sources = built[level, ok]
                 yield "sources", sources
+                if stop.is_set():
+                    return
                 yield from pipeline.generate(model, messages, think, stop)
 
             for kind, piece in placement.run(plan, attempt, executor, stop):
@@ -138,27 +145,30 @@ async def chat(body: ChatIn, request: Request):
 
     state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None,
              "model": plan[0]}
+    saving = threading.Lock()
 
     def save():
-        """Enregistre la réponse (même partielle). Appelé une seule fois."""
-        if state["saved"] is not None:
+        """Enregistre la réponse (même partielle), une seule fois : la fin normale et
+        l'interruption (client parti pendant l'enregistrement) ne la doublent pas."""
+        with saving:
+            if state["saved"] is not None:
+                return state["saved"]
+            content = state["content"]
+            if state["error"] and not content:
+                content = f"{conversations.ERROR_MARK}{state['error']}"
+            if not content and not state["thinking"]:
+                state["saved"] = 0
+                return 0
+            state["saved"] = conversations.add_message(
+                conv_id, "assistant", content, state["thinking"] or None,
+                state["model"], state["sources"], conversation_model=body.model)
+            if memory and not content.startswith(conversations.ERROR_MARK):
+                job_id = index.queue_conversation(conv_id)
+                if job_id is not None:
+                    executor.wake()
+                    executor.publish_job(job_id, force=True)
+            bus.publish({"type": "conversations"})
             return state["saved"]
-        content = state["content"]
-        if state["error"] and not content:
-            content = f"⚠ {state['error']}"
-        if not content and not state["thinking"]:
-            state["saved"] = 0
-            return 0
-        state["saved"] = conversations.add_message(
-            conv_id, "assistant", content, state["thinking"] or None,
-            state["model"], state["sources"], conversation_model=body.model)
-        if memory:
-            job_id = queue.create_job("index_conversation", {"conversation_id": conv_id},
-                                      priority=BACKGROUND)
-            executor.wake()
-            executor.publish_job(job_id, force=True)
-        bus.publish({"type": "conversations"})
-        return state["saved"]
 
     async def events():
         # L'interactif d'abord : placement.run suspend les unités GPU de fond le temps
@@ -183,7 +193,11 @@ async def chat(body: ChatIn, request: Request):
                     yield sse({"type": "thinking", "text": data})
                 elif kind == "content":
                     state["content"] += data
-                    if time.monotonic() - last_render > 0.08:
+                    # Rendue moins souvent à mesure qu'elle s'allonge : tout le texte est
+                    # refait à chaque fois, sur la boucle qui sert aussi les autres machines
+                    size = len(state["content"])
+                    every = 0.08 if size < 6000 else 0.25 if size < 30000 else 0.6
+                    if time.monotonic() - last_render > every:
                         last_render = time.monotonic()
                         yield sse({"type": "render", "html": render.to_html(state["content"])})
                 elif kind == "error":
@@ -196,8 +210,8 @@ async def chat(body: ChatIn, request: Request):
                        "html": render.to_html(state["content"])})
         finally:
             stop.set()                    # client parti ou fin : on coupe le modèle
-            if state["saved"] is None:    # interruption (bouton Stop)
-                save()
+            if state["saved"] is None:    # interruption (bouton Stop) : hors de la boucle
+                threading.Thread(target=save, daemon=True, name="aiodos-chat-save").start()
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})

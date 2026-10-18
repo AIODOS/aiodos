@@ -207,6 +207,34 @@ def visible_libraries(destination) -> set | None:
     return store.shareable_ids()
 
 
+def history_filter(destination, peers_ok: bool):
+    """Ce que l'historique peut emporter vers la machine qui répond (keep de
+    conversations.as_history) : une réponse appuyée sur la mémoire des conversations ne
+    quitte pas cette machine, ni une réponse appuyée sur une bibliothèque qui ne peut pas
+    aller là (visible_libraries) ; une réponse appuyée sur des passages d'autres machines ne
+    va qu'à un modèle autorisé (peers_ok). Une source d'avant l'identifiant de bibliothèque
+    est jugée sur son nom, et refusée si aucune bibliothèque visible ne le porte plus."""
+    only = visible_libraries(destination)
+    names = None if only is None else {
+        c["name"] for c in store.list_collections() if c["id"] in only}
+
+    def keep(sources) -> bool:
+        for s in sources:
+            kind = s.get("type")
+            if kind == "remote" and not peers_ok:
+                return False
+            if destination is not None and kind == "conversation":
+                return False
+            if only is not None and kind == "knowledge":
+                known = s.get("collection_id")
+                if known is not None and known not in only:
+                    return False
+                if known is None and s.get("collection") not in names:
+                    return False
+        return True
+    return keep
+
+
 def select_relevant(hits, min_score, limit=4) -> list:
     """Ne garde que les extraits vraiment liés à la question.
 
@@ -240,6 +268,7 @@ def _knowledge_context(question, libraries, conversations, sources, conversation
         seen.add((h["collection"], h["source"]))
         sources.append({"type": "conversation" if h["kind"] == "conversation" else "knowledge",
                         "label": h["source"], "collection": h["collection"],
+                        "collection_id": h.get("collection_id"),
                         "score": round(h["score"], 3)})
     return [f"[Source : {h['source']}]\n{h['text']}" for h in hits]
 

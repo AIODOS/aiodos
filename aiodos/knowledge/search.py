@@ -113,7 +113,8 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
         if row is None or (row["system"] and excluded and row["origin"] == excluded):
             continue
         hits.append({"score": score, "text": row["text"], "source": row["source"],
-                     "kind": row["kind"], "collection": row["collection"]})
+                     "kind": row["kind"], "collection": row["collection"],
+                     "collection_id": row["collection_id"]})
         if len(hits) == k:
             break
     return hits

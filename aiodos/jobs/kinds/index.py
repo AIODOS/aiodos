@@ -17,7 +17,8 @@ import numpy as np
 
 from aiodos import db, settings
 from aiodos.chat import conversations
-from aiodos.jobs import pacing
+from aiodos.jobs import pacing, queue
+from aiodos.jobs.models import BACKGROUND, QUEUED
 from aiodos.jobs.registry import (Interrupted, SampleMismatch, UnitSpec, register_job_kind,
                                  register_portable, task)
 from aiodos.knowledge import chunking, store
@@ -273,6 +274,8 @@ def run_index_conversation(payload):
     for m in messages:
         if m["role"] == "assistant" and conversations.cites_others(m["sources"]):
             continue          # appuyée sur des passages d'autres machines : pas en mémoire
+        if m["role"] == "assistant" and str(m["content"] or "").startswith(conversations.ERROR_MARK):
+            continue          # une erreur, pas une réponse
         who = "Utilisateur" if m["role"] == "user" else "Assistant"
         for n, piece in enumerate(chunking.chunk_text(f"{who} : {m['content']}")[:999]):
             pieces.append((m["id"] * 1000 + n, piece))
@@ -286,6 +289,17 @@ def run_index_conversation(payload):
                                        for (idx, text), vec in zip(pieces, vectors)],
                         replace=rebuild)
     return {"chunks": len(pieces)}
+
+
+def queue_conversation(conv_id) -> int | None:
+    """Met à jour la mémoire de cette conversation : un travail, sauf s'il y en a déjà un en
+    attente pour elle (il lira aussi la nouvelle réponse). → son numéro, ou None."""
+    waiting = db.query_one("SELECT id FROM jobs WHERE kind='index_conversation' AND status=? "
+                           "AND json_extract(params, '$.conversation_id')=?", (QUEUED, conv_id))
+    if waiting is not None:
+        return None
+    return queue.create_job("index_conversation", {"conversation_id": conv_id},
+                            priority=BACKGROUND)
 
 
 register_job_kind("index_conversation", split_index_conversation)

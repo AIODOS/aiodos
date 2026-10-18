@@ -74,6 +74,8 @@ HANDLERS = {
 # Réponses en flux : fonction(manager, émetteur, contenu, stop) -> itérateur de morceaux.
 # Elle vérifie la demande tout de suite (PeerError = refus lisible), puis l'itérateur
 # produit la réponse ; stop est levé si l'autre machine coupe la connexion.
+ALIVE_S = 10                    # signe de vie d'un flux silencieux (client.stream attend 180 s)
+
 STREAM_HANDLERS = {
     "chat": lending.chat,         # conversation servie par un modèle de cette machine
 }
@@ -158,7 +160,13 @@ def create_p2p_app(manager) -> FastAPI:
             seq = 0
             try:
                 while True:
-                    kind, data = await inbox.get()
+                    try:
+                        kind, data = await asyncio.wait_for(inbox.get(), timeout=ALIVE_S)
+                    except TimeoutError:
+                        # Rien depuis ALIVE_S (modèle qui se charge, longue réflexion) : un
+                        # signe de vie, que la machine qui attend ignore ; sans lui, elle ne
+                        # saurait pas si celle-ci a disparu
+                        kind, data = "data", {"alive": True}
                     item = data if kind == "data" else {"end": True} if kind == "end" \
                         else {"error": data}
                     yield envelope.wrap_frame(peer["key"], action, manager.node_id, sender,

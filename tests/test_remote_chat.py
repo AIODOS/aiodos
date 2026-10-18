@@ -264,3 +264,26 @@ def test_a_machine_reachable_in_no_way_is_refused_clearly(companion, monkeypatch
         list(remote_models.chat_stream("peer:machine-b:qwen3.6:latest", QUESTION))
     assert str(refused.value) == ("« PC de Léa » est injoignable pour l'instant (ni adresse "
                                   "sur le réseau local, ni clé Internet).")
+
+
+def test_a_silent_stream_sends_signs_of_life_the_requester_ignores(server, monkeypatch):
+    """Modèle qui se charge, longue réflexion : la machine qui calcule le dit à intervalles
+    (p2p_app.ALIVE_S), sans quoi celle qui attend ne saurait pas si elle a disparu."""
+    manager, http = server
+    monkeypatch.setattr(p2p_app, "ALIVE_S", 0.05)
+
+    def slow(m, sender, payload, stop):
+        threading.Event().wait(0.4)
+        yield {"content": "Bonjour"}
+    monkeypatch.setitem(p2p_app.STREAM_HANDLERS, "test", slow)
+    env = envelope.wrap(KEY, "test", A, B, {})
+    with http.stream("POST", "/p2p/v1/stream/test", json=env) as response:
+        frames = _read(manager, response, env)
+    assert frames[-2:] == [{"content": "Bonjour"}, {"end": True}]
+    assert len(frames) > 3 and all(f == {"alive": True} for f in frames[:-2])
+
+    _peer_with_models()
+    monkeypatch.setattr(client, "stream", lambda *a, **k: iter(
+        [{"alive": True}, {"content": "Bon"}, {"alive": True}, {"content": "jour"}]))
+    assert list(pipeline.generate("peer:machine-b:qwen3.6:latest", QUESTION, think=False)) == [
+        ("content", "Bon"), ("content", "jour")]

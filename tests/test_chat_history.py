@@ -1,0 +1,196 @@
+"""L'historique d'une conversation, tel qu'il part vers la machine qui répond : seulement ce
+qu'elle peut recevoir (mémoire, bibliothèques gardées ici, passages d'autres machines), sans
+les réponses qui ne sont qu'une erreur ; la mémoire mise à jour une fois par réponse, sans
+doublon ; le titre donné une seule fois. Sans réseau ni Ollama."""
+import json
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from aiodos import db
+from aiodos.api.server import create_app
+from aiodos.chat import conversations, pipeline
+from aiodos.jobs.kinds import index
+from aiodos.jobs.models import RUNNING
+from aiodos.knowledge import store
+
+TOKEN = {"X-Aiodos-Token": "jeton"}
+
+MEMORY = {"type": "conversation", "label": "Vacances · #3", "collection": "Mémoire"}
+WEB = {"type": "web", "label": "meteo.fr", "url": "https://meteo.fr", "title": "Météo"}
+OTHERS = {"type": "remote", "label": "fusee.txt", "collection": "Cours", "peer": "PC de Léa"}
+
+
+def _library(name, scope):
+    collection_id = store.create_collection(name)
+    store.set_scope(collection_id, scope)
+    return {"type": "knowledge", "label": f"{name}.txt", "collection": name,
+            "collection_id": collection_id}
+
+
+@pytest.fixture
+def answers():
+    """Une conversation : une réponse par genre de source, dans cet ordre."""
+    store.ensure_defaults()
+    cited = {"mémoire": [MEMORY], "journal": [_library("Journal", "local")],
+             "projets": [_library("Projets", "mine")],
+             "recettes": [_library("Recettes", "friends")], "autres": [OTHERS],
+             "web": [WEB], "renommée": [{"type": "knowledge", "label": "a.txt",
+                                         "collection": "Ancien nom"}], "rien": []}
+    conv = conversations.create()
+    for name, sources in cited.items():
+        conversations.add_message(conv, "user", f"Question {name}")
+        conversations.add_message(conv, "assistant", f"Réponse {name}", sources=sources)
+    return conv
+
+
+def _received(conv, destination, peers_ok) -> list:
+    history = conversations.as_history(conversations.history_rows(conv),
+                                       pipeline.history_filter(destination, peers_ok))
+    assert all(f"Question {name}" in json.dumps(history, ensure_ascii=False) for name in (
+        "mémoire", "journal", "projets", "recettes", "autres", "web", "renommée", "rien"))
+    return sorted(m["content"].split()[-1] for m in history
+                  if m["role"] == "assistant" and m["content"] != conversations.WITHHELD)
+
+
+def test_each_machine_receives_only_the_answers_it_may_see(answers):
+    every = ["autres", "journal", "mémoire", "projets", "recettes", "renommée", "rien", "web"]
+    # Cette machine (ou le cloud, validé) : tout, sauf les passages d'autres machines si
+    # le modèle n'y a pas droit
+    assert _received(answers, None, True) == every
+    assert _received(answers, None, False) == [a for a in every if a != "autres"]
+    # Une de mes machines : ni la mémoire, ni ce qui reste sur ce PC, ni une bibliothèque
+    # qu'on ne retrouve plus (renommée depuis)
+    assert _received(answers, "mine", True) == ["autres", "projets", "recettes", "rien", "web"]
+    # La machine d'un ami : seulement ce que je partage avec mes amis
+    assert _received(answers, "friend", False) == ["recettes", "rien", "web"]
+
+
+def test_a_renamed_library_or_a_reused_name_changes_nothing():
+    """Une source retient l'identifiant de sa bibliothèque : renommée, elle reste ce qu'elle
+    était ; son ancien nom repris par une bibliothèque partagée n'ouvre rien."""
+    store.ensure_defaults()
+    secret = _library("Secret", "local")
+    conv = conversations.create()
+    conversations.add_message(conv, "user", "Que dit mon journal ?")
+    conversations.add_message(conv, "assistant", "Le journal dit ceci.", sources=[secret])
+    store.rename_collection(secret["collection_id"], "Ancien secret")
+    _library("Secret", "friends")
+    shared = _library("Partagée", "friends")
+    store.rename_collection(shared["collection_id"], "Partagée depuis")
+    conversations.add_message(conv, "user", "Et la partagée ?")
+    conversations.add_message(conv, "assistant", "Elle dit cela.", sources=[shared])
+    history = conversations.as_history(conversations.history_rows(conv),
+                                       pipeline.history_filter("friend", False))
+    assert [m["content"] for m in history if m["role"] == "assistant"] == [
+        conversations.WITHHELD, "Elle dit cela."]
+
+
+def test_a_withheld_answer_keeps_its_place(answers):
+    history = conversations.as_history(conversations.history_rows(answers),
+                                       pipeline.history_filter("friend", False))
+    assert [m["role"] for m in history] == ["user", "assistant"] * 8
+    assert history[1] == {"role": "assistant", "content": conversations.WITHHELD}
+
+
+# ------------------------------------------------------------- erreurs
+def test_an_error_is_shown_but_neither_reused_nor_remembered(fake_embed):
+    store.ensure_defaults()
+    conv = conversations.create()
+    conversations.add_message(conv, "user", "Bonjour")
+    conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté")
+    conversations.add_message(conv, "user", "Tu es là ?")
+    conversations.add_message(conv, "assistant", "Oui, je suis là.")
+    assert conversations.history(conv) == [
+        {"role": "user", "content": "Bonjour"}, {"role": "user", "content": "Tu es là ?"},
+        {"role": "assistant", "content": "Oui, je suis là."}]
+    index.run_index_conversation({"conversation_id": conv})
+    memory = " ".join(store.chunk_texts(store.entry_by_origin(
+        store.conversation_collection_id(), str(conv))["id"]))
+    assert "je suis là" in memory and "Ollama" not in memory
+
+
+# ------------------------------------------------------------- mémoire
+def _memory_jobs(conv) -> list:
+    return [r["status"] for r in db.query(
+        "SELECT status FROM jobs WHERE kind='index_conversation' AND "
+        "json_extract(params, '$.conversation_id')=? ORDER BY id", (conv,))]
+
+
+def test_one_memory_update_waits_per_conversation():
+    store.ensure_defaults()
+    conv, other = conversations.create(), conversations.create()
+    first = index.queue_conversation(conv)
+    assert first is not None
+    assert index.queue_conversation(conv) is None          # celle qui attend lira tout
+    assert index.queue_conversation(other) is not None
+    # Commencée : elle a peut-être déjà lu les messages, la suivante en a besoin
+    db.execute("UPDATE jobs SET status=? WHERE id=?", (RUNNING, first))
+    assert index.queue_conversation(conv) is not None
+    assert len(_memory_jobs(conv)) == 2
+
+
+def test_the_same_passages_twice_double_nothing():
+    store.ensure_defaults()
+    memory = store.conversation_collection_id()
+    passages = [(1000, "Utilisateur : Bonjour", [1.0, 0.0]),
+                (2000, "Assistant : Salut", [0.0, 1.0])]
+    store.append_chunks(memory, "Essai · #1", "conversation", "1", passages)
+    store.append_chunks(memory, "Essai · #1", "conversation", "1",
+                        passages + [(3000, "Utilisateur : Merci", [1.0, 1.0])])
+    entry = store.entry_by_origin(memory, "1")["id"]
+    assert store.chunk_texts(entry) == ["Utilisateur : Bonjour", "Assistant : Salut",
+                                        "Utilisateur : Merci"]
+
+
+def test_a_new_conversation_is_titled_once():
+    conv = conversations.create()
+    assert conversations.auto_title(conv, "  Le   voyage  à Lisbonne ") == "Le voyage à Lisbonne"
+    assert conversations.auto_title(conv, "Autre chose") is None
+    assert conversations.get(conv)["title"] == "Le voyage à Lisbonne"
+    conversations.rename(conv, "Lisbonne")
+    assert conversations.auto_title(conv, "Encore") is None
+
+
+# ------------------------------------------------------------- de bout en bout
+@pytest.fixture
+def api(fake_embed):
+    store.ensure_defaults()
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        yield http
+
+
+def _chat(http, **body) -> list:
+    with http.stream("POST", "/api/chat", json=dict({"model": "local-test",
+                                                     "libraries": False}, **body),
+                     headers=TOKEN) as response:
+        return [json.loads(line[6:]) for line in response.iter_lines()
+                if line.startswith("data: ")]
+
+
+def test_a_failed_answer_is_saved_once_and_left_out_afterwards(api, monkeypatch):
+    def down(*args, **kwargs):
+        raise RuntimeError("Ollama arrêté")
+        yield
+    monkeypatch.setattr(pipeline, "generate", down)
+    events = _chat(api, text="Bonjour", conversations=True)
+    conv = events[0]["conversation_id"]
+    assert events[-1]["type"] == "done" and "Ollama arrêté" in str(events[-1]["error"])
+    saved = conversations.get(conv)["messages"]
+    assert [m["role"] for m in saved] == ["user", "assistant"]
+    assert saved[1]["content"].startswith(conversations.ERROR_MARK)
+    assert _memory_jobs(conv) == []                       # une erreur n'a rien à retenir
+
+    sent = []
+    monkeypatch.setattr(pipeline, "generate",
+                        lambda model, messages, *a, **k: sent.append(messages)
+                        or iter([("content", "Me voici.")]))
+    _chat(api, text="Tu es là ?", conversation_id=conv, conversations=True)
+    said = [m["content"] for m in sent[0] if m["role"] != "system"]
+    assert said == ["Bonjour", "Tu es là ?"]
+    deadline = time.time() + 10
+    while time.time() < deadline and len(conversations.get(conv)["messages"]) < 4:
+        time.sleep(0.05)
+    assert [m["content"] for m in conversations.get(conv)["messages"]][-1] == "Me voici."
+    assert len(_memory_jobs(conv)) == 1

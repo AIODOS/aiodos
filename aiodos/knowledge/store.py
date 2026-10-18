@@ -214,9 +214,13 @@ def append_chunks(collection_id, source, kind, origin, chunks_with_idx, replace=
             c.execute("UPDATE entries SET source=? WHERE id=?", (source, entry_id))
             if replace:
                 c.execute("DELETE FROM chunks WHERE entry_id=?", (entry_id,))
+        # Deux mises à jour de la même mémoire à la fois : la seconde ne double rien (la
+        # transaction les fait passer l'une après l'autre)
+        present = {r["idx"] for r in c.execute("SELECT idx FROM chunks WHERE entry_id=?",
+                                               (entry_id,))}
         c.executemany("INSERT INTO chunks(entry_id, idx, text, embedding) VALUES(?, ?, ?, ?)",
                       [(entry_id, idx, text, np.asarray(vec, dtype=np.float32).tobytes())
-                       for idx, text, vec in chunks_with_idx])
+                       for idx, text, vec in chunks_with_idx if idx not in present])
     search.invalidate()
 
 
