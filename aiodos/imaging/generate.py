@@ -44,8 +44,10 @@ _turn = threading.Lock()          # un calcul à la fois sur cette machine
 
 
 def request_body(params: dict) -> dict:
+    """Le corps de img_gen ; une retouche part de l'image de départ (init_png, octets) avec
+    sa force (strength) : l'API native de sd-server l'attend en data URL."""
     spec = catalog.model(params["model"])
-    return {
+    body = {
         "prompt": params["prompt"],
         "negative_prompt": params.get("negative") or "",
         "width": int(params["width"]), "height": int(params["height"]),
@@ -58,6 +60,11 @@ def request_body(params: dict) -> dict:
         "preview": "none",
         "output_format": "png",
     }
+    if params.get("init_png"):
+        body["init_image"] = "data:image/png;base64," + base64.b64encode(
+            params["init_png"]).decode("ascii")
+        body["strength"] = float(params.get("strength") or 0.75)
+    return body
 
 
 def video_body(params: dict) -> dict:

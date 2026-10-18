@@ -12,6 +12,7 @@ conversation servie par cette machine.
 """
 import base64
 import secrets
+from pathlib import Path
 
 from aiodos import settings
 from aiodos.imaging import catalog, gallery, generate
@@ -24,6 +25,7 @@ MAX_PROMPT = 2000
 MAX_PNG = 32 * 1024 ** 2
 MAX_WEBM = 512 * 1024 ** 2
 SEED_SPACE = 2 ** 31              # tailles, durées : règles de chaque modèle (catalog.py)
+STRENGTH = 0.75                   # retouche : part de l'image de départ redessinée (sd.cpp)
 
 
 def normalize(params: dict) -> dict:
@@ -72,7 +74,31 @@ def normalize(params: dict) -> dict:
              "count": count, "batch": secrets.token_hex(6)}
     if video:
         found["frames"] = frames
+    if params.get("init_path"):       # retouche : l'image de départ donne la taille
+        found.update(_start_from(params["init_path"], params.get("strength"), video, spec))
     return found
+
+
+def _start_from(path, strength, video, spec) -> dict:
+    """Une image de départ (retouche) : un PNG de cette machine, au format du modèle, et la
+    force de la retouche ; ValueError sinon."""
+    if video:
+        raise ValueError("Une vidéo ne part pas d'une image.")
+    try:
+        data = Path(str(path)).read_bytes()
+        width, height = generate.png_size(data)
+    except (OSError, ValueError) as exc:
+        raise ValueError("Image de départ illisible.") from exc
+    if len(data) > MAX_PNG or width % spec["multiple"] or height % spec["multiple"] \
+            or width * height > spec["max_pixels"]:
+        raise ValueError("Image de départ d'un format que ce modèle ne prend pas.")
+    try:
+        strength = float(STRENGTH if strength in (None, "") else strength)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Force de retouche invalide.") from exc
+    if not 0.05 <= strength <= 1.0:
+        raise ValueError("Force de retouche : de 0,05 à 1.")
+    return {"init_path": str(path), "strength": strength, "width": width, "height": height}
 
 
 def _short(text: str, n: int = 50) -> str:
@@ -82,7 +108,8 @@ def _short(text: str, n: int = 50) -> str:
 
 def split_generate(params):
     common = {k: params[k] for k in ("model", "prompt", "negative", "width", "height",
-                                     "steps", "cfg", "batch", "frames") if k in params}
+                                     "steps", "cfg", "batch", "frames", "init_path",
+                                     "strength") if k in params}
     units = [UnitSpec("generate_image", "gpu",
                       {**common, "seed": (params["seed"] + i) % SEED_SPACE, "index": i})
              for i in range(params["count"])]
@@ -106,12 +133,20 @@ def requires_image(unit, options) -> dict:
 
 def checked(payload) -> dict:
     """Les réglages d'une image reçue en ordre de calcul, revérifiés ici (mêmes bornes
-    qu'une demande faite ici) ; ValueError sinon."""
-    params = normalize({**payload, "count": 1})
+    qu'une demande faite ici) ; ValueError sinon. L'image de départ d'une retouche arrive à
+    part (le fichier de l'unité) : sa force est revérifiée ici."""
+    params = normalize({k: v for k, v in payload.items() if k != "init_path"} | {"count": 1})
+    if payload.get("strength") is not None:
+        strength = float(payload["strength"])
+        if not 0.05 <= strength <= 1.0:
+            raise ValueError("ordre d'image incohérent")
+        params["strength"] = strength
     if params["model"] != payload.get("model") or params["seed"] != int(payload["seed"]):
         raise ValueError("ordre d'image incohérent")
     found = {**payload, "width": params["width"], "height": params["height"],
              "steps": params["steps"], "cfg": params["cfg"], "negative": params["negative"]}
+    if "strength" in params:
+        found["strength"] = params["strength"]
     if "frames" in params:
         found["frames"] = params["frames"]
     return found
@@ -128,6 +163,11 @@ def compute_image(payload, file, options, stop=None):
         return {"webm": base64.b64encode(made["webm"]).decode("ascii"),
                 "frames": made["frames"], "fps": made["fps"],
                 "seconds": round(made["seconds"], 2), "machine": machine}
+    if file:                          # retouche : l'image de départ (d'ici, ou reçue)
+        start = Path(file).read_bytes()
+        if generate.png_size(start) != (payload["width"], payload["height"]):
+            raise ValueError("image de départ d'une autre taille que celle demandée")
+        payload = {**payload, "init_png": start}
     made = pacing.paced(lambda: generate.image(payload, halt), stop)
     return {"png": base64.b64encode(made["png"]).decode("ascii"),
             "seconds": round(made["seconds"], 2), "machine": machine}
@@ -182,10 +222,10 @@ def finalize_images(job_id, params, units):
             "machines": sorted({u["result"].get("machine") or "?" for u in done})}
 
 
-register_portable("generate_image", compute_image, assimilate_image,
+register_portable("generate_image", compute_image, assimilate_image, file_key="init_path",
                   requires=requires_image, validate=check_image, here=runnable_here,
                   mine_only=True, friends_out="images_from_friends",
                   friends_in="lend_images_friends",
                   shared_keys=("model", "prompt", "negative", "width", "height", "steps",
-                               "cfg", "frames", "seed"))
+                               "cfg", "frames", "seed", "strength"))
 register_job_kind("generate_images", split_generate, finalize_images)

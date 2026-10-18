@@ -158,7 +158,7 @@ def lease(manager, sender, payload):
 
 def _fits(unit, spec, max_blob) -> bool:
     """Le fichier de l'unité (s'il y en a un) n'est pas trop gros pour cette machine."""
-    if spec.file_key:
+    if spec.file_key and unit["payload"].get(spec.file_key):   # facultatif (retouche)
         try:
             return os.path.getsize(unit["payload"][spec.file_key]) <= max_blob
         except OSError:
@@ -172,7 +172,7 @@ def _order(manager, sender, unit, options, friend) -> dict:
     order = {"id": unit["id"], "task": unit["task"], "resource": unit["resource"],
              "payload": {k: v for k, v in unit["payload"].items() if k != spec.file_key},
              "options": options[unit["task"]], "lease_s": leases.LEASE_S, "blob": None}
-    if spec.file_key:
+    if spec.file_key and unit["payload"].get(spec.file_key):
         path = Path(unit["payload"][spec.file_key])
         try:
             order["blob"] = {"name": path.name, "size": path.stat().st_size,
@@ -212,7 +212,7 @@ def blob(manager, sender, payload):
     """Un morceau du fichier de l'unité confiée à cette machine (et d'aucun autre)."""
     unit = leases.held(_unit_id(payload), sender)
     spec = registry.TASKS.get(unit["task"]) if unit else None
-    if spec is None or not spec.file_key:
+    if spec is None or not spec.file_key or not unit["payload"].get(spec.file_key):
         raise PeerError("Cette unité ne t'est plus confiée.")
     offset = max(0, int(payload.get("offset") or 0))
     size = min(BLOB_CHUNK, max(1, int(payload.get("size") or BLOB_CHUNK)))

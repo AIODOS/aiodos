@@ -335,12 +335,26 @@ def _followed(request: dict, text: str, conv_id, chat_model) -> dict:
     prompt = retouches.rewrite(last["prompt"], text, chat_model) if edit else last["prompt"]
     count = request.get("count") or (last.get("count") if edit
                                      else retouches.variation_count(text, last.get("count")))
-    return {**request, "kind": last.get("kind") or "image", "model": last.get("model"),
-            "prompt": prompt, "width": last.get("width"), "height": last.get("height"),
-            "frames": last.get("frames"), "count": count,
-            "shape": None, "seconds": None,
-            # Retouche : même graine, la composition reste ; variante : une autre
-            "seed": last.get("seed") if edit else None}
+    followed = {**request, "kind": last.get("kind") or "image", "model": last.get("model"),
+                "prompt": prompt, "width": last.get("width"), "height": last.get("height"),
+                "frames": last.get("frames"), "count": count,
+                "shape": None, "seconds": None,
+                # Retouche : même graine, la composition reste ; variante : une autre
+                "seed": last.get("seed") if edit else None}
+    start_from = _first_image(last) if edit and last.get("kind") != "video" else None
+    if start_from is not None:        # une image retouchée part de la précédente
+        followed["init_path"] = str(start_from)
+        followed["strength"] = retouches.strength_for(text)
+    return followed
+
+
+def _first_image(media: dict):
+    """Le fichier de la première image d'une création, s'il est encore là."""
+    for row in gallery.batch(str(media.get("batch") or "")):
+        path = gallery.path_of(row)
+        if path.suffix == ".png" and path.is_file():
+            return path
+    return None
 
 
 def start(text: str, request: dict, conversation_id=None, chat_model=None) -> dict:
@@ -381,7 +395,10 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
             "negative": request.get("negative") or "",
             "width": size[0] if size else None, "height": size[1] if size else None,
             "count": request.get("count") or found.get("count") or 1,
-            "seed": request.get("seed"), "steps": request.get("steps"), "frames": frames})
+            "seed": request.get("seed"), "steps": request.get("steps"), "frames": frames,
+            # retouche : l'image de départ, posée ici seulement (_followed), jamais par l'API
+            "init_path": request.get("init_path") if same else None,
+            "strength": request.get("strength") if same else None})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
     if conv_id is None:

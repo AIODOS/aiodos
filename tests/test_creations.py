@@ -321,3 +321,19 @@ def test_only_the_last_creation_can_become_a_text_answer(client, can_draw):
     conversations.add_message(first["conversation_id"], "user", "Merci !")
     reply = client.post(f"/api/chat/create/{first['message_id']}/undo", headers=AUTH)
     assert reply.status_code == 409
+
+
+def test_an_image_retouch_starts_from_the_last_image(client, can_draw, monkeypatch):
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "width": 1024, "height": 1024}).json()
+    wait_for(lambda: queue.job_summary(first["job_id"])["status"] == "done")
+    monkeypatch.setattr(retouches, "rewrite", lambda prompt, text, model=None: f"{prompt}, la nuit")
+    edited = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-la de nuit", "followup": "edit",
+        "conversation_id": first["conversation_id"]}).json()
+    job = queue.job_summary(edited["job_id"])
+    path = first["media"]["images"][0]["path"] if first["media"]["images"] else None
+    started = job["params"]["init_path"]
+    assert started and started.endswith(".png") and (path is None or started == path)
+    assert job["params"]["strength"] == retouches.AMBIANCE            # « de nuit » : une ambiance
+    assert retouches.strength_for("Ajoute un chat sur le toit") == retouches.KEEP

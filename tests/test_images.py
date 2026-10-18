@@ -803,3 +803,44 @@ def test_a_late_verification_writes_where_it_started(tiny_model, tmp_path, monke
     gate.set()
     wait_for(lambda: first.exists() and str(path) in json.loads(first.read_text(encoding="utf-8")))
     assert not (tmp_path / "ailleurs" / "images" / "verified.json").exists()
+
+
+# ------------------------------------------------- retouche : à partir de l'image précédente
+def test_a_retouch_starts_from_the_previous_image(tiny_model, fake_sd, tmp_path):
+    start = tmp_path / "depart.png"
+    start.write_bytes(png(256, 384))
+    params = kind.normalize({"model": "essai", "prompt": "un chat, la nuit",
+                             "init_path": str(start)})
+    assert (params["width"], params["height"], params["strength"]) == (256, 384, kind.STRENGTH)
+    fake = fake_sd(polls=1)
+    unit = {**params, "seed": 42, "index": 0}
+    made = kind.compute_image(unit, str(start), {})
+    body = fake.bodies[0]
+    assert body["init_image"].startswith("data:image/png;base64,") and body["strength"] == 0.75
+    assert generate.png_size(base64.b64decode(made["png"])) == (256, 384)
+    with pytest.raises(ValueError):
+        kind.normalize({"model": "essai", "prompt": "x", "init_path": str(start), "strength": 2})
+    with pytest.raises(ValueError):
+        kind.normalize({"model": "essai", "prompt": "x", "init_path": str(tmp_path / "absent.png")})
+
+
+def test_the_starting_image_travels_as_the_unit_file(tiny_model, monkeypatch, tmp_path):
+    monkeypatch.setattr(work.ollama, "list_models", lambda max_age=10: [])
+    peers.save(B, "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    start = tmp_path / "depart.png"
+    start.write_bytes(png(256, 384))
+    queue.create_job("generate_images", kind.normalize({"model": "essai", "prompt": "un chat",
+                                                        "init_path": str(start)}))
+    caps = {"work_api": work.WORK_API, "images": {"engine": "f0aac52", "files": catalog.hashes("essai")}}
+    order = work.lease(_Manager(), B, {"resources": ["gpu"], "caps": caps})["unit"]
+    assert order["blob"]["size"] == start.stat().st_size and "init_path" not in order["payload"]
+    assert order["payload"]["strength"] == kind.STRENGTH
+    piece = work.blob(_Manager(), B, {"unit": order["id"], "offset": 0, "size": 10 ** 6})
+    assert base64.b64decode(piece["data"]) == start.read_bytes()
+
+
+def test_a_video_does_not_start_from_an_image(tiny_video, tmp_path):
+    start = tmp_path / "depart.png"
+    start.write_bytes(png(832, 480))
+    with pytest.raises(ValueError, match="vidéo"):
+        kind.normalize({"model": "video", "prompt": "x", "init_path": str(start)})

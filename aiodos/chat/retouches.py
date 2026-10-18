@@ -103,6 +103,23 @@ def detect(text: str) -> str | None:
     return None
 
 
+# Retouche d'une image (image vers image) : la part de l'image redessinée. Avec les 8 pas de
+# Z-Image Turbo, elle avance par huitièmes (mesuré le 18/10) : 6/8 garde la scène et sa
+# lumière (ajouter, retirer, changer un détail) ; 7/8 change l'ambiance (nuit, saison,
+# style), au prix d'une scène en partie recomposée.
+KEEP, AMBIANCE = 0.75, 0.875
+_AMBIANCE = re.compile(
+    r"\b(nuit|jour|soir|matin|aube|crépuscule|coucher|lever|hiver|été|automne|printemps|"
+    r"neige|pluie|orage|brouillard|style|façon|manière|noir et blanc|couleurs?|aquarelle|"
+    r"dessin|peinture|pixel|3d|réaliste|cartoon|manga|anime|vintage|rétro|futuriste|"
+    r"night|day|winter|summer|autumn|spring|sunset|sunrise)\b", re.IGNORECASE)
+
+
+def strength_for(text: str) -> float:
+    """La force de retouche selon la demande : une ambiance, ou un détail."""
+    return AMBIANCE if _AMBIANCE.search(text or "") else KEEP
+
+
 def variation_count(text: str, last_count: int) -> int:
     """« Encore une », « Une autre » : une seule ; « Encore », « Refais-les » : autant qu'avant."""
     return 1 if _ONE.match(text or "") else max(1, int(last_count or 1))
