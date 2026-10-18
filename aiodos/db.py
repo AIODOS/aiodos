@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -175,6 +175,19 @@ MIGRATIONS = {
      WHERE role='assistant' AND substr(content, 1, 2)='⚠ '
        AND (sources IS NULL OR sources='' OR sources='[]');
     """,
+    # Les erreurs d'avant la marque qui avaient déjà des sources (le modèle a échoué après
+    # la recherche dans les bibliothèques), et celles entrées dans la mémoire des
+    # conversations avant qu'elle les écarte
+    15: """
+    UPDATE messages SET sources=json_insert(sources, '$[#]', json('{"type": "error"}'))
+     WHERE role='assistant' AND substr(content, 1, 2)='⚠ '
+       AND json_valid(sources) AND json_type(sources)='array'
+       AND NOT EXISTS (SELECT 1 FROM json_each(messages.sources)
+                        WHERE json_extract(json_each.value, '$.type')='error');
+    DELETE FROM chunks WHERE substr(text, 1, 13)='Assistant : ⚠'
+       AND entry_id IN (SELECT e.id FROM entries e JOIN collections c ON c.id=e.collection_id
+                         WHERE c.system=1);
+    """,
 }
 
 SCHEMA = """
@@ -336,6 +349,7 @@ def transaction():
         return
     conn.execute("BEGIN IMMEDIATE")
     _local.depth = 1
+    _local.after = []
     try:
         yield conn
     except BaseException:
@@ -345,6 +359,19 @@ def transaction():
         conn.execute("COMMIT")
     finally:
         _local.depth = 0
+        hooks, _local.after = _local.after, []
+        for hook in hooks:
+            hook()
+
+
+def after_transaction(hook):
+    """hook() une fois finie la transaction en cours de ce fil, ou tout de suite s'il n'y
+    en a pas : un cache vidé avant le COMMIT se remplirait, entre-temps, de l'état d'avant
+    (knowledge/search.invalidate)."""
+    if getattr(_local, "depth", 0):
+        _local.after.append(hook)
+    else:
+        hook()
 
 
 def close():

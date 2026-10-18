@@ -94,9 +94,10 @@ qui le prêtent ; chaque réponse dit quelle machine l'a calculée, et une machi
 répond pas cède la place à la suivante. On peut aussi désigner une machine précise, à côté
 du modèle. Les machines d'un ami ne répondent d'office que si on l'accepte (Réglages →
 Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC et la mémoire
-des conversations ne la suivent jamais, ni les réponses qui s'en sont servies (l'historique
-envoyé les remplace par une mention) ; chez un ami, seules les bibliothèques partagées avec
-tes amis donnent leurs extraits.
+des conversations ne la suivent jamais, ni les réponses qui s'en sont servies, ni celles qui
+ont pu les reprendre ensuite dans la même conversation (l'historique envoyé les remplace par
+une mention) ; chez un ami, seules les bibliothèques partagées avec tes amis donnent leurs
+extraits.
 
 **Ouvrir AIODOS aux autres outils** (Réglages → Autres outils, désactivé par défaut) : une
 API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement

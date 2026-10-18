@@ -697,12 +697,15 @@ async function send(asText = null, replace = null) {
   scrollBottom(true);
   setBusy(true);
   controller = new AbortController();
+  let started = false;
+  let failure = null;
   try {
     await streamChat({
       text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
       conversation_id: state.currentConversation?.id ?? null, ...swap,
     }, ev => {
       if (ev.type === 'start') {
+        started = true;
         dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
@@ -722,6 +725,7 @@ async function send(asText = null, replace = null) {
       }
     }, controller.signal);
   } catch (e) {
+    failure = e;
     if (e.name === 'AbortError') view.stopped();
     else view.error(e.message);
   } finally {
@@ -731,16 +735,22 @@ async function send(asText = null, replace = null) {
     refreshTree();
     el.input.focus();
   }
+  // Un remplacement sans « start » (Stop, refus, réseau coupé) : le nœud a peut-être retiré
+  // l'ancien échange, ou pas ; la conversation est relue telle qu'il la garde
+  if (replace && !started && state.currentConversation) {
+    if (failure && failure.name !== 'AbortError') errorToast(failure);
+    await openConversation(state.currentConversation.id);
+  }
   return true;
 }
 
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
 // images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
 // remplacé (« Modifier »), retiré une fois la demande acceptée
-async function create(text, request, again = false, replace = null) {
+async function create(text, request, again = false, replace = null, askedNode = null) {
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
-  let asked = null;
+  let asked = askedNode;             // une nouvelle tentative garde la question d'origine
   if (!again) {                  // une nouvelle tentative (amis autorisés) ne répète pas le message
     el.input.value = '';
     autoresize();
@@ -758,13 +768,25 @@ async function create(text, request, again = false, replace = null) {
   } catch (e) {
     done();
     if (seen !== displayed) return;
+    if (e.status === 412) {          // la conversation a changé (autre fenêtre) : relue
+      errorToast(e);
+      if (state.currentConversation) openConversation(state.currentConversation.id);
+      return;
+    }
     // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être. Reconnue
-    // au vol, la demande n'en était peut-être pas une : « Répondre en texte »
+    // au vol, la demande n'en était peut-être pas une : « Répondre en texte » (si le
+    // message ne part pas, il revient dans la zone de saisie)
     const notice = appendNotice(el.list, e.message, {
       images: e.status === 409, friends: e.data?.friends || [],
-      retry: () => create(text, request, true, replace),
-      asText: request.auto ? () => { asked?.remove(); notice?.remove(); send(text, replace); }
-        : null });
+      retry: () => create(text, request, true, replace, asked),
+      asText: request.auto ? async () => {
+        asked?.remove();
+        notice?.remove();
+        if (!await send(text, replace) && !el.input.value.trim()) {
+          el.input.value = text;
+          autoresize();
+        }
+      } : null });
     markTurn();
     scrollBottom(true);
     return;

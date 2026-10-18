@@ -13,7 +13,7 @@ qui sait ainsi ce qui a été créé, sans voir les images.
 """
 import re
 
-from aiodos import settings
+from aiodos import db, settings
 from aiodos.chat import conversations, retouches
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
@@ -377,7 +377,7 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None,
     if conv_id is not None and not conversations.get(conv_id):
         conv_id = None
     if replace_from is not None and conv_id is None:
-        raise CreationError(CHANGED, status=409)
+        raise CreationError(CHANGED, status=CHANGED_STATUS)
     if request.get("followup") and not request.get("prompt"):
         request = _followed(request, text, conv_id, chat_model, replace_from)
     found = intent(text) or {}
@@ -409,27 +409,30 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None,
             "strength": request.get("strength") if same else None})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
-    if replace_from is not None:
-        replace(conv_id, replace_from, replace_text)
-    if conv_id is None:
-        conv_id = conversations.create(model=chat_model or None)
-    user_message_id = conversations.add_message(conv_id, "user", text)
-    title = conversations.auto_title(conv_id, text)
-    job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
-                              URGENT)
-    media = {"kind": "video" if catalog.is_video(model_id) else "image", "model": model_id,
-             "label": catalog.MODELS[model_id]["label"], "prompt": params["prompt"],
-             "count": params["count"], "batch": params["batch"], "job_id": job_id,
-             "width": params["width"], "height": params["height"], "seed": params["seed"]}
-    if "frames" in params:
-        media["frames"] = params["frames"]
-    if request.get("auto"):
-        media["auto"] = True          # reconnue dans le message : « Répondre en texte » possible
-    if params.get("init_path"):
-        media["retouch"] = True       # partie de l'image précédente (dit sous l'image)
-    message_id = conversations.add_message(conv_id, "assistant", describe(media), media=media)
+    # D'un seul geste : l'échange remplacé, la question, le travail et la réponse
+    with db.transaction():
+        stopped = replace(conv_id, replace_from, replace_text) if replace_from is not None else []
+        if conv_id is None:
+            conv_id = conversations.create(model=chat_model or None)
+        user_message_id = conversations.add_message(conv_id, "user", text)
+        title = conversations.auto_title(conv_id, text)
+        job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
+                                  URGENT)
+        media = {"kind": "video" if catalog.is_video(model_id) else "image", "model": model_id,
+                 "label": catalog.MODELS[model_id]["label"], "prompt": params["prompt"],
+                 "count": params["count"], "batch": params["batch"], "job_id": job_id,
+                 "width": params["width"], "height": params["height"], "seed": params["seed"]}
+        if "frames" in params:
+            media["frames"] = params["frames"]
+        if request.get("auto"):
+            media["auto"] = True      # reconnue dans le message : « Répondre en texte » possible
+        if params.get("init_path"):
+            media["retouch"] = True   # partie de l'image précédente (dit sous l'image)
+        message_id = conversations.add_message(conv_id, "assistant", describe(media),
+                                               media=media)
     return {"conversation_id": conv_id, "title": title, "user_message_id": user_message_id,
-            "message_id": message_id, "job_id": job_id, "media": view(media)}
+            "message_id": message_id, "job_id": job_id, "media": view(media),
+            "stopped": stopped}
 
 
 def undo(message_id: int) -> dict:
@@ -453,22 +456,29 @@ def undo(message_id: int) -> dict:
             "job_id": job["id"] if same_job(job, media) else None}
 
 
-CHANGED = "La conversation a changé entre-temps (autre fenêtre ?) : recharge-la."
+CHANGED = "La conversation a changé entre-temps (autre fenêtre ?) : elle est rechargée."
+CHANGED_STATUS = 412              # pas 409 : celui-là dit qu'aucun modèle ne peut calculer
 
 
-def replace(conv_id, message_id, expect=None):
+def replace(conv_id, message_id, expect=None) -> list:
     """« Régénérer », « Modifier » : la conversation reprend à ce message de l'utilisateur,
     retiré avec la suite (conversations.rewind) ; les créations retirées s'arrêtent.
-    CreationError (409) si ce n'est pas le message attendu (expect : son texte)."""
+    Seulement le dernier échange : une question venue après (autre fenêtre, ancienne
+    notice) le protège. CreationError (412) si ce n'est pas le message attendu (expect :
+    son texte). → les travaux de création arrêtés."""
     found = conversations.user_message(conv_id, message_id)
-    if found is None or (expect is not None and found != expect):
-        raise CreationError(CHANGED, status=409)
+    if (found is None or (expect is not None and found != expect)
+            or conversations.later_question(conv_id, message_id)):
+        raise CreationError(CHANGED, status=CHANGED_STATUS)
+    stopped = []
     for media in conversations.media_from(conv_id, message_id):
         job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
         if same_job(job, media) and job["status"] in ("queued", "running", "paused"):
             queue.cancel_job(job["id"])
+            stopped.append(job["id"])
     if conversations.rewind(conv_id, message_id, expect) is None:
-        raise CreationError(CHANGED, status=409)
+        raise CreationError(CHANGED, status=CHANGED_STATUS)
+    return stopped
 
 
 def same_job(job: dict | None, media: dict) -> bool:

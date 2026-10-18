@@ -219,7 +219,7 @@ def history_filter(destination, peers_ok: bool):
     bibliothèques."""
     only = visible_libraries(destination)
     names = None if only is None else {
-        c["name"] for c in store.list_collections() if c["id"] in only}
+        name for cid, name in store.collection_names().items() if cid in only}
 
     def keep(sources) -> bool:
         for s in sources:
@@ -255,7 +255,7 @@ def inherited(rows, keep=None) -> dict:
     "memory", "remote"}, vide si rien ne restreint. Une source d'avant l'identifiant de
     bibliothèque se retrouve par son nom ; introuvable, elle compte pour une bibliothèque
     que personne d'autre ne voit (-1)."""
-    names = {c["name"]: c["id"] for c in store.list_collections()}
+    names = {name: cid for cid, name in store.collection_names().items()}
     ids, memory, remote = set(), False, False
     for r in rows:
         if r["role"] != "assistant" or conversations.is_error(r):

@@ -137,3 +137,17 @@ def test_chunking_prefers_natural_breaks():
     assert len(pieces) > 1
     assert all(p.endswith(".") for p in pieces[:-1])
     assert chunking.chunk_text("   ") == []
+
+
+def test_the_search_cache_is_invalidated_once_the_write_is_committed():
+    """Vidé avant le COMMIT, le cache se remplirait, entre-temps, de l'état d'avant (un
+    passage tout juste écrit resterait introuvable)."""
+    from aiodos import db
+    from aiodos.knowledge import search
+    before = search._version
+    with db.transaction():
+        search.invalidate()
+        assert search._version == before
+    assert search._version == before + 1
+    search.invalidate()                      # hors transaction : aussitôt
+    assert search._version == before + 2

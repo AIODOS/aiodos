@@ -125,23 +125,32 @@ def test_an_answer_that_begins_with_a_warning_sign_is_still_an_answer(fake_embed
     assert "ne mélange pas" in memory
 
 
-def test_errors_saved_before_their_mark_receive_it_once_at_the_upgrade():
-    """Migration 14 : une erreur enregistrée par une version précédente (« ⚠ … », sans
-    source) reçoit sa marque une fois, à la mise à jour ; rien d'autre ne change."""
+def test_errors_saved_before_their_mark_receive_it_once_at_the_upgrade(fake_embed):
+    """Migrations 14 et 15 : une erreur enregistrée par une version précédente (« ⚠ … »,
+    avec ou sans sources) reçoit sa marque une fois, à la mise à jour, et ses passages
+    quittent la mémoire des conversations ; le reste ne change pas."""
+    store.ensure_defaults()
     conv = conversations.create()
     conversations.add_message(conv, "user", "Bonjour")
     old = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté")
-    cited = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Attention",
-                                      sources=[WEB])
+    failed = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Modèle "
+                                       "introuvable", sources=[WEB])
+    fine = conversations.add_message(conv, "assistant", "Tout va bien.", sources=[WEB])
+    memory = store.conversation_collection_id()
+    store.upsert_entry(memory, "Essai · #1", "conversation", "1", [
+        ("Assistant : ⚠ Ollama arrêté", fake_embed(["Ollama arrêté"])[0]),
+        ("Utilisateur : Bonjour", fake_embed(["Bonjour"])[0])])
     path = db.connect().execute("PRAGMA database_list").fetchone()[2]
     db.execute("PRAGMA user_version=13")
     db.close()
     db._initialized.discard(path)
     rows = {r["id"]: json.loads(r["sources"]) for r in db.query("SELECT id, sources FROM messages")}
-    assert rows[old] == [conversations.ERROR_SOURCE] and rows[cited] == [WEB]
+    assert rows[old] == [conversations.ERROR_SOURCE]
+    assert rows[failed] == [WEB, conversations.ERROR_SOURCE] and rows[fine] == [WEB]
     assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION
     assert conversations.history(conv) == [{"role": "user", "content": "Bonjour"},
-                                           {"role": "assistant", "content": "⚠ Attention"}]
+                                           {"role": "assistant", "content": "Tout va bien."}]
+    assert store.chunk_texts(store.entry_by_origin(memory, "1")["id"]) == ["Utilisateur : Bonjour"]
 
 
 # ------------------------------------------------------------- mémoire

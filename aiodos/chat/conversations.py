@@ -164,6 +164,12 @@ def user_message(conv_id, message_id) -> str | None:
     return row["content"] if row else None
 
 
+def later_question(conv_id, message_id) -> bool:
+    """Une question de l'utilisateur est-elle venue après ce message ?"""
+    return db.query_one("SELECT 1 FROM messages WHERE conversation_id=? AND role='user' "
+                        "AND id > ? LIMIT 1", (conv_id, int(message_id))) is not None
+
+
 def media_from(conv_id, message_id) -> list:
     """Les demandes d'images et de vidéos des réponses à partir de ce message."""
     found = []

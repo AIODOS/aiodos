@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from aiodos import render, settings
+from aiodos import db, render, settings
 from aiodos.api.events import sse
 from aiodos.chat import conversations, creations, pending, pipeline
 from aiodos.jobs.kinds import index
@@ -92,14 +92,8 @@ async def chat(body: ChatIn, request: Request):
         await asyncio.to_thread(pending.wait, conv_id)
     if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
         if body.replace_from is not None:
-            raise HTTPException(409, creations.CHANGED)
+            raise HTTPException(creations.CHANGED_STATUS, creations.CHANGED)
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
-    if body.replace_from is not None:     # acceptée : l'ancien échange laisse la place
-        try:
-            await asyncio.to_thread(creations.replace, conv_id, body.replace_from,
-                                    body.replace_text)
-        except creations.CreationError as exc:
-            raise HTTPException(exc.status, str(exc))
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -107,11 +101,24 @@ async def chat(body: ChatIn, request: Request):
     allowed = {m: await asyncio.to_thread(pipeline.peers_allowed, m) for m in plan}
     if body.peer_libraries:
         plan.sort(key=lambda m: not allowed[m])
-    # L'historique, lu avant d'ajouter la question ; chaque machine qui peut répondre n'en
-    # reçoit que ce qu'elle peut recevoir (pipeline.history_filter)
-    rows = await asyncio.to_thread(conversations.history_rows, conv_id, 30)
-    user_message_id = await asyncio.to_thread(conversations.add_message, conv_id, "user", text)
-    title = await asyncio.to_thread(conversations.auto_title, conv_id, text)
+    def ask():
+        """Acceptée : l'ancien échange (replace_from) laisse la place, l'historique est lu,
+        la question ajoutée, d'un seul geste (une erreur entre deux ne perd pas l'ancien
+        échange sans la nouvelle question). Chaque machine qui peut répondre ne reçoit de
+        l'historique que ce qu'elle peut recevoir (pipeline.history_filter)."""
+        with db.transaction():
+            stopped = [] if body.replace_from is None else creations.replace(
+                conv_id, body.replace_from, body.replace_text)
+            rows = conversations.history_rows(conv_id, 30)
+            asked = conversations.add_message(conv_id, "user", text)
+            named = conversations.auto_title(conv_id, text)
+        return stopped, rows, asked, named
+    try:
+        stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
+    except creations.CreationError as exc:
+        raise HTTPException(exc.status, str(exc))
+    for job_id in stopped:                # créations retirées : la vue des tâches le voit
+        executor.publish_job(job_id, force=True)
     if title:
         bus.publish({"type": "conversations"})
 

@@ -48,6 +48,13 @@ def _scope(row) -> str:
     return "friends" if row["share_friends"] else "mine"
 
 
+def collection_names() -> dict:
+    """{id : nom} des bibliothèques de l'utilisateur, sans rien compter (list_collections
+    compte entrées et passages)."""
+    return {r["id"]: r["name"] for r in db.query("SELECT id, name FROM collections "
+                                                 "WHERE system=0")}
+
+
 def collection_name(collection_id) -> str:
     row = db.query_one("SELECT name FROM collections WHERE id=?", (collection_id,))
     if row is None:

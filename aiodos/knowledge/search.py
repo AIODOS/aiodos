@@ -15,6 +15,12 @@ _cache = {}      # (collection_id, dimension) -> (version, ids, matrice normalis
 
 
 def invalidate():
+    """Les matrices en cache sont à refaire, une fois finie la transaction en cours (s'il y
+    en a une) : refaites avant le COMMIT, elles garderaient l'état d'avant."""
+    db.after_transaction(_bump)
+
+
+def _bump():
     global _version
     with _lock:
         _version += 1

@@ -58,6 +58,7 @@ async def create(body: CreateIn, request: Request):
         return JSONResponse({"detail": str(exc), "friends": exc.friends}, status_code=exc.status)
     executor = request.app.state.executor
     executor.wake()
-    executor.publish_job(made["job_id"], force=True)
+    for job_id in [made["job_id"], *made.pop("stopped", [])]:
+        executor.publish_job(job_id, force=True)
     request.app.state.bus.publish({"type": "conversations"})
     return made

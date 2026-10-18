@@ -73,9 +73,11 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
     if text is None:
         raise HTTPException(404, "Message introuvable dans cette conversation.")
     try:                                  # ses créations en cours s'arrêtent
-        creations.replace(conv_id, body.message_id, body.expect)
+        stopped = creations.replace(conv_id, body.message_id, body.expect)
     except creations.CreationError as exc:
         raise HTTPException(exc.status, str(exc))
+    for job_id in stopped:
+        request.app.state.executor.publish_job(job_id, force=True)
     _notify(request)
     return {"text": text}
 
