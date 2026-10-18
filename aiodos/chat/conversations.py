@@ -5,7 +5,10 @@ from aiodos import db
 from aiodos.knowledge import store
 
 DEFAULT_TITLE = "Nouvelle conversation"
-ERROR_MARK = "⚠ "                 # une réponse qui n'est qu'une erreur : montrée, jamais réutilisée
+ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une erreur (affichée)
+ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
+# Avant la marque (18/10/2026, 9 h), une erreur se reconnaissait à son seul début
+_MARKED_SINCE = 1792306800.0
 # À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
 # doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
 WITHHELD = ("(Réponse appuyée sur des passages trouvés chez d'autres machines : "
@@ -204,8 +207,8 @@ def history(conv_id, limit=30, with_others=True) -> list:
 def history_rows(conv_id, limit=30) -> list:
     """Les derniers messages, dans l'ordre, avec leurs sources (lus avant d'ajouter la
     question : routes/chat.py en tire l'historique de chaque machine qui peut répondre)."""
-    rows = db.query("SELECT role, content, sources FROM messages WHERE conversation_id=? "
-                    "ORDER BY id DESC LIMIT ?", (conv_id, limit))
+    rows = db.query("SELECT role, content, sources, created FROM messages "
+                    "WHERE conversation_id=? ORDER BY id DESC LIMIT ?", (conv_id, limit))
     return [dict(r) for r in reversed(rows)]
 
 
@@ -216,13 +219,28 @@ def as_history(rows, keep=None) -> list:
     found = []
     for r in rows:
         if r["role"] == "assistant":
-            if str(r["content"] or "").startswith(ERROR_MARK):
+            if is_error(r):
                 continue
             if keep is not None and not keep(_sources(r["sources"])):
                 found.append({"role": "assistant", "content": WITHHELD})
                 continue
         found.append({"role": r["role"], "content": r["content"]})
     return found
+
+
+def is_error(row) -> bool:
+    """Une réponse qui n'est qu'une erreur ? Sa marque (ERROR_SOURCE) ; avant la marque,
+    son début (ERROR_MARK) sans aucune source. Une vraie réponse qui commence par « ⚠ »
+    reste une réponse."""
+    sources = _sources(row["sources"])
+    if any(s.get("type") == "error" for s in sources):
+        return True
+    try:
+        created = float(row["created"] or 0)
+    except (KeyError, IndexError, TypeError, ValueError):
+        created = 0.0
+    return (not sources and created < _MARKED_SINCE
+            and str(row["content"] or "").startswith(ERROR_MARK))
 
 
 def _sources(sources) -> list:

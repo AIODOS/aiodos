@@ -295,7 +295,7 @@ def _occupy(model, executor):
                     _sent.pop(parsed[0], None)
 
 
-QUIET = {"route", "sources", "status"}    # ce qui n'engage pas encore la réponse
+QUIET = {"route", "summary", "sources", "status"}    # ce qui n'engage pas encore la réponse
 
 
 def _hands_over(exc) -> bool:

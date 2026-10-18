@@ -270,13 +270,13 @@ def run_index_conversation(payload):
     if rebuild and entry is None:
         return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
     known = store.message_starts(entry["id"]) if entry and not rebuild else {}
-    messages = db.query("SELECT id, role, content, sources FROM messages "
+    messages = db.query("SELECT id, role, content, sources, created FROM messages "
                         "WHERE conversation_id=? ORDER BY id", (conv_id,))
     pieces, kept, changed = [], set(), []
     for m in messages:
         if m["role"] == "assistant" and conversations.cites_others(m["sources"]):
             continue          # appuyée sur des passages d'autres machines : pas en mémoire
-        if m["role"] == "assistant" and str(m["content"] or "").startswith(conversations.ERROR_MARK):
+        if m["role"] == "assistant" and conversations.is_error(m):
             continue          # une erreur, pas une réponse
         who = "Utilisateur" if m["role"] == "user" else "Assistant"
         texts = chunking.chunk_text(f"{who} : {m['content']}")[:999]

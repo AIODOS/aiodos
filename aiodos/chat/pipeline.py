@@ -213,7 +213,9 @@ def history_filter(destination, peers_ok: bool):
     quitte pas cette machine, ni une réponse appuyée sur une bibliothèque qui ne peut pas
     aller là (visible_libraries) ; une réponse appuyée sur des passages d'autres machines ne
     va qu'à un modèle autorisé (peers_ok). Une source d'avant l'identifiant de bibliothèque
-    est jugée sur son nom, et refusée si aucune bibliothèque visible ne le porte plus."""
+    est jugée sur son nom, et refusée si aucune bibliothèque visible ne le porte plus. Une
+    réponse qui cite des noms du sommaire (source « summary ») suit la même règle que leurs
+    bibliothèques."""
     only = visible_libraries(destination)
     names = None if only is None else {
         c["name"] for c in store.list_collections() if c["id"] in only}
@@ -231,8 +233,37 @@ def history_filter(destination, peers_ok: bool):
                     return False
                 if known is None and s.get("collection") not in names:
                     return False
+            if only is not None and kind == "summary":
+                if any(i not in only for i in s.get("collection_ids") or []):
+                    return False
         return True
     return keep
+
+
+def summary_mentioned(shown: dict, content: str) -> list:
+    """Les bibliothèques du sommaire (build_messages, summary) dont la réponse cite un
+    élément : son chemin, le nom du fichier avec ou sans son extension, ou le titre d'une
+    conversation de la mémoire. Pas le nom des bibliothèques (« Général » se lirait dans
+    trop de réponses), ni les noms de moins de quatre lettres."""
+    text = str(content or "").casefold()
+    found = []
+    for collection_id, names in (shown or {}).items():
+        if any(form in text for name in names for form in _name_forms(name)):
+            found.append(int(collection_id))
+    return found
+
+
+def _name_forms(name: str) -> set:
+    """Le nom tel quel, sans son dossier, le titre d'une conversation (« titre · #12 »), et
+    le nom sans extension s'il ne ressemble pas à un mot courant (chiffres, tirets…)."""
+    name = str(name or "").strip()
+    forms = {name, name.split(" · #")[0]}
+    base = name.replace(chr(92), "/").rsplit("/", 1)[-1]
+    forms.add(base)
+    stem = base.rsplit(".", 1)[0]
+    if stem != base and any(not ch.isalpha() for ch in stem):
+        forms.add(stem)
+    return {f.casefold() for f in forms if len(f.strip()) >= 4}
 
 
 def select_relevant(hits, min_score, limit=4) -> list:
@@ -312,8 +343,13 @@ def _can_create() -> str | None:
 
 
 def build_messages(history, question, *, libraries, conversations, web_search,
-                   conversation_id=None, destination=None, web=None, peers=None):
+                   conversation_id=None, destination=None, web=None, peers=None,
+                   summary=None):
     """Construit les messages pour le modèle. → (messages, sources citées)
+
+    summary : un dict à remplir avec les noms montrés au modèle dans le sommaire des
+    bibliothèques, {id de bibliothèque : [noms de ses éléments montrés]} ; une réponse
+    qui les cite s'en est servie (summary_mentioned).
 
     destination : machine qui répondra (cf. visible_libraries) ; web : résultats déjà
     obtenus par web_context, sinon la recherche est faite ici si web_search.
@@ -328,9 +364,12 @@ def build_messages(history, question, *, libraries, conversations, web_search,
         messages.append({"role": "system", "content": note})
     sources = []
     if libraries or conversations:
-        summary = search.manifest(libraries, conversations, only=only)
-        if summary:
-            messages.append({"role": "system", "content": _MANIFEST.format(summary)})
+        parts = search.manifest_parts(libraries, conversations, only=only)
+        if parts:
+            messages.append({"role": "system",
+                             "content": _MANIFEST.format(search.manifest_text(parts))})
+            if summary is not None:               # les noms montrés (summary_mentioned)
+                summary.update({cid: list(shown) for cid, _name, _total, shown in parts})
     messages.extend(history)
 
     web_ok = False

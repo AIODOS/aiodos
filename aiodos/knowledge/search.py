@@ -144,15 +144,25 @@ def search_in(vector, k, collection_ids, exclude=None) -> list:
 
 def manifest(libraries=True, conversations=False, per_collection=25, only=None) -> str:
     """Sommaire de ce que l'IA possède : l'IA ne voit sinon que des extraits."""
-    allowed = allowed_collections(libraries, conversations, only)
-    lines = []
-    for collection_id, name in allowed:
+    return manifest_text(manifest_parts(libraries, conversations, per_collection, only))
+
+
+def manifest_parts(libraries=True, conversations=False, per_collection=25, only=None) -> list:
+    """Le sommaire, bibliothèque par bibliothèque : (id, nom, nombre d'éléments, noms
+    montrés). Une réponse qui cite ces noms s'en est servie (pipeline.summary_mentioned)."""
+    parts = []
+    for collection_id, name in allowed_collections(libraries, conversations, only):
         sources = [r["source"] for r in db.query(
             "SELECT source FROM entries WHERE collection_id=? ORDER BY source",
             (collection_id,))]
-        if not sources:
-            continue
-        shown = ", ".join(sources[:per_collection])
-        more = f" … (+{len(sources) - per_collection})" if len(sources) > per_collection else ""
-        lines.append(f"• {name} ({len(sources)} éléments) : {shown}{more}")
+        if sources:
+            parts.append((collection_id, name, len(sources), sources[:per_collection]))
+    return parts
+
+
+def manifest_text(parts) -> str:
+    lines = []
+    for _collection_id, name, total, shown in parts:
+        more = f" … (+{total - len(shown)})" if total > len(shown) else ""
+        lines.append(f"• {name} ({total} éléments) : {', '.join(shown)}{more}")
     return "\n".join(lines)

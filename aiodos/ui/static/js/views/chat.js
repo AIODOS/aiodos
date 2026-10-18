@@ -478,6 +478,7 @@ function appendAssistant(model, here = false) {
       const box = node.querySelector('.sources');
       box.innerHTML = '';
       for (const s of list || []) {
+        if (s.type === 'summary' || s.type === 'error') continue;   // marques internes
         if (s.type === 'web') {
           box.append(h(`<a class="source" href="${esc(s.url)}" title="${esc(s.title || s.url)}">${icon('globe')}${esc(s.label)}</a>`));
         } else if (s.type === 'remote') {         // trouvé dans la bibliothèque d'une autre machine

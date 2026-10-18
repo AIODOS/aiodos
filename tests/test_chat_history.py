@@ -95,11 +95,19 @@ def test_a_withheld_answer_keeps_its_place(answers):
 
 
 # ------------------------------------------------------------- erreurs
+def _after_the_mark(message_id):
+    """Daté d'après la marque des erreurs : seul compte alors ERROR_SOURCE."""
+    db.execute("UPDATE messages SET created=? WHERE id=?",
+               (conversations._MARKED_SINCE + 3600, message_id))
+
+
 def test_an_error_is_shown_but_neither_reused_nor_remembered(fake_embed):
     store.ensure_defaults()
     conv = conversations.create()
     conversations.add_message(conv, "user", "Bonjour")
-    conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté")
+    _after_the_mark(conversations.add_message(
+        conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté",
+        sources=[conversations.ERROR_SOURCE]))
     conversations.add_message(conv, "user", "Tu es là ?")
     conversations.add_message(conv, "assistant", "Oui, je suis là.")
     assert conversations.history(conv) == [
@@ -109,6 +117,28 @@ def test_an_error_is_shown_but_neither_reused_nor_remembered(fake_embed):
     memory = " ".join(store.chunk_texts(store.entry_by_origin(
         store.conversation_collection_id(), str(conv))["id"]))
     assert "je suis là" in memory and "Ollama" not in memory
+
+
+def test_an_answer_that_begins_with_a_warning_sign_is_still_an_answer(fake_embed):
+    store.ensure_defaults()
+    conv = conversations.create()
+    conversations.add_message(conv, "user", "Que faut-il savoir ?")
+    _after_the_mark(conversations.add_message(
+        conv, "assistant", f"{conversations.ERROR_MARK}Attention : ne mélange pas les deux."))
+    assert conversations.history(conv)[-1]["content"].endswith("ne mélange pas les deux.")
+    index.run_index_conversation({"conversation_id": conv})
+    memory = " ".join(store.chunk_texts(store.entry_by_origin(
+        store.conversation_collection_id(), str(conv))["id"]))
+    assert "ne mélange pas" in memory
+
+
+def test_an_error_saved_before_the_mark_is_still_recognized():
+    conv = conversations.create()
+    conversations.add_message(conv, "user", "Bonjour")
+    old = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté")
+    db.execute("UPDATE messages SET created=? WHERE id=?",
+               (conversations._MARKED_SINCE - 86400, old))
+    assert conversations.history(conv) == [{"role": "user", "content": "Bonjour"}]
 
 
 # ------------------------------------------------------------- mémoire
@@ -194,3 +224,39 @@ def test_a_failed_answer_is_saved_once_and_left_out_afterwards(api, monkeypatch)
         time.sleep(0.05)
     assert [m["content"] for m in conversations.get(conv)["messages"]][-1] == "Me voici."
     assert len(_memory_jobs(conv)) == 1
+
+
+# ------------------------------------------------- noms vus dans le sommaire
+def test_an_answer_that_names_what_the_summary_showed_follows_its_library(api, monkeypatch,
+                                                                          fake_embed):
+    """Le sommaire des bibliothèques montre au modèle les noms des fichiers ; une réponse
+    qui les cite ne part pas, dans l'historique, là où ces noms ne doivent pas aller."""
+    secret = store.create_collection("Banque")
+    store.set_scope(secret, "local")
+    store.upsert_entry(secret, "releve-compte-2026.pdf", "file", None,
+                       [("solde créditeur", fake_embed(["solde créditeur"])[0])])
+    replies = iter(["Tu as releve-compte-2026.pdf dans tes bibliothèques.", "Bonjour !"])
+    monkeypatch.setattr(pipeline, "generate",
+                        lambda *a, **k: iter([("content", next(replies))]))
+    events = _chat(api, text="Qu'as-tu comme fichiers ?", libraries=True)
+    conv = events[0]["conversation_id"]
+    shown = next(e["sources"] for e in events if e["type"] == "sources")
+    assert all(s["type"] != "summary" for s in shown)            # rien de montré à l'écran
+    _chat(api, text="Salut", conversation_id=conv, libraries=True)
+    saved = conversations.get(conv)["messages"]
+    assert {"type": "summary", "collection_ids": [secret]} in saved[1]["sources"]
+    assert not any(s["type"] == "summary" for s in saved[3]["sources"])  # ne cite rien
+    rows = conversations.history_rows(conv)
+    here = conversations.as_history(rows, pipeline.history_filter(None, True))
+    mine = conversations.as_history(rows, pipeline.history_filter("mine", True))
+    assert "releve-compte" in here[1]["content"]
+    assert mine[1]["content"] == conversations.WITHHELD and mine[3]["content"] == "Bonjour !"
+
+
+def test_names_are_recognized_in_their_usual_forms():
+    shown = {1: ["Projet/sous/releve-compte-2026.pdf"], 2: ["Divorce · #12"],
+             3: ["a.c", "tarte.txt"]}
+    assert pipeline.summary_mentioned(shown, "Voir RELEVE-COMPTE-2026, page 2.") == [1]
+    assert pipeline.summary_mentioned(shown, "Ta conversation « Divorce » parlait de…") == [2]
+    assert pipeline.summary_mentioned(shown, "Un fichier a.c, ou une tarte ?") == []
+    assert pipeline.summary_mentioned(shown, "Ta recette tarte.txt") == [3]

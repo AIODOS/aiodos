@@ -124,11 +124,14 @@ async def chat(body: ChatIn, request: Request):
                 ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
                 if (level, ok) not in built:
                     history = conversations.as_history(rows, pipeline.history_filter(level, ok))
-                    built[level, ok] = pipeline.build_messages(
+                    shown = {}            # noms du sommaire montrés à cette machine
+                    built[level, ok] = (*pipeline.build_messages(
                         history, text, libraries=libraries, conversations=memory,
                         web_search=body.web, conversation_id=conv_id, destination=level,
-                        web=web, peers=body.peer_libraries if ok else None)
-                messages, sources = built[level, ok]
+                        web=web, peers=body.peer_libraries if ok else None,
+                        summary=shown), shown)
+                messages, sources, shown = built[level, ok]
+                yield "summary", shown
                 yield "sources", sources
                 if stop.is_set():
                     return
@@ -144,7 +147,7 @@ async def chat(body: ChatIn, request: Request):
             put(("error", str(exc)))
 
     state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None,
-             "model": plan[0]}
+             "model": plan[0], "shown": {}}
     saving = threading.Lock()
 
     def save():
@@ -154,15 +157,24 @@ async def chat(body: ChatIn, request: Request):
             if state["saved"] is not None:
                 return state["saved"]
             content = state["content"]
-            if state["error"] and not content:
+            failed = bool(state["error"] and not content)    # rien qu'une erreur
+            if failed:
                 content = f"{conversations.ERROR_MARK}{state['error']}"
             if not content and not state["thinking"]:
                 state["saved"] = 0
                 return 0
+            # Une réponse qui cite des noms du sommaire des bibliothèques s'en est servie :
+            # elle ne suivra pas, dans l'historique, vers une machine qui ne doit pas les voir
+            sources = list(state["sources"])
+            cited = pipeline.summary_mentioned(state["shown"], content)
+            if cited:
+                sources.append({"type": "summary", "collection_ids": cited})
+            if failed:
+                sources.append(dict(conversations.ERROR_SOURCE))
             state["saved"] = conversations.add_message(
                 conv_id, "assistant", content, state["thinking"] or None,
-                state["model"], state["sources"], conversation_model=body.model)
-            if memory and not content.startswith(conversations.ERROR_MARK):
+                state["model"], sources, conversation_model=body.model)
+            if memory and not failed:
                 job_id = index.queue_conversation(conv_id)
                 if job_id is not None:
                     executor.wake()
@@ -183,6 +195,8 @@ async def chat(body: ChatIn, request: Request):
                 if kind == "route":
                     state["model"] = data["model"]
                     yield sse({"type": "route", **data})
+                elif kind == "summary":   # gardé pour l'enregistrement, pas montré
+                    state["shown"] = data
                 elif kind == "sources":
                     state["sources"] = data
                     yield sse({"type": "sources", "sources": data})
