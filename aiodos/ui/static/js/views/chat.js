@@ -91,6 +91,11 @@ export function mountChat(container) {
   el.input.addEventListener('input', autoresize);
   el.input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+    // Flèche haut dans une zone vide : modifier son dernier message
+    if (e.key === 'ArrowUp' && !el.input.value && !editing) {
+      const last = el.list.querySelector('.msg.user.last-turn');
+      if (last) { e.preventDefault(); startEditing(last); }
+    }
   });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
