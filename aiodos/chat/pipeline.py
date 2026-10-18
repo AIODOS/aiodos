@@ -19,7 +19,7 @@ import logging
 import re
 
 from aiodos import settings
-from aiodos.chat import creations
+from aiodos.chat import conversations, creations
 from aiodos.cluster import group as cluster
 from aiodos.knowledge import search, store
 from aiodos.network import placement, remote_models, remote_search, sharing
@@ -71,8 +71,9 @@ _RULE_WEB_NOTHING = ("RAPPEL IMPORTANT : la recherche web n'a rien donné d'util
                      "N'invente JAMAIS d'URL ni de résultat de recherche.")
 
 
-def preflight(text: str, model: str, conversation_id=None) -> dict:
-    """Ce que l'interface doit faire valider avant l'envoi (web, cloud)."""
+def preflight(text: str, model: str, conversation_id=None, replace_from=None) -> dict:
+    """Ce que l'interface doit faire valider avant l'envoi (web, cloud). replace_from : le
+    message que celui-ci remplacera (« Modifier »)."""
     provider = cloud.provider_of(model)
     return {
         "remote": remote_models.peer_name(model),     # machine appairée qui répondra
@@ -83,15 +84,15 @@ def preflight(text: str, model: str, conversation_id=None) -> dict:
         "cloud_confirm": bool(settings.get("cloud_confirm")),
         "consult": _consult_targets(),                 # chez qui partirait la question
         "consult_allowed": peers_allowed(model),       # et si ce modèle peut s'en servir
-        "create": _creation(text, conversation_id),    # une image ou une vidéo à créer
+        "create": _creation(text, conversation_id, replace_from),   # image ou vidéo à créer
     }
 
 
-def _creation(text: str, conversation_id=None) -> dict | None:
+def _creation(text: str, conversation_id=None, before=None) -> dict | None:
     """La demande d'image ou de vidéo du message, ou la retouche de la dernière création
     (chat/creations.py) ; jamais d'erreur ici."""
     try:
-        return creations.preflight(text, conversation_id)
+        return creations.preflight(text, conversation_id, before)
     except Exception as exc:
         log.warning("Demande de création illisible : %s", exc)
         return None
@@ -236,32 +237,82 @@ def history_filter(destination, peers_ok: bool):
             if only is not None and kind == "summary":
                 if any(i not in only for i in s.get("collection_ids") or []):
                     return False
+            if kind == "inherited":           # reçu d'une réponse précédente (inherited)
+                if s.get("remote") and not peers_ok:
+                    return False
+                if s.get("memory") and destination is not None:
+                    return False
+                if only is not None and any(i not in only for i in s.get("collection_ids") or []):
+                    return False
         return True
     return keep
 
 
+def inherited(rows, keep=None) -> dict:
+    """Ce qu'une réponse doit aux réponses de son historique (elle a pu les reprendre mot
+    pour mot) : leurs bibliothèques, la mémoire, les passages d'autres machines ; seulement
+    celles que keep laisse passer (les autres ne lui ont pas été montrées). → {"collection_ids",
+    "memory", "remote"}, vide si rien ne restreint. Une source d'avant l'identifiant de
+    bibliothèque se retrouve par son nom ; introuvable, elle compte pour une bibliothèque
+    que personne d'autre ne voit (-1)."""
+    names = {c["name"]: c["id"] for c in store.list_collections()}
+    ids, memory, remote = set(), False, False
+    for r in rows:
+        if r["role"] != "assistant" or conversations.is_error(r):
+            continue
+        sources = conversations.sources_of(r["sources"])
+        if keep is not None and not keep(sources):
+            continue
+        for s in sources:
+            kind = s.get("type")
+            if kind == "knowledge":
+                known = s.get("collection_id")
+                ids.add(int(known) if known is not None else names.get(s.get("collection"), -1))
+            elif kind in ("summary", "inherited"):
+                ids.update(int(i) for i in s.get("collection_ids") or [])
+                memory = memory or bool(s.get("memory"))
+                remote = remote or bool(s.get("remote"))
+            elif kind == "conversation":
+                memory = True
+            elif kind == "remote":
+                remote = True
+    if not (ids or memory or remote):
+        return {}
+    return {"collection_ids": sorted(ids), "memory": memory, "remote": remote}
+
+
 def summary_mentioned(shown: dict, content: str) -> list:
     """Les bibliothèques du sommaire (build_messages, summary) dont la réponse cite un
-    élément : son chemin, le nom du fichier avec ou sans son extension, ou le titre d'une
-    conversation de la mémoire. Pas le nom des bibliothèques (« Général » se lirait dans
-    trop de réponses), ni les noms de moins de quatre lettres."""
+    élément, en mots entiers (_name_forms). Pas le nom des bibliothèques (« Général » se
+    lirait dans trop de réponses)."""
     text = str(content or "").casefold()
     found = []
     for collection_id, names in (shown or {}).items():
-        if any(form in text for name in names for form in _name_forms(name)):
+        if any(_cites(text, form) for name in names for form in _name_forms(name)):
             found.append(int(collection_id))
     return found
 
 
+def _cites(text: str, form: str) -> bool:
+    """Le nom figure dans le texte en mots entiers (« tarte » ne se lit pas dans
+    « tartelette »)."""
+    return re.search(r"(?<!\w)" + re.escape(form) + r"(?!\w)", text) is not None
+
+
 def _name_forms(name: str) -> set:
-    """Le nom tel quel, sans son dossier, le titre d'une conversation (« titre · #12 »), et
-    le nom sans extension s'il ne ressemble pas à un mot courant (chiffres, tirets…)."""
+    """Les formes sous lesquelles une réponse citerait un nom du sommaire : le titre d'une
+    conversation de la mémoire (« titre · #12 ») s'il a au moins deux mots (« Bonjour » se
+    lirait partout) ; un fichier tel quel, sans son dossier, et sans son extension s'il
+    mêle lettres et chiffres ou tirets (pas un mot ni un nombre courants : « tarte »,
+    « 2025 »). Rien de moins de quatre caractères."""
     name = str(name or "").strip()
-    forms = {name, name.split(" · #")[0]}
+    if " · #" in name:
+        title = name.split(" · #")[0].strip()
+        return {title.casefold()} if len(title.split()) >= 2 and len(title) >= 4 else set()
     base = name.replace(chr(92), "/").rsplit("/", 1)[-1]
-    forms.add(base)
+    forms = {name, base}
     stem = base.rsplit(".", 1)[0]
-    if stem != base and any(not ch.isalpha() for ch in stem):
+    if stem != base and any(ch.isalpha() for ch in stem) and any(not ch.isalpha() for ch in stem):
         forms.add(stem)
     return {f.casefold() for f in forms if len(f.strip()) >= 4}
 
@@ -368,8 +419,10 @@ def build_messages(history, question, *, libraries, conversations, web_search,
         if parts:
             messages.append({"role": "system",
                              "content": _MANIFEST.format(search.manifest_text(parts))})
-            if summary is not None:               # les noms montrés (summary_mentioned)
-                summary.update({cid: list(shown) for cid, _name, _total, shown in parts})
+            if summary is not None:               # les noms montrés (summary_mentioned) ;
+                own = f" · #{conversation_id}"    # pas la mémoire de cette conversation-ci
+                summary.update({cid: [n for n in shown if not n.endswith(own)]
+                                for cid, _name, _total, shown in parts})
     messages.extend(history)
 
     web_ok = False

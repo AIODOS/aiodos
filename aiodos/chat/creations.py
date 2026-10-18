@@ -283,13 +283,14 @@ def capability_note() -> str | None:
             "images créées : tu n'en connais que la description.")
 
 
-def preflight(text: str, conversation_id=None) -> dict | None:
+def preflight(text: str, conversation_id=None, before=None) -> dict | None:
     """La demande reconnue dans le message, et le modèle qui la calculerait (None : aucun
     ne le peut en ce moment). Après une création, une retouche (« Fais-la de nuit ») ou
-    une variante (« Encore une ») de celle-ci : followup, d'après chat/retouches.py."""
+    une variante (« Encore une ») de celle-ci : followup, d'après chat/retouches.py.
+    before : le message remplacé (« Modifier ») ; la création d'avant lui compte."""
     found = intent(text)
     if found is None and conversation_id is not None:
-        last = conversations.last_media(conversation_id)
+        last = conversations.last_media(conversation_id, before)
         followup = retouches.detect(text) if last else None
         if followup:
             count = last.get("count") or 1
@@ -325,10 +326,11 @@ def _nothing_can(media_kind: str) -> CreationError:
                          f"vidéos ».", status=409)
 
 
-def _followed(request: dict, text: str, conv_id, chat_model) -> dict:
-    """Une retouche ou une variante de la dernière création de la conversation : ses
-    réglages (modèle, format, durée, nombre), et sa description retouchée ou reprise."""
-    last = conversations.last_media(conv_id) if conv_id is not None else None
+def _followed(request: dict, text: str, conv_id, chat_model, before=None) -> dict:
+    """Une retouche ou une variante de la dernière création de la conversation (avant le
+    message remplacé, s'il y en a un) : ses réglages (modèle, format, durée, nombre), et
+    sa description retouchée ou reprise."""
+    last = conversations.last_media(conv_id, before) if conv_id is not None else None
     if last is None:
         return request
     edit = request.get("followup") == retouches.EDIT
@@ -358,11 +360,14 @@ def _first_image(media: dict):
     return None
 
 
-def start(text: str, request: dict, conversation_id=None, chat_model=None) -> dict:
+def start(text: str, request: dict, conversation_id=None, chat_model=None,
+          replace_from=None, replace_text=None) -> dict:
     """Ajoute la demande à la conversation (créée au besoin) et lance son travail.
     request : kind, model, prompt, count, width, height, shape, frames, seconds, seed,
     negative (vides : tirés du message, du modèle et de ses réglages par défaut), et
     followup (retouche ou variante de la dernière création, chat/retouches.py).
+    replace_from, replace_text : « Modifier » ; ce message de l'utilisateur et la suite
+    sont retirés (replace), une fois la demande acceptée.
     → {"conversation_id", "title", "user_message_id", "message_id", "job_id", "media"} ;
     CreationError si rien ne peut la calculer, ou si elle est invalide."""
     text = (text or "").strip()
@@ -371,8 +376,10 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
     conv_id = conversation_id
     if conv_id is not None and not conversations.get(conv_id):
         conv_id = None
+    if replace_from is not None and conv_id is None:
+        raise CreationError(CHANGED, status=409)
     if request.get("followup") and not request.get("prompt"):
-        request = _followed(request, text, conv_id, chat_model)
+        request = _followed(request, text, conv_id, chat_model, replace_from)
     found = intent(text) or {}
     media_kind = request.get("kind") or found.get("kind") or "image"
     if media_kind not in ("image", "video"):
@@ -402,6 +409,8 @@ def start(text: str, request: dict, conversation_id=None, chat_model=None) -> di
             "strength": request.get("strength") if same else None})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
+    if replace_from is not None:
+        replace(conv_id, replace_from, replace_text)
     if conv_id is None:
         conv_id = conversations.create(model=chat_model or None)
     user_message_id = conversations.add_message(conv_id, "user", text)
@@ -442,6 +451,24 @@ def undo(message_id: int) -> dict:
                                   [message_id] + ([found["asked_id"]] if found["asked_id"] else []))
     return {"conversation_id": found["conversation_id"], "text": found["asked"] or "",
             "job_id": job["id"] if same_job(job, media) else None}
+
+
+CHANGED = "La conversation a changé entre-temps (autre fenêtre ?) : recharge-la."
+
+
+def replace(conv_id, message_id, expect=None):
+    """« Régénérer », « Modifier » : la conversation reprend à ce message de l'utilisateur,
+    retiré avec la suite (conversations.rewind) ; les créations retirées s'arrêtent.
+    CreationError (409) si ce n'est pas le message attendu (expect : son texte)."""
+    found = conversations.user_message(conv_id, message_id)
+    if found is None or (expect is not None and found != expect):
+        raise CreationError(CHANGED, status=409)
+    for media in conversations.media_from(conv_id, message_id):
+        job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
+        if same_job(job, media) and job["status"] in ("queued", "running", "paused"):
+            queue.cancel_job(job["id"])
+    if conversations.rewind(conv_id, message_id, expect) is None:
+        raise CreationError(CHANGED, status=409)
 
 
 def same_job(job: dict | None, media: dict) -> bool:

@@ -19,6 +19,7 @@ class FolderIn(BaseModel):
 
 class RewindIn(BaseModel):
     message_id: int
+    expect: str | None = None           # son texte, tel que l'interface le croit
 
 
 def _notify(request: Request):
@@ -68,9 +69,13 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
     message de l'utilisateur, qui en est retiré avec tout ce qui suit ; l'interface le
     renvoie ensuite (tel quel, ou modifié) comme un nouveau message. → son texte."""
     pending.wait(conv_id)                 # une réponse arrêtée juste avant : retirée aussi
-    text = conversations.rewind(conv_id, body.message_id)
+    text = conversations.user_message(conv_id, body.message_id)
     if text is None:
         raise HTTPException(404, "Message introuvable dans cette conversation.")
+    try:                                  # ses créations en cours s'arrêtent
+        creations.replace(conv_id, body.message_id, body.expect)
+    except creations.CreationError as exc:
+        raise HTTPException(exc.status, str(exc))
     _notify(request)
     return {"text": text}
 

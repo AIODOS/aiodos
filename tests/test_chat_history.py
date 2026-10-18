@@ -249,20 +249,63 @@ def test_an_answer_that_names_what_the_summary_showed_follows_its_library(api, m
     saved = conversations.get(conv)["messages"]
     assert {"type": "summary", "collection_ids": [secret]} in saved[1]["sources"]
     assert not any(s["type"] == "summary" for s in saved[3]["sources"])  # ne cite rien
+    # … mais elle a reçu la première dans son historique, et a pu la reprendre
+    assert {"type": "inherited", "collection_ids": [secret], "memory": False,
+            "remote": False} in saved[3]["sources"]
     rows = conversations.history_rows(conv)
     here = conversations.as_history(rows, pipeline.history_filter(None, True))
     mine = conversations.as_history(rows, pipeline.history_filter("mine", True))
-    assert "releve-compte" in here[1]["content"]
-    assert mine[1]["content"] == conversations.WITHHELD and mine[3]["content"] == "Bonjour !"
+    assert "releve-compte" in here[1]["content"] and here[3]["content"] == "Bonjour !"
+    assert mine[1]["content"] == mine[3]["content"] == conversations.WITHHELD
+
+
+def test_an_answer_inherits_only_what_its_model_was_shown():
+    """« Comme dit : releve-compte-2026.pdf… » : une réponse qui reprend une réponse
+    précédente en reçoit les marques ; une réponse retirée de l'historique ne lui a rien
+    montré, elle ne lui impose rien."""
+    store.ensure_defaults()
+    secret = _library("Banque", "local")
+    rows = [{"role": "user", "content": "Qu'as-tu ?", "sources": "[]"},
+            {"role": "assistant", "content": "releve-compte-2026.pdf", "sources": json.dumps(
+                [{"type": "summary", "collection_ids": [secret["collection_id"]]}])},
+            {"role": "user", "content": "Et la mémoire ?", "sources": "[]"},
+            {"role": "assistant", "content": "Ta conversation sur Lisbonne.",
+             "sources": json.dumps([MEMORY])},
+            {"role": "assistant", "content": f"{conversations.ERROR_MARK}Ollama arrêté",
+             "sources": json.dumps([conversations.ERROR_SOURCE, OTHERS])}]
+    assert pipeline.inherited(rows, pipeline.history_filter(None, True)) == {
+        "collection_ids": [secret["collection_id"]], "memory": True, "remote": False}
+    assert pipeline.inherited(rows, pipeline.history_filter("mine", True)) == {}
+    keep = pipeline.history_filter("mine", True)
+    marked = {"type": "inherited", "collection_ids": [], "memory": True, "remote": False}
+    assert not keep([marked]) and pipeline.history_filter(None, True)([marked])
+    assert conversations.cites_others([{"type": "inherited", "remote": True}])
 
 
 def test_names_are_recognized_in_their_usual_forms():
-    shown = {1: ["Projet/sous/releve-compte-2026.pdf"], 2: ["Divorce · #12"],
-             3: ["a.c", "tarte.txt"]}
+    shown = {1: ["Projet/sous/releve-compte-2026.pdf"], 2: ["Divorce de Paul · #12"],
+             3: ["a.c", "tarte.txt", "2025.pdf"], 4: ["Bonjour · #3"]}
     assert pipeline.summary_mentioned(shown, "Voir RELEVE-COMPTE-2026, page 2.") == [1]
-    assert pipeline.summary_mentioned(shown, "Ta conversation « Divorce » parlait de…") == [2]
+    assert pipeline.summary_mentioned(shown, "Ta conversation « Divorce de Paul »…") == [2]
     assert pipeline.summary_mentioned(shown, "Un fichier a.c, ou une tarte ?") == []
     assert pipeline.summary_mentioned(shown, "Ta recette tarte.txt") == [3]
+    # Ni un mot ou un nombre courants, ni un titre d'un seul mot, ni un bout de mot
+    assert pipeline.summary_mentioned(shown, "Bonjour ! En 2025, Paris est la capitale.") == []
+    assert pipeline.summary_mentioned(shown, "Une tartelette.txt ? Non.") == []
+
+
+def test_the_current_conversation_is_not_a_name_to_watch(fake_embed):
+    store.ensure_defaults()
+    conv = conversations.create()
+    memory = store.conversation_collection_id()
+    store.upsert_entry(memory, f"Voyage à Lisbonne · #{conv}", "conversation", str(conv),
+                       [("souvenir", fake_embed(["souvenir"])[0])])
+    store.upsert_entry(memory, "Recette des crêpes · #999", "conversation", "999",
+                       [("crêpes", fake_embed(["crêpes"])[0])])
+    shown = {}
+    pipeline.build_messages([], "Bonjour", libraries=False, conversations=True,
+                            web_search=False, conversation_id=conv, summary=shown)
+    assert shown == {memory: ["Recette des crêpes · #999"]}
 
 
 # ------------------------------------------------- réponse arrêtée, puis la suite

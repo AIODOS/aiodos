@@ -9,8 +9,8 @@ ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une err
 ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
 # À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
 # doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
-WITHHELD = ("(Réponse appuyée sur des passages trouvés chez d'autres machines : "
-            "non transmise à ce modèle.)")
+WITHHELD = ("(Réponse non transmise à ce modèle : elle s'appuie sur des documents, des "
+            "souvenirs ou des passages qui ne lui sont pas confiés.)")
 
 
 def list_tree() -> dict:
@@ -111,11 +111,13 @@ def add_message(conv_id, role, content, thinking=None, model=None, sources=None,
     return message_id
 
 
-def last_media(conv_id) -> dict | None:
+def last_media(conv_id, before=None) -> dict | None:
     """La demande d'images ou de vidéos de la dernière réponse, si cette réponse en est une
-    (chat/retouches.py : « Fais-la de nuit » se rapporte à elle)."""
+    (chat/retouches.py : « Fais-la de nuit » se rapporte à elle). before : la dernière
+    avant ce message (« Modifier » une retouche se rapporte à la création d'avant)."""
     row = db.query_one("SELECT media FROM messages WHERE conversation_id=? AND role='assistant' "
-                       "ORDER BY id DESC LIMIT 1", (conv_id,))
+                       "AND id < ? ORDER BY id DESC LIMIT 1",
+                       (conv_id, int(before) if before is not None else 2 ** 62))
     if row is None or not row["media"]:
         return None
     try:
@@ -155,17 +157,47 @@ def remove_messages(conv_id, ids):
                    (conv_id, *ids))
 
 
-def rewind(conv_id, message_id) -> str | None:
+def user_message(conv_id, message_id) -> str | None:
+    """Le texte de ce message de l'utilisateur dans cette conversation, ou None."""
+    row = db.query_one("SELECT content FROM messages WHERE id=? AND conversation_id=? "
+                       "AND role='user'", (int(message_id), conv_id))
+    return row["content"] if row else None
+
+
+def media_from(conv_id, message_id) -> list:
+    """Les demandes d'images et de vidéos des réponses à partir de ce message."""
+    found = []
+    for row in db.query("SELECT media FROM messages WHERE conversation_id=? AND id >= ? "
+                        "AND media IS NOT NULL", (conv_id, int(message_id))):
+        try:
+            media = json.loads(row["media"])
+        except ValueError:
+            continue
+        if isinstance(media, dict):
+            found.append(media)
+    return found
+
+
+def rewind(conv_id, message_id, expect=None) -> str | None:
     """Reprend la conversation à ce message de l'utilisateur (« Régénérer », « Modifier ») :
     lui et tout ce qui le suit en sont retirés, et de la mémoire des conversations (ses
     passages portent le numéro de leur message : idx = id × 1000 + n). → son texte, ou None
-    si ce n'est pas un message de l'utilisateur dans cette conversation."""
+    si ce n'est pas un message de l'utilisateur dans cette conversation, ou pas celui
+    qu'on croit (expect : son texte ; SQLite redonne les numéros des messages retirés, une
+    autre fenêtre a pu changer la conversation). Le titre tiré du premier message suit,
+    s'il était repris de lui."""
     row = db.query_one("SELECT content FROM messages WHERE id=? AND conversation_id=? "
                        "AND role='user'", (int(message_id), conv_id))
-    if row is None:
+    if row is None or (expect is not None and row["content"] != expect):
         return None
-    db.execute("DELETE FROM messages WHERE conversation_id=? AND id >= ?",
-               (conv_id, int(message_id)))
+    first = db.query_one("SELECT MIN(id) AS id FROM messages WHERE conversation_id=?",
+                         (conv_id,))["id"] == int(message_id)
+    with db.transaction() as c:
+        c.execute("DELETE FROM messages WHERE conversation_id=? AND id >= ?",
+                  (conv_id, int(message_id)))
+        if first:                     # le titre redeviendra celui du nouveau premier message
+            c.execute("UPDATE conversations SET title=? WHERE id=? AND title=?",
+                      (DEFAULT_TITLE, conv_id, _title_of(row["content"])))
     store.remove_chunks_from(store.conversation_collection_id(), str(conv_id),
                              int(message_id) * 1000)
     return row["content"]
@@ -185,14 +217,11 @@ def by_batch(batches) -> dict:
 
 
 def cites_others(sources) -> bool:
-    """La réponse s'appuie-t-elle sur des passages trouvés chez d'autres machines ?
-    `sources` : la liste enregistrée avec le message, ou son texte JSON."""
-    if isinstance(sources, str):
-        try:
-            sources = json.loads(sources or "[]")
-        except ValueError:
-            return False
-    return any(isinstance(s, dict) and s.get("type") == "remote" for s in sources or [])
+    """La réponse s'appuie-t-elle sur des passages trouvés chez d'autres machines, ou en
+    a-t-elle reçu d'une réponse précédente (« inherited ») ? `sources` : la liste
+    enregistrée avec le message, ou son texte JSON."""
+    return any(s.get("type") == "remote" or (s.get("type") == "inherited" and s.get("remote"))
+               for s in sources_of(sources))
 
 
 def history(conv_id, limit=30, with_others=True) -> list:
@@ -232,6 +261,11 @@ def is_error(row) -> bool:
     return any(s.get("type") == "error" for s in _sources(row["sources"]))
 
 
+def sources_of(sources) -> list:
+    """Les sources d'un message (la liste enregistrée, ou son texte JSON), lisibles."""
+    return _sources(sources)
+
+
 def _sources(sources) -> list:
     if isinstance(sources, str):
         try:
@@ -241,10 +275,14 @@ def _sources(sources) -> list:
     return [s for s in sources or [] if isinstance(s, dict)]
 
 
+def _title_of(text) -> str:
+    line = " ".join((text or "").split())
+    return (line[:60] + "…") if len(line) > 60 else line
+
+
 def auto_title(conv_id, text) -> str | None:
     """Donne un titre à une conversation neuve à partir du premier message."""
-    line = " ".join((text or "").split())
-    title = (line[:60] + "…") if len(line) > 60 else line
+    title = _title_of(text)
     if not title:
         return None
     # D'un seul geste : deux messages à la fois ne se disputent pas le titre

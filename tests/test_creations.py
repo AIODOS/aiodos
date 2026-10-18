@@ -365,3 +365,50 @@ def test_retouching_several_images_redraws_each_from_its_description(client, can
     params = queue.job_summary(edited["job_id"])["params"]
     assert params["count"] == 2 and "init_path" not in params
     assert params["seed"] == first["media"]["seed"]              # chacune garde sa graine
+
+
+def test_editing_a_retouch_starts_again_from_the_creation_before_it(client, can_draw,
+                                                                   monkeypatch):
+    """« Modifier » une retouche (« Fais-la de nuit » → « Fais-la sous la neige ») : la
+    nouvelle retouche part de la première image, et l'échange de la nuit laisse la place."""
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux", "width": 1024, "height": 1024}).json()
+    wait_for(lambda: queue.job_summary(first["job_id"])["status"] == "done")
+    monkeypatch.setattr(retouches, "rewrite", lambda prompt, text, model=None: f"{prompt} ({text})")
+    conv = first["conversation_id"]
+    night = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-la de nuit", "followup": "edit", "conversation_id": conv}).json()
+    wait_for(lambda: queue.job_summary(night["job_id"])["status"] == "done")
+    pre = client.post("/api/chat/preflight", headers=AUTH, json={
+        "text": "Fais-la sous la neige", "model": "", "conversation_id": conv,
+        "replace_from": night["user_message_id"]}).json()["create"]
+    assert pre["followup"] == "edit"
+    snow = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-la sous la neige", "followup": "edit", "conversation_id": conv,
+        "replace_from": night["user_message_id"], "replace_text": "Fais-la de nuit"}).json()
+    job = queue.job_summary(snow["job_id"])
+    assert job["params"]["prompt"] == "un chat roux (Fais-la sous la neige)"
+    from aiodos.imaging import gallery
+    first_image = gallery.path_of(gallery.batch(first["media"]["batch"])[0])
+    assert job["params"]["init_path"] == str(first_image)          # pas l'image de nuit
+    assert [m["content"] for m in conversations.get(conv)["messages"] if m["role"] == "user"] \
+        == ["Crée une image d'un chat roux", "Fais-la sous la neige"]
+
+
+def test_replacing_a_creation_stops_its_job(client, can_draw, monkeypatch):
+    import threading
+    gate = threading.Event()
+
+    def slow(params, stop=None, waiting=None):
+        gate.wait(10)
+        return {"png": png(params["width"], params["height"]), "seconds": 0.5}
+    monkeypatch.setattr(generate, "image", slow)
+    made = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée une image d'un chat roux"}).json()
+    reply = client.post(f"/api/conversations/{made['conversation_id']}/rewind", headers=AUTH,
+                        json={"message_id": made["user_message_id"],
+                              "expect": "Crée une image d'un chat roux"})
+    assert reply.status_code == 200
+    assert queue.job_summary(made["job_id"])["status"] == "cancelled"
+    gate.set()
+    assert conversations.get(made["conversation_id"])["messages"] == []

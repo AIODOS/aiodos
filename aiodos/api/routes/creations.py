@@ -29,6 +29,8 @@ class CreateIn(BaseModel):
     negative: str | None = None
     followup: str | None = None         # « edit » ou « variation » de la dernière création
     auto: bool = False                  # reconnue dans le message (et non demandée au bouton)
+    replace_from: int | None = None     # « Modifier » : ce message et la suite sont remplacés
+    replace_text: str | None = None     # son texte, tel que l'interface le croit
 
 
 @router.post("/create/{message_id}/undo")
@@ -50,7 +52,8 @@ async def create(body: CreateIn, request: Request):
         await asyncio.to_thread(pending.wait, body.conversation_id)
     try:
         made = await asyncio.to_thread(creations.start, body.text, body.model_dump(),
-                                       body.conversation_id, body.chat_model)
+                                       body.conversation_id, body.chat_model,
+                                       body.replace_from, body.replace_text)
     except creations.CreationError as exc:     # avec les amis qui pourraient calculer
         return JSONResponse({"detail": str(exc), "friends": exc.friends}, status_code=exc.status)
     executor = request.app.state.executor

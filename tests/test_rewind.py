@@ -158,3 +158,50 @@ def test_what_is_removed_during_the_computation_never_enters_the_memory(talk, mo
     monkeypatch.setattr(index.pacing, "embed", deleted_meanwhile)
     index.run_index_conversation({"conversation_id": conv})
     assert store.entry_by_origin(store.conversation_collection_id(), str(conv)) is None
+
+
+# ------------------------------------------------- remplacer, une fois accepté
+def _stream(http, **body):
+    with http.stream("POST", "/api/chat", headers=TOKEN,
+                     json=dict({"libraries": False, "conversations": False}, **body)) as reply:
+        return reply.status_code, [json.loads(line[6:]) for line in reply.iter_lines()
+                                   if line.startswith("data: ")]
+
+
+def test_the_old_exchange_goes_only_once_the_new_question_is_accepted(talk, monkeypatch):
+    conv, ids = talk
+    monkeypatch.setattr(pipeline, "generate", lambda *a, **k: iter([("content", "545 000.")]))
+    before = [m["content"] for m in conversations.get(conv)["messages"]]
+    replace = {"conversation_id": conv, "replace_from": ids[2],
+               "replace_text": "Et sa population ?"}
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        # Refusée avant l'envoi (cloud sans clé) : rien n'est retiré
+        assert _stream(http, text="Et sa population ?", model="cloud:mistral", **replace)[0] == 400
+        # Pas le message attendu (autre fenêtre, numéro repris) : rien n'est retiré
+        assert _stream(http, text="Et sa population ?", model="local-test",
+                       **dict(replace, replace_text="Autre chose"))[0] == 409
+        assert [m["content"] for m in conversations.get(conv)["messages"]] == before
+        status, events = _stream(http, text="Et sa population exacte ?", model="local-test",
+                                 **replace)
+    assert status == 200 and events[-1]["type"] == "done"
+    assert [m["content"] for m in conversations.get(conv)["messages"]] == [
+        "Quelle est la capitale du Portugal ?", "Lisbonne.", "Et sa population exacte ?",
+        "545 000."]
+
+
+def test_replacing_the_first_message_gives_its_title_back(talk, monkeypatch):
+    conv, ids = talk
+    monkeypatch.setattr(pipeline, "generate", lambda *a, **k: iter([("content", "Madrid.")]))
+    conversations.auto_title(conv, "Quelle est la capitale du Portugal ?")
+    with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
+        status, events = _stream(http, text="Quelle est la capitale de l'Espagne ?",
+                                 model="local-test", conversation_id=conv,
+                                 replace_from=ids[0],
+                                 replace_text="Quelle est la capitale du Portugal ?")
+    assert status == 200 and events[0]["title"] == "Quelle est la capitale de l'Espagne ?"
+    assert conversations.get(conv)["title"] == "Quelle est la capitale de l'Espagne ?"
+    # Un titre choisi par l'utilisateur reste
+    conversations.rename(conv, "Géographie")
+    first = conversations.get(conv)["messages"][0]["id"]
+    assert conversations.rewind(conv, first) is not None
+    assert conversations.get(conv)["title"] == "Géographie"

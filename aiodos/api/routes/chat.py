@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from aiodos import render, settings
 from aiodos.api.events import sse
-from aiodos.chat import conversations, pending, pipeline
+from aiodos.chat import conversations, creations, pending, pipeline
 from aiodos.jobs.kinds import index
 from aiodos.network import placement
 from aiodos.services import cloud
@@ -32,6 +32,7 @@ class PreflightIn(BaseModel):
     text: str
     model: str
     conversation_id: int | None = None  # pour reconnaître la retouche d'une création
+    replace_from: int | None = None     # « Modifier » : le message remplacé (cf. ChatIn)
 
 
 class ChatIn(BaseModel):
@@ -48,6 +49,10 @@ class ChatIn(BaseModel):
     # demande les nomme, jamais d'après un réglage, ni chez une machine arrivée après
     # l'accord (une autre application cliente ne l'enverra pas sans le savoir)
     peer_libraries: list[str] = []
+    # « Régénérer », « Modifier » : ce message de l'utilisateur (replace_text : son texte, tel
+    # que l'interface le croit) et la suite sont retirés, une fois la demande acceptée
+    replace_from: int | None = None
+    replace_text: str | None = None
 
 
 @router.get("/models")
@@ -57,7 +62,7 @@ def models():
 
 @router.post("/chat/preflight")
 def preflight(body: PreflightIn):
-    return pipeline.preflight(body.text, body.model, body.conversation_id)
+    return pipeline.preflight(body.text, body.model, body.conversation_id, body.replace_from)
 
 
 def _flag(value, key):
@@ -86,7 +91,15 @@ async def chat(body: ChatIn, request: Request):
     if conv_id is not None:               # la réponse arrêtée juste avant : en place d'abord
         await asyncio.to_thread(pending.wait, conv_id)
     if conv_id is None or not await asyncio.to_thread(conversations.get, conv_id):
+        if body.replace_from is not None:
+            raise HTTPException(409, creations.CHANGED)
         conv_id = await asyncio.to_thread(conversations.create, model=body.model)
+    if body.replace_from is not None:     # acceptée : l'ancien échange laisse la place
+        try:
+            await asyncio.to_thread(creations.replace, conv_id, body.replace_from,
+                                    body.replace_text)
+        except creations.CreationError as exc:
+            raise HTTPException(exc.status, str(exc))
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -125,15 +138,17 @@ async def chat(body: ChatIn, request: Request):
                 level = placement.destination(model)
                 ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
                 if (level, ok) not in built:
-                    history = conversations.as_history(rows, pipeline.history_filter(level, ok))
+                    keep = pipeline.history_filter(level, ok)
+                    history = conversations.as_history(rows, keep)
                     shown = {}            # noms du sommaire montrés à cette machine
                     built[level, ok] = (*pipeline.build_messages(
                         history, text, libraries=libraries, conversations=memory,
                         web_search=body.web, conversation_id=conv_id, destination=level,
                         web=web, peers=body.peer_libraries if ok else None,
-                        summary=shown), shown)
-                messages, sources, shown = built[level, ok]
+                        summary=shown), shown, pipeline.inherited(rows, keep))
+                messages, sources, shown, marks = built[level, ok]
                 yield "summary", shown
+                yield "inherit", marks
                 yield "sources", sources
                 if stop.is_set():
                     return
@@ -149,7 +164,7 @@ async def chat(body: ChatIn, request: Request):
             put(("error", str(exc)))
 
     state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None,
-             "model": plan[0], "shown": {}}
+             "model": plan[0], "shown": {}, "inherit": {}}
     saving = threading.Lock()
 
     def save():
@@ -171,6 +186,8 @@ async def chat(body: ChatIn, request: Request):
             cited = pipeline.summary_mentioned(state["shown"], content)
             if cited:
                 sources.append({"type": "summary", "collection_ids": cited})
+            if state["inherit"]:          # ce que lui imposent les réponses qu'elle a reçues
+                sources.append({"type": "inherited", **state["inherit"]})
             if failed:
                 sources.append(dict(conversations.ERROR_SOURCE))
             state["saved"] = conversations.add_message(
@@ -199,6 +216,8 @@ async def chat(body: ChatIn, request: Request):
                     yield sse({"type": "route", **data})
                 elif kind == "summary":   # gardé pour l'enregistrement, pas montré
                     state["shown"] = data
+                elif kind == "inherit":
+                    state["inherit"] = data
                 elif kind == "sources":
                     state["sources"] = data
                     yield sse({"type": "sources", "sources": data})
