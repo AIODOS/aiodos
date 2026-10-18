@@ -56,6 +56,11 @@ class TaskSpec:
     # unités à ses amis (friends_out), l'ami de les calculer pour ses amis (friends_in)
     friends_out: Optional[str] = None
     friends_in: Optional[str] = None
+    # Fichier facultatif (l'image de départ d'une retouche) : file_optional(caps) dit si la
+    # machine qui calcule sait s'en servir ; sans lui (illisible, trop gros, machine d'avant),
+    # l'ordre part sans le fichier ni les clés file_extras, et la tâche fait sans
+    file_optional: Optional[Callable] = None
+    file_extras: tuple = ()
 
     @property
     def portable(self) -> bool:
@@ -90,9 +95,11 @@ def task(name):
 
 def register_portable(name, compute, assimilate, file_key=None, options=None,
                       requires=None, validate=None, shared_keys=(), sample=None, here=None,
-                      mine_only=False, friends_out=None, friends_in=None):
+                      mine_only=False, friends_out=None, friends_in=None, file_optional=None,
+                      file_extras=()):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
-                           tuple(shared_keys), sample, here, mine_only, friends_out, friends_in)
+                           tuple(shared_keys), sample, here, mine_only, friends_out, friends_in,
+                           file_optional, tuple(file_extras))
 
 
 def friends_may_take(spec) -> bool:

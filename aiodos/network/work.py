@@ -153,12 +153,14 @@ def lease(manager, sender, payload):
                     "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible "
                               "d'y vérifier le modèle d'embedding, rien n'est confié."}
         return {"unit": None, "retry_after": NOTHING_RETRY}
-    return _order(manager, sender, unit, options, friend)
+    return _order(manager, sender, unit, options, friend, caps, max_blob)
 
 
 def _fits(unit, spec, max_blob) -> bool:
     """Le fichier de l'unité (s'il y en a un) n'est pas trop gros pour cette machine."""
-    if spec.file_key and unit["payload"].get(spec.file_key):   # facultatif (retouche)
+    if spec.file_optional is not None:
+        return True               # l'ordre partira sans le fichier s'il le faut (_order)
+    if spec.file_key and unit["payload"].get(spec.file_key):
         try:
             return os.path.getsize(unit["payload"][spec.file_key]) <= max_blob
         except OSError:
@@ -166,7 +168,7 @@ def _fits(unit, spec, max_blob) -> bool:
     return True
 
 
-def _order(manager, sender, unit, options, friend) -> dict:
+def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB) -> dict:
     """L'ordre de calcul envoyé à la machine qui a obtenu l'unité."""
     spec = registry.TASKS[unit["task"]]
     order = {"id": unit["id"], "task": unit["task"], "resource": unit["resource"],
@@ -175,11 +177,18 @@ def _order(manager, sender, unit, options, friend) -> dict:
     if spec.file_key and unit["payload"].get(spec.file_key):
         path = Path(unit["payload"][spec.file_key])
         try:
+            if spec.file_optional is not None and (not spec.file_optional(caps or {})
+                                                   or path.stat().st_size > max_blob):
+                raise OSError("fichier facultatif gardé ici")
             order["blob"] = {"name": path.name, "size": path.stat().st_size,
                              "sha256": _sha256(path)}
         except OSError:
-            leases.release(unit["id"], sender)
-            return {"unit": None, "retry_after": NOTHING_RETRY}
+            if spec.file_optional is None:
+                leases.release(unit["id"], sender)
+                return {"unit": None, "retry_after": NOTHING_RETRY}
+            # Facultatif (image de départ) : l'ordre part sans lui, la tâche fait sans
+            for key in spec.file_extras:
+                order["payload"].pop(key, None)
     if friend:
         order = sharing.order_for_friend(order, spec, unit)
         blob = order.get("blob") or {}

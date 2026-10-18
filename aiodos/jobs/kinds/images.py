@@ -11,6 +11,7 @@ Le calcul suit la cadence du travail de fond (jobs/pacing.py) : il attend la fin
 conversation servie par cette machine.
 """
 import base64
+import logging
 import secrets
 from pathlib import Path
 
@@ -19,6 +20,8 @@ from aiodos.imaging import catalog, gallery, generate
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import pacing
 from aiodos.jobs.registry import UnitSpec, register_job_kind, register_portable
+
+log = logging.getLogger("aiodos.images")
 
 MAX_COUNT = 16
 MAX_PROMPT = 2000
@@ -163,14 +166,37 @@ def compute_image(payload, file, options, stop=None):
         return {"webm": base64.b64encode(made["webm"]).decode("ascii"),
                 "frames": made["frames"], "fps": made["fps"],
                 "seconds": round(made["seconds"], 2), "machine": machine}
-    if file:                          # retouche : l'image de départ (d'ici, ou reçue)
-        start = Path(file).read_bytes()
-        if generate.png_size(start) != (payload["width"], payload["height"]):
-            raise ValueError("image de départ d'une autre taille que celle demandée")
+    start = _start_image(file, payload) if file else None
+    if start is not None:             # retouche : l'image de départ (d'ici, ou reçue)
         payload = {**payload, "init_png": start}
     made = pacing.paced(lambda: generate.image(payload, halt), stop)
     return {"png": base64.b64encode(made["png"]).decode("ascii"),
             "seconds": round(made["seconds"], 2), "machine": machine}
+
+
+def _start_image(file, payload) -> bytes | None:
+    """L'image de départ d'une retouche, relue et réécrite par Pillow avant d'aller à
+    sd-server (elle peut venir d'une autre machine) ; illisible, disparue ou d'une autre
+    taille : None, et l'image se fait depuis sa description."""
+    try:
+        data = Path(file).read_bytes()
+        if len(data) > MAX_PNG or generate.png_size(data) != (payload["width"], payload["height"]):
+            raise ValueError("image de départ d'une autre taille que celle demandée")
+        try:
+            from PIL import Image
+        except ImportError:           # sans Pillow : l'en-tête et la taille sont vérifiés
+            return data
+        import io
+        with Image.open(io.BytesIO(data)) as picture:
+            if picture.format != "PNG" or picture.size != (payload["width"], payload["height"]):
+                raise ValueError("image de départ invalide")
+            clean = picture.convert("RGB")
+        out = io.BytesIO()
+        clean.save(out, "PNG")
+        return out.getvalue()
+    except (OSError, ValueError) as exc:
+        log.info("Image de départ inutilisable (%s) : l'image se fait depuis sa description", exc)
+        return None
 
 
 def _decoded(payload, output) -> bytes:
@@ -223,6 +249,8 @@ def finalize_images(job_id, params, units):
 
 
 register_portable("generate_image", compute_image, assimilate_image, file_key="init_path",
+                  file_optional=lambda caps: bool((caps.get("images") or {}).get("img2img")),
+                  file_extras=("strength",),
                   requires=requires_image, validate=check_image, here=runnable_here,
                   mine_only=True, friends_out="images_from_friends",
                   friends_in="lend_images_friends",

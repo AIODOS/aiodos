@@ -1,6 +1,8 @@
 """Images et vidéos créées dans la conversation (chat/creations.py) : la demande se
 reconnaît dans le message, part dans la file comme une demande de la vue Images, et la
 réponse de l'assistant la garde (les images, le travail, la description)."""
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -97,6 +99,18 @@ def test_the_shape_and_length_follow_the_model():
 def client():
     with TestClient(create_app(TOKEN, {"testserver"})) as c:
         yield c
+        # Les images en cours de calcul finissent avant la fin de l'essai : un fil qui
+        # écrirait après coup ouvrirait la base de l'essai suivant (« database is locked »)
+        _settle()
+
+
+def _settle(timeout=15):
+    from aiodos import db
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not db.query_one("SELECT COUNT(*) AS n FROM units WHERE status='running'")["n"]:
+            return
+        time.sleep(0.05)
 
 
 @pytest.fixture
@@ -337,3 +351,16 @@ def test_an_image_retouch_starts_from_the_last_image(client, can_draw, monkeypat
     assert started and started.endswith(".png") and (path is None or started == path)
     assert job["params"]["strength"] == retouches.AMBIANCE            # « de nuit » : une ambiance
     assert retouches.strength_for("Ajoute un chat sur le toit") == retouches.KEEP
+
+
+def test_retouching_several_images_redraws_each_from_its_description(client, can_draw, monkeypatch):
+    first = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Crée deux images d'un chat roux", "width": 1024, "height": 1024}).json()
+    wait_for(lambda: queue.job_summary(first["job_id"])["status"] == "done")
+    monkeypatch.setattr(retouches, "rewrite", lambda prompt, text, model=None: f"{prompt}, la nuit")
+    edited = client.post("/api/chat/create", headers=AUTH, json={
+        "text": "Fais-les de nuit", "followup": "edit",
+        "conversation_id": first["conversation_id"]}).json()
+    params = queue.job_summary(edited["job_id"])["params"]
+    assert params["count"] == 2 and "init_path" not in params
+    assert params["seed"] == first["media"]["seed"]              # chacune garde sa graine

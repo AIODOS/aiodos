@@ -341,7 +341,8 @@ def _followed(request: dict, text: str, conv_id, chat_model) -> dict:
                 "shape": None, "seconds": None,
                 # Retouche : même graine, la composition reste ; variante : une autre
                 "seed": last.get("seed") if edit else None}
-    start_from = _first_image(last) if edit and last.get("kind") != "video" else None
+    single = int(last.get("count") or 1) == 1 and int(count or 1) == 1
+    start_from = _first_image(last) if edit and single and last.get("kind") != "video" else None
     if start_from is not None:        # une image retouchée part de la précédente
         followed["init_path"] = str(start_from)
         followed["strength"] = retouches.strength_for(text)

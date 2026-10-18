@@ -831,7 +831,8 @@ def test_the_starting_image_travels_as_the_unit_file(tiny_model, monkeypatch, tm
     start.write_bytes(png(256, 384))
     queue.create_job("generate_images", kind.normalize({"model": "essai", "prompt": "un chat",
                                                         "init_path": str(start)}))
-    caps = {"work_api": work.WORK_API, "images": {"engine": "f0aac52", "files": catalog.hashes("essai")}}
+    caps = {"work_api": work.WORK_API, "images": {"engine": "f0aac52", "files": catalog.hashes("essai"),
+                                                  "img2img": True}}     # sait partir d'une image
     order = work.lease(_Manager(), B, {"resources": ["gpu"], "caps": caps})["unit"]
     assert order["blob"]["size"] == start.stat().st_size and "init_path" not in order["payload"]
     assert order["payload"]["strength"] == kind.STRENGTH

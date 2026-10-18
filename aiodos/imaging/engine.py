@@ -158,7 +158,8 @@ def capabilities() -> dict | None:
         return None
     files = {spec["sha256"] for m in catalog.MODELS.values() for spec in m["files"].values()
              if catalog.file_state(spec) == "ok"}
-    return {"engine": found["version"], "files": sorted(files), "models": catalog.available()}
+    return {"engine": found["version"], "files": sorted(files), "models": catalog.available(),
+            "img2img": True}         # retouche à partir d'une image (jobs/kinds/images.py)
 
 
 # --------------------------------------------------------------- sd-server
