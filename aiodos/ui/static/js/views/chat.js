@@ -360,7 +360,13 @@ async function regenerate(answer) {
   let asked = answer.previousElementSibling;
   while (asked && !asked.classList.contains('user')) asked = asked.previousElementSibling;
   const text = await rewindTo(asked);
-  if (text !== null) send(text);           // tel quel, avec le modèle choisi maintenant
+  if (text === null) return;
+  // Tel quel, avec le modèle choisi maintenant ; pas parti (validation refusée…) : la
+  // question revient dans la zone de saisie plutôt que de se perdre
+  if (!await send(text) && !el.input.value.trim()) {
+    el.input.value = text;
+    autoresize();
+  }
 }
 
 function startEditing(node) {
@@ -639,36 +645,37 @@ async function confirmPeers(text, pre) {
 }
 
 /** asText : un message envoyé au modèle de conversation tel quel, sans chercher d'image à
- *  créer (« Répondre en texte » sur une création qui n'en était pas une). */
+ *  créer (« Répondre en texte » sur une création qui n'en était pas une, « Régénérer »).
+ *  → faux si rien n'est parti (validation refusée, aucun modèle…). */
 async function send(asText = null) {
-  if (busy || creating) return;
+  if (busy || creating) return false;
   const text = asText ?? el.input.value.trim();
-  if (!text) return;
+  if (!text) return false;
   if (editing && asText === null) {            // « Modifier » : la suite part, ce message la remplace
     const { node } = editing;
     stopEditing(false);
-    if (await rewindTo(node) === null) return;
+    if (await rewindTo(node) === null) return false;
   }
   const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
-  if (explicit) { await create(text, explicit); return; }
+  if (explicit) { await create(text, explicit); return true; }
   const model = selectedModel();
 
   let pre;
   try {
     pre = await post('/chat/preflight', {
       text, model, conversation_id: state.currentConversation?.id ?? null });
-  } catch (e) { errorToast(e); return; }
+  } catch (e) { errorToast(e); return false; }
   if (pre.create && asText === null) {             // « Crée une image de… », reconnu au vol
     await create(text, { ...autoRequest(pre.create), auto: true });
-    return;
+    return true;
   }
   if (!model) {
     if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
     else toast('Les modèles se chargent, un instant…');
-    return;
+    return false;
   }
   const go = await confirmOutgoing(text, model, pre);
-  if (!go) return;
+  if (!go) return false;
 
   if (asText === null) {
     el.input.value = '';
@@ -712,6 +719,7 @@ async function send(asText = null) {
     refreshTree();
     el.input.focus();
   }
+  return true;
 }
 
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
