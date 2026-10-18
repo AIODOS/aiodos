@@ -6,6 +6,7 @@ import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
+import { chooseModel, progressBar, cancelInstall, finished, here } from './model-install.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 
@@ -20,6 +21,7 @@ let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
 let editing = null;        // { node } : le dernier message de l'utilisateur, en cours de modification
 let opening = 0;           // ouvertures de conversation : seule la dernière s'affiche
+let installing = null;     // installation d'un modèle en cours (avancement)
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -116,6 +118,11 @@ export function mountChat(container) {
   on('chat:renamed', title => setTitle(title));
   on('settings:loaded', syncChips);
   on('models:loaded', fillModels);
+  on('model-install', ev => {            // avancement d'une installation (model-install.js)
+    installing = ev;
+    if (finished(ev, () => emit('models:reload'))) installing = null;
+    if (state.modelsLoaded) fillModels();
+  });
   on('node:loaded', () => { if (state.modelsLoaded) fillModels(); });   // libellés VRAM
   el.model.innerHTML = '<option value="">Chargement des modèles…</option>';
   showWelcome();
@@ -174,13 +181,18 @@ function fillModels() {
     `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`]));
   group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));
   selectModel(wanted);
-  el.banner.innerHTML = local.length ? '' : remote.length ? `
-    <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ce PC : tes réponses seront
-    calculées par tes machines appairées qui prêtent les leurs.</div></div>` : `
-    <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle local : Ollama ne répond pas ou
-    aucun modèle n'est installé. AIODOS réessaie tout seul toutes les 8 secondes.</div>
-    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`;
+  // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un
+  el.banner.innerHTML = progressBar(installing) + (local.length ? '' : remote.length ? `
+    <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ${here()} : tes réponses
+    seront calculées par tes machines appairées qui prêtent les leurs.</div>
+    <button class="btn sm" data-install>${icon('plus')}Installer un modèle ici</button></div>` : `
+    <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle sur ${here()} pour répondre (ou
+    Ollama ne répond pas : AIODOS réessaie tout seul toutes les 8 secondes).</div>
+    <button class="btn sm primary" data-install>${icon('plus')}Installer un modèle</button>
+    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`);
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
+  el.banner.querySelector('[data-install]')?.addEventListener('click', chooseModel);
+  el.banner.querySelector('[data-install-cancel]')?.addEventListener('click', cancelInstall);
 }
 
 /** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,

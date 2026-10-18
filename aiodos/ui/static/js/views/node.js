@@ -5,6 +5,7 @@ import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { ask, toast, errorToast } from '../ui.js';
 import { loadNetwork } from './network.js';
+import { chooseModel, here } from './model-install.js';
 
 const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedding: 'embeddings' };
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
@@ -95,7 +96,9 @@ function render() {
       Une de tes machines qui a la mémoire nécessaire peut alors répondre à sa place, ou plusieurs peuvent
       se le partager.</p>
     ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
-      <tbody>${rows}</tbody></table>` : '<div class="empty">Aucun modèle (Ollama ne répond pas ?)</div>'}`;
+      <tbody>${rows}</tbody></table>` : `<div class="empty">Aucun modèle sur ${here()} (ou Ollama ne répond pas).</div>`}
+    <button class="btn sm" data-install>${icon('plus')}Installer un modèle</button>`;
+  $('#node-models', root).querySelector('[data-install]').onclick = chooseModel;
 
   renderNetworkSummary();
   // Les préférences ne sont reconstruites qu'à leur changement (settings:loaded) :

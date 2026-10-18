@@ -72,6 +72,36 @@ def loaded_models() -> list:
         return []
 
 
+def pull(model: str, progress=None, stop=None, timeout=(10, 600)) -> bool:
+    """Télécharge un modèle (POST /api/pull, en flux). progress(reçu, total, étape) à
+    chaque nouvelle : octets de toutes les couches. Vrai une fois installé ; faux si
+    `stop` est levé en route ; RuntimeError si Ollama refuse."""
+    layers = {}
+    with requests.post(base() + "/api/pull", json={"model": model, "stream": True},
+                       stream=True, timeout=timeout) as r:
+        if r.status_code >= 400:
+            raise RuntimeError(_error_text(r))
+        for line in r.iter_lines(decode_unicode=True):
+            if stop is not None and stop.is_set():
+                return False
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if obj.get("error"):
+                raise RuntimeError(obj["error"])
+            if obj.get("digest") and obj.get("total"):
+                layers[obj["digest"]] = (obj.get("completed") or 0, obj["total"])
+            if progress is not None:
+                progress(sum(c for c, _ in layers.values()), sum(t for _, t in layers.values()),
+                         str(obj.get("status") or ""))
+            if obj.get("status") == "success":
+                return True
+    return False
+
+
 def unload_chat_models() -> list:
     """Décharge de la carte graphique les modèles de conversation (keep_alive 0) : sa
     mémoire va à un autre moteur (images). Les modèles d'embedding, petits, restent pour
