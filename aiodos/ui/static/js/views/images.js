@@ -7,7 +7,7 @@ import { $, h, esc, bytes, debounce } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { errorToast, modal } from '../ui.js';
-import { openMedia, fileOf, isVideo, length } from './media-viewer.js';
+import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PAGE = 60;
@@ -223,7 +223,7 @@ function renderGrid() {
       ${isVideo(img)
         ? `<video muted loop playsinline preload="metadata" src="${fileOf(img)}"
              style="aspect-ratio:${img.width}/${img.height}"></video>`
-        : `<img loading="lazy" src="${fileOf(img)}" alt="${esc(img.prompt)}"
+        : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}"
              style="aspect-ratio:${img.width}/${img.height}">`}
       <span class="img-tag">${isVideo(img) ? `vidéo ${length(img)} · ` : ''}${esc(img.machine || 'cette machine')}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
     </button>`).join('');

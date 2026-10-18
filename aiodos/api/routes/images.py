@@ -2,7 +2,8 @@
 
 Une demande devient un travail de la file (jobs/kinds/images.py) : ses images se calculent
 ici et chez mes machines qui ont le modèle et prêtent leur puissance. Les PNG ne sortent
-que par GET /api/images/{id}/file (jeton exigé, comme toute l'API locale).
+que par GET /api/images/{id}/file (jeton exigé, comme toute l'API locale) ; ?size=… : une
+vignette (imaging/thumbs.py), pour la conversation et la galerie.
 """
 import asyncio
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 
 from aiodos import settings
 from aiodos.chat import conversations
-from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share
+from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share, thumbs
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -118,18 +119,23 @@ async def list_images(limit: int = 60, before: int | None = None, batch: str | N
 
 
 @router.get("/{image_id}/file")
-def image_file(image_id: int):
+def image_file(image_id: int, size: int | None = None):
     row = gallery.get(image_id)
     if row is None or not gallery.path_of(row).is_file():
         raise HTTPException(404, "Image introuvable.")
+    cache = {"Cache-Control": "private, max-age=86400"}
+    small = thumbs.thumbnail(row, size) if size and size > 0 else None
+    if small is not None:
+        return FileResponse(small, media_type="image/webp", headers=cache)
     video = gallery.path_of(row).suffix == ".webm"
     return FileResponse(gallery.path_of(row), media_type="video/webm" if video else "image/png",
-                        headers={"Cache-Control": "private, max-age=86400"})
+                        headers=cache)
 
 
 @router.delete("/{image_id}")
 def delete_image(image_id: int, request: Request):
     if not gallery.delete(image_id):
         raise HTTPException(404, "Image introuvable.")
+    thumbs.remove(image_id)
     request.app.state.bus.publish({"type": "images"})
     return {"ok": True}

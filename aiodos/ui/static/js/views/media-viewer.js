@@ -9,6 +9,9 @@ import { toast, errorToast, confirmDanger } from '../ui.js';
 // L'adresse porte le nom du fichier : un numéro réutilisé après une suppression ne ressort
 // pas l'ancienne image du cache du navigateur
 export const fileOf = img => `${fileUrl(`/images/${img.id}/file`)}&v=${encodeURIComponent(img.file)}`;
+// Une vignette (WebP, 768 pixels au plus de côté) pour une tuile : le PNG entier ne sert
+// qu'en grand et pour l'enregistrer
+export const thumbOf = (img, size = 768) => (img.media === 'video' ? fileOf(img) : `${fileOf(img)}&size=${size}`);
 export const isVideo = img => img.media === 'video';
 export const length = img => (img.frames && img.fps ? `${(img.frames / img.fps).toFixed(1).replace('.', ',')} s` : '');
 // La fenêtre native d'AIODOS (pywebview) : « Enregistrer sous… » et « Ouvrir le dossier »

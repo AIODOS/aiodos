@@ -8,7 +8,7 @@ import { h, esc, duration } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit, prefs } from '../state.js';
 import { menu, toast, errorToast } from '../ui.js';
-import { openMedia, fileOf, isVideo, length } from './media-viewer.js';
+import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const COUNTS = [1, 2, 4, 8];
@@ -274,7 +274,7 @@ function paintGrid(view) {
         ${isVideo(img)
           ? `<video muted loop autoplay playsinline preload="metadata" src="${fileOf(img)}"></video>
              <span class="img-tag">vidéo ${length(img)}</span>`
-          : `<img loading="lazy" src="${fileOf(img)}" alt="${esc(img.prompt)}">`}
+          : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}">`}
       </button>`).join('')
     + `<div class="creation-slot" style="${ratio}">${icon(KINDS[media.kind]?.icon || 'image')}</div>`.repeat(waiting);
   grid.classList.toggle('n1', images.length + waiting === 1);
