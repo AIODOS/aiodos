@@ -600,8 +600,14 @@ async function confirmOutgoing(text, model, pre) {
     }
     if (pre.cloud_confirm && !session.cloudConsent.has(pre.cloud)) {
       const leaving = ['ton message', "l'historique de cette conversation"];
-      if (state.settings?.knowledge_enabled || state.settings?.conversations_enabled) {
-        leaving.push('les extraits de tes connaissances utilisés pour répondre');
+      // Le cloud reçoit ce que reçoit cette machine (pipeline.visible_libraries) : le dire
+      if (state.settings?.knowledge_enabled) {
+        leaving.push('la liste des fichiers de tes bibliothèques (même celles gardées sur ce PC) '
+          + 'et les extraits utilisés pour répondre');
+      }
+      if (state.settings?.conversations_enabled) {
+        leaving.push('les titres de tes autres conversations et les passages de ta mémoire '
+          + 'utilisés pour répondre');
       }
       if (web) leaving.push('les résultats web');
       const r = await modal({
