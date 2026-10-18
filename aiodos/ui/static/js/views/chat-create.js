@@ -264,20 +264,38 @@ const sameJob = (job, media) => !!job && job.kind === 'generate_images'
 
 const active = view => !!view.job && ACTIVE.includes(view.job.status);
 
+// Les vidéos de la conversation ne tournent que visibles : au téléphone, plusieurs vidéos
+// ne se téléchargent ni ne se décodent toutes à la fois
+const onScreen = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const { target, isIntersecting } of entries) {
+    if (isIntersecting) target.play().catch(() => {});
+    else target.pause();
+  }
+}, { threshold: 0.4 }) : null;
+
+function watchVideos(grid, on) {
+  grid.querySelectorAll('video').forEach(video => {
+    if (!onScreen) { if (on) video.play().catch(() => {}); return; }
+    if (on) onScreen.observe(video); else onScreen.unobserve(video);
+  });
+}
+
 function paintGrid(view) {
   const { media, images } = view;
   const grid = view.node.querySelector('.creation-grid');
   const waiting = active(view) ? Math.max(0, media.count - images.length) : 0;
   const ratio = `aspect-ratio:${media.width}/${media.height}`;
+  watchVideos(grid, false);
   grid.innerHTML = images.map(img => `
       <button class="creation-tile" data-id="${img.id}" title="${esc(img.prompt)}" style="${ratio}">
         ${isVideo(img)
-          ? `<video muted loop autoplay playsinline preload="metadata" src="${fileOf(img)}"></video>
+          ? `<video muted loop playsinline preload="metadata" src="${fileOf(img)}"></video>
              <span class="img-tag">vidéo ${length(img)}</span>`
           : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}">`}
       </button>`).join('')
     + `<div class="creation-slot" style="${ratio}">${icon(KINDS[media.kind]?.icon || 'image')}</div>`.repeat(waiting);
   grid.classList.toggle('n1', images.length + waiting === 1);
+  watchVideos(grid, true);
   grid.querySelectorAll('.creation-tile').forEach(tile => {
     tile.onclick = () => openMedia(images.find(i => i.id === Number(tile.dataset.id)), {
       onReuse: img => setMode(media.kind, { model: img.model, prompt: img.prompt, width: img.width,
