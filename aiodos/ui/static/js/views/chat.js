@@ -14,6 +14,7 @@ const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled
 let el = {};
 let busy = false;
 let creating = false;      // une création d'image en route vers le nœud
+let sending = false;       // un envoi en préparation (preflight, validations) : pas un second
 let displayed = 0;         // change à chaque conversation affichée (créations en route)
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
@@ -362,7 +363,7 @@ function dropReplaced(replace, newest) {
 }
 
 function regenerate(answer) {
-  if (busy || creating) return;
+  if (busy || creating || sending) return;
   stopEditing();
   let asked = answer.previousElementSibling;
   while (asked && !asked.classList.contains('user')) asked = asked.previousElementSibling;
@@ -372,7 +373,7 @@ function regenerate(answer) {
 }
 
 function startEditing(node) {
-  if (busy || creating || !node?.dataset.id) return;
+  if (busy || creating || sending || !node?.dataset.id) return;
   stopEditing();
   const text = node.querySelector('.bubble').textContent;
   editing = { node, text };
@@ -659,7 +660,16 @@ async function confirmPeers(text, pre) {
  *  replace : l'échange qu'il remplace (« Régénérer » ; « Modifier » passe par editing).
  *  → faux si rien n'est parti (validation refusée, aucun modèle…). */
 async function send(asText = null, replace = null) {
-  if (busy || creating) return false;
+  if (busy || creating || sending) return false;
+  sending = true;              // un double clic, ou Entrée pendant les validations : un seul envoi
+  try {
+    return await sendNow(asText, replace);
+  } finally {
+    sending = false;
+  }
+}
+
+async function sendNow(asText, replace) {
   const text = asText ?? el.input.value.trim();
   if (!text) return false;
   if (editing && !editing.node.isConnected) stopEditing(false);   // retiré entre-temps
@@ -819,7 +829,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
 // « Répondre en texte » : la création reconnue au vol n'en était pas une. Elle quitte la
 // conversation (avec le message, que le modèle de conversation reçoit à la place)
 async function answerAsText({ messageId, node }) {
-  if (busy || creating) return;
+  if (busy || creating || sending) return;
   stopEditing();
   let undone;
   try { undone = await post(`/chat/create/${messageId}/undo`); } catch (e) { errorToast(e); return; }
