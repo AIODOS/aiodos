@@ -147,6 +147,15 @@ class Manager:
     def on_paired(self, node_id):
         pass
 
+    def __init__(self):
+        self.presented = []              # appairage par groupe (network/group.py)
+
+    def present_later(self, friend_id, only=None):
+        self.presented.append(("ami", friend_id))
+
+    def present_new_machine(self, node_id):
+        self.presented.append(("machine", node_id))
+
 
 def test_trust_is_chosen_when_confirming_the_pairing(data_dir, monkeypatch):
     db.connect()
@@ -165,6 +174,8 @@ def test_trust_is_chosen_when_confirming_the_pairing(data_dir, monkeypatch):
                                             b"k" * 32, "123456")
     pairs.answer("lea", True, sharing.FRIEND)                          # nouvel appairage :
     assert sharing.set_aside_reason("lea") is None                    # nouvelle chance
+    # Appairage par groupe : l'amie rencontre mes autres machines, le portable mes amis
+    assert pairs.m.presented == [("ami", "lea"), ("machine", "portable"), ("ami", "lea")]
 
 
 def test_api_changes_trust_restores_and_shows_what_was_sent(owner):

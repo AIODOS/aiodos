@@ -37,6 +37,12 @@ class CodeIn(BaseModel):
     code: str
 
 
+class IntroAnswerIn(BaseModel):
+    intro: str
+    accept: bool
+    always: bool = False                # les prochaines machines du même groupe aussi
+
+
 def _manager(request: Request):
     return request.app.state.network
 
@@ -163,9 +169,40 @@ async def set_trust(node_id: str, body: TrustIn, request: Request):
     """Une de mes machines, ou celle d'un ami (cf. network/sharing.py)."""
     if body.trust not in sharing.LEVELS:
         raise HTTPException(400, f"Niveau de confiance inconnu : {body.trust!r}")
+    before = await asyncio.to_thread(peers.trust_of, node_id)
     if not await asyncio.to_thread(peers.set_trust, node_id, body.trust):
         raise HTTPException(404, "Machine appairée introuvable.")
+    manager = _manager(request)
+    if body.trust == sharing.FRIEND and before != sharing.FRIEND:
+        manager.present_later(node_id)    # un ami rencontre mes autres machines
+    elif body.trust == sharing.MINE and before != sharing.MINE:
+        # une de mes machines rencontre mes amis
+        await asyncio.to_thread(manager.present_new_machine, node_id)
+    manager.changed()
+    return manager.snapshot()
+
+
+@router.post("/peers/{node_id}/present")
+async def present(node_id: str, request: Request):
+    """Présente à la machine d'un ami mes autres machines (appairage par groupe).
+    → {"introduced", "asked", "known", "unreachable", "refused"} : des noms."""
+    try:
+        report = await asyncio.to_thread(_manager(request).group.present, node_id)
+    except PeerError as exc:
+        raise HTTPException(400, str(exc))
     _manager(request).changed()
+    return report
+
+
+@router.post("/introductions/answer")
+async def answer_introduction(body: IntroAnswerIn, request: Request):
+    """Réponse à une présentation reçue (« toujours » : accepter d'office les prochaines
+    machines du même groupe)."""
+    try:
+        await asyncio.to_thread(_manager(request).group.answer, body.intro, body.accept,
+                                body.always)
+    except PeerError as exc:
+        raise HTTPException(400, str(exc))
     return _manager(request).snapshot()
 
 
@@ -190,6 +227,12 @@ def consulted(node_id: str):
 
 
 @router.delete("/peers/{node_id}")
-async def unpair(node_id: str, request: Request):
-    await _manager(request).unpair(node_id)
-    return _manager(request).snapshot()
+async def unpair(node_id: str, request: Request, only_here: bool = False):
+    """Retire une machine appairée. Celle d'un ami l'est aussi de toutes mes machines
+    (décision de l'auteur), sauf only_here : seulement de celle-ci."""
+    manager = _manager(request)
+    friend = await asyncio.to_thread(peers.trust_of, node_id) == sharing.FRIEND
+    await manager.unpair(node_id)
+    if friend and not only_here:
+        await asyncio.to_thread(manager.group.spread, "group/remove", {"node_id": node_id})
+    return manager.snapshot()

@@ -51,22 +51,23 @@ export function modal(opts) {
       yes.disabled = true;
       back.querySelectorAll('.choice input').forEach(r => { r.onchange = () => { yes.disabled = false; }; });
     }
-    const finish = ok => {
+    // how : « yes », « no », ou « dismiss » (fermée sans répondre : Échap, clic à côté)
+    const finish = (ok, how = ok ? 'yes' : 'no') => {
       back.remove();
       document.removeEventListener('keydown', onKey, true);
-      resolve({ ok, value: input ? input.value : undefined,
+      resolve({ ok, how, value: input ? input.value : undefined,
                 checked: !!back.querySelector('.check input')?.checked,
                 choice: back.querySelector('.choice input:checked')?.value });
     };
     const onKey = e => {
-      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false, 'dismiss'); }
       if (e.key === 'Enter' && !yes.disabled && !(input && input.tagName === 'TEXTAREA')) {
         e.preventDefault();
         finish(true);
       }
     };
     back.addEventListener('click', e => {
-      if (e.target === back) finish(false);
+      if (e.target === back) finish(false, 'dismiss');
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act) finish(act === 'yes');
     });

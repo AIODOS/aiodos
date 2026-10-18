@@ -20,8 +20,8 @@ from fastapi.responses import StreamingResponse
 from aiodos import __version__
 from aiodos.cluster import helper as cluster
 from aiodos.imaging import share as images_share
-from aiodos.network import (activity, consult, envelope, lending, netinfo, peers, placement,
-                            sharing, work)
+from aiodos.network import (activity, consult, envelope, group, lending, netinfo, peers,
+                            placement, sharing, work)
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -69,6 +69,7 @@ HANDLERS = {
     **updates.HANDLERS,           # versions signées : update/manifest, update/chunk
     **cluster.HANDLERS,           # carte graphique prêtée : cluster/lend, keep, release
     **images_share.HANDLERS,      # modèles d'images copiés entre mes machines : images/file
+    **group.HANDLERS,             # appairage par groupe : group/introduce, propose, key…
 }
 
 # Réponses en flux : fonction(manager, émetteur, contenu, stop) -> itérateur de morceaux.

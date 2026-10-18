@@ -5,6 +5,7 @@ l'interface lise pendant que la file de tâches écrit. Les écritures groupées
 passent par transaction(), qui pose un verrou d'écriture dès le début : c'est
 ce qui remplace le verrou maison de la v1 (cf. l'écrasement de chunks.json).
 """
+import re
 import sqlite3
 import threading
 import time
@@ -12,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -189,6 +190,12 @@ MIGRATIONS = {
        AND entry_id IN (SELECT e.id FROM entries e JOIN collections c ON c.id=e.collection_id
                          WHERE c.system=1);
     """,
+    # Appairage par groupe (network/group.py) : la machine qui a présenté celle-ci (vide
+    # pour un appairage direct), et « toujours accepter les machines de ce groupe »
+    16: """
+    ALTER TABLE peers ADD COLUMN introduced_by TEXT;
+    ALTER TABLE peers ADD COLUMN group_ok INTEGER NOT NULL DEFAULT 0;
+    """,
 }
 
 SCHEMA = """
@@ -331,10 +338,23 @@ def _ensure_schema(conn, path):
             version = 1
         for target in sorted(MIGRATIONS):
             if version < target:
-                conn.executescript(MIGRATIONS[target])
+                conn.executescript(_replayable(conn, MIGRATIONS[target]))
                 version = target
+                conn.execute(f"PRAGMA user_version={version}")    # migration par migration
         conn.execute(f"PRAGMA user_version={version}")
         _initialized.add(path)
+
+
+_ADD_COLUMN = re.compile(r"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)[^;]*;", re.IGNORECASE)
+
+
+def _replayable(conn, script: str) -> str:
+    """Une migration rejouée (arrêt au milieu d'une mise à jour, base remise à une version
+    antérieure) ne doit pas échouer sur une colonne déjà ajoutée : ces ajouts sont sautés."""
+    def keep(match):
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info({match.group(1)})")}
+        return "" if match.group(2) in columns else match.group(0)
+    return _ADD_COLUMN.sub(keep, script)
 
 
 @contextmanager

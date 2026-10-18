@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 
 from aiodos import settings
@@ -274,6 +275,13 @@ def result(manager, sender, payload):
     except registry.SampleMismatch as exc:
         reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
         peers.set_aside(sender, reason[:300])
+        # Un résultat faux ne dépend pas de la machine à qui il a été rendu : mes autres
+        # machines la mettent de côté aussi (appairage par groupe, network/group.py)
+        group = getattr(manager, "group", None)
+        if group is not None:
+            threading.Thread(target=group.spread, daemon=True, name="aiodos-mise-de-cote",
+                             args=("group/set_aside", {"node_id": sender, "reason": reason[:300]})
+                             ).start()
         peers.account(sender, refused_units=1)
         log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
         job_id, finished = queue.fail_unit(

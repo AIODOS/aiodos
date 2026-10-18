@@ -129,6 +129,13 @@ function nudge(net) {
 }
 
 /** La carte « Machines connectées », en tête de la vue Réseau. */
+/** Info-bulle d'une machine appairée par une présentation (appairage par groupe). */
+function introduced(peer, net) {
+  if (!peer.introduced_by) return '';
+  const by = net.peers.find(p => p.node_id === peer.introduced_by);
+  return ` title="${esc(`Présentée par ${by ? `« ${by.name} »` : 'une machine retirée depuis'}`)}"`;
+}
+
 export function renderConnected(box, net) {
   box.hidden = !net.enabled;
   if (!net.enabled) return;
@@ -136,7 +143,7 @@ export function renderConnected(box, net) {
     || a.name.localeCompare(b.name, 'fr'));
   const rows = order.map(peer => `
     <tr class="${peer.online ? '' : 'off'}">
-      <td class="live-name"><span class="dot ${peer.online ? 'on' : ''}"></span><b>${esc(peer.name)}</b>
+      <td class="live-name"><span class="dot ${peer.online ? 'on' : ''}"></span><b${introduced(peer, net)}>${esc(peer.name)}</b>
         ${peer.trust === 'friend' ? '<span class="pill">ami</span>' : ''}</td>
       <td class="faint">${link(peer)}</td>
       <td><div class="caps">${lends(peer)}</div></td>

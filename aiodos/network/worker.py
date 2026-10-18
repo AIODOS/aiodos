@@ -38,7 +38,7 @@ from aiodos.jobs.models import GPU_BOUND
 from aiodos.network import client, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
-from aiodos.node import identity, power, priority
+from aiodos.node import android, identity, power, priority
 from aiodos.services import extract
 
 log = logging.getLogger("aiodos.worker")
@@ -103,6 +103,12 @@ def sharing_state(previous=None) -> dict:
         return {"active": True, "state": "in_use",
                 "detail": f"Prêt à calculer pour tes autres machines, en priorité basse {when}."}
     return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
+
+
+def friends_welcome() -> bool:
+    """Un téléphone ne calcule pour un ami qu'en charge et en Wi-Fi (décision de l'auteur,
+    appairage par groupe) : ni sa batterie, ni ses données mobiles. Dans le doute, non."""
+    return bool(power.read().get("plugged")) and android.on_wifi() is True
 
 
 def _phone_pause(supply, previous) -> dict | None:
@@ -262,6 +268,8 @@ class Worker:
         pour moi d'abord."""
         online = [p for p in peers.list_peers()
                   if p["online"] and (p.get("address") or p.get("net_id"))]
+        if android.is_android() and not friends_welcome():
+            online = [p for p in online if p.get("trust") != sharing.FRIEND]
         online.sort(key=lambda p: p["received_s"] - p["given_s"], reverse=True)
         return online
 

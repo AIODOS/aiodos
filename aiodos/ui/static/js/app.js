@@ -9,7 +9,7 @@ import { mountLibrary } from './views/library.js';
 import { mountJobs, loadJobs } from './views/jobs.js';
 import { mountImages } from './views/images.js';
 import { mountNode, loadNode } from './views/node.js';
-import { mountNetwork, loadNetwork, answerPairRequest } from './views/network.js';
+import { mountNetwork, loadNetwork, answerPairRequest, answerIntroduction } from './views/network.js';
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
@@ -99,8 +99,10 @@ function onEvent(ev) {
     case 'model_install': emit('model-install', ev); break;
     case 'cluster': emit('cluster:changed', ev); break;
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
+    case 'group_request': answerIntroduction(ev); break;   // présentation (appairage par groupe)
     case 'pair_result':
-      toast(ev.outcome === 'paired' ? `Machine appairée : « ${ev.name} »`
+      toast(ev.outcome === 'paired'
+        ? `Machine appairée : « ${ev.name} »${ev.via ? `, présentée par « ${ev.via} »` : ''}`
         : `Appairage avec « ${ev.name} » annulé.`, ev.outcome === 'paired' ? 'ok' : 'info', 6000);
       break;
     default: break;

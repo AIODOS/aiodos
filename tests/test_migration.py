@@ -47,3 +47,16 @@ def test_v1_data_is_imported_once(tmp_path):
     assert store.list_entries(memory, include_system=True) == []    # reconstruite plus tard
 
     assert migrate_legacy.run_if_needed(legacy) is None              # une seule fois
+
+
+def test_a_migration_replayed_after_an_interruption_does_not_fail():
+    """Arrêt au milieu d'une mise à jour, ou base remise à une version antérieure : les
+    colonnes déjà ajoutées sont sautées, le reste de la migration s'applique."""
+    conn = db.connect()
+    path = conn.execute("PRAGMA database_list").fetchone()[2]
+    db.execute("PRAGMA user_version=15")             # la migration 16 sera rejouée
+    db.close()
+    db._initialized.discard(path)
+    columns = {row[1] for row in db.connect().execute("PRAGMA table_info(peers)")}
+    assert {"introduced_by", "group_ok"} <= columns
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION

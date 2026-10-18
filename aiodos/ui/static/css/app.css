@@ -489,6 +489,8 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 /* -------------------------------------------------------------- réseau local */
 .peer-list { display: flex; flex-direction: column; gap: 8px; }
 .peer { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.peer.intro { border-color: var(--cyan); }
+.intro-list { margin-bottom: 8px; }
 .peer-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .peer-facts { font-size: 13px; color: var(--muted); margin-top: 6px; }
 .peer-work { font-size: 12.5px; color: var(--cyan); margin-top: 4px; display: flex; align-items: center; gap: 6px; }

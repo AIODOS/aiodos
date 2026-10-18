@@ -212,15 +212,33 @@ function peerFacts(peer) {
   return facts.join(' · ');
 }
 
+/** La machine qui en a présenté une autre (appairage par groupe), par son nom. */
+function presenterName(peer, net) {
+  if (!peer.introduced_by) return '';
+  const by = net.peers.find(p => p.node_id === peer.introduced_by);
+  return by ? `« ${by.name} »` : 'une machine retirée depuis';
+}
+
 function renderPeers(net) {
   const box = $('#net-peers', root);
+  const intros = net.introductions || [];
   box.innerHTML = `
     <h2>${icon('network')}Machines appairées</h2>
     <p class="hint">Tes machines et celles de tes amis. Les échanges sont chiffrés, et chaque machine applique ses
       propres règles de partage (réglables dans « Cette machine »). Un ami ne reçoit que les bibliothèques
-      partagées avec tes amis. ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}</p>
+      partagées avec tes amis. ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}
+      Une machine d'ami rencontre aussi tes autres machines, et les siennes les tiennes, avec votre accord.</p>
+    ${intros.length ? '<div class="peer-list intro-list"></div>' : ''}
     <div class="peer-list"></div>`;
-  const list = box.querySelector('.peer-list');
+  for (const o of intros) {                  // présentations qui attendent ma réponse
+    const row = h(`
+      <div class="peer intro"><div class="peer-head">${icon('network')}<b>${esc(o.machine)}</b>
+        <span class="faint">présentée par « ${esc(o.presenter)} » ${ago(o.created)} · attend ta réponse</span>
+        <span style="flex:1"></span><button class="btn sm primary">Répondre</button></div></div>`);
+    row.querySelector('button').onclick = () => answerIntroduction(o);
+    box.querySelector('.intro-list').append(row);
+  }
+  const list = box.querySelector('.peer-list:not(.intro-list)');
   if (!net.peers.length) {
     list.append(h('<div class="empty" style="padding:18px">Aucune machine appairée pour l\'instant.</div>'));
     return;
@@ -229,6 +247,7 @@ function renderPeers(net) {
     const friend = peer.trust === 'friend';
     const shared = peer.shared;
     const consulted = peer.consulted;          // ses recherches dans mes bibliothèques ouvertes
+    const presenter = presenterName(peer, net);
     const row = h(`
       <div class="peer">
         <div class="peer-head">
@@ -236,6 +255,8 @@ function renderPeers(net) {
           <b>${esc(peer.name)}</b>
           ${friend ? '<span class="pill" title="Machine d\'un ami : droits plus étroits">ami</span>' : ''}
           ${peer.set_aside_at ? '<span class="pill err">mise de côté</span>' : ''}
+          ${presenter ? `<span class="faint" title="Appairée par une présentation : pas de code à comparer, la
+            confiance vient de la machine qui l'a présentée">présentée par ${esc(presenter)}</span>` : ''}
           <span class="faint">${peer.address ? `${esc(peer.address)}:${peer.port || '?'}`
             : peer.net_id ? 'par Internet' : 'adresse inconnue'}</span>
           <span class="faint">${peer.online ? 'en ligne' : peer.last_seen ? `vue ${ago(peer.last_seen)}` : 'jamais vue'}</span>
@@ -270,6 +291,8 @@ function renderPeers(net) {
         friend
           ? { label: 'C\'est une de mes machines', icon: 'network', action: () => setTrust(peer, 'mine') }
           : { label: 'C\'est la machine d\'un ami', icon: 'shield', action: () => setTrust(peer, 'friend') },
+        ...(friend && !peer.set_aside_at ? [{ label: 'Présenter mes autres machines', icon: 'network',
+          action: () => presentMachines(peer) }] : []),
         ...(shared ? [{ label: 'Voir ce qui lui a été confié', icon: 'file', action: () => showShared(peer) }] : []),
         ...(consulted ? [{ label: 'Voir ses recherches dans tes bibliothèques', icon: 'search',
           action: () => showConsulted(peer) }] : []),
@@ -284,11 +307,21 @@ function renderPeers(net) {
       catch (e) { errorToast(e); }
     };
     row.querySelector('[data-act="unpair"]').onclick = async () => {
-      const ok = await confirmDanger('Retirer l\'appairage',
-        `« ${peer.name} » ne pourra plus échanger avec cette machine. Il faudra refaire l'appairage pour la retrouver.`,
-        'Retirer');
-      if (!ok) return;
-      try { await del(`/network/peers/${peer.node_id}`); lastJson = ''; loadNetwork(); } catch (e) { errorToast(e); }
+      // La machine d'un ami est retirée de toutes mes machines, sauf « seulement de celle-ci »
+      const r = friend
+        ? await modal({ title: 'Retirer l\'appairage', iconName: 'warn', danger: true, confirm: 'Retirer',
+          text: `« ${peer.name} » ne pourra plus échanger avec cette machine. Tes autres machines la retirent `
+            + 'aussi, sauf si tu coches la case ci-dessous. Il faudra refaire l\'appairage pour la retrouver.',
+          check: 'Seulement de cette machine' })
+        : { ok: await confirmDanger('Retirer l\'appairage',
+          `« ${peer.name} » ne pourra plus échanger avec cette machine. Il faudra refaire l'appairage pour la retrouver.`,
+          'Retirer'), checked: false };
+      if (!r.ok) return;
+      try {
+        await del(`/network/peers/${peer.node_id}${friend ? `?only_here=${r.checked}` : ''}`);
+        lastJson = '';
+        loadNetwork();
+      } catch (e) { errorToast(e); }
     };
     list.append(row);
   }
@@ -310,6 +343,25 @@ function netFact(peer) {
   if (!inet?.connected) return '';
   const rtt = inet.rtt_ms ? ` (${Math.round(inet.rtt_ms)} ms)` : '';
   return ` · Internet : ${inet.path === 'direct' ? 'en direct' : 'par un relais'}${rtt}`;
+}
+
+const names = list => list.map(n => `« ${n} »`).join(', ');
+
+/** « Présenter mes autres machines » : celles qui ne connaissent pas encore cette machine d'ami. */
+async function presentMachines(peer) {
+  toast(`Présentation de tes autres machines à « ${peer.name} »…`, 'info', 4000);
+  let r;
+  try { r = await post(`/network/peers/${peer.node_id}/present`); } catch (e) { errorToast(e); return; }
+  const parts = [];
+  if (r.introduced.length) parts.push(`appairée avec ${names(r.introduced)}`);
+  if (r.asked.length) parts.push(`son accord est demandé pour ${names(r.asked)}`);
+  if (r.known.length) parts.push(`connaît déjà ${names(r.known)}`);
+  if (r.refused.length) parts.push(`a refusé ${names(r.refused)}`);
+  if (r.unreachable.length) parts.push(`injoignable(s) pour l'instant : ${names(r.unreachable)}`);
+  toast(parts.length ? `« ${peer.name} » : ${parts.join(' ; ')}.` : 'Aucune autre de tes machines à présenter.',
+    r.unreachable.length || r.refused.length ? 'info' : 'ok', 10000);
+  lastJson = '';
+  loadNetwork();
 }
 
 async function setTrust(peer, trust) {
@@ -441,6 +493,36 @@ async function confirmPairing(pending, text) {
   } catch (e) { errorToast(e); }
   lastJson = '';
   loadNetwork();
+}
+
+/** Présentation reçue (appairage par groupe) : une autre machine de la même personne, présentée
+ *  par une machine déjà appairée. Fermée sans répondre, elle attend dans « Machines appairées »
+ *  (3 minutes) ; une seule question à la fois, les autres attendent là aussi. */
+let introOpen = false;
+
+export async function answerIntroduction(ev) {
+  if (introOpen) return;
+  introOpen = true;
+  let r;
+  try {
+    r = await modal({
+      title: 'Présentation', iconName: 'network',
+      text: `« ${ev.presenter} » te présente « ${ev.machine} », une autre machine de la même personne. Si tu `
+        + `acceptes, elle pourra échanger avec cette machine comme « ${ev.presenter} », au même niveau de `
+        + 'confiance, sans code à comparer.',
+      check: 'Accepter d\'office les prochaines machines de ce groupe',
+      confirm: 'Accepter', cancel: 'Refuser',
+    });
+  } finally { introOpen = false; }
+  if (r.how === 'dismiss') return;
+  try {
+    state.network = await post('/network/introductions/answer',
+      { intro: ev.intro, accept: r.ok, always: r.ok && r.checked });
+  } catch (e) { errorToast(e); }
+  lastJson = '';
+  await loadNetwork();
+  const next = (state.network?.introductions || [])[0];    // la suivante, s'il en reste une
+  if (next) answerIntroduction(next);
 }
 
 /** Demande reçue d'une autre machine (affichée quelle que soit la vue ouverte). */

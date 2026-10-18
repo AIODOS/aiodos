@@ -7,6 +7,7 @@ les interfaces (0.0.0.0) — séparé de l'API de l'interface, qui reste sur 127
 """
 import asyncio
 import logging
+import threading
 import time
 
 import uvicorn
@@ -17,6 +18,7 @@ from aiodos.network import activity, client, consult, invitations, peers, placem
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
+from aiodos.network.group import Group
 from aiodos.network.internet import Internet
 from aiodos.network.pairing import Pairing
 from aiodos.network.worker import Worker
@@ -52,6 +54,7 @@ class NetworkManager:
         self.discovery_on = options.get("discovery", True)
         self.guard = ReplayGuard()
         self.pairing = Pairing(self)
+        self.group = Group(self)                           # appairage par groupe
         self.internet = Internet(self, options)            # --internet, --internet-local
         self.visible = {}
         self.error = None
@@ -257,6 +260,38 @@ class NetworkManager:
         if peer:
             await self._refresh_peer(peer)
 
+    def remove_now(self, node_id: str):
+        """Retire une machine appairée, depuis n'importe quel thread (« group/remove ») :
+        elle est prévenue, oubliée ici, et retirée de la liste blanche du compagnon."""
+        peer = peers.get(node_id)
+        if peer and (peer.get("address") or peer.get("net_id")):
+            try:
+                client.call(self.node_id, peer, "unpair", {}, None, 4)
+            except Exception:
+                pass
+        peers.remove(node_id)
+        self.internet.forget(node_id)
+        activity.forget(node_id)
+        self.net_changed(node_id)
+        self.changed()
+
+    def present_later(self, friend_id: str, only=None):
+        """Appairage par groupe (décision de l'auteur) : un ami choisi ici est présenté
+        d'office à mes autres machines ; une nouvelle machine à moi, aux amis. Hors du fil
+        appelant : il faut joindre trois machines."""
+        def run():
+            try:
+                self.group.present(friend_id, only)
+            except Exception as exc:
+                log.info("Présentation de « %s » impossible : %s", friend_id, exc)
+        threading.Thread(target=run, daemon=True, name="aiodos-presentation").start()
+
+    def present_new_machine(self, node_id: str):
+        """Une nouvelle machine à moi : présentée aux amis qui l'acceptent."""
+        for listed in peers.list_peers():
+            if listed["trust"] == sharing.FRIEND and not listed.get("set_aside_at"):
+                self.present_later(listed["node_id"], only=[node_id])
+
     async def unpair(self, node_id: str):
         peer = await asyncio.to_thread(peers.get, node_id)
         # Jointe sur le réseau local ou par Internet (appairée sur invitation : clé seule)
@@ -299,6 +334,7 @@ class NetworkManager:
             "peers": paired,
             "visible": [v for v in self.visible.values() if v["node_id"] not in paired_ids],
             "pairing": self.pairing.snapshot(),
+            "introductions": self.group.offers(),          # présentations à accepter
             "invitations": invitations.snapshot(),
             "internet": self.internet.snapshot(),
             "offload": bool(settings.get("offload_enabled")),

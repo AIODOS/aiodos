@@ -199,6 +199,12 @@ class Pairing:
                             "name": pending.name, "outcome": outcome})
         if outcome == "paired":
             self.m.on_paired(pending.node_id)
+            # Appairage par groupe : un ami rencontre mes autres machines, une nouvelle
+            # machine à moi rencontre mes amis (network/group.py)
+            if pending.trust == sharing.FRIEND:
+                self.m.present_later(pending.node_id)
+            else:
+                self.m.present_new_machine(pending.node_id)
         if outcome and pending.net_id:
             self.m.net_changed()              # liste blanche : l'invitation a servi
         self.m.changed()

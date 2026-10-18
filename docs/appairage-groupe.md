@@ -6,8 +6,8 @@ pouvoir joindre aussi mes autres machines, sans refaire l'appairage avec chacune
 concevoir avec soin, parce que c'est la sécurité de l'appairage qui est en jeu : la
 confiance est transmise par une de mes machines, et l'ami doit être d'accord.
 
-**Ce document propose la conception. Rien n'est codé avant ta relecture** ; les questions
-à trancher sont à la fin (§ 9).
+**Conception relue et tranchée le 18/10/2026 (§ 9), puis codée** : `aiodos/network/group.py`,
+essayée avec trois et quatre vrais nœuds (`tests/test_group_pairing.py`).
 
 ## 1. Aujourd'hui
 
@@ -68,6 +68,28 @@ P est un ami pour A). Mon PC fixe F est une de mes machines pour P. P présente 
 Une présentation expire au bout de 3 minutes, comme une demande d'appairage, et il ne
 peut y en avoir que quelques-unes en attente à la fois.
 
+**Dans le code**, les messages sont `group/introduce` (P→F : F prépare sa clé éphémère),
+`group/propose` (P→A : A accepte d'office ou demande à son utilisateur), `group/key` (P→F :
+F termine), et `group/answer` (A→P, quand l'utilisateur de A a répondu).
+
+**Rien à moitié.** Si une étape échoue (machine injoignable, refus), P le dit à celle qui
+attendait (`group/cancel`) : une paire gardée trop tôt est défaite. La réponse de A
+attend que F ait terminé, et A ne garde la paire que si F l'a gardée. Une paire déjà
+connue n'est jamais remplacée (ce serait une clé différente de l'autre côté).
+
+**De proche en proche.** Toute machine qui gagne la machine d'un ami (appairée, choisie
+comme amie, ou présentée) lui présente à son tour ses propres machines. Ainsi, après un
+seul appairage entre mon portable et le PC de Léa, et une réponse de chaque côté, mon PC
+fixe rencontre aussi le téléphone de Léa. « Toujours accepter ce groupe », dit sur une de
+mes machines, vaut pour mes autres machines (`group/ok`), y compris pour les questions
+déjà affichées.
+
+**Présentations croisées.** De proche en proche, la même paire peut être présentée des
+deux côtés à la fois (mon portable présente mon PC fixe au téléphone de Léa pendant que le
+PC de Léa présente son téléphone à mon PC fixe). Les deux machines de la paire appliquent
+la même règle : la présentation de la machine au plus petit identifiant continue, l'autre
+s'arrête. Une seule aboutit, avec une seule clé.
+
 **Une machine qui arrive plus tard dans mon groupe** (un nouveau PC appairé comme une de
 mes machines) est présentée de la même façon aux amis qui ont accepté « toutes celles de
 ce groupe » ; les autres reçoivent une demande.
@@ -80,8 +102,9 @@ ce groupe » ; les autres reçoivent une demande.
 - **Mettre de côté** une machine d'ami après un contrôle échoué (un résultat faux) : la
   machine qui l'a vu prévient les autres, qui la mettent de côté aussi (proposition). Un
   résultat faux ne dépend pas de la machine à qui il a été rendu.
-- **Côté ami**, retirer une de mes machines laisse le choix : celle-ci seulement, ou tout
-  le groupe.
+- **Côté ami**, la même règle : retirer une de mes machines la retire de toutes les
+  siennes, sauf « seulement de celle-ci ». Retirer d'un geste toutes les machines d'un même
+  groupe reste à faire.
 - **Si une de mes machines est volée**, je la retire de mes autres machines comme
   aujourd'hui. Les paires qu'elle a présentées gardent leur clé, qu'elle n'a jamais
   connue ; elles restent valables, ce qui est voulu (ce sont mes autres machines et mes
@@ -101,10 +124,15 @@ ce groupe » ; les autres reçoivent une demande.
 
 ## 6. Interface
 
-- **Chez moi** : dans la vue Réseau, la ligne de l'ami dit avec lesquelles de mes machines
-  il est appairé, et propose « Présenter mes autres machines » s'il en manque.
-- **Chez l'ami** : une carte « Présentations » dans la vue Réseau (accepter, refuser,
-  toujours accepter ce groupe), comme les demandes d'appairage aujourd'hui.
+- **Une présentation reçue** ouvre une question, quelle que soit la vue : accepter, refuser,
+  avec la case « Accepter d'office les prochaines machines de ce groupe ». La fermer sans
+  répondre (Échap, clic à côté) ne refuse rien : elle attend dans « Machines appairées »
+  (« attend ta réponse », bouton « Répondre ») jusqu'à son expiration.
+- **Machines appairées** : une machine présentée porte « présentée par … » ; le menu ⋯ de
+  la machine d'un ami propose « Présenter mes autres machines » (le résultat dit qui a été
+  appairée, qui connaissait déjà, qui est injoignable, qui a refusé).
+- **Retirer la machine d'un ami** : retirée de toutes mes machines, sauf si la case
+  « Seulement de cette machine » est cochée.
 - **Machines connectées** : une machine présentée y apparaît comme les autres, avec
   « présentée par … » en info-bulle.
 
@@ -114,26 +142,30 @@ ce groupe » ; les autres reçoivent une demande.
   direct) et `peers.group_ok` (j'accepte toutes les machines du groupe de celle-ci).
 - Les présentations en attente restent en mémoire, comme les appairages en attente
   (`network/pairing.py`), et disparaissent au redémarrage.
-- Nouvelles actions entre nœuds, scellées : `group/propose`, `group/key` (le relais des
-  clés publiques), `group/done`, `group/remove`, `group/set_aside`.
+- Nouvelles actions entre nœuds, scellées : `group/introduce`, `group/propose`,
+  `group/key` (le relais des clés publiques), `group/answer`, `group/cancel`,
+  `group/remove`, `group/set_aside`, `group/ok`.
 
 ## 8. Étapes
 
-1. Le protocole sur le réseau local, avec ses tests à trois nœuds (P, F, A) : présentation,
-   refus, niveau hérité, rien de plus haut, P sans la clé.
-2. Par Internet : listes blanches des compagnons mises à jour par la présentation.
-3. Retrait et mise de côté propagés à tout le groupe.
-4. L'interface (vue Réseau des deux côtés).
+1. Fait : le protocole sur le réseau local, avec ses tests à trois et quatre nœuds :
+   présentation, accord, niveau hérité, rien de plus haut, P sans la clé, de proche en
+   proche, présentations croisées, rien à moitié.
+2. Codé : par Internet, la présentation donne la clé du compagnon et ses indices, et la
+   liste blanche est mise à jour sans invitation. Pas encore essayé entre deux réseaux.
+3. Fait : retrait, mise de côté et « toujours accepter ce groupe » propagés à toutes mes
+   machines.
+4. Fait : l'interface (§ 6), essayée sur trois nœuds dans le navigateur.
+5. À faire : côté ami, retirer d'un geste toutes les machines d'un même groupe.
 
-## 9. Questions pour toi
+## 9. Décisions de l'auteur (18/10/2026)
 
-1. **De mon côté, présenter automatiquement** un ami à toutes mes machines dès que je le
-   choisis comme ami (recommandé : oui, tu l'as déjà choisi), ou machine par machine ?
-2. **Côté ami, l'accord** : la première fois seulement, avec « toujours accepter ce
-   groupe » (recommandé), ou à chaque machine ?
-3. **Retirer un ami** : de toutes mes machines par défaut (recommandé), avec une case
-   « seulement de celle-ci » ?
-4. **Mise de côté** : propagée à toutes mes machines (recommandé) ?
-5. **Le téléphone** : le présenter aussi aux amis, ou garder les téléphones hors des
-   présentations par défaut (batterie, données mobiles) ? Recommandé : présenté, mais il
-   ne calcule pour un ami que dans ses conditions habituelles (en charge, Wi-Fi).
+Les cinq recommandations sont retenues :
+
+1. **De mon côté, présentation d'office** : un ami choisi sur une de mes machines est
+   présenté à toutes mes autres machines.
+2. **Côté ami, l'accord la première fois**, avec « toujours accepter ce groupe ».
+3. **Retirer un ami** le retire de toutes mes machines, sauf « seulement de celle-ci ».
+4. **Mise de côté** propagée à toutes mes machines.
+5. **Le téléphone est présenté aussi**, mais ne calcule pour un ami qu'en charge et en
+   Wi-Fi (`network/worker.py`, `node/android.py`).

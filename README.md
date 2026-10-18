@@ -18,7 +18,7 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
 |---|---|---|
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
-| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques approuvées sur un deuxième appareil, gros modèles répartis entre mes machines (prototype), images et vidéos réparties (créées dans la conversation), réciprocité souple, clés protégées sur le disque (2.3) ; appairage par groupe en conception ([docs/appairage-groupe.md](docs/appairage-groupe.md)) |
+| 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques approuvées sur un deuxième appareil, gros modèles répartis entre mes machines (prototype), images et vidéos réparties (créées dans la conversation), réciprocité souple, clés protégées sur le disque (2.3), appairage par groupe : un ami appairé avec une de mes machines rencontre les autres, avec son accord ([docs/appairage-groupe.md](docs/appairage-groupe.md)) |
 | 3 — Réseau public | Vérification des résultats, incitation, gouvernance | en conception : [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) |
 
 ## Ce que fait la phase 0
@@ -280,6 +280,7 @@ aiodos/
 ├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
 │   ├── pairing.py     appairage par code à 6 chiffres (X25519 → HKDF)
+│   ├── group.py       appairage par groupe : une machine en présente une autre, sans code
 │   ├── envelope.py    messages scellés, horodatés, anti-rejeu (ChaCha20-Poly1305)
 │   ├── p2p_app.py     serveur entre nœuds, séparé de l'API locale
 │   ├── work.py        travail confié : bail, fichier par morceaux, résultats
