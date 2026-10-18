@@ -154,6 +154,22 @@ def remove_messages(conv_id, ids):
                    (conv_id, *ids))
 
 
+def rewind(conv_id, message_id) -> str | None:
+    """Reprend la conversation à ce message de l'utilisateur (« Régénérer », « Modifier ») :
+    lui et tout ce qui le suit en sont retirés, et de la mémoire des conversations (ses
+    passages portent le numéro de leur message : idx = id × 1000 + n). → son texte, ou None
+    si ce n'est pas un message de l'utilisateur dans cette conversation."""
+    row = db.query_one("SELECT content FROM messages WHERE id=? AND conversation_id=? "
+                       "AND role='user'", (int(message_id), conv_id))
+    if row is None:
+        return None
+    db.execute("DELETE FROM messages WHERE conversation_id=? AND id >= ?",
+               (conv_id, int(message_id)))
+    store.remove_chunks_from(store.conversation_collection_id(), str(conv_id),
+                             int(message_id) * 1000)
+    return row["content"]
+
+
 def by_batch(batches) -> dict:
     """{lot : conversation} des images et vidéos demandées dans une conversation (la
     galerie mène à leur conversation)."""

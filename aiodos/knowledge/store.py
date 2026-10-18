@@ -275,5 +275,19 @@ def remove_by_origin(collection_id, origin):
     search.invalidate()
 
 
+def remove_chunks_from(collection_id, origin, first_idx: int):
+    """Retire les passages d'une entrée à partir de first_idx (la mémoire d'une conversation
+    reprise plus haut : ce qu'elle a oublié n'y reste pas). Une entrée vidée disparaît."""
+    with db.transaction() as c:
+        row = c.execute("SELECT id FROM entries WHERE collection_id=? AND origin=?",
+                        (collection_id, origin)).fetchone()
+        if row is None:
+            return
+        c.execute("DELETE FROM chunks WHERE entry_id=? AND idx >= ?", (row["id"], int(first_idx)))
+        if c.execute("SELECT 1 FROM chunks WHERE entry_id=? LIMIT 1", (row["id"],)).fetchone() is None:
+            c.execute("DELETE FROM entries WHERE id=?", (row["id"],))
+    search.invalidate()
+
+
 def count_chunks() -> int:
     return db.query_one("SELECT COUNT(*) AS n FROM chunks")["n"]

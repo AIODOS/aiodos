@@ -17,6 +17,10 @@ class FolderIn(BaseModel):
     name: str
 
 
+class RewindIn(BaseModel):
+    message_id: int
+
+
 def _notify(request: Request):
     request.app.state.bus.publish({"type": "conversations"})
 
@@ -56,6 +60,18 @@ def update(conv_id: int, body: ConversationPatch, request: Request):
         raise HTTPException(400, str(exc))
     _notify(request)
     return {"ok": True}
+
+
+@router.post("/conversations/{conv_id}/rewind")
+def rewind(conv_id: int, body: RewindIn, request: Request):
+    """« Régénérer » une réponse, « Modifier » un message : la conversation reprend à ce
+    message de l'utilisateur, qui en est retiré avec tout ce qui suit ; l'interface le
+    renvoie ensuite (tel quel, ou modifié) comme un nouveau message. → son texte."""
+    text = conversations.rewind(conv_id, body.message_id)
+    if text is None:
+        raise HTTPException(404, "Message introuvable dans cette conversation.")
+    _notify(request)
+    return {"text": text}
 
 
 @router.delete("/conversations/{conv_id}")

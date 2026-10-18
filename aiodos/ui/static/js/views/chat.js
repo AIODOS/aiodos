@@ -17,6 +17,7 @@ let creating = false;      // une création d'image en route vers le nœud
 let displayed = 0;         // change à chaque conversation affichée (créations en route)
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
+let editing = null;        // { node } : le dernier message de l'utilisateur, en cours de modification
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -41,6 +42,9 @@ export function mountChat(container) {
       <div id="cluster-prep" hidden></div>
       <div class="messages" id="messages"><div class="messages-inner" id="messages-inner"></div></div>
       <footer class="composer">
+        <div class="edit-bar" id="edit-bar" hidden>${icon('edit')}<span>Modification de ton dernier
+          message : l'envoyer remplace la suite de la conversation.</span>
+          <button class="link-btn" id="edit-cancel" type="button">Annuler</button></div>
         <div class="composer-box">
           <textarea id="composer" rows="1" placeholder="Écris ton message…"></textarea>
           <button class="send" id="send" title="Envoyer (Entrée)">${icon('send')}</button>
@@ -50,10 +54,11 @@ export function mountChat(container) {
     </div>`);
   container.append(chat);
   el = {
-    title: $('#chat-title'), model: $('#model-select'), machine: $('#machine-select'),
-    banner: $('#chat-banner'),
+    chat, title: $('#chat-title'), model: $('#model-select'), machine: $('#machine-select'),
+    banner: $('#chat-banner'), editBar: $('#edit-bar'),
     scroll: $('#messages'), list: $('#messages-inner'), input: $('#composer'), send: $('#send'),
   };
+  $('#edit-cancel').onclick = () => stopEditing();
 
   chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
   // La liste des conversations, avec ☰ ou « Discussions » touché à nouveau dans la barre du
@@ -87,7 +92,11 @@ export function mountChat(container) {
   el.input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && busy) stop(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (busy) stop();
+    else if (editing) stopEditing();
+  });
   el.send.onclick = () => (busy ? stop() : send());
   el.title.onclick = renameCurrent;
   el.list.addEventListener('click', onMessageClick);
@@ -249,6 +258,7 @@ async function renameCurrent() {
 // --------------------------------------------------------- conversation courante
 function newConversation() {
   if (busy) stop();
+  stopEditing();
   displayed += 1;
   state.currentConversation = null;
   prefs.set('lastConversation', null);
@@ -269,6 +279,7 @@ async function openConversation(id) {
     if (e.status === 404) { newConversation(); return; }
     errorToast(e); return;
   }
+  stopEditing();
   displayed += 1;
   state.currentConversation = { id: conv.id, title: conv.title, model: conv.model };
   prefs.set('lastConversation', conv.id);
@@ -277,13 +288,15 @@ async function openConversation(id) {
   resetMedia();
   const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
-    if (m.role === 'user') { appendUser(m.content); continue; }
+    if (m.role === 'user') { appendUser(m.content, m.id); continue; }
     if (m.media) { appendMedia(el.list, m.media, m.id); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
+    view.node.dataset.id = m.id;
     if (m.thinking) view.restoreThinking(m.thinking);
     view.sources(m.sources);
     view.done(m.html);
   }
+  markTurn();
   if (conv.model) selectModel(conv.model);
   emit('chat:current');
   scrollBottom(true);
@@ -302,11 +315,66 @@ function showWelcome() {
 }
 
 // ------------------------------------------------------------------- messages
-function appendUser(text) {
+function appendUser(text, id = null) {
   el.list.querySelector('.welcome')?.remove();
-  const node = h(`<div class="msg user"><div class="bubble">${esc(text)}</div></div>`);
+  const node = h(`<div class="msg user">
+      <div class="turn-actions turn-only"><button class="icon-btn" data-act="edit" title="Modifier ce message">${icon('edit')}</button></div>
+      <div class="bubble">${esc(text)}</div></div>`);
+  if (id) node.dataset.id = id;
   el.list.append(node);
   return node;
+}
+
+/** « Modifier » sur le dernier message de l'utilisateur, « Régénérer » sur la réponse qui le
+ *  suit, si c'est une réponse écrite (une création a « Encore une » et ses retouches). */
+function markTurn() {
+  el.list.querySelectorAll('.last-turn').forEach(n => n.classList.remove('last-turn'));
+  const msgs = [...el.list.children].filter(n => n.classList.contains('msg'));
+  const asked = msgs.filter(n => n.classList.contains('user')).pop();
+  if (!asked?.dataset.id) return;
+  asked.classList.add('last-turn');
+  const after = msgs.slice(msgs.indexOf(asked) + 1);
+  if (after.length === 1 && after[0].dataset.id) after[0].classList.add('last-turn');
+}
+
+/** La conversation reprend à ce message de l'utilisateur : lui et la suite s'en vont (ici et
+ *  sur le nœud, mémoire comprise). → son texte, ou null. */
+async function rewindTo(node) {
+  const conv = state.currentConversation;
+  if (!conv || !node?.dataset.id) return null;
+  try {
+    const back = await post(`/conversations/${conv.id}/rewind`, { message_id: Number(node.dataset.id) });
+    while (node.nextElementSibling) node.nextElementSibling.remove();
+    node.remove();
+    return back.text;
+  } catch (e) { errorToast(e); return null; }
+}
+
+async function regenerate(answer) {
+  if (busy || creating) return;
+  let asked = answer.previousElementSibling;
+  while (asked && !asked.classList.contains('user')) asked = asked.previousElementSibling;
+  const text = await rewindTo(asked);
+  if (text !== null) send(text);           // tel quel, avec le modèle choisi maintenant
+}
+
+function startEditing(node) {
+  if (busy || creating || !node?.dataset.id) return;
+  stopEditing();
+  editing = { node };
+  node.classList.add('editing');
+  el.input.value = node.querySelector('.bubble').textContent;
+  autoresize();
+  el.input.focus();
+  el.editBar.hidden = false;
+}
+
+function stopEditing(clear = true) {
+  if (!editing) return;
+  editing.node.classList.remove('editing');
+  editing = null;
+  el.editBar.hidden = true;
+  if (clear) { el.input.value = ''; autoresize(); }
 }
 
 function appendAssistant(model, here = false) {
@@ -324,7 +392,7 @@ function appendAssistant(model, here = false) {
         <div class="meta">
           <span class="model-tag">${esc(label)}</span>
           <span class="sources"></span>
-          <span class="actions"><button class="icon-btn" data-act="copy" title="Copier la réponse">${icon('copy')}</button></span>
+          <span class="actions"><button class="icon-btn" data-act="copy" title="Copier la réponse">${icon('copy')}</button><button class="icon-btn turn-only" data-act="regenerate" title="Régénérer la réponse (avec le modèle choisi)">${icon('retry')}</button></span>
         </div>
       </div>
     </div>`);
@@ -358,6 +426,7 @@ function appendAssistant(model, here = false) {
     thinkTimer = null;
   };
   return {
+    node,
     route(ev) {                       // mode automatique : la machine choisie, ou qui prend le relais
       if (!model?.startsWith(AUTO)) return;
       node.querySelector('.model-tag').textContent =
@@ -443,6 +512,10 @@ function onMessageClick(e) {
     navigator.clipboard.writeText(text).then(() => toast('Réponse copiée.', 'ok', 1800));
     return;
   }
+  const again = e.target.closest('[data-act="regenerate"]');
+  if (again) { regenerate(again.closest('.msg')); return; }
+  const change = e.target.closest('[data-act="edit"]');
+  if (change) { startEditing(change.closest('.msg')); return; }
   const link = e.target.closest('a[href]');
   if (link && /^https?:/i.test(link.getAttribute('href'))) {
     e.preventDefault();
@@ -462,6 +535,7 @@ function autoresize() {
 
 function setBusy(on) {
   busy = on;
+  el.chat.classList.toggle('busy', on);
   el.send.classList.toggle('stop', on);
   el.send.innerHTML = icon(on ? 'stop' : 'send');
   el.send.title = on ? 'Arrêter (Échap)' : 'Envoyer (Entrée)';
@@ -565,6 +639,11 @@ async function send(asText = null) {
   if (busy || creating) return;
   const text = asText ?? el.input.value.trim();
   if (!text) return;
+  if (editing && asText === null) {            // « Modifier » : la suite part, ce message la remplace
+    const { node } = editing;
+    stopEditing(false);
+    if (await rewindTo(node) === null) return;
+  }
   const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
   if (explicit) { await create(text, explicit); return; }
   const model = selectedModel();
@@ -590,7 +669,7 @@ async function send(asText = null) {
     el.input.value = '';
     autoresize();
   }
-  appendUser(text);
+  const asked = appendUser(text);
   const view = appendAssistant(model);
   scrollBottom(true);
   setBusy(true);
@@ -601,6 +680,7 @@ async function send(asText = null) {
       conversation_id: state.currentConversation?.id ?? null,
     }, ev => {
       if (ev.type === 'start') {
+        asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
           state.currentConversation = { id: ev.conversation_id, title: ev.title || 'Nouvelle conversation', model };
           prefs.set('lastConversation', ev.conversation_id);
@@ -612,7 +692,10 @@ async function send(asText = null) {
       else if (ev.type === 'status') view.status(ev.text);
       else if (ev.type === 'thinking') view.think(ev.text);
       else if (ev.type === 'render') view.render(ev.html);
-      else if (ev.type === 'done') view.done(ev.html, ev.error);
+      else if (ev.type === 'done') {
+        if (ev.message_id) view.node.dataset.id = ev.message_id;
+        view.done(ev.html, ev.error);
+      }
     }, controller.signal);
   } catch (e) {
     if (e.name === 'AbortError') view.stopped();
@@ -620,6 +703,7 @@ async function send(asText = null) {
   } finally {
     setBusy(false);
     controller = null;
+    markTurn();
     refreshTree();
     el.input.focus();
   }
@@ -671,7 +755,10 @@ async function create(text, request, again = false) {
   }
   if (made.title) { state.currentConversation.title = made.title; setTitle(made.title); }
   emit('chat:current');
+  const userNode = asked || [...el.list.querySelectorAll('.msg.user')].pop();
+  if (userNode && made.user_message_id) userNode.dataset.id = made.user_message_id;
   appendMedia(el.list, made.media, made.message_id);
+  markTurn();
   scrollBottom(true);
   refreshTree();
   el.input.focus();

@@ -255,6 +255,16 @@ main { grid-row: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .msg .actions { opacity: 0; transition: opacity .15s; display: flex; gap: 2px; }
 .msg:hover .actions { opacity: 1; }
 .msg .actions .icon-btn { width: 28px; height: 28px; }
+/* « Modifier » et « Régénérer » : sur le dernier échange seulement, pas pendant une réponse */
+.msg:not(.last-turn) .turn-only, .chat.busy .turn-only { display: none !important; }
+.msg.user .turn-actions { display: flex; align-items: center; opacity: 0; transition: opacity .15s; }
+.msg.user:hover .turn-actions, .msg.user:focus-within .turn-actions { opacity: 1; }
+.msg.user .turn-actions .icon-btn { width: 28px; height: 28px; }
+.msg.user.editing .bubble { opacity: .5; border-style: dashed; }
+.edit-bar { max-width: 840px; margin: 0 auto 8px; display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted); }
+.edit-bar[hidden] { display: none; }
+.edit-bar > span:not(.icon) { flex: 1; min-width: 0; }
 .source {
   display: inline-flex; align-items: center; gap: 5px; max-width: 280px; height: 24px; padding: 0 9px;
   border-radius: 12px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line);
@@ -604,7 +614,7 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 
 /* Écran tactile : pas de survol, les boutons qu'il dévoile restent visibles */
 @media (hover: none) {
-  .t-row .icon-btn, .ktree .k-row .icon-btn, .msg .actions { opacity: 1; }
+  .t-row .icon-btn, .ktree .k-row .icon-btn, .msg .actions, .msg.user .turn-actions { opacity: 1; }
 }
 
 /* Téléphone (application Android, écran étroit) : une colonne, la barre de navigation en bas

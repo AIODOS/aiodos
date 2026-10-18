@@ -24,7 +24,10 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
 ## Ce que fait la phase 0
 
 - **Conversations** avec les modèles locaux (et Mistral/Qwen cloud en option),
-  réponses en streaming, rendu Markdown et coloration du code, dossiers, renommage.
+  réponses en streaming, rendu Markdown et coloration du code, dossiers, renommage,
+  recherche dans leur contenu ; « Régénérer » la dernière réponse (avec le modèle choisi
+  à ce moment) et « Modifier » le dernier message, la suite de la conversation et sa
+  trace en mémoire s'effaçant.
 - **Réflexion des modèles** (Qwen3…) affichée en direct, désactivable pour aller vite.
 - **Bibliothèques de connaissance** : fichiers, dossiers entiers, pages web ; tous les
   formats (PDF, Word, Excel, PowerPoint, code…), images (OCR + description par un
@@ -91,8 +94,9 @@ qui le prêtent ; chaque réponse dit quelle machine l'a calculée, et une machi
 répond pas cède la place à la suivante. On peut aussi désigner une machine précise, à côté
 du modèle. Les machines d'un ami ne répondent d'office que si on l'accepte (Réglages →
 Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC et la mémoire
-des conversations ne la suivent jamais ; chez un ami, seules les bibliothèques partagées
-avec tes amis donnent leurs extraits.
+des conversations ne la suivent jamais, ni les réponses qui s'en sont servies (l'historique
+envoyé les remplace par une mention) ; chez un ami, seules les bibliothèques partagées avec
+tes amis donnent leurs extraits.
 
 **Ouvrir AIODOS aux autres outils** (Réglages → Autres outils, désactivé par défaut) : une
 API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement
