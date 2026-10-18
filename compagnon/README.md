@@ -197,6 +197,8 @@ Toutes les requêtes portent l'en-tête `X-Aiodos-Net-Token`.
 | `PUT /net/v1/peers` | remplace la liste blanche : `{"peers": [{"id": "<clé>", "addrs": ["ip:port"], "relays": ["https://…"]}, {"ticket": "endpoint…"}]}` ; les connexions des clés retirées sont fermées |
 | `GET /net/v1/ticket` | ticket Iroh à donner à une autre machine (clé, relais, adresses) ; il ne contient aucun secret et ne fait pas entrer dans la liste blanche à lui seul. Juste après le démarrage, il attend que le relais soit joint (4 s au plus après le démarrage) |
 | `POST /net/v1/shutdown` | arrêt propre |
+| `GET /net/v1/public` | réseau public (phase 3.0) : `enabled`, `key` (la clé publique du nœud, distincte de celle de la machine), `neighbors`, `nodes` (les nœuds publics vus depuis moins de 5 minutes : clé, version, modèles, prête ou non, `seen_s`), `rendezvous` (dernière inscription dans la DHT, clés trouvées, erreur) |
+| `PUT /net/v1/public` | rejoint ou quitte le réseau public, avec le profil à diffuser : `{"enabled": true, "version": "…", "models": ["…"], "lends": false}` ; désactivé tant qu'AIODOS ne le demande pas (docs/phase3-reseau-public.md) |
 | `* /peer/<clé>/p2p/…` | requête relayée vers cette machine |
 
 Entre compagnons, le protocole `aiodos/2` (ALPN) est simple : un échange HTTP/1.1 par

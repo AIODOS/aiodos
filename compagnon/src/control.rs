@@ -12,6 +12,8 @@
 //! - `PUT  /net/v1/exposed`  : services locaux ouverts à des machines nommées (cf. tunnel.rs)
 //! - `POST /net/v1/tunnels`  : port local relié au service d'une machine ; `DELETE
 //!   /net/v1/tunnels/<port>` le ferme
+//! - `GET  /net/v1/public`   : réseau public (clé du nœud, voisins, nœuds vus) ; `PUT` le
+//!   rejoint ou le quitte, avec le profil à diffuser (cf. public.rs)
 
 use std::{
     convert::Infallible,
@@ -36,6 +38,7 @@ use crate::{
     config::{Config, Relays},
     outbound,
     pool::Pool,
+    public::{Public, Wanted},
     reply::{self, Body},
     status, tunnel,
 };
@@ -49,6 +52,7 @@ pub struct Ctx {
     pub config: Config,
     pub started: Instant,
     pub network_changes: Arc<AtomicU64>,
+    pub public: Arc<Public>,
 }
 
 /// Sert l'API locale jusqu'à l'arrêt du compagnon.
@@ -105,6 +109,11 @@ async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
             reply::json(StatusCode::OK, status::ticket(ctx))
         }
         (&Method::PUT, "/net/v1/peers") => set_peers(ctx, req).await,
+        (&Method::GET, "/net/v1/public") => reply::json(StatusCode::OK, ctx.public.snapshot()),
+        (&Method::PUT, "/net/v1/public") => match read_json::<Wanted>(req).await {
+            Ok(wanted) => reply::json(StatusCode::OK, ctx.public.configure(wanted).await),
+            Err(response) => response,
+        },
         (&Method::POST, "/net/v1/shutdown") => {
             info!("Arrêt demandé par AIODOS");
             ctx.pool.shutdown.cancel();

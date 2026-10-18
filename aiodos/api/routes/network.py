@@ -60,6 +60,19 @@ async def enable(body: EnableIn, request: Request):
     return manager.snapshot()
 
 
+@router.post("/public")
+async def public_enable(body: EnableIn, request: Request):
+    """« Rejoindre le réseau public » (phase 3.0, désactivé par défaut) : un annuaire, rien
+    de confié. Il passe par le compagnon Internet."""
+    manager = _manager(request)
+    if body.enabled and not manager.internet.enabled:
+        raise HTTPException(400, "Active d'abord « Internet » : le réseau public passe par lui.")
+    await asyncio.to_thread(settings.set_value, "public_network", body.enabled)
+    await manager.public.sync()
+    manager.changed()
+    return manager.snapshot()
+
+
 @router.get("/internet")
 async def internet_status(request: Request):
     """Compagnon Internet (aiodos-net) : état lu à l'instant, connexions comprises."""

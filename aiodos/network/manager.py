@@ -20,6 +20,7 @@ from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
 from aiodos.network.group import Group
 from aiodos.network.internet import Internet
+from aiodos.network.public import Public
 from aiodos.network.pairing import Pairing
 from aiodos.network.worker import Worker
 
@@ -56,6 +57,7 @@ class NetworkManager:
         self.pairing = Pairing(self)
         self.group = Group(self)                           # appairage par groupe
         self.internet = Internet(self, options)            # --internet, --internet-local
+        self.public = Public(self)                         # réseau public (phase 3.0)
         self.visible = {}
         self.error = None
         self._server = None
@@ -217,6 +219,7 @@ class NetworkManager:
                     log.warning("Nouvelles de « %s » : %s", peer["name"], result)
             await self.internet.sync()
             await self.internet.refresh_status()
+            await self.public.sync()
             await asyncio.sleep(REFRESH_EVERY)
 
     async def _refresh_peer(self, peer: dict):
@@ -337,6 +340,7 @@ class NetworkManager:
             "introductions": self.group.offers(),          # présentations à accepter
             "invitations": invitations.snapshot(),
             "internet": self.internet.snapshot(),
+            "public": self.public.snapshot(),              # réseau public (phase 3.0)
             "offload": bool(settings.get("offload_enabled")),
             "sharing": working,
         }

@@ -8,7 +8,7 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use iroh::RelayUrl;
+use iroh::{RelayUrl, address_lookup::MemoryLookup};
 
 /// Relais utilisés pour joindre une machine qu'on ne peut pas joindre en direct.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +134,10 @@ pub struct Config {
     /// liens mobiles qui décrochent quelques secondes (Iroh envoie un battement toutes
     /// les 5 s, la connexion ne s'éteint pas d'elle-même).
     pub idle_timeout: Duration,
+    /// Essais du réseau public : nœuds d'amorçage d'une DHT locale (`None` : la vraie).
+    pub public_dht_bootstrap: Option<Vec<String>>,
+    /// Essais du réseau public : annuaire en mémoire partagé par les compagnons du test.
+    pub public_lookup: Option<MemoryLookup>,
 }
 
 impl Config {
@@ -151,6 +155,8 @@ impl Config {
             token: token.to_string(),
             dial_timeout: Duration::from_secs(10),
             idle_timeout: Duration::from_secs(60),
+            public_dht_bootstrap: None,
+            public_lookup: None,
         }
     }
 }
@@ -239,6 +245,8 @@ impl Args {
             token,
             dial_timeout: Duration::from_secs(self.dial_timeout),
             idle_timeout: Duration::from_secs(60),
+            public_dht_bootstrap: None,
+            public_lookup: None,
         })
     }
 }

@@ -22,7 +22,13 @@ pub const KEY_FILE: &str = "aiodos-net.key";
 
 /// Clé de la machine, et si elle vient d'être créée.
 pub fn load_or_create(data_dir: &Path) -> Result<(SecretKey, bool)> {
-    let path = data_dir.join(KEY_FILE);
+    load_or_create_file(data_dir, KEY_FILE)
+}
+
+/// Une clé gardée dans ce fichier du dossier de données (celle de la machine, ou celle du
+/// nœud public, cf. public.rs), et si elle vient d'être créée.
+pub fn load_or_create_file(data_dir: &Path, file: &str) -> Result<(SecretKey, bool)> {
+    let path = data_dir.join(file);
     match fs::read_to_string(&path) {
         Ok(text) => {
             let key = parse(text.trim()).with_context(|| {

@@ -6,8 +6,8 @@ récompenses, les précédents et le cadre légal. Ici : comment des machines qu
 connaissent pas se trouvent sans serveur central, ce qu'on peut leur confier, comment
 vérifier leur travail, et dans quel ordre le construire.
 
-**Rien n'est codé de la phase 3 avant ton accord** : plusieurs choix sont de la
-gouvernance (§ 9). Ce qui est déjà en place et resservira est signalé.
+**Tes réponses du 18/10 sont au § 9.** La première étape, **3.0 (l'annuaire, sans rien
+confier), est codée** (§ 2 et § 8) ; la suite attend ton essai.
 
 ## 1. Ce que « public » voudrait dire
 
@@ -46,24 +46,46 @@ désactivée par défaut), sans passer par les serveurs DNS de n0. Les relais re
 de n0 par défaut, ou un relais auto-hébergé ([relais.md](relais.md)) : un relais ne voit
 que des paquets chiffrés.
 
-**À vérifier avant d'écrire du code** (règle du brief : vérifier les bibliothèques P2P) :
-le crate `mainline` (MIT, version 8.0.1, mainteneurs de Pubky) gère `get_peers`,
-`announce_peer` et les éléments signés (BEP 44) ; l'API synchrone est dépréciée au profit
-de l'API asynchrone, ce qui convient au compagnon (tokio). Il faudra mesurer le temps
-d'un premier rendez-vous (quelques secondes pour la DHT, d'après les mesures de 2.2 :
-2,6 s pour résoudre une clé) et le comportement derrière un NAT de box ou en 4G.
+**Vérifié avant d'écrire le code** (règle du brief) : `mainline` (MIT, 8.0.1, Pubky) et sa
+reprise par n0, `n0-mainline` (MIT ou Apache-2.0, 0.7.1), **déjà dans le compagnon** pour
+l'annuaire DHT d'Iroh : c'est elle qui sert, rien de plus à télécharger pour la DHT ;
+`iroh-gossip` 0.101.0 (MIT ou Apache-2.0, n0, compatible avec Iroh 1.3.0), seule crate
+ajoutée.
+
+**Ce qui est codé (3.0), et ce qui a changé en route.** Une annonce BEP 5 (`announce_peer`)
+ne rend que des adresses IP, alors qu'Iroh se connecte à une **clé** ; l'annonce signée
+(« signed peers ») de `n0-mainline` le permettrait, mais c'est une extension que seuls
+quelques nœuds de la DHT comprennent. Le rendez-vous passe donc par des **éléments signés
+BEP 44**, compris par la plupart des nœuds (`compagnon/src/rendezvous.rs`) : chaque
+créneau de 15 minutes a sa clé de signature, tirée du nom du réseau (« aiodos/public/1 »)
+et du numéro du créneau, que tout nœud public sait recalculer ; sous elle, huit cases.
+Chaque nœud inscrit sa clé dans sa case, à côté des 25 inscriptions les plus récentes, et
+lit les cases du créneau en cours et du précédent ; puis il rejoint le sujet du groupe de
+discussion avec les clés trouvées (`compagnon/src/public.rs`). **Mesuré le 18/10** : deux
+compagnons sur ce PC, avec la vraie DHT et les relais de n0, se sont trouvés en **8 s**.
+
+Limites connues : la clé d'un créneau est publique, donc n'importe qui peut vider ou
+brouiller une case (cela gêne le rendez-vous, sans plus : une clé lue ne sert qu'à
+proposer une connexion, qu'Iroh authentifie, et rien n'est confié en 3.0) ; les nœuds de
+la DHT qui gardent une case voient l'adresse IP de qui l'écrit, comme pour l'annuaire DHT
+d'Iroh. Reste à mesurer derrière une box en 4G (essai PC–téléphone).
 
 **Ce qui existe déjà** : le compagnon et sa clé Ed25519, ses relais, la DHT pour résoudre
 les clés (mesurée en 2.2), le protocole scellé entre nœuds.
 
 ## 3. L'identité d'un inconnu
 
-- **La clé du compagnon est l'identité** : c'est elle que le transport authentifie. Le
-  `node_id` actuel reste un nom interne, lié à la clé dans le profil.
-- **Un profil public signé** par cette clé : nom choisi (jamais le nom de la machine par
-  défaut), version, modèles qu'il sait calculer (avec leurs empreintes), s'il prête en ce
-  moment. Rien du matériel au-delà du nécessaire, rien de l'alimentation ni de l'activité
-  (comme le profil allégé des amis).
+- **Une clé publique à part est l'identité** (codé en 3.0) : distincte de la clé Internet
+  de la machine, gardée dans `aiodos-public.key`, avec son propre point de terminaison
+  Iroh, qui n'accepte que le groupe de discussion public. Ni mes amis ni les inconnus ne
+  peuvent relier mon identité publique à mes machines appairées, et la liste blanche du
+  point de terminaison privé ne change pas.
+- **Par les relais seulement** (codé en 3.0) : les inconnus ne voient pas l'adresse IP de
+  la machine (le relais, si). Sans relais choisi, pas de réseau public.
+- **Un profil public signé** par cette clé (`compagnon/src/public_profile.rs`) : **pas de
+  nom, la clé seulement** (ta décision), la version d'AIODOS, les modèles qu'il sait
+  calculer, s'il prête (toujours « non » en 3.0). Rien du matériel, de l'alimentation ni de
+  l'activité. Daté et signé : un ancien profil rejoué, ou celui d'un autre, est refusé.
 - **Pas d'appairage, pas de code à 6 chiffres** : un inconnu n'entre pas dans la table
   des machines appairées. Il a sa propre table (clé, première vue, réputation), et le
   compagnon l'accepte sur un protocole à part (ALPN `aiodos/public/1`), limité en débit,
@@ -74,7 +96,7 @@ les clés (mesurée en 2.2), le protocole scellé entre nœuds.
 | Travail | À un inconnu | Pour un inconnu | Pourquoi |
 |---|---|---|---|
 | Indexation d'une bibliothèque publique (passages → vecteurs) | Oui | Oui | Unités indépendantes, contenu public, résultat vérifiable (§ 5) |
-| Images et vidéos à description publique | Oui, avec l'accord de chaque création | Oui (réglage à part) | Unités indépendantes ; la description est lue par la machine qui calcule |
+| Images et vidéos | Oui, avec l'accord de chaque création, demandeur anonyme | Oui (réglage à part) | Unités indépendantes ; la machine qui calcule lit forcément la description et voit l'image, mais pas qui la demande : une clé éphémère par création, et la demande passe par un relais (ta décision) |
 | Conversations (modèle prêté) | Non | Non au début | Le modèle lit toute la conversation ; une réponse ne se vérifie pas à bas prix |
 | Gros modèle découpé | Non | Non | Chaque tranche peut fausser le résultat sans que personne le voie |
 | Recherche dans une bibliothèque consultable par tous | — | Oui (si ouverte à tous) | Seuls des passages publics sortent |
@@ -137,6 +159,10 @@ revoir en phase 3 ») : à comparer avec des reçus échangés entre pairs, sans
    gossip public ; la vue Réseau montre combien de nœuds publics sont en ligne et ce
    qu'ils savent calculer. *Fini quand* : deux AIODOS sur deux réseaux différents se
    voient sans invitation, et un nœud sans « Rejoindre le réseau public » n'annonce rien.
+   **Codé le 18/10** : réglage « Rejoindre le réseau public » (Réseau, désactivé par
+   défaut, Internet requis), essais du compagnon avec une DHT locale (`tests/public.rs` :
+   deux nœuds se voient, le troisième n'annonce rien), et essai réel sur ce PC (8 s).
+   Reste l'essai entre deux réseaux (le PC et le téléphone en 4G).
 2. **3.1 Donner.** Calculer pour des inconnus : indexation de bibliothèques publiques, avec
    les conditions du prêt, en dernier dans la file. Rien n'est confié aux inconnus.
 3. **3.2 Recevoir, avec vérification.** Confier à des inconnus l'indexation d'une
@@ -149,18 +175,20 @@ revoir en phase 3 ») : à comparer avec des reçus échangés entre pairs, sans
 Ce qui peut se faire dès maintenant sans rien décider : la **fiabilité** de chaque
 machine (unités rendues, vérifiées, écarts), utile aussi entre amis.
 
-## 9. Questions pour toi
+## 9. Décisions de l'auteur (18/10/2026)
 
-1. **Le nom affiché** d'un nœud public : un pseudonyme choisi à l'activation (recommandé),
-   ou rien du tout (une suite de lettres tirée de la clé) ?
-2. **Images pour les inconnus** : seulement à description publique, création par
-   création (recommandé), ou jamais ?
-3. **Les avis entre amis** sur des clés inconnues (§ 6) : à garder pour plus tard
-   (recommandé), ou dès le début ?
-4. **Les relais** : ceux de n0 par défaut pour le public aussi (simple), ou un relais
-   AIODOS auto-hébergé à prévoir (plus indépendant, mais il faut l'héberger) ?
-5. **Blockchain** : comparer d'abord les reçus signés entre pairs, sans registre
-   (recommandé), avant toute chaîne ?
+1. **Pas de pseudonyme : des clés**, « pour que ça soit vraiment anonyme ». Un nœud public
+   n'a pas d'autre nom que sa clé (codé en 3.0).
+2. **Images pour les inconnus : l'anonymat du demandeur.** Pas besoin de description
+   publique : on doit pouvoir créer ses images sans que les autres sachent qui les crée.
+   La machine qui calcule voit la description et le résultat, pas le demandeur (clé
+   éphémère par création, demande relayée). Pour l'étape 3.4.
+3. **Les avis entre amis** sur des clés inconnues : plus tard.
+4. **Les relais** : ceux de n0 par défaut pour commencer, mais pas viables à long terme ;
+   à terme, des **nœuds volontaires** qui relaient, sans serveur central.
+5. **Des reçus signés entre pairs avant toute blockchain.**
+6. **Commencer la 3.0 tout de suite**, derrière un réglage désactivé par défaut (fait) ;
+   publier une version signée seulement **après ton essai**.
 
 ## Sources
 

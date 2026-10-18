@@ -14,6 +14,12 @@ publish = false
 iroh = { version = "=1.3.0", default-features = false, features = ["portmapper", "tls-ring"] }
 iroh-tickets = "=1.0.0"
 iroh-mainline-address-lookup = "=0.6.0"
+# Réseau public (phase 3.0, docs/phase3-reseau-public.md) : rendez-vous par des éléments
+# signés de la DHT Mainline (BEP 44 ; n0-mainline est déjà celle de l'annuaire DHT), puis
+# groupe de discussion d'Iroh. Accord de l'auteur le 18/10/2026.
+n0-mainline = "=0.7.1"
+iroh-gossip = { version = "=0.101.0", default-features = false, features = ["net"] }
+sha2 = "0.11"
 
 anyhow = "1"
 bytes = "1"

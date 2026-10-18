@@ -18,6 +18,7 @@ export function mountNetwork(container) {
       <div class="card" id="net-live" hidden></div>
       <div class="card" id="net-state" style="margin-top:16px"></div>
       <div class="card" id="net-internet" style="margin-top:16px"></div>
+      <div class="card" id="net-public" style="margin-top:16px"></div>
       <div class="card" id="net-peers" style="margin-top:16px"></div>
       <div class="card" id="net-visible" style="margin-top:16px"></div>
     </div></div>`);
@@ -44,6 +45,7 @@ function render() {
   $('#net-state', root).style.marginTop = net.enabled ? '16px' : '0';
   renderState(net);
   renderInternet(net);
+  renderPublic(net);
   renderPeers(net);
   renderVisible(net);
 }
@@ -157,6 +159,57 @@ async function pasteReply(invitationId) {
   catch (e) { errorToast(e); return; }
   await confirmPairing(pending, 'Vérifie avec ton ami (au téléphone, par message) qu\'il voit ce même code, '
     + 'dis ce qu\'est sa machine pour toi, puis confirmez chacun de votre côté.');
+}
+
+// ------------------------------------------------ réseau public (phase 3.0)
+const shortKey = key => (key ? `${key.slice(0, 6)}…${key.slice(-4)}` : '');
+
+function publicNode(n) {
+  return `<div class="peer"><div class="peer-head"><span class="dot on"></span>
+      <code title="${esc(n.key)}">${esc(shortKey(n.key))}</code>
+      <span class="faint">AIODOS ${esc(n.version || '?')} · vu ${ago(Date.now() / 1000 - n.seen_s)}</span></div>
+    <div class="peer-facts">${n.models?.length ? esc(n.models.join(', ')) : 'aucun modèle annoncé'}</div></div>`;
+}
+
+function renderPublic(net) {
+  const box = $('#net-public', root);
+  const pub = net.public;
+  box.hidden = !pub || !net.enabled;
+  if (box.hidden) return;
+  const nodes = pub.nodes || [];
+  const detail = !pub.wanted ? ''
+    : !pub.internet ? `<div class="hint" style="margin:8px 0 0">Active d'abord « Internet », plus haut : le réseau
+        public passe par lui.</div>`
+      : pub.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(pub.error)}</div></div>`
+        : !pub.joined ? '<div class="faint" style="margin-top:8px">Connexion au réseau public…</div>'
+          : `<div class="peer-facts" style="margin:8px 0">Clé publique de cette machine :
+              <code title="${esc(pub.key)}">${esc(shortKey(pub.key))}</code> · ${pub.count} autre(s) nœud(s) public(s)
+              en ligne · ${pub.neighbors} voisin(s) direct(s)${pub.rendezvous?.error
+                ? ` · annuaire : ${esc(pub.rendezvous.error)}` : ''}</div>
+            <div class="peer-list">${nodes.length ? nodes.map(publicNode).join('')
+              : '<div class="empty" style="padding:12px">Aucun autre nœud public en ligne pour l\'instant.</div>'}</div>`;
+  box.innerHTML = `
+    <div class="setting-row" style="border:0;padding-top:0">
+      <div class="txt"><b>Rejoindre le réseau public <span class="pill">essai</span></b>
+        <small>Un annuaire sans propriétaire (la DHT de BitTorrent), où les nœuds AIODOS se trouvent sans invitation.
+        Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais
+        seulement : les inconnus ne voient pas ton adresse IP. Elle dit seulement sa version d'AIODOS et les modèles
+        qu'elle sait calculer. Rien n'est confié aux inconnus, et rien n'est calculé pour eux : cela viendra plus
+        tard, avec ton accord.</small></div>
+      <label class="switch"><input type="checkbox" id="public-toggle" ${pub.wanted ? 'checked' : ''}
+        ${pub.internet || pub.wanted ? '' : 'disabled'}><span></span></label>
+    </div>
+    ${detail}`;
+  $('#public-toggle', box).onchange = async e => {
+    try {
+      state.network = await post('/network/public', { enabled: e.target.checked });
+      lastJson = '';
+      loadNetwork();
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      errorToast(err);
+    }
+  };
 }
 
 // --------------------------------------------------------------------- état
