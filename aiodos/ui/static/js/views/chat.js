@@ -339,42 +339,45 @@ function markTurn() {
   if (!asked?.dataset.id) return;
   asked.classList.add('last-turn');
   const after = msgs.slice(msgs.indexOf(asked) + 1);
-  if (after.length === 1 && after[0].dataset.id) after[0].classList.add('last-turn');
+  // Une réponse écrite, même arrêtée (son numéro n'est pas connu ici : seul compte celui
+  // de la question) ; une création a « Encore une » et ses retouches
+  if (after.length === 1 && after[0].classList.contains('assistant')
+      && !after[0].matches('.creation, .notice, .waiting')) after[0].classList.add('last-turn');
 }
 
-/** La conversation reprend à ce message de l'utilisateur : lui et la suite s'en vont (ici et
- *  sur le nœud, mémoire comprise). → son texte, ou null. */
-async function rewindTo(node) {
-  const conv = state.currentConversation;
-  if (!conv || !node?.dataset.id) return null;
-  try {
-    const back = await post(`/conversations/${conv.id}/rewind`, { message_id: Number(node.dataset.id) });
-    while (node.nextElementSibling) node.nextElementSibling.remove();
+/** Ce qu'un envoi remplace (« Régénérer », « Modifier ») : la question `node` et la suite.
+ *  Le nœud ne les retire qu'une fois la nouvelle demande acceptée (replace_from), et si
+ *  c'est bien ce texte-là (replace_text). */
+const replacing = (node, text) => ({ node, id: Number(node.dataset.id), text });
+
+/** La demande acceptée : l'échange remplacé quitte l'écran (jusqu'à la nouvelle question). */
+function dropReplaced(replace, newest) {
+  if (!replace?.node?.isConnected) return;
+  let node = replace.node;
+  while (node && node !== newest) {
+    const next = node.nextElementSibling;
     node.remove();
-    return back.text;
-  } catch (e) { errorToast(e); return null; }
+    node = next;
+  }
 }
 
-async function regenerate(answer) {
+function regenerate(answer) {
   if (busy || creating) return;
+  stopEditing();
   let asked = answer.previousElementSibling;
   while (asked && !asked.classList.contains('user')) asked = asked.previousElementSibling;
-  const text = await rewindTo(asked);
-  if (text === null) return;
-  // Tel quel, avec le modèle choisi maintenant ; pas parti (validation refusée…) : la
-  // question revient dans la zone de saisie plutôt que de se perdre
-  if (!await send(text) && !el.input.value.trim()) {
-    el.input.value = text;
-    autoresize();
-  }
+  if (!asked?.dataset.id) return;
+  const text = asked.querySelector('.bubble').textContent;
+  send(text, replacing(asked, text));       // tel quel, avec le modèle choisi maintenant
 }
 
 function startEditing(node) {
   if (busy || creating || !node?.dataset.id) return;
   stopEditing();
-  editing = { node };
+  const text = node.querySelector('.bubble').textContent;
+  editing = { node, text };
   node.classList.add('editing');
-  el.input.value = node.querySelector('.bubble').textContent;
+  el.input.value = text;
   autoresize();
   el.input.focus();
   el.editBar.hidden = false;
@@ -653,27 +656,27 @@ async function confirmPeers(text, pre) {
 
 /** asText : un message envoyé au modèle de conversation tel quel, sans chercher d'image à
  *  créer (« Répondre en texte » sur une création qui n'en était pas une, « Régénérer »).
+ *  replace : l'échange qu'il remplace (« Régénérer » ; « Modifier » passe par editing).
  *  → faux si rien n'est parti (validation refusée, aucun modèle…). */
-async function send(asText = null) {
+async function send(asText = null, replace = null) {
   if (busy || creating) return false;
   const text = asText ?? el.input.value.trim();
   if (!text) return false;
-  if (editing && asText === null) {            // « Modifier » : la suite part, ce message la remplace
-    const { node } = editing;
-    stopEditing(false);
-    if (await rewindTo(node) === null) return false;
-  }
+  if (editing && !editing.node.isConnected) stopEditing(false);   // retiré entre-temps
+  if (editing && asText === null) replace = replacing(editing.node, editing.text);
+  const swap = replace ? { replace_from: replace.id, replace_text: replace.text } : {};
   const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
-  if (explicit) { await create(text, explicit); return true; }
+  if (explicit) { await create(text, { ...explicit, ...swap }, false, replace); return true; }
   const model = selectedModel();
 
   let pre;
   try {
     pre = await post('/chat/preflight', {
-      text, model, conversation_id: state.currentConversation?.id ?? null });
+      text, model, conversation_id: state.currentConversation?.id ?? null,
+      replace_from: replace?.id ?? null });
   } catch (e) { errorToast(e); return false; }
   if (pre.create && asText === null) {             // « Crée une image de… », reconnu au vol
-    await create(text, { ...autoRequest(pre.create), auto: true });
+    await create(text, { ...autoRequest(pre.create), auto: true, ...swap }, false, replace);
     return true;
   }
   if (!model) {
@@ -688,6 +691,7 @@ async function send(asText = null) {
     el.input.value = '';
     autoresize();
   }
+  stopEditing(false);
   const asked = appendUser(text);
   const view = appendAssistant(model);
   scrollBottom(true);
@@ -696,9 +700,10 @@ async function send(asText = null) {
   try {
     await streamChat({
       text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
-      conversation_id: state.currentConversation?.id ?? null,
+      conversation_id: state.currentConversation?.id ?? null, ...swap,
     }, ev => {
       if (ev.type === 'start') {
+        dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
           state.currentConversation = { id: ev.conversation_id, title: ev.title || 'Nouvelle conversation', model };
@@ -730,14 +735,16 @@ async function send(asText = null) {
 }
 
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
-// images s'ajoutent à la conversation, le calcul part dans la file
-async function create(text, request, again = false) {
+// images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
+// remplacé (« Modifier »), retiré une fois la demande acceptée
+async function create(text, request, again = false, replace = null) {
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
   let asked = null;
   if (!again) {                  // une nouvelle tentative (amis autorisés) ne répète pas le message
     el.input.value = '';
     autoresize();
+    stopEditing(false);
     asked = appendUser(text);
   }
   const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…' : '');
@@ -755,8 +762,10 @@ async function create(text, request, again = false) {
     // au vol, la demande n'en était peut-être pas une : « Répondre en texte »
     const notice = appendNotice(el.list, e.message, {
       images: e.status === 409, friends: e.data?.friends || [],
-      retry: () => create(text, request, true),
-      asText: request.auto ? () => { asked?.remove(); notice?.remove(); send(text); } : null });
+      retry: () => create(text, request, true, replace),
+      asText: request.auto ? () => { asked?.remove(); notice?.remove(); send(text, replace); }
+        : null });
+    markTurn();
     scrollBottom(true);
     return;
   } finally {
@@ -776,6 +785,7 @@ async function create(text, request, again = false) {
   if (made.title) { state.currentConversation.title = made.title; setTitle(made.title); }
   emit('chat:current');
   const userNode = asked || [...el.list.querySelectorAll('.msg.user')].pop();
+  dropReplaced(replace, userNode);                // acceptée : l'ancien échange s'en va
   if (userNode && made.user_message_id) userNode.dataset.id = made.user_message_id;
   appendMedia(el.list, made.media, made.message_id);
   markTurn();
@@ -788,11 +798,17 @@ async function create(text, request, again = false) {
 // conversation (avec le message, que le modèle de conversation reçoit à la place)
 async function answerAsText({ messageId, node }) {
   if (busy || creating) return;
+  stopEditing();
   let undone;
   try { undone = await post(`/chat/create/${messageId}/undo`); } catch (e) { errorToast(e); return; }
   const asked = node.previousElementSibling;
   if (asked?.classList.contains('user')) asked.remove();
   node.remove();
+  markTurn();
   refreshTree();
-  send(undone.text);
+  // Pas parti (validation refusée…) : le message revient dans la zone de saisie
+  if (!await send(undone.text) && !el.input.value.trim()) {
+    el.input.value = undone.text;
+    autoresize();
+  }
 }
