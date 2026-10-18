@@ -398,4 +398,6 @@ def view(media: dict | None) -> dict | None:
     images = [dict(row, path=str(gallery.path_of(row)))
               for row in gallery.batch(str(media.get("batch") or ""))]
     job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
-    return {**media, "images": images, "job": job}
+    expected = gallery.typical_seconds(media.get("model"), media.get("width"),
+                                       media.get("height"), media.get("frames"))
+    return {**media, "images": images, "job": job, "expected_s": expected}

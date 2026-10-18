@@ -287,7 +287,10 @@ function paintState(view) {
       : job.status === 'running' ? 'Création en cours' : 'En attente de son tour';
     const count = media.count > 1 ? ` · ${images.length} sur ${media.count}` : '';
     const since = job.created ? ` · ${duration(Math.max(0, Date.now() / 1000 - job.created))}` : '';
-    text = `${doing}${count}${since}`;
+    // D'après les précédentes, de ce modèle à cette taille (la première est plus longue)
+    const usual = media.expected_s && job.status !== 'paused'
+      ? ` · d'habitude ${duration(media.expected_s)}${media.count > 1 ? ` par ${noun}` : ''}` : '';
+    text = `${doing}${count}${since}${usual}`;
     box.innerHTML = `<span class="typing"><i></i><i></i><i></i></span><span class="faint">${esc(text)}</span>
       <button class="icon-btn" data-stop title="Arrêter">${icon('stop')}</button>`;
     box.querySelector('[data-stop]').onclick = async () => {

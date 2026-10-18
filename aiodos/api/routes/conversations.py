@@ -26,6 +26,12 @@ def tree():
     return conversations.list_tree()
 
 
+@router.get("/conversations/search")
+def search(q: str = ""):
+    """Conversations dont un message contient la recherche (avec un extrait)."""
+    return conversations.search(q)
+
+
 @router.get("/conversations/{conv_id}")
 def read(conv_id: int):
     conv = conversations.get(conv_id)

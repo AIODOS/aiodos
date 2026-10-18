@@ -115,6 +115,17 @@ def batch(name: str) -> list:
                                       (_SAFE.sub("", str(name).lower())[:32],))]
 
 
+def typical_seconds(model: str, width: int, height: int, frames: int | None = None) -> float | None:
+    """Temps de calcul habituel d'une image ou d'une vidéo de ce modèle à cette taille (et
+    cette durée) : la médiane des dix dernières, quelle que soit la machine. None : jamais
+    faite."""
+    rows = db.query("SELECT seconds FROM images WHERE model=? AND width=? AND height=? "
+                    "AND COALESCE(frames, 0)=? AND seconds > 0 ORDER BY id DESC LIMIT 10",
+                    (model, int(width or 0), int(height or 0), int(frames or 0)))
+    values = sorted(r["seconds"] for r in rows)
+    return round(values[len(values) // 2], 1) if values else None
+
+
 def path_of(row: dict) -> Path:
     """Le fichier d'une image : dans le dossier actuel, ou dans celui où elle a été écrite
     avant un changement de dossier."""

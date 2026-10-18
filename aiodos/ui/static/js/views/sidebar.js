@@ -1,12 +1,13 @@
 // Barre latérale des conversations : dossiers, recherche, glisser-déposer, menus.
 import { get, post, patch, del } from '../api.js';
-import { $, h, esc } from '../dom.js';
+import { $, h, esc, debounce } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs } from '../state.js';
 import { ask, confirmDanger, menu, errorToast } from '../ui.js';
 
 let treeEl;
 let filter = '';
+let found = new Map();       // conversation → extrait d'un message qui contient la recherche
 const openFolders = new Set(prefs.get('openFolders', []));
 
 export function mountSidebar(container) {
@@ -29,7 +30,23 @@ export function mountSidebar(container) {
   $('#new-chat', root).onclick = () => emit('chat:new');
   $('#new-folder', root).onclick = () => newFolder();
   $('#sidebar-fold', root).onclick = () => emit('chat:fold');
-  $('#conv-search', root).oninput = e => { filter = e.target.value.trim().toLowerCase(); render(); };
+  // Le titre se cherche ici, aussitôt ; le contenu des messages, chez le nœud, un instant après
+  const searchMessages = debounce(async () => {
+    const asked = filter;
+    let rows = [];
+    if (asked.length >= 2) {
+      try { rows = await get(`/conversations/search?q=${encodeURIComponent(asked)}`); } catch { return; }
+    }
+    if (asked !== filter) return;
+    found = new Map(rows.map(r => [r.id, r.snippet]));
+    render();
+  }, 250);
+  $('#conv-search', root).oninput = e => {
+    filter = e.target.value.trim().toLowerCase();
+    if (!filter) found = new Map();
+    render();
+    searchMessages();
+  };
   dropTarget(treeEl, null);                      // déposer dans le vide = hors dossier
   on('conversations:changed', refresh);
   on('chat:current', render);
@@ -45,7 +62,7 @@ export async function refresh() {
 
 function render() {
   const { folders, conversations } = state.tree;
-  const match = c => !filter || c.title.toLowerCase().includes(filter);
+  const match = c => !filter || c.title.toLowerCase().includes(filter) || found.has(c.id);
   treeEl.innerHTML = '';
   for (const f of folders) {
     const items = conversations.filter(c => c.folder_id === f.id && match(c));
@@ -80,9 +97,11 @@ function render() {
 
 function convRow(c) {
   const active = state.currentConversation?.id === c.id;
+  // Trouvée dans un message (pas dans le titre) : l'extrait, sous le titre
+  const snippet = filter && !c.title.toLowerCase().includes(filter) ? found.get(c.id) : '';
   const row = h(`
-    <div class="t-row ${active ? 'active' : ''}" draggable="true" title="${esc(c.title)}">
-      <span class="label">${esc(c.title)}</span>
+    <div class="t-row ${active ? 'active' : ''}${snippet ? ' found' : ''}" draggable="true" title="${esc(c.title)}">
+      <span class="label">${esc(c.title)}${snippet ? `<span class="t-snippet">${esc(snippet)}</span>` : ''}</span>
       <button class="icon-btn" title="Options">${icon('more')}</button>
     </div>`);
   row.onclick = e => { if (!e.target.closest('.icon-btn')) emit('chat:open', c.id); };

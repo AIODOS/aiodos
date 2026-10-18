@@ -41,6 +41,37 @@ def get(conv_id) -> dict | None:
     return conv
 
 
+def search(query: str, limit: int = 50) -> list:
+    """Conversations dont un message contient la recherche, la plus récente d'abord :
+    [{"id", "snippet"}], l'extrait autour du premier passage trouvé (titre : cherché par
+    l'interface elle-même)."""
+    query = " ".join(str(query or "").split())
+    if len(query) < 2:
+        return []
+    # « ! » protège les jokers de LIKE (% et _) tapés dans la recherche
+    pattern = "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+    found, seen = [], set()
+    for row in db.query("SELECT conversation_id, content FROM messages WHERE content LIKE ? "
+                        "ESCAPE '!' ORDER BY id DESC LIMIT 2000", (pattern,)):
+        if row["conversation_id"] in seen:
+            continue
+        seen.add(row["conversation_id"])
+        found.append({"id": row["conversation_id"], "snippet": _snippet(row["content"], query)})
+        if len(found) >= limit:
+            break
+    return found
+
+
+def _snippet(text: str, query: str, before: int = 18, after: int = 70) -> str:
+    """Quelques mots autour du passage trouvé, qui reste visible dans une liste étroite."""
+    text = " ".join(str(text or "").split())
+    at = text.lower().find(query.lower())
+    if at < 0:
+        return text[:before + after]
+    start, end = max(0, at - before), min(len(text), at + len(query) + after)
+    return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
+
+
 def rename(conv_id, title):
     title = (title or "").strip()
     if not title:

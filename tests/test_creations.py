@@ -243,3 +243,17 @@ def test_friends_who_could_compute_are_offered(client, monkeypatch):
                         json={"text": "Crée une image d'un chat roux"})
     assert reply.status_code == 409
     assert reply.json()["friends"] == ["PC de Léa (ami)"] and "PC de Léa" in reply.json()["detail"]
+
+
+def test_a_creation_says_how_long_it_usually_takes(tiny_model):  # noqa: F811
+    from aiodos.imaging import gallery
+    from aiodos.jobs.kinds import images as kind
+    made = {"png": __import__("base64").b64encode(png(256, 384)).decode()}
+    payload = {"model": "essai", "prompt": "un chat", "negative": "", "width": 256, "height": 384,
+               "steps": 4, "cfg": 1.0, "index": 0, "batch": "abc123"}
+    for seed, seconds in ((1, 20.0), (2, 30.0), (3, 22.0)):
+        kind.assimilate_image({**payload, "seed": seed}, {**made, "seconds": seconds})
+    assert gallery.typical_seconds("essai", 256, 384) == 22.0
+    assert gallery.typical_seconds("essai", 1024, 1024) is None
+    assert creations.view({"model": "essai", "width": 256, "height": 384, "batch": "abc123",
+                           "count": 1})["expected_s"] == 22.0

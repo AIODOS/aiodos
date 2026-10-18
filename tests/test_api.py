@@ -151,3 +151,17 @@ def test_interface_files_are_revalidated_after_an_update(data_dir):
         assert first.status_code == 200 and first.headers["cache-control"] == "no-cache"
         again = client.get("/js/app.js", headers={"If-None-Match": first.headers["etag"]})
         assert again.status_code == 304
+
+
+def test_conversations_are_found_by_what_their_messages_say(client):
+    from aiodos.chat import conversations
+    first = conversations.create(title="Voyage")
+    conversations.add_message(first, "user", "Quel temps fait-il à Brest en novembre ?")
+    conversations.add_message(first, "assistant", "À Brest, novembre est doux et pluvieux.")
+    other = conversations.create(title="Cuisine")
+    conversations.add_message(other, "user", "Une recette de crêpes, 100% sarrasin")
+    found = client.get("/api/conversations/search?q=brest", headers=AUTH).json()
+    assert [f["id"] for f in found] == [first] and "Brest" in found[0]["snippet"]
+    assert [f["id"] for f in client.get("/api/conversations/search?q=100%25",
+                                        headers=AUTH).json()] == [other]
+    assert client.get("/api/conversations/search?q=_", headers=AUTH).json() == []
