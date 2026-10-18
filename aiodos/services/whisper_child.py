@@ -9,21 +9,25 @@ rendue quand AIODOS le ferme, quelques minutes après la dernière demande (medi
 une panne de la bibliothèque n'arrête que lui.
 
 Protocole, une ligne JSON par message (UTF-8) :
-  AIODOS → programme : {"path", "model", "threads"} (une demande), puis « next » après
-                       chaque segment reçu (le suivant est calculé) ou « stop » ;
-  programme → AIODOS : {"language"}, puis {"segment": texte} un à un, et {"end": true} ;
-                       {"error": message} si la transcription échoue.
+  AIODOS → programme : {"id", "path", "model", "threads"} (une demande), puis « next »
+                       après chaque segment reçu (le suivant est calculé) ou « stop » ;
+  programme → AIODOS : {"id", "language"}, puis {"id", "segment": texte} un à un, et
+                       {"id", "end": true} ; {"id", "error": message} si la transcription
+                       échoue. Chaque réponse rappelle le numéro de sa demande.
 Entre deux segments, le programme attend la réponse d'AIODOS : la cadence du travail de
 fond (jobs/pacing.py : pause sur batterie, attente du secteur) s'applique avant le calcul
 du segment suivant, comme quand la transcription se faisait dans AIODOS même. La fin de
 l'entrée (AIODOS qui le ferme, ou qui s'arrête) le termine.
 
-Un seul fil lit l'entrée, et seulement quand rien d'autre ne tourne : sous Windows, une
-lecture bloquée sur le tuyau d'entrée dans un fil bloque aussi, dans un autre, le
-lancement d'un programme qui en hérite (ce que font certaines bibliothèques à leur
-chargement).
+Le protocole a sa propre copie de la sortie standard ; la sortie standard elle-même
+(celle de Python, du runtime C et de Windows) part vers la sortie d'erreur : ce qu'une
+bibliothèque y écrit ne peut pas se mêler aux réponses. Un seul fil lit l'entrée, et
+seulement quand rien d'autre ne tourne : sous Windows, une lecture bloquée sur le tuyau
+d'entrée dans un fil bloque aussi, dans un autre, le lancement d'un programme qui en
+hérite (ce que font certaines bibliothèques à leur chargement).
 """
 import json
+import os
 import sys
 
 
@@ -37,8 +41,10 @@ def serve(read, send):
         line = line.strip()
         if not line or line in ("next", "stop"):
             continue                    # réponse en retard à une transcription finie
+        rid = None
         try:
             request = json.loads(line)
+            rid = request.get("id")
             key = (str(request["model"]), int(request.get("threads") or 0))
             model = models.get(key)
             if model is None:
@@ -48,28 +54,44 @@ def serve(read, send):
                                      cpu_threads=key[1])
                 models[key] = model
             segments, info = model.transcribe(str(request["path"]), vad_filter=True)
-            send({"language": getattr(info, "language", None) or "?"})
+            send({"id": rid, "language": getattr(info, "language", None) or "?"})
             for segment in segments:    # générateur : un segment calculé à la fois
-                send({"segment": segment.text})
+                send({"id": rid, "segment": segment.text})
                 answer = read()
                 if not answer:
                     return
                 if answer.strip() != "next":
                     break
-            send({"end": True})
+            send({"id": rid, "end": True})
         except Exception as exc:
-            send({"error": f"{exc.__class__.__name__} : {exc}"[:500]})
+            send({"id": rid, "error": f"{exc.__class__.__name__} : {exc}"[:500]})
 
 
-def _send(message: dict):
-    sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+def _protocol_channel():
+    """Le canal des réponses (une copie de la sortie standard), la sortie standard
+    renvoyée vers la sortie d'erreur."""
+    channel = os.fdopen(os.dup(1), "w", encoding="utf-8", newline="\n")
     sys.stdout.flush()
+    os.dup2(2, 1)
+    if sys.platform == "win32":     # le code natif qui écrit par la poignée de Windows
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+        set_handle = ctypes.windll.kernel32.SetStdHandle
+        set_handle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+        set_handle(wintypes.DWORD(-11 & 0xFFFFFFFF), msvcrt.get_osfhandle(1))  # STD_OUTPUT_HANDLE
+    sys.stdout = sys.stderr
+    return channel
 
 
 def main():
     sys.stdin.reconfigure(encoding="utf-8")
-    sys.stdout.reconfigure(encoding="utf-8")
-    serve(sys.stdin.readline, _send)
+    channel = _protocol_channel()
+
+    def send(message: dict):
+        channel.write(json.dumps(message, ensure_ascii=False) + "\n")
+        channel.flush()
+    serve(sys.stdin.readline, send)
 
 
 if __name__ == "__main__":

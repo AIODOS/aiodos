@@ -2,6 +2,7 @@
 et audio/vidéo (transcription locale via faster-whisper)."""
 import base64
 import json
+import queue
 import subprocess
 import sys
 import threading
@@ -31,6 +32,7 @@ def vision_extract(path, model: str, mode: str = "both") -> str:
 
 WHISPER_THREADS = 4               # fils de calcul de faster-whisper par défaut (cpu_threads=0)
 IDLE_S = 180                      # programme de transcription fermé après ce temps sans demande
+REPLY_S = 3600                    # au-delà sans réponse (modèle à télécharger…), il est arrêté
 CHILD = Path(__file__).with_name("whisper_child.py")
 _whisper_lock = threading.Lock()  # une transcription à la fois
 
@@ -39,13 +41,21 @@ class TranscriptionError(RuntimeError):
     pass
 
 
+class _Stopped(Exception):
+    """Stop levé pendant que le programme calcule."""
+
+
 class _Child:
     """Le programme de transcription (services/whisper_child.py), gardé d'un fichier au
-    suivant ; fermé après IDLE_S sans demande (sa mémoire est rendue), relancé au besoin."""
+    suivant ; fermé après IDLE_S sans demande (sa mémoire est rendue), relancé au besoin.
+    Ses réponses sont lues par un fil à part : Stop, ou un programme qui ne répond plus,
+    se voient sans attendre le segment suivant."""
 
     def __init__(self):
         self.process = None
+        self.replies = None
         self.last = 0.0
+        self.requests = 0
 
     def alive(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -58,8 +68,20 @@ class _Child:
         children.bind(self.process.pid)
         priority.lower_process(self.process.pid)
         self.last = time.monotonic()
+        self.replies = queue.Queue()
+        threading.Thread(target=self._read_all, args=(self.process, self.replies), daemon=True,
+                         name="aiodos-transcription-lecture").start()
         threading.Thread(target=self._idle, args=(self.process,), daemon=True,
                          name="aiodos-transcription-veille").start()
+
+    @staticmethod
+    def _read_all(process, replies):
+        try:
+            for line in process.stdout:
+                replies.put(line)
+        except (OSError, ValueError):     # fermé pendant la lecture
+            pass
+        replies.put(None)
 
     def _idle(self, process):
         """Ferme le programme quand il n'a pas servi depuis IDLE_S (jamais pendant une
@@ -79,12 +101,29 @@ class _Child:
         self.process.stdin.write(line + "\n")
         self.process.stdin.flush()
 
-    def read(self) -> dict:
-        line = self.process.stdout.readline()
-        if not line:
-            self.process.wait()
+    def read(self, rid: int, stop=None) -> dict:
+        """La réponse suivante à la demande `rid`. _Stopped si `stop` est levé entre-temps ;
+        TranscriptionError si le programme s'arrête, ne répond plus, ou répond autre chose
+        (l'appelant l'arrête alors : on ne sait plus où il en est)."""
+        deadline = time.monotonic() + REPLY_S
+        while True:
+            if stop is not None and stop.is_set():
+                raise _Stopped()
+            try:
+                line = self.replies.get(timeout=0.5)
+                break
+            except queue.Empty:
+                if time.monotonic() > deadline:
+                    raise TranscriptionError("Le programme de transcription ne répond plus.")
+        if line is None:
             raise TranscriptionError("Le programme de transcription s'est arrêté en route.")
-        return json.loads(line)
+        try:
+            reply = json.loads(line)
+        except ValueError:
+            reply = None
+        if not isinstance(reply, dict) or reply.get("id") != rid:
+            raise TranscriptionError("Réponse inattendue du programme de transcription.")
+        return reply
 
     def close(self):
         """Fin de son entrée : il s'arrête de lui-même (sinon, arrêté)."""
@@ -122,35 +161,39 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
     priorité basse (services/whisper_child.py), une à la fois : Whisper occupe déjà
     plusieurs cœurs du processeur.
 
-    stop    : threading.Event ; s'il est levé, la transcription s'arrête au segment
-              suivant (le texte partiel renvoyé doit alors être ignoré par l'appelant) ;
+    stop    : threading.Event ; s'il est levé, la transcription s'arrête aussitôt (le
+              programme est arrêté s'il calcule ; le texte partiel renvoyé doit alors être
+              ignoré par l'appelant) ;
     threads : fils de calcul (None : WHISPER_THREADS) ; un autre nombre recharge le modèle ;
     pace    : pace(secondes) après chaque segment, avec le temps qu'il a pris : la cadence
               du travail de fond (jobs/pacing.py : pause sur batterie, attente du secteur)
               passe avant le calcul du segment suivant."""
-    request = json.dumps({"path": str(path), "model": model_name, "threads": threads or 0},
-                         ensure_ascii=False)
+    lines, language = [], "?"
     with _whisper_lock:
-        for attempt in (1, 2):
-            try:
-                if not _child.alive():
-                    _child.start()
-                _child.send(request)
-                reply = _child.read()
-                break
-            except (OSError, TranscriptionError):
-                # Fermé entre-temps (inactif depuis longtemps) : relancé une fois
-                _child.stop()
-                if attempt == 2:
-                    raise
-        lines, language, began = [], "?", time.monotonic()
         try:
+            for attempt in (1, 2):
+                _child.requests += 1
+                rid = _child.requests
+                try:
+                    if not _child.alive():
+                        _child.start()
+                    _child.send(json.dumps({"id": rid, "path": str(path), "model": model_name,
+                                            "threads": threads or 0}, ensure_ascii=False))
+                    reply = _child.read(rid, stop)
+                    break
+                except (OSError, TranscriptionError):
+                    # Fermé entre-temps (inactif depuis longtemps), ou réponse hors protocole :
+                    # un programme neuf, une fois
+                    _child.stop()
+                    if attempt == 2:
+                        raise
+            began = time.monotonic()
             while not reply.get("end") and "error" not in reply:
                 if "language" in reply:
                     language = reply["language"]
                 elif "segment" in reply:
-                    if reply["segment"].strip():
-                        lines.append(reply["segment"].strip())
+                    if str(reply["segment"]).strip():
+                        lines.append(str(reply["segment"]).strip())
                     if stop is not None and stop.is_set():
                         _child.send("stop")          # il répond par la fin
                     else:
@@ -158,7 +201,10 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
                             pace(time.monotonic() - began)
                         _child.send("next")
                     began = time.monotonic()
-                reply = _child.read()
+                reply = _child.read(rid, stop)
+        except _Stopped:
+            _child.stop()                  # Stop pendant un calcul : arrêté sur-le-champ
+            reply = {}
         except BaseException:
             _child.stop()                  # état incertain : on repart d'un programme neuf
             raise

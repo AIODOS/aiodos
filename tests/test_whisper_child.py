@@ -19,8 +19,11 @@ import json, os, subprocess, sys
 from types import SimpleNamespace
 
 # Comme de vraies bibliothèques à leur chargement : un programme lancé, qui hérite de
-# l'entrée (sous Windows, bloqué si un autre fil attendait sur ce tuyau)
+# l'entrée (sous Windows, bloqué si un autre fil attendait sur ce tuyau), et du texte
+# écrit sur la sortie standard, par Python et directement (code natif)
 subprocess.run([sys.executable, "-c", "pass"], timeout=30)
+print("chargement du modèle…")
+os.write(1, b"bruit du code natif" + bytes([10]))
 
 def _log(entry):
     with open(os.environ["FAKE_WHISPER_LOG"], "a", encoding="utf-8") as f:
@@ -33,6 +36,9 @@ class WhisperModel:
     def transcribe(self, path, vad_filter):
         if "illisible" in path:
             raise ValueError("fichier illisible")
+        if "long" in path:
+            import time
+            time.sleep(60)                       # un long fichier : la détection de voix
 
         def segments():
             for text in (" un ", "deux", "trois"):
@@ -74,12 +80,29 @@ def test_the_transcription_runs_apart_at_low_priority_and_is_paced(whisper):
         {"load": "small", "threads": 0, "device": "cpu"}]
 
 
-def test_a_stop_ends_it_before_the_next_segment_is_computed(whisper):
+def test_a_stop_ends_it_at_once(whisper):
     stop = threading.Event()
-    media.transcribe(Path("note.wav"), "small", stop=stop, pace=lambda seconds: stop.set())
-    # Le deuxième segment, calculé avant que l'arrêt soit vu ; le troisième, jamais
-    assert [e["segment"] for e in whisper() if "segment" in e] == [" un ", "deux"]
+    text = media.transcribe(Path("note.wav"), "small", stop=stop,
+                            pace=lambda seconds: stop.set())
+    assert "trois" not in text and "trois" not in [e.get("segment") for e in whisper()]
     assert media.transcribe(Path("note.wav"), "small").endswith("trois")   # il sert encore
+
+
+def test_a_stop_while_it_computes_does_not_wait_for_it(whisper):
+    stop = threading.Event()
+    threading.Timer(1.0, stop.set).start()
+    began = time.monotonic()
+    assert media.transcribe(Path("long.wav"), "small", stop=stop) == ""
+    assert time.monotonic() - began < 15 and not media._child.alive()
+
+
+def test_what_libraries_print_never_mixes_with_the_replies(whisper):
+    """Le faux faster_whisper écrit sur la sortie standard en se chargeant : les
+    transcriptions de deux fichiers restent chacune la sienne."""
+    first = media.transcribe(Path("a.wav"), "small")
+    second = media.transcribe(Path("b.wav"), "small")
+    assert first.startswith("[Transcription de a.wav") and first.endswith("un\ndeux\ntrois")
+    assert second.startswith("[Transcription de b.wav") and second.endswith("un\ndeux\ntrois")
 
 
 def test_an_unreadable_file_is_reported_and_the_program_kept(whisper):
