@@ -192,11 +192,13 @@ def entry_by_origin(collection_id, origin):
     return dict(row) if row else None
 
 
-def message_starts(entry_id) -> dict:
-    """{numéro de message : texte de son premier passage} d'une mémoire de conversation
-    (idx = id du message × 1000 + n) : ce qui y est déjà, et pour quel texte."""
-    return {r["idx"] // 1000: r["text"] for r in db.query(
-        "SELECT idx, text FROM chunks WHERE entry_id=? AND idx % 1000 = 0", (entry_id,))}
+def message_chunks(entry_id) -> dict:
+    """{numéro de message : textes de ses passages, dans l'ordre} d'une mémoire de
+    conversation (idx = id du message × 1000 + n) : ce qui y est déjà, et pour quel texte."""
+    found = {}
+    for r in db.query("SELECT idx, text FROM chunks WHERE entry_id=? ORDER BY idx", (entry_id,)):
+        found.setdefault(r["idx"] // 1000, []).append(r["text"])
+    return found
 
 
 def drop_message_chunks(collection_id, origin, message_ids):

@@ -254,10 +254,12 @@ def split_index_conversation(params):
 @task("index_conversation")
 def run_index_conversation(payload):
     """Met la mémoire de la conversation à jour, message par message : un message déjà
-    là (même numéro, même premier passage) n'est pas recalculé ; un message retiré
+    là (même numéro, mêmes passages) n'est pas recalculé ; un message retiré
     (« Régénérer », « Modifier », « Répondre en texte ») perd ses passages, et un numéro
     repris par SQLite pour un autre message est recalculé. En reconstruction (payload
     « rebuild », après un changement de modèle d'embedding), tout est recalculé.
+    Ce qui change pendant le calcul (message retiré ou remplacé, conversation supprimée)
+    n'entre pas en mémoire : tout est revérifié au moment d'écrire.
     Chaque passage porte l'id du message dans son index : idx = id×1000 + n."""
     conv_id = payload["conversation_id"]
     rebuild = bool(payload.get("rebuild"))
@@ -269,9 +271,10 @@ def run_index_conversation(payload):
     entry = store.entry_by_origin(collection_id, str(conv_id))
     if rebuild and entry is None:
         return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
-    known = store.message_starts(entry["id"]) if entry and not rebuild else {}
+    known = store.message_chunks(entry["id"]) if entry and not rebuild else {}
     messages = db.query("SELECT id, role, content, sources, created FROM messages "
                         "WHERE conversation_id=? ORDER BY id", (conv_id,))
+    read = {m["id"]: m["content"] for m in messages}
     pieces, kept, changed = [], set(), []
     for m in messages:
         if m["role"] == "assistant" and conversations.cites_others(m["sources"]):
@@ -284,7 +287,7 @@ def run_index_conversation(payload):
             continue
         kept.add(m["id"])
         if m["id"] in known:
-            if known[m["id"]] == texts[0]:
+            if known[m["id"]] == texts:
                 continue                  # déjà en mémoire
             changed.append(m["id"])       # numéro repris par un autre message
         pieces.extend((m["id"] * 1000 + n, piece) for n, piece in enumerate(texts))
@@ -296,11 +299,23 @@ def run_index_conversation(payload):
             store.drop_message_chunks(collection_id, str(conv_id), drop)
         return {"chunks": 0}
     vectors = pacing.embed([p for _, p in pieces])
-    store.append_chunks(collection_id, f"{conv['title']} · #{conv_id}", "conversation",
-                        str(conv_id), [(idx, text, vec)
-                                       for (idx, text), vec in zip(pieces, vectors)],
-                        replace=rebuild, drop_messages=drop)
-    return {"chunks": len(pieces)}
+    with db.transaction() as c:           # revérifié d'un seul geste avec l'écriture
+        if c.execute("SELECT 1 FROM conversations WHERE id=?", (conv_id,)).fetchone() is None:
+            store.remove_by_origin(collection_id, str(conv_id))
+            return {"skipped": True, "ext": "conversation", "reason": "supprimée"}
+        now = {r["id"]: r["content"] for r in c.execute(
+            "SELECT id, content FROM messages WHERE conversation_id=?", (conv_id,))}
+        still = [(idx, text, vec) for (idx, text), vec in zip(pieces, vectors)
+                 if now.get(idx // 1000) == read[idx // 1000]]
+        gone = [mid for mid in set(known) | set(read) if mid not in now]
+        if still:
+            store.append_chunks(collection_id, f"{conv['title']} · #{conv_id}", "conversation",
+                                str(conv_id), still, replace=rebuild, drop_messages=drop + gone)
+        elif rebuild:
+            store.remove_by_origin(collection_id, str(conv_id))
+        elif drop or gone:
+            store.drop_message_chunks(collection_id, str(conv_id), drop + gone)
+    return {"chunks": len(still)}
 
 
 def queue_conversation(conv_id) -> int | None:

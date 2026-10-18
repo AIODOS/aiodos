@@ -118,3 +118,43 @@ def test_removed_messages_leave_the_memory_and_nothing_is_computed_twice(talk, m
     conversations.remove_messages(conv, ids[2:])     # « Répondre en texte », par exemple
     assert index.run_index_conversation({"conversation_id": conv}) == {"chunks": 0}
     assert "population" not in " ".join(_memory(conv)) and "Lisbonne" in " ".join(_memory(conv))
+
+
+def test_a_long_message_changed_only_at_the_end_is_indexed_again(talk):
+    conv, ids = talk
+    start = " ".join(f"Phrase numéro {n} du long texte collé." for n in range(60))
+    first = conversations.add_message(conv, "user", start + " Fin : version un.")
+    index.run_index_conversation({"conversation_id": conv})
+    assert "version un" in " ".join(_memory(conv))
+    conversations.rewind(conv, first)
+    assert conversations.add_message(conv, "user", start + " Fin : version deux.") == first
+    index.run_index_conversation({"conversation_id": conv})
+    text = " ".join(_memory(conv))
+    assert "version deux" in text and "version un" not in text
+
+
+def test_what_is_removed_during_the_computation_never_enters_the_memory(talk, monkeypatch):
+    """« Régénérer » pendant que la mémoire se calcule : rien de l'échange retiré n'y entre,
+    même si personne ne renvoie de question ensuite ; une conversation supprimée pendant le
+    calcul ne laisse pas de mémoire orpheline."""
+    conv, ids = talk
+    asked = conversations.add_message(conv, "user", "Et son maire ?")
+    conversations.add_message(conv, "assistant", "Carlos Moedas.")
+    real = index.pacing.embed
+
+    def rewound_meanwhile(texts, **kwargs):
+        conversations.rewind(conv, asked)
+        return real(texts, **kwargs)
+    monkeypatch.setattr(index.pacing, "embed", rewound_meanwhile)
+    index.run_index_conversation({"conversation_id": conv})
+    text = " ".join(_memory(conv))
+    assert "Lisbonne" in text and "maire" not in text and "Moedas" not in text
+
+    conversations.add_message(conv, "user", "Et son fleuve ?")
+
+    def deleted_meanwhile(texts, **kwargs):
+        conversations.delete(conv)
+        return real(texts, **kwargs)
+    monkeypatch.setattr(index.pacing, "embed", deleted_meanwhile)
+    index.run_index_conversation({"conversation_id": conv})
+    assert store.entry_by_origin(store.conversation_collection_id(), str(conv)) is None

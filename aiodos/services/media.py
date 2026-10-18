@@ -105,15 +105,16 @@ class _Child:
         """La réponse suivante à la demande `rid`. _Stopped si `stop` est levé entre-temps ;
         TranscriptionError si le programme s'arrête, ne répond plus, ou répond autre chose
         (l'appelant l'arrête alors : on ne sait plus où il en est)."""
-        deadline = time.monotonic() + REPLY_S
-        while True:
+        waited = 0.0                     # en attentes de 0,5 s : une mise en veille du PC
+        while True:                      # ne compte pas (l'horloge, elle, continue)
             if stop is not None and stop.is_set():
                 raise _Stopped()
             try:
                 line = self.replies.get(timeout=0.5)
                 break
             except queue.Empty:
-                if time.monotonic() > deadline:
+                waited += 0.5
+                if waited > REPLY_S:
                     raise TranscriptionError("Le programme de transcription ne répond plus.")
         if line is None:
             raise TranscriptionError("Le programme de transcription s'est arrêté en route.")

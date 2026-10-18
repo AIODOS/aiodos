@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -167,6 +167,13 @@ MIGRATIONS = {
     # précédentes (imaging/gallery.py, path_of)
     13: """
     ALTER TABLE images ADD COLUMN folder TEXT;
+    """,
+    # Les réponses qui n'étaient qu'une erreur portent une marque (chat/conversations.py,
+    # ERROR_SOURCE) : celles d'avant la reçoivent, une fois pour toutes, d'après leur début
+    14: """
+    UPDATE messages SET sources='[{"type": "error"}]'
+     WHERE role='assistant' AND substr(content, 1, 2)='⚠ '
+       AND (sources IS NULL OR sources='' OR sources='[]');
     """,
 }
 

@@ -95,19 +95,12 @@ def test_a_withheld_answer_keeps_its_place(answers):
 
 
 # ------------------------------------------------------------- erreurs
-def _after_the_mark(message_id):
-    """Daté d'après la marque des erreurs : seul compte alors ERROR_SOURCE."""
-    db.execute("UPDATE messages SET created=? WHERE id=?",
-               (conversations._MARKED_SINCE + 3600, message_id))
-
-
 def test_an_error_is_shown_but_neither_reused_nor_remembered(fake_embed):
     store.ensure_defaults()
     conv = conversations.create()
     conversations.add_message(conv, "user", "Bonjour")
-    _after_the_mark(conversations.add_message(
-        conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté",
-        sources=[conversations.ERROR_SOURCE]))
+    conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté",
+                              sources=[conversations.ERROR_SOURCE])
     conversations.add_message(conv, "user", "Tu es là ?")
     conversations.add_message(conv, "assistant", "Oui, je suis là.")
     assert conversations.history(conv) == [
@@ -123,8 +116,8 @@ def test_an_answer_that_begins_with_a_warning_sign_is_still_an_answer(fake_embed
     store.ensure_defaults()
     conv = conversations.create()
     conversations.add_message(conv, "user", "Que faut-il savoir ?")
-    _after_the_mark(conversations.add_message(
-        conv, "assistant", f"{conversations.ERROR_MARK}Attention : ne mélange pas les deux."))
+    conversations.add_message(conv, "assistant",
+                              f"{conversations.ERROR_MARK}Attention : ne mélange pas les deux.")
     assert conversations.history(conv)[-1]["content"].endswith("ne mélange pas les deux.")
     index.run_index_conversation({"conversation_id": conv})
     memory = " ".join(store.chunk_texts(store.entry_by_origin(
@@ -132,13 +125,23 @@ def test_an_answer_that_begins_with_a_warning_sign_is_still_an_answer(fake_embed
     assert "ne mélange pas" in memory
 
 
-def test_an_error_saved_before_the_mark_is_still_recognized():
+def test_errors_saved_before_their_mark_receive_it_once_at_the_upgrade():
+    """Migration 14 : une erreur enregistrée par une version précédente (« ⚠ … », sans
+    source) reçoit sa marque une fois, à la mise à jour ; rien d'autre ne change."""
     conv = conversations.create()
     conversations.add_message(conv, "user", "Bonjour")
     old = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Ollama arrêté")
-    db.execute("UPDATE messages SET created=? WHERE id=?",
-               (conversations._MARKED_SINCE - 86400, old))
-    assert conversations.history(conv) == [{"role": "user", "content": "Bonjour"}]
+    cited = conversations.add_message(conv, "assistant", f"{conversations.ERROR_MARK}Attention",
+                                      sources=[WEB])
+    path = db.connect().execute("PRAGMA database_list").fetchone()[2]
+    db.execute("PRAGMA user_version=13")
+    db.close()
+    db._initialized.discard(path)
+    rows = {r["id"]: json.loads(r["sources"]) for r in db.query("SELECT id, sources FROM messages")}
+    assert rows[old] == [conversations.ERROR_SOURCE] and rows[cited] == [WEB]
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION
+    assert conversations.history(conv) == [{"role": "user", "content": "Bonjour"},
+                                           {"role": "assistant", "content": "⚠ Attention"}]
 
 
 # ------------------------------------------------------------- mémoire

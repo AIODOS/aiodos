@@ -7,8 +7,6 @@ from aiodos.knowledge import store
 DEFAULT_TITLE = "Nouvelle conversation"
 ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une erreur (affichée)
 ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
-# Avant la marque (18/10/2026, 9 h), une erreur se reconnaissait à son seul début
-_MARKED_SINCE = 1792306800.0
 # À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
 # doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
 WITHHELD = ("(Réponse appuyée sur des passages trouvés chez d'autres machines : "
@@ -229,18 +227,9 @@ def as_history(rows, keep=None) -> list:
 
 
 def is_error(row) -> bool:
-    """Une réponse qui n'est qu'une erreur ? Sa marque (ERROR_SOURCE) ; avant la marque,
-    son début (ERROR_MARK) sans aucune source. Une vraie réponse qui commence par « ⚠ »
-    reste une réponse."""
-    sources = _sources(row["sources"])
-    if any(s.get("type") == "error" for s in sources):
-        return True
-    try:
-        created = float(row["created"] or 0)
-    except (KeyError, IndexError, TypeError, ValueError):
-        created = 0.0
-    return (not sources and created < _MARKED_SINCE
-            and str(row["content"] or "").startswith(ERROR_MARK))
+    """Une réponse qui n'est qu'une erreur ? Sa marque (ERROR_SOURCE ; celles d'avant l'ont
+    reçue de la migration 14). Une vraie réponse qui commence par « ⚠ » reste une réponse."""
+    return any(s.get("type") == "error" for s in _sources(row["sources"]))
 
 
 def _sources(sources) -> list:
