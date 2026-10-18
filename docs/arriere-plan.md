@@ -41,7 +41,7 @@ pendant l'indexation (`qwen2.5:7b`).
   fichiers, l'effet se voit à peine : chaque unité ne dure que quelques lots.
 
 D'où les trois leviers : la priorité des threads d'AIODOS (utile surtout pour la lecture
-des documents et Whisper, qui calculent dans AIODOS), la cadence des demandes faites à
+des documents, qui se calcule dans AIODOS, et Whisper, dans un programme à part), la cadence des demandes faites à
 Ollama (combien d'unités à la fois, des pauses), et céder la carte graphique aux
 conversations.
 
@@ -105,8 +105,14 @@ prennent.
 
 Limite : un thread créé par une bibliothèque compilée démarre, sous Windows, en priorité
 normale, quel que soit le thread qui le crée. Les fils de calcul de Whisper (CTranslate2)
-et ceux d'OpenMP ne sont donc pas abaissés sous Windows ; d'où, sur batterie, deux fils de
-calcul pour Whisper au lieu de quatre.
+et ceux d'OpenMP n'étaient donc pas abaissés sous Windows. Depuis le 18/10/2026, Whisper
+calcule dans un programme à part (`services/whisper_child.py`), créé en classe
+« inférieure à la normale » et passé en EcoQoS : tous ses fils le sont, quelle que soit la
+bibliothèque qui les crée (vérifié : classe 0x4000 et EcoQoS pendant une vraie
+transcription). Il est gardé d'un fichier au suivant, fermé après trois minutes sans
+demande (sa mémoire, ~500 Mo pour « small », est rendue), et la cadence s'applique entre
+deux segments comme avant : il attend la réponse d'AIODOS avant de calculer le suivant.
+Sur batterie, toujours deux fils de calcul au lieu de quatre.
 
 ## 3. Une conversation passe devant
 
@@ -328,9 +334,6 @@ Ce qu'on en retient :
   batterie, Windows abaisse en plus fréquences et QoS ; l'outil peut tourner débranché
   (`--label …` sans `--battery`) pour comparer, et la décharge se lit dans
   `root\wmi:BatteryStatus.DischargeRate`.
-- **Whisper sous Windows** : ses fils de calcul ne sont pas abaissés (§ 2). Le faire
-  tourner dans un processus à part, créé en priorité basse, réglerait cela (et isolerait
-  aussi son GIL).
 - **Inversion de priorité** : un thread de fond abaissé qui tient le GIL quand le
   processeur est saturé par d'autres programmes peut retenir l'interface jusqu'à ce que
   Windows le relance. Les lots qui attendent une conversation ne tiennent pas le GIL ; ce

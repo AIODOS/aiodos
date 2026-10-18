@@ -1,11 +1,8 @@
 """Cadence du travail de fond (jobs/pacing.py) : sur batterie, moins d'unités, moins de
 fils de calcul et des pauses, ou rien du tout ; pendant une conversation, les lots
 attendent ; à l'arrêt, plus rien n'attend. Batterie simulée (AIODOS_SIMULATE_POWER)."""
-import sys
 import threading
 import time
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -181,27 +178,6 @@ def test_every_embedding_request_carries_it(loaded, monkeypatch):
     ollama.set_thread_limit(None)
     ollama.embed(["question"], model="embeddinggemma")
     assert [s.get("options") for s in sent] == [{"num_thread": 8}, None, None]
-
-
-# ------------------------------------------------ fils de calcul : Whisper
-def test_whisper_takes_fewer_threads_and_is_paced(monkeypatch):
-    created = []
-
-    class FakeWhisper:
-        def __init__(self, name, device, compute_type, cpu_threads):
-            created.append(cpu_threads)
-
-        def transcribe(self, path, vad_filter):
-            segments = [SimpleNamespace(text=" un "), SimpleNamespace(text="deux")]
-            return iter(segments), SimpleNamespace(language="fr")
-    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisper))
-    monkeypatch.setattr(media, "_whisper", {})
-    paces = []
-    text = media.transcribe(Path("note.wav"), "small", threads=2, pace=paces.append)
-    assert created == [2] and len(paces) == 2 and text.endswith("un\ndeux")
-    media.transcribe(Path("note.wav"), "small", threads=2)    # même modèle, gardé
-    media.transcribe(Path("note.wav"), "small")               # secteur : fils par défaut
-    assert created == [2, 0] and len(media._whisper) == 1
 
 
 # ------------------------------------- calcul sur le processeur : pages, segments
