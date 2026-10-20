@@ -165,7 +165,7 @@ function renderSlots() {
     + batteryPill(ex.pacing)
     + lentPills(ex)
     + (Object.keys(ex.waiting || {}).length
-      ? `<span class="pill warn">${icon('warn')}Ollama injoignable : nouvel essai automatique</span>` : '');
+      ? `<span class="pill warn">${icon('warn')}Moteur des modèles injoignable : nouvel essai automatique</span>` : '');
 }
 
 function card(j) {

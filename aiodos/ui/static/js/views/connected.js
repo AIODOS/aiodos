@@ -123,7 +123,7 @@ function nudge(net) {
   if (received < 3 || given > 0 || s.share_enabled || (s.lend_models && hasModels)) return '';
   return `<div class="banner info live-nudge">${icon('bolt')}<div>Tes machines et tes amis t'ont déjà rendu
     ${received} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour
-    participer : ${hasModels ? '' : 'installe un modèle d’Ollama, puis '}active « Prêter mes modèles » ou
+    participer : ${hasModels ? '' : 'installe un modèle, puis '}active « Prêter mes modèles » ou
     « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.</div>
     <button class="btn sm" data-go-node>Cette machine</button></div>`;
 }

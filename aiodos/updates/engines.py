@@ -32,6 +32,7 @@ IMAGES = "stable-diffusion.cpp"
 # Les programmes dont AIODOS se sert : une archive sans eux est inutilisable
 PROGRAMS = {LLAMA: ("llama-server", "ggml-rpc-server"), IMAGES: ("sd-server",)}
 FIND_TTL = 60                     # un moteur arrivé avec une nouvelle version est vu en 1 min
+PACKAGED_ENV = "AIODOS_ENGINES_DIR"   # appli Android : ses propres programmes (node/android_app.py)
 _FOLDER = re.compile(r"[0-9a-f]{16}")
 
 _lock = threading.Lock()
@@ -47,21 +48,31 @@ def complete(folder: Path, engine: str) -> bool:
     return all((folder / platforms.executable(p)).is_file() for p in PROGRAMS[engine])
 
 
+def packaged_only() -> bool:
+    """Appli Android : un programme ne s'y exécute que depuis l'appli elle-même (Android
+    refuse ceux écrits dans ses données). Ni moteur livré par les versions, ni posé à la
+    main : seulement ceux de l'appli (bundled)."""
+    return bool(os.environ.get(PACKAGED_ENV))
+
+
 def bundled(engine: str) -> Path | None:
     """Le moteur joint par l'installeur Windows à côté du code installé (engines/<moteur>/,
     tools/build_installer.py) : celui de cette version, sinon celui de la version d'origine
-    quand le lanceur des mises à jour en lance une plus récente (AIODOS_BASE_DIR)."""
-    for root in (paths.APP_ROOT, os.environ.get("AIODOS_BASE_DIR")):
-        if root:
-            folder = Path(root) / "engines" / engine
-            if complete(folder, engine):
-                return folder
-    return None
+    quand le lanceur des mises à jour en lance une plus récente (AIODOS_BASE_DIR). Dans
+    l'appli Android : celui de l'appli (PACKAGED_ENV, <dossier>/<moteur>/)."""
+    if packaged_only():
+        folders = [Path(os.environ[PACKAGED_ENV]) / engine]
+    else:
+        folders = [Path(root) / "engines" / engine
+                   for root in (paths.APP_ROOT, os.environ.get("AIODOS_BASE_DIR")) if root]
+    return next((folder for folder in folders if complete(folder, engine)), None)
 
 
 def find(engine: str, store: Store | None = None) -> Path | None:
     """Dossier du moteur livré, déplié s'il le faut ; None si aucune version gardée ici ne
     le livre pour cette plateforme. Résultat gardé FIND_TTL secondes."""
+    if packaged_only():
+        return None
     with _lock:
         at, folder = _found.get(engine, (0.0, None))
         if store is None and at and time.monotonic() - at < FIND_TTL:

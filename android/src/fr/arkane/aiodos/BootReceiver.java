@@ -3,18 +3,18 @@ package fr.arkane.aiodos;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.util.Log;
 
+import java.io.File;
+
 /**
- * Démarrage du téléphone : le nœud AIODOS démarre dans Termux, sans ouvrir l'appli, si
- * l'utilisateur l'a demandé (« Démarrer avec le téléphone », dans Cette machine : fichier
- * ~/.aiodos-autostart, aiodos/node/autostart.py). Même script que l'appli (le nœud déjà en
- * marche est gardé), lancé en arrière-plan par l'intention RUN_COMMAND de Termux. Android
- * permet de démarrer un service au premier plan juste après le démarrage.
+ * Démarrage du téléphone : le nœud AIODOS démarre en arrière-plan, sans ouvrir l'appli, si
+ * « Démarrer avec le téléphone » est activé (Cette machine ; fichier « autostart » de
+ * l'appli, aiodos/node/autostart.py). Android permet de démarrer un service au premier plan
+ * juste après le démarrage.
  */
 public class BootReceiver extends BroadcastReceiver {
-    static final String ONLY_IF_ASKED = "[ -f \"$HOME/.aiodos-autostart\" ] || exit 0\n";
+    static final String FLAG = "autostart";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -23,18 +23,15 @@ public class BootReceiver extends BroadcastReceiver {
                 && !"android.intent.action.QUICKBOOT_POWERON".equals(action)) {
             return;
         }
-        Intent run = MainActivity.termuxCommand(ONLY_IF_ASKED + MainActivity.SCRIPT);
+        if (!new File(context.getFilesDir(), FLAG).isFile()) {
+            return;
+        }
         try {
-            if (Build.VERSION.SDK_INT >= 26) {
-                context.startForegroundService(run);
-            } else {
-                context.startService(run);
-            }
-            Log.i("AIODOS", "Démarrage du téléphone : nœud AIODOS demandé à Termux");
+            NodeService.start(context);
+            Log.i("AIODOS", "Démarrage du téléphone : nœud AIODOS démarré");
         } catch (RuntimeException e) {
-            // Termux absent, autorisation retirée, ou démarrage refusé : l'appli le dira
-            // à sa prochaine ouverture
-            Log.w("AIODOS", "Démarrage du téléphone : Termux n'a pas pu être appelé", e);
+            // démarrage refusé par Android : l'appli le démarrera à sa prochaine ouverture
+            Log.w("AIODOS", "Démarrage du téléphone : nœud AIODOS non démarré", e);
         }
     }
 }

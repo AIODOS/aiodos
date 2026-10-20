@@ -48,6 +48,8 @@ def folder() -> Path | None:
     """Dossier de llama.cpp s'il contient les deux programmes, sinon None : celui du
     réglage, sinon celui livré avec les versions (delivery.py) ou joint par l'installeur,
     sinon un llama.cpp posé à la main dans data/engines/llama.cpp."""
+    if engines.packaged_only():          # appli Android : seulement ses programmes
+        return engines.bundled(engines.LLAMA)
     configured = str(settings.get("llamacpp_dir") or "").strip()
     if configured:
         return Path(configured) if delivery.complete(Path(configured)) else None

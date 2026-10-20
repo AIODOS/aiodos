@@ -8,7 +8,8 @@ D'où viennent les mesures :
   - Windows : GetSystemPowerStatus ;
   - Linux et Android : /sys/class/power_supply/ (fermé aux applications par
     SELinux sur la plupart des Android récents) ;
-  - Android, à défaut : la commande termux-battery-status (paquet termux-api et
+  - Android, dans l'appli AIODOS : Android lui-même (node/android_app.py) ;
+  - Android, sous Termux : la commande termux-battery-status (paquet termux-api et
     application Termux:API). Elle peut ne jamais répondre (application absente,
     ou au hasard une fois sur dix ou vingt) : délai, puis arrêt de tout ce
     qu'elle a lancé, et la dernière mesure reste valable deux minutes.
@@ -18,7 +19,7 @@ read() renvoie un dict :
   level       charge de la batterie en %, None si inconnue (ou pas de batterie) ;
   temperature température de la batterie en °C, None si inconnue ;
   mobile      True sur un téléphone ou une tablette (Android) ;
-  source      d'où vient la mesure (windows, sysfs, termux-api, simulation) ou None.
+  source      d'où vient la mesure (windows, sysfs, android, termux-api, simulation) ou None.
 
 AIODOS_SIMULATE_POWER=battery (ou ac) fait comme si la machine était sur batterie (ou
 sur secteur), pour essayer ou mesurer sans débrancher (tools/bench_background.py).
@@ -34,7 +35,7 @@ import threading
 import time
 from pathlib import Path
 
-from aiodos.node import android
+from aiodos.node import android, android_app
 
 POWER_SUPPLY = Path("/sys/class/power_supply")
 SIMULATE_ENV = "AIODOS_SIMULATE_POWER"
@@ -90,7 +91,15 @@ def _linux(root: Path, mobile: bool) -> dict:
     # par SELinux ne veut pas dire « machine de bureau, toujours sur secteur »
     if found and found["level"] is None:
         found = None
+    if android_app.in_app():
+        return _app_status() or found or _status(mobile=True)
     return _termux_status() or found or _status(mobile=True)
+
+
+def _app_status() -> dict | None:
+    """Mesure d'Android dans l'appli (sans délai : rien à lancer), même format que Termux."""
+    value = from_termux(android_app.battery())
+    return dict(value, source="android") if value else None
 
 
 def _attr(folder: Path, name: str):

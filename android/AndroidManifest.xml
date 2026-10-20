@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Application Android d'AIODOS (tools/build_android.py). versionCode et versionName sont
-     ceux d'AIODOS, posés à la construction. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="fr.arkane.aiodos">
+<!-- Appli Android d'AIODOS (android/build.gradle.kts, tools/build_android.py). Le nœud
+     tourne dans l'appli (Python par Chaquopy), dans un service au premier plan : ni Termux,
+     ni rien d'autre à installer. Numéros de version et API : ceux de build.gradle.kts. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
-
-    <!-- L'interface du nœud, servie sur 127.0.0.1 par Termux -->
+    <!-- L'interface du nœud (127.0.0.1), les autres machines, Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Démarrer le nœud dans Termux (autorisation accordée par l'utilisateur) -->
-    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-    <!-- « Démarrer avec le téléphone » (BootReceiver, si ~/.aiodos-autostart existe) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Les annonces des machines du réseau local, écran éteint compris (MulticastLock) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Le nœud en arrière-plan : un service au premier plan et sa notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Calculer en charge, écran éteint -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- « Démarrer avec le téléphone » (BootReceiver) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <queries>
-        <package android:name="com.termux" />
-    </queries>
 
     <application
         android:label="@string/app_name"
@@ -33,6 +35,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- « Toucher pour redémarrer » : un processus neuf (Python ne démarre qu'une fois) -->
+        <activity
+            android:name=".Relaunch"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:process=":relance"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service
+            android:name=".NodeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Nœud de calcul AIODOS : sert les autres machines de son utilisateur (réseau local et Internet) et calcule pour elles en charge, à sa demande." />
+        </service>
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -51,3 +51,23 @@ def test_port_freed_meanwhile_is_taken_on_a_later_attempt(busy_port):
 def test_port_kept_busy_is_reported_without_stopping_the_node(busy_port):
     running, error = start(busy_port.getsockname()[1])
     assert not running and "indisponible" in error
+
+
+def test_port_of_the_settings_taken_for_good_gives_way_to_a_free_one(busy_port):
+    """Un autre programme garde le port réglé (ancien nœud sous Termux sur le même
+    téléphone…) : le réseau passe par un port libre, que les annonces donnent aux autres.
+    Un port demandé explicitement (--p2p-port, essais) n'est jamais changé, lui."""
+    from aiodos import settings
+    taken = busy_port.getsockname()[1]
+    settings.set_value("p2p_port", taken)
+    net = NetworkManager("moi", Bus(), {"force": True, "host": "127.0.0.1", "discovery": False})
+
+    async def scenario():
+        await net._start()
+        outcome = (net.running, net.error, net.p2p_port, net._beacon()["port"])
+        if net.running:
+            await net._stop()
+        return outcome
+    running, error, port, announced = asyncio.run(scenario())
+    assert running and error is None
+    assert port != taken and announced == port

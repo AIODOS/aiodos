@@ -211,7 +211,9 @@ def profile(max_age=5.0) -> dict:
         "on_ac_power": supply["plugged"],
         "power": supply,
         "idle_seconds": idle_seconds(),
-        "ollama": {"version": ollama.version(), "models": _models(vram_total)},
+        # « engine » : llama.cpp intégré (llm/) ou Ollama ; la clé garde son ancien nom
+        "ollama": {"version": ollama.version(), "models": _models(vram_total),
+                   "engine": "llama.cpp" if ollama.use_integrated() else "ollama"},
         "lends_models": bool(settings.get("lend_models")),
         # Réponses en flux avec signes de vie (network/p2p_app.ALIVE_S) : la machine qui
         # attend peut lire avec un délai court (remote_models.chat_stream)

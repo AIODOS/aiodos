@@ -73,7 +73,9 @@ def _windows_app_id():
             pass
 
 
-def main():
+def parser() -> argparse.ArgumentParser:
+    """Les options de la ligne de commande (l'appli Android part de leurs valeurs par
+    défaut, node/android_app.py)."""
     parser = argparse.ArgumentParser(prog="aiodos", description="AIODOS — nœud local")
     parser.add_argument("--headless", action="store_true", help="nœud seul, sans fenêtre")
     parser.add_argument("--background", action="store_true",
@@ -104,7 +106,11 @@ def main():
     parser.add_argument("--ui-file", default=None, metavar="FICHIER",
                         help="écrit l'adresse de l'interface, jeton compris, dans ce fichier "
                              "lisible par soi seul, effacé à l'arrêt (application Android)")
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = parser().parse_args()
     if args.data_dir:
         os.environ["AIODOS_DATA_DIR"] = os.path.abspath(args.data_dir)
 

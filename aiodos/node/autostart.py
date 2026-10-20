@@ -5,9 +5,10 @@ administrateur) lance AIODOS sans ouvrir sa fenêtre (--background) ; l'icône p
 l'horloge la rouvre. Il vise la version d'origine, comme le raccourci du menu Démarrer :
 le lanceur y choisit ensuite la version à jour (updates/launcher.py).
 
-Android : l'appli AIODOS démarre le nœud dans Termux quand le téléphone démarre
-(android/…/BootReceiver.java), seulement si le fichier ~/.aiodos-autostart existe ; le
-nœud tourne alors sans que l'appli s'ouvre.
+Android : l'appli AIODOS démarre son nœud quand le téléphone démarre
+(android/…/BootReceiver.java), seulement si son fichier « autostart » existe
+(node/android_app.py : activé à la première ouverture) ; le nœud tourne alors sans que
+l'appli s'ouvre. Sous Termux, le fichier était ~/.aiodos-autostart.
 
 L'état se lit sur le disque (le raccourci, le fichier) : il reste juste même si
 l'utilisateur supprime le raccourci à la main.
@@ -18,7 +19,7 @@ import sys
 from pathlib import Path
 
 from aiodos import paths
-from aiodos.node import android
+from aiodos.node import android, android_app
 from aiodos.updates import launcher
 
 SHORTCUT = "AIODOS.lnk"
@@ -34,6 +35,9 @@ def _startup_folder() -> Path | None:
 
 
 def _android_flag() -> Path | None:
+    in_app = os.environ.get(android_app.AUTOSTART_ENV)
+    if in_app:
+        return Path(in_app)
     home = os.environ.get("HOME")
     return Path(home) / ANDROID_FLAG if android.is_android() and home else None
 

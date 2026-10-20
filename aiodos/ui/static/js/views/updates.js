@@ -27,6 +27,9 @@ export async function announceUpdate() {
 }
 
 function stateLine(u) {
+  if (u.android_app) {
+    return 'Appli Android : une nouvelle version d\'AIODOS arrive avec une nouvelle appli.';
+  }
   if (u.developer) {
     return 'Copie de développement (dépôt git) : son code n\'est jamais remplacé. '
       + 'Elle transmet les versions publiées à tes machines.';

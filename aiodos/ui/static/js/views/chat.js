@@ -6,7 +6,7 @@ import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
-import { chooseModel, progressBar, cancelInstall, finished, here } from './model-install.js';
+import { chooseModel, progressBar, cancelInstall, finished, here, integrated } from './model-install.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 
@@ -186,10 +186,10 @@ function fillModels() {
     <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ${here()} : tes réponses
     seront calculées par tes machines appairées qui prêtent les leurs.</div>
     <button class="btn sm" data-install>${icon('plus')}Installer un modèle ici</button></div>` : `
-    <div class="banner warn">${icon('warn')}<div style="flex:1">Aucun modèle sur ${here()} pour répondre (ou
-    Ollama ne répond pas : AIODOS réessaie tout seul toutes les 8 secondes).</div>
-    <button class="btn sm primary" data-install>${icon('plus')}Installer un modèle</button>
-    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div>`);
+    <div class="banner warn wrap">${icon('warn')}<div class="banner-text">Aucun modèle sur ${here()} pour
+    répondre${integrated() ? '' : ' (ou Ollama ne répond pas : AIODOS réessaie tout seul toutes les 8 secondes)'}.</div>
+    <div class="banner-actions"><button class="btn sm primary" data-install>${icon('plus')}Installer un modèle</button>
+    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div></div>`);
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
   el.banner.querySelector('[data-install]')?.addEventListener('click', chooseModel);
   el.banner.querySelector('[data-install-cancel]')?.addEventListener('click', cancelInstall);
@@ -726,8 +726,9 @@ async function sendNow(asText, replace) {
     return true;
   }
   if (!model) {
-    if (state.modelsLoaded) toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
-    else toast('Les modèles se chargent, un instant…');
+    if (!state.modelsLoaded) toast('Les modèles se chargent, un instant…');
+    else if (integrated()) toast('Aucun modèle disponible : installe-en un (« Installer un modèle »).', 'err');
+    else toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
     return false;
   }
   const go = await confirmOutgoing(text, model, pre);

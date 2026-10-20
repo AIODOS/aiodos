@@ -1,16 +1,21 @@
 package fr.arkane.aiodos;
 
+import android.Manifest;
 import android.app.Activity;
-import android.app.PendingIntent;
-import android.content.ComponentName;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -22,47 +27,22 @@ import android.widget.TextView;
 /**
  * AIODOS sur le téléphone : l'interface du nœud AIODOS de ce téléphone, en plein écran.
  *
- * Le nœud tourne dans Termux (docs/android.md). L'application le démarre au besoin par
- * l'intention RUN_COMMAND de Termux, qui lui rend l'adresse de l'interface, jeton compris :
- * le nœud l'écrit dans ~/.aiodos-ui (option --ui-file), un fichier que seul Termux peut lire.
- * Première étape de l'application de l'étude (docs/installeurs.md, § 3), qui embarquera
- * ensuite le nœud lui-même.
+ * Le nœud tourne dans l'appli elle-même (NodeService, Python par Chaquopy) : l'ouvrir le
+ * démarre au besoin, la fermer le laisse tourner en arrière-plan, avec sa notification.
+ * Rien d'autre à installer (avant : Termux, docs/android.md).
  */
 public class MainActivity extends Activity {
-    private static final String TERMUX = "com.termux";
-    private static final String PERMISSION = "com.termux.permission.RUN_COMMAND";
-    private static final String RESULT = "fr.arkane.aiodos.RESULTAT";
-    private static final String HOME = "/data/data/com.termux/files/home";
-    private static final String BASH = "/data/data/com.termux/files/usr/bin/bash";
+    private static final int NOTIFICATIONS = 1;
+    private static final int FILES = 2;
+    private static final long SLOW = 15_000;          // première ouverture : mise en place
+    private static final long TOO_LONG = 180_000;     // jamais d'attente sans fin
 
-    /** Trouve le nœud en marche (adresse dans ~/.aiodos-ui, qui répond), ou le (re)démarre
-     *  avec --ui-file et les options de ~/.aiodos-options (« --internet »…), puis écrit
-     *  l'adresse de son interface. SIGTERM pour arrêter l'ancien : lancé en arrière-plan,
-     *  le nœud ignore SIGINT (les versions récentes s'arrêtent proprement sur les deux).
-     *  « [p]ython3 » : pkill -f lit toute la ligne de commande, et ce script, qui contient
-     *  le motif dans son texte, se serait arrêté lui-même. */
-    static final String SCRIPT =
-        "F=\"$HOME/.aiodos-ui\"\n"
-        + "cd \"$HOME/aiodos\" 2>/dev/null || { echo \"AIODOS n'est pas dans ~/aiodos "
-        + "(voir docs/android.md).\" >&2; exit 2; }\n"
-        + "alive() { [ -s \"$F\" ] && python3 -c 'import sys, urllib.request; "
-        + "urllib.request.urlopen(sys.argv[1].split(\"?\")[0], timeout=3)' \"$(cat \"$F\")\" "
-        + "2>/dev/null; }\n"
-        + "if alive; then cat \"$F\"; exit 0; fi\n"
-        + "rm -f \"$F\"\n"
-        + "if command -v pgrep >/dev/null && pgrep -f '[p]ython3 -m aiodos' >/dev/null; then\n"
-        + "  pkill -TERM -f '[p]ython3 -m aiodos'\n"
-        + "  for i in $(seq 1 20); do pgrep -f '[p]ython3 -m aiodos' >/dev/null || break; sleep 1; done\n"
-        + "fi\n"
-        + "OPTIONS=$(cat \"$HOME/.aiodos-options\" 2>/dev/null)\n"
-        + "nohup sh lancer-noeud.sh --ui-file \"$F\" $OPTIONS >\"$HOME/aiodos-noeud.log\" 2>&1 &\n"
-        + "for i in $(seq 1 150); do [ -s \"$F\" ] && { cat \"$F\"; exit 0; }; sleep 1; done\n"
-        + "echo \"Le nœud AIODOS n'a pas démarré : voir ~/aiodos-noeud.log dans Termux.\" >&2\n"
-        + "tail -n 5 \"$HOME/aiodos-noeud.log\" >&2\n"
-        + "exit 1\n";
-
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
     private TextView status;
+    private String shown;
+    private long since;
+    private ValueCallback<Uri[]> picking;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -76,7 +56,13 @@ public class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         web.setBackgroundColor(Color.rgb(8, 12, 26));
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                return pickFiles(callback, params);
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -85,7 +71,11 @@ public class MainActivity extends Activity {
                 if ("127.0.0.1".equals(host) || "localhost".equals(host)) {
                     return false;                     // l'interface du nœud, ici
                 }
-                startActivity(new Intent(Intent.ACTION_VIEW, uri));   // le reste : navigateur
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));   // le reste : navigateur
+                } catch (ActivityNotFoundException ignored) {
+                    // aucune appli pour ce lien
+                }
                 return true;
             }
         });
@@ -98,149 +88,110 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         root.addView(status, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
-        if (saved != null && saved.getString("url") != null) {
-            show(saved.getString("url"));
-            return;
-        }
+        askNotifications();
         begin();
     }
 
-    private String url;
-
-    @Override
-    protected void onSaveInstanceState(Bundle out) {
-        super.onSaveInstanceState(out);
-        if (url != null) {
-            out.putString("url", url);
+    /** Android 13 et plus : sans cette autorisation, la notification du nœud n'apparaît que
+     *  dans le gestionnaire de tâches ; le nœud tourne quand même. */
+    private void askNotifications() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS},
+                NOTIFICATIONS);
         }
     }
 
     private void begin() {
-        if (!termuxInstalled()) {
-            problem("Termux n'est pas installé : le nœud AIODOS de ce téléphone y tourne "
-                + "(voir docs/android.md).");
-        } else if (Build.VERSION.SDK_INT >= 23
-                && checkSelfPermission(PERMISSION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] {PERMISSION}, 1);
-        } else {
-            start();
-        }
+        status.setVisibility(View.VISIBLE);
+        web.setVisibility(View.GONE);
+        status.setOnClickListener(null);
+        status.setText("Démarrage d'AIODOS…");
+        NodeService.start(this);
+        since = SystemClock.elapsedRealtime();
+        handler.post(this::poll);
     }
 
-    private boolean termuxInstalled() {
-        try {
-            getPackageManager().getPackageInfo(TERMUX, 0);
-            return true;
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-            start();
-        } else {
-            problem("Sans l'autorisation d'exécuter des commandes dans Termux, AIODOS ne peut "
-                + "pas démarrer son nœud. Paramètres → Applications → AIODOS → Autorisations.");
-        }
-    }
-
-    /** La commande Termux qui exécute ce script en arrière-plan (RUN_COMMAND). */
-    static Intent termuxCommand(String script) {
-        Intent run = new Intent("com.termux.RUN_COMMAND");
-        run.setClassName(TERMUX, "com.termux.app.RunCommandService");
-        run.putExtra("com.termux.RUN_COMMAND_PATH", BASH);
-        run.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[] {"-c", script});
-        run.putExtra("com.termux.RUN_COMMAND_WORKDIR", HOME);
-        run.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
-        return run;
-    }
-
-    private void start() {
-        status.setText("Démarrage du nœud AIODOS…");
-        Intent run = termuxCommand(SCRIPT);
-        Intent back = new Intent(this, MainActivity.class).setAction(RESULT)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT
-            | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
-        run.putExtra("com.termux.RUN_COMMAND_PENDING_INTENT",
-            PendingIntent.getActivity(this, 1, back, flags));
-        ComponentName started;
-        try {
-            started = Build.VERSION.SDK_INT >= 26 ? startForegroundService(run) : startService(run);
-        } catch (RuntimeException e) {
-            problem("Termux refuse la commande (" + e.getMessage() + "). Dans Termux : "
-                + "echo allow-external-apps=true >> ~/.termux/termux.properties");
+    private void poll() {
+        if (isFinishing()) {
             return;
         }
-        if (started == null) {               // Termux mis en veille par Android : introuvable
-            problem(SLEEPING);
+        if (NodeService.url != null) {
+            show(NodeService.url);
             return;
         }
-        final int attempt = ++attempts;
-        status.postDelayed(() -> {           // jamais d'attente sans fin
-            if (attempt == attempts && url == null && status.getVisibility() == View.VISIBLE) {
-                problem("Le nœud AIODOS ne répond pas après 3 minutes. " + SLEEPING);
-            }
-        }, 180_000);
-    }
-
-    /** Termux en « Restreint » (batterie) : Android le cache aux autres applications. */
-    static final String SLEEPING = "Termux est mis en veille par Android. Paramètres → "
-        + "Applications → Termux → Batterie → « Non restreinte » (et pas dans les applications "
-        + "en veille profonde), puis rouvre AIODOS.";
-
-    private int attempts;
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        if (!RESULT.equals(intent.getAction())) {
+        if (NodeService.error != null) {
+            problem("AIODOS n'a pas démarré : " + NodeService.error);
             return;
         }
-        Bundle result = intent.getBundleExtra("result");
-        String out = result == null ? "" : result.getString("stdout", "");
-        String err = result == null ? "" : result.getString("stderr", "");
-        String message = result == null ? "" : result.getString("errmsg", "");
-        for (String line : out.split("\n")) {
-            if (line.trim().startsWith("http://127.0.0.1")) {
-                show(line.trim());
-                return;
-            }
+        long waited = SystemClock.elapsedRealtime() - since;
+        if (waited > TOO_LONG) {
+            problem("AIODOS ne répond pas après 3 minutes.");
+            return;
         }
-        String detail = (err + "\n" + message).trim();
-        if (detail.isEmpty() && result != null) {      // rien de lisible : ce que Termux a rendu
-            StringBuilder raw = new StringBuilder("Termux n'a rien écrit");
-            for (String key : new String[] {"exitCode", "err"}) {
-                if (result.containsKey(key)) {
-                    raw.append(" · ").append(key).append(" ").append(result.get(key));
-                }
-            }
-            detail = raw.append('.').toString();
+        if (waited > SLOW) {
+            status.setText("Démarrage d'AIODOS…\n\nÀ la première ouverture, l'appli met en "
+                + "place Python et ses bibliothèques : jusqu'à une minute.");
         }
-        if (detail.contains("allow-external-apps")) {
-            detail = "Termux n'accepte pas encore les commandes des autres applications. Dans "
-                + "Termux : echo allow-external-apps=true >> ~/.termux/termux.properties";
-        }
-        problem(detail.isEmpty() ? "Le nœud AIODOS n'a pas répondu." : detail);
+        handler.postDelayed(this::poll, 250);
     }
 
     private void show(String address) {
-        url = address;
         status.setVisibility(View.GONE);
         web.setVisibility(View.VISIBLE);
-        web.loadUrl(address);
+        if (!address.equals(shown)) {
+            shown = address;
+            web.loadUrl(address);
+        }
     }
 
     private void problem(String text) {
         web.setVisibility(View.GONE);
         status.setVisibility(View.VISIBLE);
-        status.setText(text + "\n\nToucher pour réessayer.");
-        status.setOnClickListener(v -> {
-            status.setOnClickListener(null);
-            begin();
-        });
+        status.setText(text + "\n\nToucher pour redémarrer AIODOS.");
+        status.setOnClickListener(v -> Relaunch.app(this));
+    }
+
+    /** Joindre des fichiers (bibliothèques, conversations) : le sélecteur d'Android. */
+    private boolean pickFiles(ValueCallback<Uri[]> callback, WebChromeClient.FileChooserParams params) {
+        if (picking != null) {
+            picking.onReceiveValue(null);
+        }
+        picking = callback;
+        Intent intent = params.createIntent();
+        if (params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+        try {
+            startActivityForResult(intent, FILES);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            picking = null;
+            return false;
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        if (request != FILES || picking == null) {
+            super.onActivityResult(request, result, data);
+            return;
+        }
+        Uri[] chosen = null;
+        if (result == RESULT_OK && data != null) {
+            ClipData clip = data.getClipData();
+            if (clip != null) {
+                chosen = new Uri[clip.getItemCount()];
+                for (int i = 0; i < clip.getItemCount(); i++) {
+                    chosen[i] = clip.getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                chosen = new Uri[] {data.getData()};
+            }
+        }
+        picking.onReceiveValue(chosen);
+        picking = null;
     }
 
     @Override
@@ -248,7 +199,13 @@ public class MainActivity extends Activity {
         if (web.getVisibility() == View.VISIBLE && web.canGoBack()) {
             web.goBack();
         } else {
-            super.onBackPressed();
+            moveTaskToBack(true);       // l'appli passe derrière, le nœud continue
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 }

@@ -117,9 +117,10 @@ pendant une conversation, le calcul sur la carte graphique attend la fin de la r
 sur batterie, il est ménagé (une unité à la fois par ressource, des pauses, moins de fils
 de calcul), ou attend le secteur, au choix. Mesures et détails : [docs/arriere-plan.md](docs/arriere-plan.md).
 
-**Un téléphone Android** peut aussi calculer, sous Termux : il ne prête sa puissance
-qu'en charge, batterie assez chargée et pas trop chaude, comme BOINC sous Android.
-Pas à pas : [docs/android.md](docs/android.md).
+**Un téléphone Android** peut aussi calculer, avec l'appli AIODOS, qui fait tourner le
+nœud elle-même (rien d'autre à installer) : il ne prête sa puissance qu'en charge,
+batterie assez chargée et pas trop chaude, comme BOINC sous Android. Pas à pas :
+[docs/android.md](docs/android.md).
 
 **Avec des amis (phase 2)** : en confirmant un appairage, chaque machine dit si l'autre est
 une des siennes ou celle d'un ami. Un ami ne reçoit que les bibliothèques « partagées avec mes
@@ -194,9 +195,10 @@ mises à jour signées. L'installeur n'est pas encore signé : Windows demande d
 `python tools/build_installer.py` (Inno Setup 6, `dist/`). Étude complète :
 [docs/installeurs.md](docs/installeurs.md).
 
-**Téléphone Android** : le nœud tourne dans Termux ([docs/android.md](docs/android.md)), et
-l'application AIODOS (`python tools/build_android.py --install`) le démarre et affiche son
-interface.
+**Téléphone Android** : l'appli AIODOS (`python tools/build_android.py --install`) fait
+tourner le nœud dans son propre processus (Python par Chaquopy, llama.cpp et le compagnon
+Internet rangés dans l'appli), en arrière-plan avec sa notification, et affiche son
+interface ([docs/android.md](docs/android.md)). Ni Termux ni Ollama.
 
 **À la main**, depuis le code :
 
@@ -228,7 +230,8 @@ Réglable dans « Cette machine » → « Travail de fond ».
 **Démarrer avec l'appareil, en arrière-plan** (« Cette machine » → « Travail de fond ») :
 sous Windows, un raccourci dans le dossier Démarrage lance AIODOS sans ouvrir sa fenêtre
 (`python -m aiodos --background`, l'icône près de l'horloge la rouvre) ; sur un téléphone,
-l'appli AIODOS démarre le nœud dans Termux quand le téléphone s'allume.
+l'appli AIODOS démarre son nœud quand le téléphone s'allume (activé dès la première
+ouverture).
 
 Au premier lancement, les données de la v1 (`legacy/data`) sont importées
 automatiquement : conversations, dossiers, bibliothèques et réglages.
@@ -308,8 +311,9 @@ aiodos/
 │   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
 │                      priorité du travail de fond (priority.py), Android (android.py),
-│                      programmes lancés arrêtés avec AIODOS (children.py), démarrage
-│                      avec l'appareil (autostart.py)
+│                      le nœud dans l'appli Android (android_app.py), programmes lancés
+│                      arrêtés avec AIODOS (children.py), démarrage avec l'appareil
+│                      (autostart.py)
 ├── updates/           mises à jour signées : transmission entre machines, installation
 │                      à côté, lanceur avec retour en arrière, approbation sur un deuxième
 │                      appareil (approval.py), moteurs livrés (engines.py) — docs/mises-a-jour.md
@@ -317,8 +321,10 @@ aiodos/
 └── ui/                fenêtre native, icône de la zone de notification (tray.py),
                        interface web (HTML/CSS/JS, sans compilation)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
+android/               l'appli Android : projet Gradle (Chaquopy), Java, paquets Python
 tests/                 tests automatisés (pytest)
 tools/                 publication des versions (moteurs joints : engine_release.py),
+                       appli Android (build_android.py, android_wheels.py, android_deps.py),
                        outils de mesure (modèle d'embedding, coût du travail de fond :
                        bench_background.py, modèles répartis : bench_repartition.py)
 docs/                  notes de mesures et de choix techniques, téléphone Android

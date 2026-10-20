@@ -778,6 +778,27 @@ certifié devra venir d'un développeur enregistré auprès de Google.
    - F-Droid plus tard, si ses règles acceptent les paquets natifs de Chaquopy, ou après un
      passage à Rust.
 
+### 3.9 Ce qui est fait (20/10/2026)
+
+Décision de l'auteur : « Nœud dans l'appli », par **Chaquopy et nos compilations**
+([android.md](android.md), « L'appli AIODOS »). Essayé sur le S23 le jour même.
+
+- **Python 3.13 par Chaquopy 17.1**, avec ses paquets natifs ; **pydantic-core compilé
+  ici** (Rust et NDK, `tools/android_wheels.py`) plutôt que de passer `p2p_app` sous
+  Starlette : FastAPI reste partout, et tout le code d'AIODOS tourne tel quel.
+- **L'interface reste celle des PC**, dans une WebView : elle a sa barre de navigation en
+  bas sur un écran étroit ; une interface native n'est plus nécessaire pour commencer.
+- **llama.cpp en programme, pas par JNI** : l'archive officielle pour Android de la
+  version des PC, rangée parmi les bibliothèques de l'appli avec le compagnon, comme
+  Syncthing pour Android. Le moteur intégré des PC (`llm/`) sert donc tel quel. C'est une
+  entorse assumée à la règle du § 3.5 : avec le service au premier plan, l'appli n'est
+  jamais en arrière-plan, et la règle d'arrêt pour usage du processeur ne s'applique pas.
+- **Un service au premier plan permanent** (`specialUse`), plutôt que des tâches
+  planifiées : le nœud sert ses machines à tout moment, comme sur les PC (« Démarrer avec
+  le téléphone » activé dès la première ouverture). Verrou de veille seulement en charge,
+  verrou multicast. Les tâches planifiées et la sobriété exigée par Google Play restent à
+  faire avant toute publication sur le Play Store.
+
 ## 4. iOS et iPadOS : un client d'abord, du calcul appli ouverte
 
 iOS 27 est sorti le 14/09/2026 ; les règles de l'App Store datent du 8/06/2026.

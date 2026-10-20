@@ -5,7 +5,7 @@ import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { ask, toast, errorToast } from '../ui.js';
 import { loadNetwork } from './network.js';
-import { chooseModel, here } from './model-install.js';
+import { chooseModel, here, integrated } from './model-install.js';
 
 const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedding: 'embeddings' };
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
@@ -76,7 +76,9 @@ function render() {
       <dt>GPU</dt><dd>${gpus}</dd>
       <dt>Alimentation</dt><dd>${power}</dd>
       <dt>Activité</dt><dd>${idle}</dd>
-      <dt>Ollama</dt><dd>${n.ollama.version ? `version ${esc(n.ollama.version)}` : '<span style="color:var(--err)">ne répond pas</span>'}</dd>
+      <dt>${integrated() ? 'Moteur' : 'Ollama'}</dt><dd>${n.ollama.version
+        ? (integrated() ? `${esc(n.ollama.version)} (intégré)` : `version ${esc(n.ollama.version)}`)
+        : '<span style="color:var(--err)">ne répond pas</span>'}</dd>
     </dl>`;
   $('#rename-node', root).onclick = renameNode;
 
@@ -97,7 +99,7 @@ function render() {
       Une de tes machines qui a la mémoire nécessaire peut alors répondre à sa place, ou plusieurs peuvent
       se le partager.</p>
     ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
-      <tbody>${rows}</tbody></table>` : `<div class="empty">Aucun modèle sur ${here()} (ou Ollama ne répond pas).</div>`}
+      <tbody>${rows}</tbody></table>` : `<div class="empty">Aucun modèle sur ${here()}${integrated() ? '' : ' (ou Ollama ne répond pas)'}.</div>`}
     <button class="btn sm" data-install>${icon('plus')}Installer un modèle</button>`;
   $('#node-models', root).querySelector('[data-install]').onclick = chooseModel;
 
@@ -156,7 +158,7 @@ async function loadAutostart() {
 }
 
 /** Démarrer avec l'appareil, en arrière-plan : Windows (raccourci du dossier Démarrage) ou
- *  téléphone (l'appli AIODOS démarre le nœud dans Termux). */
+ *  téléphone (l'appli AIODOS démarre son nœud, node/android_app.py). */
 function renderAutostart() {
   const box = root && $('#autostart-row', root);
   if (!box) return;
@@ -165,8 +167,8 @@ function renderAutostart() {
   box.innerHTML = `<div class="setting-row"><div class="txt">
       <b>${phone ? 'Démarrer avec le téléphone' : 'Démarrer avec Windows, en arrière-plan'}</b>
       <small>${phone
-        ? "Le nœud démarre dans Termux quand le téléphone s'allume, sans ouvrir l'appli AIODOS (il faut "
-          + "l'appli AIODOS à jour, et Termux autorisé à tourner en arrière-plan)."
+        ? "Le nœud démarre quand le téléphone s'allume, sans ouvrir l'appli AIODOS : il tourne en "
+          + "arrière-plan, avec sa notification (Android l'exige)."
         : "À l'ouverture de ta session, AIODOS démarre sans ouvrir sa fenêtre : le nœud sert tes machines "
           + "et avance le travail de fond ; l'icône près de l'horloge rouvre la fenêtre."}</small></div>
     <label class="switch"><input type="checkbox" id="autostart-toggle" ${autostart.enabled ? 'checked' : ''}>

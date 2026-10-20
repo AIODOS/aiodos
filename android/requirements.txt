@@ -1,0 +1,27 @@
+# Paquets Python de l'appli Android (Chaquopy, Python 3.13), installés par Gradle
+# (android/build.gradle.kts, tools/build_android.py). Mêmes versions que sur les PC quand
+# Chaquopy le permet ; les paquets natifs viennent de son dépôt (numpy 1.26.2, cryptography
+# 42.0.8, lxml 5.3.0, Pillow 11.0.0), sauf pydantic-core, compilé ici
+# (tools/android_wheels.py). Ni fenêtre (pywebview) ni Whisper : comme le nœud sous Termux
+# (requirements-node.txt).
+
+# Nœud, API locale et réseau entre machines
+fastapi==0.143.2
+starlette==1.8.0
+pydantic==2.13.3
+pydantic-core==2.46.3
+uvicorn==0.54.0
+requests
+numpy==1.26.2
+cryptography==42.0.8
+markdown-it-py
+pygments
+
+# Lecture des documents confiés : PDF, Word, PowerPoint, Excel, RTF, EPUB
+pypdf
+python-docx
+python-pptx
+openpyxl
+striprtf
+lxml==5.3.0
+pillow==11.0.0

@@ -78,7 +78,7 @@ def ndk() -> Path | None:
     return None
 
 
-def _android_tools(ndk_dir: Path) -> tuple:
+def android_tools(ndk_dir: Path) -> tuple:
     """(éditeur de liens, archiveur) du NDK pour aarch64."""
     host = {"win32": "windows-x86_64", "darwin": "darwin-x86_64"}.get(sys.platform,
                                                                        "linux-x86_64")
@@ -111,7 +111,7 @@ def missing(target: str) -> str | None:
     if found is None:
         return ("NDK Android introuvable (ANDROID_NDK_HOME, ou ANDROID_HOME avec un dossier "
                 "ndk/<version>)")
-    linker = _android_tools(found)[0]
+    linker = android_tools(found)[0]
     if not linker.is_file():
         return f"NDK Android incomplet ({linker} absent)"
     triple = platforms.RUST_TARGETS[target]
@@ -157,7 +157,7 @@ def build(target: str, commit: str, number: str, out: Path, repo: Path = ROOT) -
     shared = repo / "compagnon" / "target"
     env = dict(os.environ, AIODOS_NET_COMMIT=commit, CARGO_TARGET_DIR=str(shared))
     if target == ANDROID:
-        linker, archiver = _android_tools(ndk())
+        linker, archiver = android_tools(ndk())
         env.update({"CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER": str(linker),
                     "CC_aarch64_linux_android": str(linker),
                     "AR_aarch64_linux_android": str(archiver)})

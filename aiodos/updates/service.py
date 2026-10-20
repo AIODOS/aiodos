@@ -19,7 +19,8 @@ prend que l'archive du code, ou depuis une archive). Arrivé alors qu'un autre p
 tourne, il le remplace dès qu'aucun travail ne passe par le compagnon.
 
 Une copie de développement (dépôt git) reçoit et transmet les versions, mais ne les
-installe jamais.
+installe jamais. L'appli Android, elle, ne reçoit rien : son code et ses programmes sont
+ceux de l'appli, qu'une nouvelle appli remplace (node/android_app.py).
 """
 import logging
 import threading
@@ -29,7 +30,7 @@ from aiodos import __version__, settings
 from aiodos.jobs import queue
 from aiodos.network import peers
 from aiodos.network.client import PeerError
-from aiodos.node import identity
+from aiodos.node import android_app, identity
 from aiodos.updates import binaries, install, launcher, p2p, platforms, restart, state
 from aiodos.updates import manifest as manifests
 from aiodos.updates import version as versions
@@ -95,7 +96,7 @@ class UpdateService:
             self._wake.clear()
 
     def tick(self):
-        if not settings.get("auto_update"):
+        if not settings.get("auto_update") or android_app.in_app():
             return
         found = self._best_offer()
         if found:
@@ -271,7 +272,7 @@ class UpdateService:
     # ------------------------------------------------------------- redémarrage
     def ready(self, data: dict | None = None):
         """Version installée qu'un redémarrage lancerait, ou None."""
-        if launcher.developer_checkout():
+        if launcher.developer_checkout() or android_app.in_app():
             return None
         data = state.load(self.store.root) if data is None else data
         pending = data.get("pending") or {}
@@ -332,6 +333,7 @@ class UpdateService:
         return {
             "version": __version__,
             "developer": launcher.developer_checkout(),
+            "android_app": android_app.in_app(),
             "auto": bool(settings.get("auto_update")),
             "offer": self.store.offer(),          # ce que cette machine transmet
             "available": self.available,

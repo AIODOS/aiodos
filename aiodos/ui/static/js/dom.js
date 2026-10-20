@@ -39,7 +39,7 @@ export function duration(seconds) {
 export function powerText(profile) {
   const p = profile.power || {};
   const plugged = p.plugged ?? profile.on_ac_power;
-  const parts = [plugged == null ? (p.mobile ? 'Charge inconnue (Termux:API absent ?)' : '—')
+  const parts = [plugged == null ? (p.mobile ? 'Charge inconnue' : '—')
     : plugged ? (p.mobile ? 'En charge' : 'Sur secteur') : 'Sur batterie'];
   if (p.level != null) parts.push(`batterie ${p.level} %`);
   if (p.temperature != null) parts.push(`${String(p.temperature).replace('.', ',')} °C`);

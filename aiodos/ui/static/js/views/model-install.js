@@ -1,6 +1,7 @@
 // Installer un modèle de conversation : les modèles conseillés pour cet appareil (téléphone ou
-// PC, carte graphique), aux licences libres, puis le téléchargement par Ollama, dont
-// l'avancement arrive par l'événement « model_install » (services/model_install.py).
+// PC, carte graphique), aux licences libres, puis le téléchargement (Hugging Face pour le
+// moteur intégré, Ollama sinon), dont l'avancement arrive par l'événement « model_install »
+// (services/model_install.py).
 import { get, post, del } from '../api.js';
 import { bytes, esc } from '../dom.js';
 import { icon } from '../icons.js';
@@ -9,6 +10,8 @@ import { state } from '../state.js';
 
 export const isPhone = () => !!state.node?.os?.startsWith('Android');
 export const here = () => (isPhone() ? 'ce téléphone' : 'ce PC');
+/** Les modèles tournent dans le moteur intégré (llama.cpp, llm/), pas dans Ollama. */
+export const integrated = () => state.node?.ollama?.engine === 'llama.cpp';
 
 function fitText(m, phone) {
   if (m.fits === 'gpu') return ' Tient dans ta carte graphique : rapide.';
@@ -27,8 +30,12 @@ export async function chooseModel() {
   }
   if (!found.ollama) {
     await modal({
-      title: 'Ollama ne répond pas', iconName: 'warn', cancel: null, confirm: 'OK',
-      text: found.phone
+      title: integrated() ? 'Le moteur des modèles ne répond pas' : 'Ollama ne répond pas',
+      iconName: 'warn', cancel: null, confirm: 'OK',
+      text: integrated()
+        ? 'llama.cpp, qui fait tourner les modèles, ne répond pas : AIODOS le relance tout seul. '
+          + 'Réessaie dans un instant.'
+        : found.phone
         ? 'Ollama fait tourner les modèles sur le téléphone : relance AIODOS depuis son application, '
           + 'qui le démarre avec le nœud, puis réessaie.'
         : 'Ollama fait tourner les modèles : lance-le (ou installe-le depuis ollama.com), puis réessaie. '
@@ -41,7 +48,11 @@ export async function chooseModel() {
   const r = await modal({
     title: 'Installer un modèle', iconName: 'plus', confirm: 'Installer',
     text: `Modèles conseillés pour ${found.phone ? 'ce téléphone' : 'ce PC'}, aux licences libres. `
-      + 'Le téléchargement passe par Ollama ; tu peux continuer à te servir d\'AIODOS pendant ce temps.',
+      + (integrated()
+        ? 'Le fichier vient de Hugging Face, vérifié avant d\'être mis en place'
+        : 'Le téléchargement passe par Ollama')
+      + (found.phone ? ' (en Wi-Fi de préférence : plusieurs centaines de Mo)' : '')
+      + ' ; tu peux continuer à te servir d\'AIODOS pendant ce temps.',
     choices: offered.map(m => ({
       value: m.name,
       label: `${m.label}${m.recommended ? ' · conseillé' : ''} · ${bytes(m.size)}`,

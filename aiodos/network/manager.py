@@ -7,6 +7,7 @@ les interfaces (0.0.0.0) — séparé de l'API de l'interface, qui reste sur 127
 """
 import asyncio
 import logging
+import socket
 import threading
 import time
 
@@ -34,6 +35,13 @@ PORT_ATTEMPTS = 3           # port encore tenu par l'instance qui vient de s'arr
 PORT_RETRY_DELAY = 2
 
 
+def _spare_port(host: str) -> int:
+    """Un port libre choisi par le système, pour le réseau entre nœuds."""
+    with socket.socket() as s:
+        s.bind((host, 0))
+        return s.getsockname()[1]
+
+
 async def _serve(server):
     """uvicorn « quitte » (SystemExit) quand le port est déjà pris : sans cette garde,
     l'arrêt remonterait jusqu'à la boucle du nœud et l'arrêterait tout entier."""
@@ -53,6 +61,7 @@ class NetworkManager:
         self.force = bool(options.get("force"))           # --network
         self.host = options.get("host") or "0.0.0.0"       # --p2p-host
         self.port_override = options.get("port")          # --p2p-port
+        self.spare_port = None            # port réglé pris par un autre programme : celui-ci
         self.discovery_on = options.get("discovery", True)
         self.guard = ReplayGuard()
         self.pairing = Pairing(self)
@@ -93,7 +102,7 @@ class NetworkManager:
 
     @property
     def p2p_port(self) -> int:
-        return int(self.port_override or settings.get("p2p_port"))
+        return int(self.port_override or self.spare_port or settings.get("p2p_port"))
 
     @property
     def running(self) -> bool:
@@ -135,19 +144,17 @@ class NetworkManager:
         self.error = None
         app = create_p2p_app(self)
         host = self._bound = self._listen_host()
-        for attempt in range(PORT_ATTEMPTS):
-            config = uvicorn.Config(app, host=host, port=self.p2p_port,
-                                    log_config=None, log_level="warning", access_log=False)
-            self._server = uvicorn.Server(config)
-            self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
-            for _ in range(100):
-                if self._server.started or self._server_task.done():
-                    break
-                await asyncio.sleep(0.05)
-            if self._server.started or not self._server_task.done():
-                break
-            if attempt + 1 < PORT_ATTEMPTS:
-                await asyncio.sleep(PORT_RETRY_DELAY)
+        await self._listen(app, host)
+        if not self._server.started and not self.port_override:
+            # Port réglé pris par un autre programme (un ancien nœud sous Termux sur le même
+            # téléphone…) : un port libre, que les annonces et l'appairage donnent aux autres
+            wanted, self.spare_port = self.p2p_port, _spare_port(host)
+            await self._listen(app, host, attempts=1)
+            if self._server.started:
+                log.warning("Port %s pris par un autre programme : réseau entre machines sur "
+                            "le port %s", wanted, self.p2p_port)
+            else:
+                self.spare_port = None
         if not self._server.started:
             self.error = (f"Le port {self.p2p_port} est indisponible : le réseau n'a pas pu "
                           "démarrer.")
@@ -167,6 +174,23 @@ class NetworkManager:
                      "autre : %s:%s)", self.host, self.p2p_port, address, self.p2p_port)
         else:
             log.info("Réseau local actif sur %s:%s", self.host, self.p2p_port)
+
+    async def _listen(self, app, host: str, attempts: int = PORT_ATTEMPTS):
+        """Le serveur entre nœuds sur p2p_port ; quelques essais (port encore tenu par
+        l'instance qui vient de s'arrêter, lors d'une mise à jour)."""
+        for attempt in range(attempts):
+            config = uvicorn.Config(app, host=host, port=self.p2p_port,
+                                    log_config=None, log_level="warning", access_log=False)
+            self._server = uvicorn.Server(config)
+            self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
+            for _ in range(100):
+                if self._server.started or self._server_task.done():
+                    break
+                await asyncio.sleep(0.05)
+            if self._server.started or not self._server_task.done():
+                return
+            if attempt + 1 < attempts:
+                await asyncio.sleep(PORT_RETRY_DELAY)
 
     async def _stop(self):
         if self.worker:

@@ -70,16 +70,23 @@ def test_the_node_can_tell_the_phone_app_where_its_interface_is(tmp_path):
         assert target.stat().st_mode & 0o777 == 0o600
 
 
-def test_the_phone_app_script_restarts_a_node_without_the_file():
-    """Le script que l'application confie à Termux : relancer avec --ui-file un nœud lancé
-    à la main, puis rendre l'adresse."""
-    source = (paths.APP_ROOT / "android" / "src" / "fr" / "arkane" / "aiodos"
-              / "MainActivity.java").read_text(encoding="utf-8")
-    # SIGTERM : lancé en arrière-plan par ce même script, le nœud ignore SIGINT ; et un
-    # motif que le texte du script ne contient pas, sinon pkill -f l'arrêterait lui-même
-    assert "lancer-noeud.sh --ui-file" in source and "pkill -TERM -f '[p]ython3 -m aiodos'" in source
-    assert "'python3 -m aiodos'" not in source
-    assert "com.termux.RUN_COMMAND_PENDING_INTENT" in source
+def test_the_phone_app_and_its_python_node_agree():
+    """Ce que l'appli Android (Java) attend du nœud Python (node/android_app.py) : le module
+    et ses fonctions, le fichier du démarrage avec le téléphone, ce que Device.java donne à
+    Python, et des programmes rangés sous des noms que le gestionnaire de paquets d'Android
+    déplie (« lib….so », tools/build_android.py)."""
+    from aiodos.node import android_app
+    java = paths.APP_ROOT / "android" / "src" / "fr" / "arkane" / "aiodos"
+    service = (java / "NodeService.java").read_text(encoding="utf-8")
+    assert 'getModule("aiodos.node.android_app")' in service
+    assert 'callAttr("start", getFilesDir()' in service and 'callAttr("stop")' in service
+    boot = (java / "BootReceiver.java").read_text(encoding="utf-8")
+    assert f'FLAG = "{android_app.AUTOSTART}"' in boot
+    device = (java / "Device.java").read_text(encoding="utf-8")
+    assert "public static String battery()" in device and "public static int wifi()" in device
+    libraries = [android_app.COMPANION] + [library for programs in android_app.PROGRAMS.values()
+                                           for library in programs.values()]
+    assert all(name.startswith("lib") and name.endswith(".so") for name in libraries)
 
 
 def test_a_headless_node_stops_cleanly_on_sigint_and_sigterm():

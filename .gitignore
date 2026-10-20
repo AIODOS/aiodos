@@ -16,3 +16,7 @@ __pycache__/
 # Construction de l'installeur Windows (tools/build_installer.py)
 build/
 dist/
+
+# Appli Android : caches de Gradle (tools/build_android.py)
+android/.gradle/
+android/local.properties

@@ -60,6 +60,8 @@ def folder() -> Path | None:
     """Dossier de stable-diffusion.cpp s'il contient sd-server, sinon None : celui du
     réglage, sinon celui livré avec les versions ou joint par l'installeur, sinon un
     dossier posé à la main."""
+    if engines.packaged_only():          # appli Android : seulement ses programmes
+        return engines.bundled(engines.IMAGES)
     configured = str(settings.get("sdcpp_dir") or "").strip()
     if configured:
         return Path(configured) if complete(Path(configured)) else None

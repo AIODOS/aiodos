@@ -63,5 +63,7 @@ pas de réindexation à prévoir. Téléchargé et vérifié (SHA-256) en une di
    déjà pour les gros modèles) : sans lui, AIODOS revient à Ollama.
 2. La passerelle vers les autres outils (`gateway/`) parle encore à Ollama : la brancher sur
    le routeur (son API OpenAI est déjà celle de llama-server).
-3. Le téléphone : llama.cpp pour Android dans l'appli (nœud intégré à l'appli, décision du
-   20/10), à la place d'Ollama dans Termux.
+3. ~~Le téléphone~~ : fait le 20/10 ([android.md](android.md)). L'appli contient l'archive
+   officielle pour Android de llama.cpp b11707 et le même moteur intégré qu'ici. Sur un
+   Galaxy S23, embeddinggemma calcule environ 400 passages par minute, avec les mêmes
+   vecteurs qu'ici (similarité 0,9997 en moyenne, 0,9995 au moins).

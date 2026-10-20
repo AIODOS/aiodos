@@ -1,13 +1,14 @@
-# Un téléphone Android comme nœud de calcul (Termux)
+# Un téléphone Android comme nœud de calcul
 
-> **État : essayé sur un vrai téléphone le 16/10/2026** (Galaxy S9, Android 10) :
-> l'installation, l'appairage et le calcul pour le PC fonctionnent. Résultats et points
-> encore ouverts [en fin de page](#essai-sur-un-galaxy-s9-et-ce-qui-reste-à-vérifier).
+> **État : l'appli AIODOS fait tourner le nœud elle-même depuis le 20/10/2026**, essayée sur
+> un Galaxy S23 (Android 16) : ni Termux, ni Ollama, ni rien d'autre à installer. Mesures
+> [plus bas](#mesures-du-20102026-galaxy-s23). L'ancienne méthode, le nœud dans Termux
+> (essayée le 16/10 sur un Galaxy S9), est décrite [en fin de page](#lancienne-méthode--le-nœud-dans-termux).
 
 Un téléphone récent a 6 à 12 Go de mémoire et 8 cœurs. C'est assez pour calculer des
-embeddings pour les bibliothèques du PC pendant qu'il recharge, la nuit par exemple. Il
-fait tourner AIODOS **sans fenêtre** dans Termux, avec son propre Ollama, et calcule
-pour le PC comme n'importe quelle machine appairée.
+embeddings pour les bibliothèques du PC pendant qu'il recharge, la nuit par exemple.
+L'appli AIODOS fait tourner le nœud **en arrière-plan**, avec son propre moteur
+(llama.cpp), et calcule pour le PC comme n'importe quelle machine appairée.
 
 ## Ce que fait le téléphone, et quand
 
@@ -20,10 +21,10 @@ Pour chacun, il lit le contenu, le découpe en passages et calcule les embedding
 **le même modèle que le PC, à l'empreinte près**. Le résultat est enregistré
 **uniquement sur le PC**. Les fichiers reçus sont effacés dès la fin du calcul.
 
-**Ce qu'il ne calcule pas :**
-- les images, faute de modèle de vision : trop lourd pour un téléphone ;
-- l'audio et la vidéo, faute de Whisper : il n'est pas installé sous Termux ;
-- les conversations.
+**Ce qu'il ne calcule pas (encore) :**
+- l'audio et la vidéo, faute de Whisper : il n'est pas dans l'appli ;
+- les images et les conversations, tant qu'aucun modèle de conversation n'y est installé
+  (avec qwen3.5:2b, à essayer).
 
 Le PC ne lui confie que les unités qu'il sait traiter (`can_serve`,
 `aiodos/network/work.py`). Le téléphone annonce les formats de document qu'il sait
@@ -47,7 +48,236 @@ puissance », et seulement dans ces conditions, comme BOINC sous Android :
 - Contrairement à un PC, on ne peut pas savoir sans `adb` si quelqu'un utilise le
   téléphone (écran allumé). C'est donc la charge qui fait foi.
 
-## Ce qu'il faut
+## L'appli AIODOS
+
+### Installer
+
+| | |
+|---|---|
+| Téléphone | Android 9 ou plus récent, processeur 64 bits (arm64) |
+| Mémoire | 4 Go au moins ; 8 Go pour un modèle de conversation |
+| Espace libre | environ 200 Mo pour l’appli, plus les modèles (334 Mo pour embeddinggemma) |
+| Réseau | le même Wi-Fi que le PC pour l'appairage (pas un réseau « invité ») ; ensuite, Internet suffit |
+
+1. **Sur le PC** : `python tools/build_android.py --install` construit l'appli et
+   l'installe sur le téléphone branché en USB (débogage USB autorisé). Sans câble :
+   `dist/AIODOS-<version>.apk`, à copier sur le téléphone et ouvrir (autoriser
+   « Installer des applis inconnues » pour l'appli qui l'ouvre).
+2. **Ouvrir AIODOS.** Android demande d'autoriser les notifications : accepter. Sans
+   elles, le nœud tourne quand même, mais sa notification n'apparaît que dans le
+   gestionnaire de tâches.
+3. L'interface s'affiche dès que le nœud est prêt : 6 secondes à la première ouverture
+   (mise en place de Python), 3 ensuite.
+
+### Ce qui tourne, et comment l'arrêter
+
+- Le nœud tourne **en arrière-plan**, appli fermée : c'est lui qui calcule pour les autres
+  machines. Android l'exige pour tout travail en arrière-plan : une notification discrète
+  « AIODOS — Le nœud AIODOS est en marche » l'accompagne. Son bouton **« Arrêter »** arrête
+  le nœud ; rouvrir l'appli le redémarre.
+- **« Démarrer avec le téléphone »** est activé dès la première ouverture (vue « Cette
+  machine », où on peut le retirer) : après un redémarrage, le nœud repart seul.
+- Le retour en arrière, sur la première page, met l'appli en arrière-plan sans arrêter le
+  nœud.
+
+### Les modèles
+
+« Installer un modèle » propose ceux qui conviennent au téléphone, avec leur licence :
+- **embeddinggemma** (334 Mo), le modèle des bibliothèques : celui du PC, au fichier
+  près ;
+- **qwen3.5:2b** pour converser, conseillé avec 8 Go de mémoire (qwen3.5:0.8b en dessous).
+
+Les fichiers viennent de Hugging Face, épinglés et vérifiés (SHA-256) avant d'être mis en
+place (docs/moteur-integre.md). **De préférence en Wi-Fi** : plusieurs centaines de Mo.
+
+### Si Android arrête le nœud
+
+Avec son service au premier plan, le nœud n'a besoin d'aucun réglage. Si un constructeur
+l'arrête quand même en arrière-plan (certains Samsung, Xiaomi…) : Paramètres,
+Applications, AIODOS, Batterie, « Non restreinte » (le libellé varie selon la marque,
+voir [dontkillmyapp.com](https://dontkillmyapp.com)).
+
+### Ce qu'il y a dans l'appli
+
+- **Python 3.13 dans le processus de l'appli**, par Chaquopy 17.1 (licence MIT) : le même
+  code d'AIODOS que sur les PC, mis dans l'appli à sa construction. Les paquets natifs
+  viennent du dépôt de Chaquopy (numpy 1.26.2, cryptography 42.0.8, lxml 5.3.0,
+  Pillow 11.0.0), sauf **pydantic-core**, que FastAPI demande et que personne ne publie
+  pour Android : compilé ici avec Rust et le NDK (`tools/android_wheels.py`). Le code
+  d'AIODOS est vérifié compatible avec 3.13 (les annotations sont évaluées dès la
+  définition, contrairement à 3.14).
+- **Les programmes rangés parmi les bibliothèques** de l'appli, le seul dossier d'où
+  Android permet d'exécuter un programme : `llama-server` et `ggml-rpc-server` de l'archive
+  officielle de llama.cpp pour Android, de la même version que sur les PC (b11707, avec
+  une variante par famille de processeur ARM, choisie au démarrage), et le compagnon
+  Internet `aiodos-net`, compilé avec le NDK. L'appli les retrouve sous leurs vrais noms
+  par des liens (`node/android_app.py`).
+- **Un service au premier plan** (type `specialUse`) garde le nœud en marche : Android ne
+  met pas en veille une appli qui en a un. Un verrou de veille garde le processeur éveillé,
+  écran éteint, **seulement en charge** (le téléphone ne calcule qu'en charge), et un
+  verrou multicast laisse passer les annonces des machines du réseau local.
+- **La batterie et le Wi-Fi** se lisent par Android lui-même (`Device.java`) : plus de
+  Termux:API.
+- **Les mises à jour** arrivent avec une nouvelle appli (même clé de signature, gardée
+  hors du dépôt dans `~/.aiodos/android/`) : le code d'une appli ne se remplace pas par le
+  réseau.
+- **Les données** (identité, appairages, bibliothèques, modèles) restent dans le dossier
+  privé de l'appli, effacé avec elle.
+
+**Les « limites des processus enfants »** (le *phantom process killer*, qui gênait le
+nœud sous Termux) : `llama-server` et le compagnon sont bien des processus enfants de
+l'appli, qu'Android suit comme tels. Mais sa règle d'arrêt pour usage du processeur ne vise
+que les applis en arrière-plan, et celle-ci, avec son service au premier plan, n'y est
+jamais ; l'autre règle (32 processus au plus, toutes applis réunies) n'en compte que deux
+ou trois ici. La règle de conception de l'étude ([installeurs.md](installeurs.md),
+§ 3.5 : aucun programme lancé à part) est donc assouplie, comme le fait Syncthing pour
+Android.
+
+### Mesures du 20/10/2026 (Galaxy S23)
+
+Galaxy S23 (SM-S911B, Snapdragon 8 Gen 2, 8 Go, Android 16), en 4G.
+
+- **Appli** : 58,6 Mo, dont Python et ses paquets (37 Mo) et les bibliothèques natives,
+  programmes compris (22 Mo compressés, 51 Mo une fois dépliés).
+- **Démarrage** : nœud prêt en 6 s à la première ouverture, 3 s ensuite ; compagnon
+  Internet démarré, llama.cpp 11707 reconnu (processeur).
+- **embeddinggemma** (Q8_0, le fichier du PC copié par le câble) : chargé en 14 s ;
+  32 passages d'environ 490 caractères en 4,8 s, soit **environ 400 passages par minute**
+  (le S9 sous Termux et Ollama en faisait 8, sur des passages deux fois plus longs).
+- **Mêmes vecteurs que le PC** : similarité 0,9997 en moyenne (0,9995 au moins) avec le
+  processeur comme avec la carte graphique du PC, mêmes 10 premiers résultats d'une
+  recherche ; identiques au bit près d'une fois sur l'autre sur le téléphone.
+- **« Arrêter »** dans la notification : nœud, compagnon et notification arrêtés ensemble.
+
+**Reste à essayer** : l'appairage et le calcul pour le PC (en Wi-Fi), le démarrage avec le
+téléphone, plusieurs heures écran éteint en charge, un modèle de conversation.
+
+### Passer de Termux à l'appli
+
+- La nouvelle appli s'installe par-dessus l'ancienne (même signature) et n'utilise plus
+  Termux. Son nœud a **une nouvelle identité** : l'appairer avec le PC (sur le Wi-Fi), puis
+  retirer l'ancien téléphone de « Mes machines » sur le PC.
+- **Arrêter le nœud de Termux** : dans Termux, `pkill -f "python3 -m aiodos"; pkill
+  ollama; pkill aiodos-net`, ou redémarrer le téléphone. Ses programmes survivent à
+  « Forcer l'arrêt » de Termux (constaté le 20/10). Tant qu'il tient le port 47701, le
+  nœud de l'appli en prend un autre, qu'il annonce aux autres machines.
+- Termux et Termux:API peuvent ensuite être désinstallés : l'ancien nœud part avec eux.
+
+### Construire l'appli (sur le PC)
+
+```sh
+python tools/build_android.py            # dist/AIODOS-<version>.apk
+python tools/build_android.py --install  # et l'installer sur le téléphone branché
+```
+
+Il faut : le SDK Android (`ANDROID_HOME`) avec le NDK, un JDK 17 ou plus récent, Rust avec
+la cible `aarch64-linux-android`, et **Python 3.13** (`uv python install 3.13`) : Chaquopy
+installe les paquets de l'appli avec la même version qu'elle.
+
+- `android/` : le projet Gradle (assistant `gradlew` pour Gradle 8.11.1, empreinte
+  vérifiée ; greffon Android 8.9.1 ; Chaquopy 17.1.0), le manifeste, le code Java et
+  `requirements.txt` (les paquets Python, aux versions des PC quand Chaquopy le permet).
+- `tools/android_deps.py` épingle ce que l'appli prend ailleurs (archive Android de
+  llama.cpp, sources de pydantic-core, Python 3.13 de Chaquopy) : taille et SHA-256,
+  téléchargés une fois dans `~/.aiodos/android/telechargements/`.
+- Gardés d'une construction à l'autre dans `build/android-cache/` : la roue de
+  pydantic-core (une minute à compiler) et le compagnon (une fois par état de
+  `compagnon/`). Une nouvelle construction prend ensuite une dizaine de secondes.
+
+## Appairer avec le PC
+
+1. **Sur le téléphone** : ouvrir l'appli AIODOS et la laisser ouverte.
+2. **Sur le PC**, vue « Réseau local » (activer le réseau si besoin) :
+   - le téléphone apparaît parfois tout seul dans « Machines détectées », sous le nom de
+     son modèle, par exemple « Google Pixel 7 » ;
+   - sinon, saisir son adresse (`192.168.1.42`) puis « Ajouter ».
+3. **Sur le PC**, « Appairer » : un code à 6 chiffres s'affiche sur les deux écrans.
+   **Confirmer sur chacun**, seulement si les codes sont identiques.
+   - Si la fenêtre n'apparaît pas sur le téléphone : vue « Réseau local », puis
+     « Vérifier le code ».
+   - Une demande expire au bout de 3 minutes.
+4. Le téléphone apparaît dans « Mes machines » sur le PC, avec l'état de sa batterie.
+
+À savoir :
+- Écran éteint, Android filtre les annonces diffusées sur le réseau. Le téléphone voit donc
+  mal les autres machines, mais ce n'est pas gênant : l'appairage part du PC, et les
+  échanges se font ensuite directement d'une machine à l'autre.
+- L'adresse du téléphone peut changer, puisque la box l'attribue. Réserver son adresse
+  dans la box évite de devoir le rajouter.
+- Le téléphone doit pouvoir joindre le PC sur le port 47701. Sous Windows, autoriser
+  Python sur les **réseaux privés** et vérifier que le Wi-Fi du PC est bien déclaré
+  « privé ».
+
+## Prêter la puissance du téléphone
+
+**Dans l'interface du téléphone**, vue « Cette machine » :
+- « Prêter ma puissance à mes autres machines » : **activer**. C'est le geste de
+  l'utilisateur du téléphone : rien ne se fait sans lui.
+- « Seulement en charge » (activé), « Batterie minimale » (80 %), « Température
+  maximale de la batterie » (40 °C) : à ajuster si besoin.
+- « Calcul prêté au maximum » : entre 50 et 75 %, le téléphone fait des pauses entre deux
+  unités et chauffe moins. BOINC n'utilise que la moitié des cœurs d'un téléphone.
+- « Alimentation » doit afficher par exemple **« En charge · batterie 84 % · 31,2 °C »** :
+  - « Charge inconnue » : dans l'appli, Android la donne toujours ; sous Termux,
+    voir l'étape 2 de l'ancienne méthode ;
+  - l'état du partage, en haut de la carte, dit « Prêt », « En pause » (et pourquoi) ou
+    « Calcule pour tes machines ».
+
+**Sur le PC** :
+- « Me faire aider par mes autres machines » doit être activé (c'est le cas par défaut) ;
+- une bibliothèque « gardée sur ce PC » (cadenas) ne part jamais.
+
+## Vérifier que ça marche
+
+1. Brancher le téléphone, attendre « Prêt » sur son interface.
+2. Sur le PC, indexer un dossier de textes et de PDF.
+   - Le PC calcule aussi de son côté : le téléphone prend ce qu'il peut quand il demande
+     du travail.
+   - Pour voir le téléphone travailler seul, lancer le PC sans embeddings locaux :
+     `python -m aiodos --slots embed=0`.
+3. Vue « Tâches » du PC : les unités calculées ailleurs indiquent la machine. Sur le
+   téléphone, l'état passe à « Calcule pour tes machines » avec le nom du fichier.
+4. Débrancher le téléphone : en moins d'une minute, il se met en pause et rend son unité,
+   que le PC reprend.
+
+## Hors du Wi-Fi de la maison : le compagnon Internet
+
+Pour que le téléphone continue de calculer en 4G/5G, ou chez un ami, chaque machine fait
+tourner le compagnon `aiodos-net` (Rust, Iroh) à côté du nœud. **L'appli le contient** et le
+démarre avec le nœud (« Relier mes machines par Internet », activé par défaut) :
+
+1. Appairer le téléphone et le PC sur le Wi-Fi, comme d'habitude : ils s'échangent alors
+   leurs clés Internet.
+2. Ensuite, quand le réseau local ne répond plus, les requêtes passent par le compagnon
+   (en direct, ou par un relais de n0).
+
+En 4G, le téléphone n'est pas joignable directement de l'extérieur : le PC le joint par
+le relais, ou se sert de la connexion que le téléphone a ouverte vers lui. Sous Termux, le
+compagnon se construisait à part : voir [compagnon/README.md](../compagnon/README.md).
+
+## Dépannage
+
+| Symptôme | Cause probable | Que faire |
+|---|---|---|
+| « AIODOS n'a pas démarré : … » à l'ouverture de l'appli | erreur du nœud | toucher l'écran pour redémarrer AIODOS ; journal par le câble USB : `adb logcat -s python.stdout AIODOS` |
+| Le nœud de l'appli s'arrête écran éteint | réglage de batterie du constructeur | « Si Android arrête le nœud » |
+| « Port 47701 pris par un autre programme » au journal | ancien nœud sous Termux encore en marche | « Passer de Termux à l'appli » |
+| `termux-battery-status` ne rend pas la main ; « Charge inconnue » (Termux) | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
+| « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
+| « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
+| Le téléphone ne reçoit jamais rien | modèle d'embedding absent du téléphone ou différent de celui du PC (embeddinggemma : « Installer un modèle » ; sous Termux, colonne ID de `ollama list`), « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images, de sons ou de documents que le téléphone ne sait pas lire (paquet de lecture manquant), ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
+| Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | rouvrir l'appli (sous Termux : relancer `sh lancer-noeud.sh`) ; sur le même Wi-Fi, le téléphone s'annonce tout seul dans « Machines détectées » |
+| `[Process completed (signal 9) - press Enter]` (Termux) | phantom process killer | étape 6 de l'ancienne méthode |
+| pip : « no matching distribution » ou « has no usable wheels » (Termux) | le TUR n'a pas (encore) cette version | étape 4 de l'ancienne méthode |
+| `ImportError … _cffi_backend` (Termux) | `cffi` non compilé (clang manquait) | `pkg install clang && pkg reinstall python-cryptography` |
+
+## L'ancienne méthode : le nœud dans Termux
+
+Avant le 20/10/2026, le nœud tournait dans Termux, avec son propre Ollama ; l'appli ne
+faisait qu'afficher son interface. La méthode reste décrite ici pour mémoire (et pour les
+téléphones sous Android 7 ou 8, que l'appli ne prend pas).
+
+### Ce qu'il faut
 
 | | |
 |---|---|
@@ -58,7 +288,7 @@ puissance », et seulement dans ces conditions, comme BOINC sous Android :
 | PC | AIODOS dans la même version que le téléphone, avec le réseau local activé |
 | Chargeur | un vrai chargeur secteur de préférence. Branché sur le port USB d'un PC, le téléphone peut se décharger en calculant |
 
-## 1. Installer Termux et Termux:API
+### 1. Installer Termux et Termux:API
 
 1. Installer **Termux** et **Termux:API**, tous deux depuis **F-Droid** (`com.termux`,
    `com.termux.api`), ou tous deux depuis les versions GitHub :
@@ -72,7 +302,7 @@ puissance », et seulement dans ces conditions, comme BOINC sous Android :
    pkg update && pkg upgrade
    ```
 
-## 2. Installer les paquets
+### 2. Installer les paquets
 
 ```sh
 pkg install python python-pip clang
@@ -98,7 +328,7 @@ termux-battery-status
   l'application Termux:API manque ou ne vient pas de la même source que Termux.
   Interrompre avec <kbd>Ctrl</kbd>+<kbd>C</kbd>.
 
-## 3. Copier AIODOS sur le téléphone
+### 3. Copier AIODOS sur le téléphone
 
 **Sur le PC**, dans le dossier d'AIODOS (dans la même version que celle qui tourne sur
 le PC) :
@@ -128,7 +358,7 @@ cd ~/aiodos
 **Mettre à jour** : refaire l'archive sur le PC, puis l'extraire au même endroit. Le
 dossier `data/` du téléphone est conservé, et avec lui son identité et son appairage.
 
-## 4. Installer les dépendances Python
+### 4. Installer les dépendances Python
 
 ```sh
 pip install --only-binary=:all: \
@@ -161,7 +391,7 @@ dernier, pip refuserait la version compilée.
 > Quand `pkg upgrade` installe une nouvelle version de Python (3.15 est annoncé), il
 > faut refaire cette étape.
 
-## 5. Le modèle d'embedding
+### 5. Le modèle d'embedding
 
 Le téléphone doit avoir **exactement** le modèle d'embedding du PC. Pour le connaître, sur
 le PC : Réglages, puis « Modèle d'embedding ». C'est `embeddinggemma` par défaut, mais une
@@ -180,7 +410,7 @@ ollama list
 - Ollama calcule ici sur le processeur. Ne pas installer `ollama-backend-vulkan` : il
   n'est validé que sur quelques puces graphiques.
 
-## 6. Empêcher Android d'arrêter le nœud
+### 6. Empêcher Android d'arrêter le nœud
 
 1. **Optimisation de la batterie.**
    - Au premier `termux-wake-lock` (le script de lancement l'appelle), Android propose de
@@ -208,7 +438,7 @@ ollama list
    arrière-plan. Depuis Android 15, une application qui n'en a pas perd l'accès au
    réseau.
 
-## 7. Lancer le nœud
+### 7. Lancer le nœud
 
 ```sh
 cd ~/aiodos
@@ -241,7 +471,9 @@ Nœud AIODOS prêt : http://127.0.0.1:8800/?t=…
 - puis `termux-wake-unlock` ;
 - Ollama continue de tourner : l'arrêter avec `pkill ollama`.
 
-### 7 bis. L'application AIODOS (17/10/2026)
+#### 7 bis. L'application AIODOS (17/10/2026)
+
+> Remplacée le 20/10/2026 par l'appli qui fait tourner le nœud elle-même (plus haut).
 
 Une application Android, avec son icône, remplace ces gestes : elle démarre le nœud dans
 Termux s'il ne tourne pas, puis affiche son interface en plein écran. C'est la première
@@ -274,94 +506,7 @@ encore dans Termux.
 - **Essai du 17/10/2026 sur le Galaxy S23** (Android 16, Termux 0.118.3) : nœud démarré
   par l'application en 36 s, compagnon Internet compris, interface affichée.
 
-## 8. Appairer avec le PC
-
-1. **Sur le téléphone** : ouvrir son interface (étape 7) et la laisser ouverte.
-2. **Sur le PC**, vue « Réseau local » (activer le réseau si besoin) :
-   - le téléphone apparaît parfois tout seul dans « Machines détectées », sous le nom de
-     son modèle, par exemple « Google Pixel 7 » ;
-   - sinon, saisir son adresse (`192.168.1.42`) puis « Ajouter ».
-3. **Sur le PC**, « Appairer » : un code à 6 chiffres s'affiche sur les deux écrans.
-   **Confirmer sur chacun**, seulement si les codes sont identiques.
-   - Si la fenêtre n'apparaît pas sur le téléphone : vue « Réseau local », puis
-     « Vérifier le code ».
-   - Une demande expire au bout de 3 minutes.
-4. Le téléphone apparaît dans « Mes machines » sur le PC, avec l'état de sa batterie.
-
-À savoir :
-- Écran éteint, Android filtre les annonces diffusées sur le réseau. Le téléphone voit donc
-  mal les autres machines, mais ce n'est pas gênant : l'appairage part du PC, et les
-  échanges se font ensuite directement d'une machine à l'autre.
-- L'adresse du téléphone peut changer, puisque la box l'attribue. Réserver son adresse
-  dans la box évite de devoir le rajouter.
-- Le téléphone doit pouvoir joindre le PC sur le port 47701. Sous Windows, autoriser
-  Python sur les **réseaux privés** et vérifier que le Wi-Fi du PC est bien déclaré
-  « privé ».
-
-## 9. Prêter la puissance du téléphone
-
-**Dans l'interface du téléphone**, vue « Cette machine » :
-- « Prêter ma puissance à mes autres machines » : **activer**. C'est le geste de
-  l'utilisateur du téléphone : rien ne se fait sans lui.
-- « Seulement en charge » (activé), « Batterie minimale » (80 %), « Température
-  maximale de la batterie » (40 °C) : à ajuster si besoin.
-- « Calcul prêté au maximum » : entre 50 et 75 %, le téléphone fait des pauses entre deux
-  unités et chauffe moins. BOINC n'utilise que la moitié des cœurs d'un téléphone.
-- « Alimentation » doit afficher par exemple **« En charge · batterie 84 % · 31,2 °C »** :
-  - « Charge inconnue (Termux:API absent ?) » : voir l'étape 2 ;
-  - l'état du partage, en haut de la carte, dit « Prêt », « En pause » (et pourquoi) ou
-    « Calcule pour tes machines ».
-
-**Sur le PC** :
-- « Me faire aider par mes autres machines » doit être activé (c'est le cas par défaut) ;
-- une bibliothèque « gardée sur ce PC » (cadenas) ne part jamais.
-
-## 10. Vérifier que ça marche
-
-1. Brancher le téléphone, attendre « Prêt » sur son interface.
-2. Sur le PC, indexer un dossier de textes et de PDF.
-   - Le PC calcule aussi de son côté : le téléphone prend ce qu'il peut quand il demande
-     du travail.
-   - Pour voir le téléphone travailler seul, lancer le PC sans embeddings locaux :
-     `python -m aiodos --slots embed=0`.
-3. Vue « Tâches » du PC : les unités calculées ailleurs indiquent la machine. Sur le
-   téléphone, l'état passe à « Calcule pour tes machines » avec le nom du fichier.
-4. Débrancher le téléphone : en moins d'une minute, il se met en pause et rend son unité,
-   que le PC reprend.
-
-## 11. Hors du Wi-Fi de la maison : le compagnon Internet (phase 2, en essai)
-
-Pour que le téléphone continue de calculer en 4G/5G, ou chez un ami, chaque machine fait
-tourner le compagnon `aiodos-net` (Rust, Iroh) à côté du nœud :
-
-1. Le construire sous Termux (`pkg install rust resolv-conf`, puis `cargo build
-   --release` dans `compagnon/`), ou le compiler sur le PC avec le NDK et le copier :
-   voir [compagnon/README.md](../compagnon/README.md). Le mettre dans `$PREFIX/bin`.
-2. Lancer le nœud avec `--internet` (ou activer le réglage `internet_enabled`), sur le
-   téléphone comme sur le PC.
-3. Appairer les deux machines sur le Wi-Fi, comme d'habitude : elles s'échangent alors
-   leurs clés Internet. Ensuite, quand le réseau local ne répond plus, les requêtes
-   passent par le compagnon (en direct, ou par un relais de n0).
-
-En 4G, le téléphone n'est pas joignable directement de l'extérieur : le PC le joint par
-le relais, ou se sert de la connexion que le téléphone a ouverte vers lui. Pas encore
-essayé sur un téléphone : la compilation pour Android a été vérifiée depuis le PC le
-16/10/2026.
-
-## Dépannage
-
-| Symptôme | Cause probable | Que faire |
-|---|---|---|
-| `termux-battery-status` ne rend pas la main ; « Charge inconnue » | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
-| « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
-| « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
-| Le téléphone ne reçoit jamais rien | modèle d'embedding différent (colonne ID de `ollama list`), Ollama arrêté sur le téléphone, « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images, de sons ou de documents que le téléphone ne sait pas lire (paquet de lecture manquant), ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
-| Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | relancer `sh lancer-noeud.sh` et reprendre l'adresse affichée |
-| `[Process completed (signal 9) - press Enter]` | phantom process killer | étape 6 |
-| pip : « no matching distribution » ou « has no usable wheels » | le TUR n'a pas (encore) cette version | étape 4, « Si cela échoue » |
-| `ImportError … _cffi_backend` | `cffi` non compilé (clang manquait) | `pkg install clang && pkg reinstall python-cryptography` |
-
-## Essai sur un Galaxy S9, et ce qui reste à vérifier
+### Essai sur un Galaxy S9, et ce qui reste à vérifier
 
 Galaxy S9 (SM-G960F, Exynos 9810 de 2018, 4 Go, Android 10), le 16/10/2026, appairé
 avec le PC par le câble USB (tunnels `adb`, voir plus bas).
@@ -400,7 +545,7 @@ avec le PC par le câble USB (tunnels `adb`, voir plus bas).
 32 bits (par exemple la Galaxy Note 10.1 de 2014, Android 5.1.1) : Termux demande
 Android 7, et son paquet `ollama` n'existe qu'en 64 bits.
 
-### Piloter le téléphone depuis le PC (essais, développement)
+#### Piloter le téléphone depuis le PC (essais, développement)
 
 Pour un téléphone branché en USB avec le débogage USB activé :
 - les versions GitHub de Termux sont « débogables » : depuis le PC, `adb shell run-as
@@ -415,7 +560,17 @@ Pour un téléphone branché en USB avec le débogage USB activé :
   `adb reverse tcp:<port P2P du PC> tcp:<même port>` (le téléphone joint le PC), et
   `adb forward tcp:8800 tcp:8800` pour ouvrir l'interface du téléphone sur le PC.
 
-## Sources (consultées le 16/10/2026)
+## Sources (consultées le 16 et le 20/10/2026)
+
+- L'appli (20/10/2026) :
+  - Chaquopy, versions et greffon Gradle : <https://chaquo.com/chaquopy/doc/current/versions.html>,
+    <https://chaquo.com/chaquopy/doc/current/android.html> ; paquets pour Python 3.13 :
+    <https://chaquo.com/pypi-13.1/> ;
+  - llama.cpp b11707 pour Android : <https://github.com/ggml-org/llama.cpp/releases/tag/b11707> ;
+  - services au premier plan et type `specialUse` :
+    <https://developer.android.com/develop/background-work/services/fgs/service-types> ;
+  - programmes exécutables depuis le dossier des bibliothèques (API 29 et plus) :
+    <https://developer.android.com/about/versions/10/behavior-changes-10#execute-permission>.
 
 - Termux :
   - installation et règle de la même source : <https://github.com/termux/termux-app#installation> ;
