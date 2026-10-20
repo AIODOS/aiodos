@@ -105,7 +105,10 @@ API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement
 (`127.0.0.1`, port fixe 11435, clé d'accès à copier). Open WebUI, AnythingLLM, Continue, un
 éditeur de code ou un assistant (Claude Desktop, Claude Code…) y trouvent les modèles de
 cette machine et ceux que te prêtent tes machines, avec le même choix automatique, et
-cherchent dans tes bibliothèques. Pas à pas : [docs/autres-outils.md](docs/autres-outils.md).
+cherchent dans tes bibliothèques. **Sans Ollama** : le moteur intégré (llama.cpp) sert ces
+API lui-même, outils (*tool calling*), images, format de réponse imposé, complétion de code
+et embeddings compris ; ce qu'il ne sait pas faire est refusé clairement. Pas à pas :
+[docs/autres-outils.md](docs/autres-outils.md).
 
 Une machine dédiée au calcul peut tourner sans fenêtre : `python -m aiodos --headless`.
 `--slots embed=1,gpu=0` limite ce qu'elle exécute en parallèle, et
@@ -284,7 +287,8 @@ aiodos/
 │   ├── mcp_server.py  serveur MCP : bibliothèques et conversation pour les assistants
 │   ├── mcp_stdio.py   pont stdio, pour les assistants qui lancent un programme
 │   ├── catalog.py     modèles proposés et leurs identifiants
-│   └── answer.py      réponse par cette machine ou par une machine appairée
+│   ├── answer.py      réponse par cette machine ou par une machine appairée
+│   └── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │   ├── queue.py       persistance, priorités, réessais, reprise
 │   ├── executor.py    exécution selon les ressources (GPU, embeddings, CPU, réseau)

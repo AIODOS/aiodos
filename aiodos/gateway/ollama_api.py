@@ -9,9 +9,11 @@ l'ancienne /api/embeddings, /api/show (« model » ou l'ancien « name », que C
 envoie encore ; model_info toujours présent), /api/version, /api/ps et « / » (« Ollama is
 running »). Erreurs : {"error": "…"}.
 
-Sur cette machine, la demande est relayée telle quelle à Ollama (answer.local_raw) ;
-une machine appairée reçoit la conversation en texte, et la réponse est remise ici au
-format d'Ollama. Pas de gestion des modèles (pull, create, delete…) par la passerelle.
+Sur cette machine, la demande est relayée telle quelle à Ollama (answer.local_raw) ; quand
+le moteur intégré tient lieu d'Ollama (engine.py), une conversation en texte passe par la
+façade, et images, outils et format imposé par son routeur. Une machine appairée reçoit la
+conversation en texte. Ces réponses-là sont remises ici au format d'Ollama (Lines). Pas de
+gestion des modèles (pull, create, delete…) par la passerelle.
 """
 import asyncio
 import json
@@ -20,13 +22,14 @@ import time
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 
-from aiodos.gateway import answer, catalog
+from aiodos.gateway import answer, catalog, engine
 from aiodos.gateway.answer import GatewayError
 from aiodos.network import placement, remote_models
 from aiodos.services import ollama
 
 router = APIRouter()
 NDJSON = "application/x-ndjson"
+FORMATS = "0.40.5"          # version d'Ollama dont la passerelle suit les formats (plus haut)
 
 
 def _error(exc) -> JSONResponse:
@@ -57,7 +60,10 @@ def root():
 
 @router.api_route("/api/version", methods=["GET", "HEAD"])
 async def version():
-    # Un numéro « 0.40.5 » : Open WebUI le lit nombre par nombre
+    # Un numéro « 0.40.5 » : Open WebUI le lit nombre par nombre. Le moteur intégré, lui,
+    # donnerait celui de llama.cpp : à sa place, celui des formats que suit la passerelle
+    if await asyncio.to_thread(ollama.use_integrated):
+        return {"version": FORMATS}
     return {"version": await asyncio.to_thread(ollama.version) or "0.0.0"}
 
 
@@ -74,6 +80,8 @@ async def tags():
 
 @router.get("/api/ps")
 async def running():
+    if await asyncio.to_thread(ollama.use_integrated):
+        return await asyncio.to_thread(engine.running)
     try:
         status, content, kind = await asyncio.to_thread(answer.local_get, "/api/ps")
     except GatewayError:
@@ -93,7 +101,11 @@ async def show(request: Request):
     if not remote_models.parse(model):
         tags = await asyncio.to_thread(_local_names)
         name = next((t for t in tags if placement.same_model(t, name)), name)
-        if name in tags:
+        if name in tags and await asyncio.to_thread(ollama.use_integrated):
+            shown = await asyncio.to_thread(engine.show, name)
+            if shown is not None:
+                return shown
+        elif name in tags:
             try:
                 status, content, kind = await asyncio.to_thread(
                     answer.local_post, "/api/show", {**body, "model": name, "name": None})
@@ -122,6 +134,8 @@ async def _embed(request: Request, path: str):
     try:
         body = await _body(request)
         name = catalog.local_name(body.get("model"))
+        if await asyncio.to_thread(ollama.use_integrated):
+            return await asyncio.to_thread(_embedded, path, body, name)
         status, content, kind = await asyncio.to_thread(answer.local_post, path,
                                                         {**body, "model": name})
     except catalog.UnknownModel as exc:
@@ -129,6 +143,27 @@ async def _embed(request: Request, path: str):
     except GatewayError as exc:
         return _error(exc)
     return Response(content, status_code=status, media_type=kind)
+
+
+def _embedded(path: str, body: dict, name: str) -> dict:
+    """Embeddings du moteur intégré, au format de l'une ou l'autre route d'Ollama. Le nombre
+    de jetons lus n'est pas connu ici (0)."""
+    started = time.perf_counter()
+    if path == "/api/embeddings":                 # l'ancienne route : un texte, « prompt »
+        prompt = body.get("prompt") or ""
+        if not isinstance(prompt, str):
+            raise GatewayError(400, "« prompt » doit être du texte.")
+        vectors = engine.embed(name, [prompt] if prompt else [])
+        return {"embedding": vectors[0] if vectors else []}
+    texts = body.get("input")
+    if isinstance(texts, str):
+        texts = [texts]
+    if not isinstance(texts, list) or not all(isinstance(t, str) for t in texts):
+        raise GatewayError(400, "« input » doit être un texte ou une liste de textes.")
+    vectors = engine.embed(name, texts, body.get("dimensions"))
+    return {"model": body.get("model"), "embeddings": vectors,
+            "total_duration": int((time.perf_counter() - started) * 1e9), "load_duration": 0,
+            "prompt_eval_count": 0}
 
 
 @router.post("/api/embed")
@@ -163,8 +198,9 @@ def plain_messages(messages) -> list:
     return out
 
 
-class Remote:
-    """Réponse d'une machine appairée remise au format d'Ollama (chat ou generate)."""
+class Lines:
+    """Réponse calculée ailleurs que par l'Ollama d'ici (machine appairée, moteur intégré)
+    remise au format d'Ollama (chat ou generate)."""
 
     def __init__(self, model_id: str, chat: bool):
         self.model_id = model_id
@@ -173,13 +209,16 @@ class Remote:
         self.stats = {}
         self.content = []
         self.thinking = []
+        self.calls = []
 
-    def _line(self, content: str, thinking: str = "", done=False) -> dict:
+    def _line(self, content: str, thinking: str = "", done=False, calls=None) -> dict:
         line = {"model": self.model_id, "created_at": catalog.now_iso()}
         if self.chat:
             message = {"role": "assistant", "content": content}
             if thinking:
                 message["thinking"] = thinking
+            if calls:
+                message["tool_calls"] = calls
             line["message"] = message
         else:
             line["response"] = content
@@ -198,13 +237,17 @@ class Remote:
         elif kind == "thinking":
             self.thinking.append(value)
             return self._line("", value)
+        elif kind == "tool_calls" and value:          # moteur intégré : appels d'outils
+            self.calls.extend(value)
+            return self._line("", calls=value)
         return None
 
     def final(self, whole=False) -> dict:
         """Dernière ligne (whole : avec toute la réponse, pour stream: false)."""
         elapsed = int((time.perf_counter() - self.started) * 1e9)
         line = self._line("".join(self.content) if whole else "",
-                          "".join(self.thinking) if whole else "", done=True)
+                          "".join(self.thinking) if whole else "", done=True,
+                          calls=self.calls if whole else None)
         line.update({"done_reason": self.stats.get("done_reason") or "stop",
                      "total_duration": elapsed, "load_duration": 0,
                      "prompt_eval_count": int(self.stats.get("prompt_tokens") or 0),
@@ -220,8 +263,8 @@ def _ndjson(obj) -> bytes:
 
 async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
                    streaming: bool, request: Request):
-    """Réponse HTTP une fois la machine engagée : relais tel quel (cette machine) ou mise
-    au format d'Ollama (machine appairée)."""
+    """Réponse HTTP une fois la machine engagée : relais tel quel (l'Ollama d'ici) ou mise
+    au format d'Ollama (machine appairée, moteur intégré)."""
     raw = next((value for kind, value in head if kind == "head"), None)
     if raw is not None:
         async def relay():
@@ -238,7 +281,7 @@ async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
                 stream.close()
         return StreamingResponse(relay(), media_type=raw)
 
-    remote = Remote(model_id, chat)
+    remote = Lines(model_id, chat)
     if not streaming:
         try:
             for item in head:
@@ -267,8 +310,18 @@ async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
     return StreamingResponse(lines(), media_type=NDJSON)
 
 
+def _think(body: dict) -> bool:
+    return body.get("think") is not False
+
+
+def _options(body: dict) -> dict | None:
+    return body.get("options") if isinstance(body.get("options"), dict) else None
+
+
 async def _answer(request: Request, path: str, body: dict, messages, *, chat: bool,
-                  local_only: bool, prefer_local: bool):
+                  local_only: bool, prefer_local: bool, here):
+    """here(modèle, stop) : la réponse du moteur intégré de cette machine, quand il tient
+    lieu d'Ollama (engine.py)."""
     model_id = str(body.get("model") or "")
     if not model_id:
         return JSONResponse({"error": "model is required"}, status_code=400)
@@ -279,16 +332,22 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
                                          local_only=local_only, prefer_local=prefer_local)
     except GatewayError as exc:
         return _error(exc)
-    think = body.get("think") is not False
-    options = body.get("options") if isinstance(body.get("options"), dict) else None
+    think, options = _think(body), _options(body)
+    unload = body.get("keep_alive") in (0, "0", "0s")
 
     def attempt(model, stop):
-        if answer.is_local(model):
+        if not answer.is_local(model):
+            if messages is None:          # chargement ou déchargement : rien à calculer là-bas
+                yield "content", ""
+            else:                         # en texte, seulement pour une autre machine
+                yield from answer.remote(model, plain_messages(messages), think, options, stop)
+        elif not ollama.use_integrated():
             yield from answer.local_raw(path, {**body, "model": model}, stop)
-        elif messages is None:            # chargement ou déchargement : rien à calculer là-bas
+        elif messages is None:
+            engine.load(model, unload)
             yield "content", ""
-        else:                             # en texte, seulement pour une autre machine
-            yield from answer.remote(model, plain_messages(messages), think, options, stop)
+        else:
+            yield from here(model, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
@@ -298,8 +357,7 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
         return _error(exc)
     if messages is None and raw_head(head) is None:
         stream.close()
-        unload = body.get("keep_alive") in (0, "0", "0s")
-        line = Remote(model_id, chat).final()
+        line = Lines(model_id, chat).final()
         line.update(done_reason="unload" if unload else "load", total_duration=0,
                     eval_duration=0)
         return JSONResponse(line)
@@ -323,8 +381,16 @@ async def chat(request: Request):
     tools = bool(body.get("tools")) or any(
         isinstance(m, dict) and (m.get("tool_calls") or m.get("role") == "tool")
         for m in messages)
+    special = images or tools or bool(body.get("format"))
+
+    def here(model, stop):                # le texte par la façade, le reste par le routeur
+        if special:
+            return engine.ollama_chat(model, body, messages, stop)
+        return engine.converse(model, plain_messages(messages), _think(body), _options(body),
+                               stop)
     return await _answer(request, "/api/chat", body, messages or None, chat=True,
-                         local_only=images or bool(body.get("format")), prefer_local=tools)
+                         local_only=images or bool(body.get("format")), prefer_local=tools,
+                         here=here)
 
 
 @router.post("/api/generate")
@@ -343,13 +409,27 @@ async def generate(request: Request):
         system = body.get("system")
         messages = ([{"role": "system", "content": system}] if isinstance(system, str)
                     and system else []) + [{"role": "user", "content": prompt}]
+
+    def here(model, stop):
+        if body.get("template") or body.get("context"):
+            raise GatewayError(400, "« template » et « context » (propres à Ollama) ne sont pas "
+                               "pris par le moteur intégré : envoie la conversation entière par "
+                               "/api/chat.")
+        suffix = body.get("suffix")
+        if suffix or body.get("raw"):     # complétion de code, texte brut
+            return engine.complete(model, prompt, suffix if isinstance(suffix, str) else None,
+                                   _options(body), stop)
+        if body.get("images") or body.get("format"):
+            question = {**messages[-1], "images": body.get("images") or []}
+            return engine.ollama_chat(model, body, [*messages[:-1], question], stop)
+        return engine.converse(model, messages, _think(body), _options(body), stop)
     return await _answer(request, "/api/generate", body, messages, chat=False,
-                         local_only=special, prefer_local=False)
+                         local_only=special, prefer_local=False, here=here)
 
 
 # ------------------------------------------------------------- le reste
 @router.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD"])
 def unknown(rest: str):
     return JSONResponse({"error": f"« /api/{rest} » n'est pas servi par la passerelle "
-                         "d'AIODOS : les modèles s'installent et se gèrent avec Ollama."},
-                        status_code=404)
+                         "d'AIODOS : les modèles s'installent et se gèrent dans AIODOS "
+                         "(« Installer un modèle ») ou avec Ollama."}, status_code=404)

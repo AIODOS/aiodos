@@ -344,7 +344,9 @@ def _default_model() -> str:
     chosen = str(settings.get("default_model") or "")
     if chosen and not chosen.startswith("cloud:"):
         return chosen
-    entries = catalog.entries()
+    # Pas un modèle d'embedding : le moteur intégré les range par nom (bge-m3 d'abord…)
+    entries = [e for e in catalog.entries()
+               if not e["capabilities"] or "completion" in e["capabilities"]]
     if not entries:
         raise ToolError("Aucun modèle de conversation dans le cercle AIODOS.")
     return entries[0]["id"]

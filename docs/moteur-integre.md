@@ -61,8 +61,24 @@ pas de réindexation à prévoir. Téléchargé et vérifié (SHA-256) en une di
 
 1. Livrer llama.cpp avec AIODOS (l'installeur le joint ; les versions signées le livrent
    déjà pour les gros modèles) : sans lui, AIODOS revient à Ollama.
-2. La passerelle vers les autres outils (`gateway/`) parle encore à Ollama : la brancher sur
-   le routeur (son API OpenAI est déjà celle de llama-server).
+2. ~~La passerelle vers les autres outils~~ : fait le 20/10 (`gateway/engine.py`,
+   [autres-outils.md](autres-outils.md)). Sans Ollama, les outils gardent les mêmes API :
+   catalogue d'après le moteur intégré (`/api/tags`, `/v1/models`, `/api/show` avec le
+   contexte du routeur, `/api/ps`) ; `/v1/chat/completions` transmis tel quel au routeur
+   (outils, images, format imposé, `logprobs`, `n`), une conversation en texte mise en forme
+   pour les gabarits stricts ; l'API d'Ollama au format d'Ollama (le texte par la façade ;
+   images, outils et `format` traduits pour le routeur ; complétion de code par `/infill`) ;
+   embeddings par la façade. Ce que le routeur ne prend pas est refusé clairement (400).
+   **Essai réel le 20/10** (llama.cpp b11707, dossier de données à part, `ollama_url` vers un
+   port fermé) : 32 vérifications sur 32 — qwen3.5:9b réfléchit à part, appelle un outil en
+   flux puis lit son résultat, voit une image rouge ou bleue ; qwen2.5-coder:7b complète du
+   code au milieu d'un texte, donne deux réponses avec probabilités, suit un schéma JSON ;
+   mistral:7b reçoit deux messages de suite (mis en forme) ; nomic-embed-text, 768
+   dimensions (256 sur demande) ; clients officiels openai et MCP (recherche dans une
+   bibliothèque indexée par le moteur intégré). Refus clairs : image pour un modèle qui ne la
+   voit pas, complétion de code pour mistral, texte de 1802 jetons pour l'embedding ;
+   qwen2.5vl et embeddinggemma d'Ollama écartés (404) dès leur premier essai. Un outil qui
+   part en route : le routeur arrête la génération (« cancel task », 66 jetons).
 3. ~~Le téléphone~~ : fait le 20/10 ([android.md](android.md)). L'appli contient l'archive
    officielle pour Android de llama.cpp b11707 et le même moteur intégré qu'ici. Sur un
    Galaxy S23, embeddinggemma calcule environ 400 passages par minute, avec les mêmes

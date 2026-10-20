@@ -13,7 +13,8 @@ AIODOS peut s'ouvrir aux autres outils d'IA de ta machine : Open WebUI, Anything
 Les formats ont été vérifiés le 17/10/2026 dans la documentation d'OpenAI, celle d'Ollama
 (0.40.5), la spécification MCP (2026-07-28) et le code d'Open WebUI 0.12.3, AnythingLLM 1.18,
 Continue, et des clients officiels openai 3.33.0 et mcp 2.3.0, avec lesquels AIODOS est essayé
-(`tests/test_gateway.py`, `tests/test_gateway_nodes.py`).
+(`tests/test_gateway.py`, `tests/test_gateway_nodes.py`) ; ceux du moteur intégré, le
+20/10/2026 avec llama.cpp b11707 (`tests/test_gateway_integrated.py`, et un essai réel).
 
 ## 1. Ouvrir la passerelle
 
@@ -67,17 +68,37 @@ Les machines d'un ami ne répondent d'office que si tu l'acceptes (Réglages →
 « faire aussi répondre les machines de mes amis »). Les modèles du cloud ne passent pas par
 la passerelle : leur envoi se valide dans AIODOS, message par message.
 
-Une demande calculée par **cette machine** est transmise telle quelle à Ollama : les outils
-(*tool calling*), les images, un format de réponse imposé, la complétion de code y passent.
-Une **machine appairée**, elle, ne reçoit que la conversation en texte. D'où :
+Une demande calculée par **cette machine** va à son moteur : le moteur intégré d'AIODOS
+(llama.cpp, [moteur-integre.md](moteur-integre.md)), ou Ollama là où il n'est pas encore.
+Les outils (*tool calling*), les images, un format de réponse imposé, la complétion de code
+y passent. Une **machine appairée**, elle, ne reçoit que la conversation en texte. D'où :
 
 - images, format imposé (`format`, `response_format`), complétion de code (`suffix`,
   `/v1/completions`), probabilités (`logprobs`) : **cette machine seulement** ;
 - outils : cette machine d'abord ; si seule une machine appairée a le modèle, elle répond
   sans eux, en texte ;
-- embeddings : **cette machine seulement** (son Ollama) ;
+- embeddings : **cette machine seulement** (son modèle d'embedding) ;
 - réglages d'échantillonnage (température, `max_tokens`, `stop`…) : transmis ; ceux qui
   rechargeraient le modèle chez l'autre (`num_ctx`…) restent à ses valeurs.
+
+**Avec le moteur intégré** (sans Ollama), les mêmes adresses et les mêmes formats :
+
+- `/v1/chat/completions` est transmis tel quel à son routeur, dont l'API est déjà celle
+  d'OpenAI : outils, images, `response_format`, `logprobs`, plusieurs réponses (`n`) ; le nom
+  du modèle est remis dans la réponse. Une conversation en texte seul y arrive mise en forme
+  (une seule consigne système, en tête ; deux messages de suite du même rôle réunis) : le
+  gabarit de mistral, par exemple, refuserait sinon. `reasoning_effort: "none"` coupe la
+  réflexion ;
+- l'API d'Ollama (`/api/chat`, `/api/generate`) répond au format d'Ollama : images (`images`),
+  outils (`tools`, `tool_calls` avec les arguments en objet) et `format` (`"json"` ou un
+  schéma) traduits pour le routeur, complétion de code (`suffix`) par les jetons de
+  complétion du modèle — seulement les modèles de code qui les ont (qwen2.5-coder…) ;
+- ce que le modèle ne sait pas faire est **refusé clairement** (erreur 400 qui dit pourquoi) :
+  images pour un modèle qui ne les voit pas, complétion de code sans ses jetons, texte trop
+  long pour son contexte ;
+- `/api/show` donne le contexte que le moteur intégré donne au modèle (`num_ctx`, 8192 pour
+  la conversation, 2048 pour les embeddings) ; `/api/version` donne la version d'Ollama dont
+  la passerelle suit les formats (0.40.5).
 
 ## 3. Open WebUI
 
@@ -270,8 +291,16 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 ## 8. Limites
 
 - Pas de gestion des modèles par la passerelle (`/api/pull`, `create`, `delete`…) : on les
-  installe avec Ollama.
+  installe dans AIODOS (« Installer un modèle ») ou avec Ollama.
 - Une machine appairée ne reçoit ni outils, ni images, ni format imposé (§ 2).
+- Moteur intégré : un texte à transformer en embedding fait au plus 512 jetons (au-delà,
+  refusé : à découper ; Ollama, lui, le tronquait) et le nombre de jetons lus n'est pas
+  donné (0) ; le contexte est celui du moteur, quel que soit `num_ctx` ; `template` et
+  `context` de `/api/generate` (propres à Ollama) sont refusés : la conversation passe par
+  `/api/chat`.
+- Une réponse attendue sans flux (`stream: false`) par `/v1/chat/completions` ne s'arrête
+  pas en route si l'outil part : le moteur n'envoie rien avant la fin (en flux, et par l'API
+  d'Ollama, elle s'arrête).
 - Pas de connexion depuis une autre machine : 127.0.0.1 seulement (un conteneur Docker
   Desktop de cette machine passe en principe par `host.docker.internal`, § 3).
 - Pas de CORS : un outil qui tourne dans le navigateur (extension, page web) ne peut pas
@@ -284,7 +313,9 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 - `aiodos/gateway/server.py` : le serveur (127.0.0.1, port, ouverture et fermeture sans
   relancer), les trois verrous (Host, Origin, clé) ; `access.py` : la clé.
 - `openai_api.py`, `ollama_api.py` : les deux API ; `catalog.py` : les modèles proposés ;
-  `answer.py` : relais vers l'Ollama local ou conversation par une machine appairée.
+  `answer.py` : relais vers l'Ollama local ou conversation par une machine appairée ;
+  `engine.py` : la réponse du moteur intégré (son routeur, `aiodos/llm/integrated.forward`,
+  ou la façade `services/ollama.py`).
 - `mcp_server.py` : le serveur MCP ; `mcp_stdio.py` : le pont stdio.
 - `aiodos/network/placement.py` : le choix automatique de la machine qui répond, commun aux
   conversations d'AIODOS et à la passerelle.
