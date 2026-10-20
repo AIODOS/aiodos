@@ -1,7 +1,8 @@
 # Paquets Python de l'appli Android (Chaquopy, Python 3.13), installés par Gradle
-# (android/build.gradle.kts, tools/build_android.py). Mêmes versions que sur les PC quand
-# Chaquopy le permet ; les paquets natifs viennent de son dépôt (numpy 1.26.2, cryptography
-# 42.0.8, lxml 5.3.0, Pillow 11.0.0), sauf pydantic-core, compilé ici
+# (android/build.gradle.kts, tools/build_android.py). Tous épinglés, dépendances comprises
+# (relevé de la construction du 20/10/2026) : une nouvelle construction prend les mêmes.
+# Mêmes versions que sur les PC quand Chaquopy le permet ; les paquets natifs viennent de
+# son dépôt (numpy, cryptography, cffi, lxml, Pillow), sauf pydantic-core, compilé ici
 # (tools/android_wheels.py). Ni fenêtre (pywebview) ni Whisper : comme le nœud sous Termux
 # (requirements-node.txt).
 
@@ -11,17 +12,36 @@ starlette==1.8.0
 pydantic==2.13.3
 pydantic-core==2.46.3
 uvicorn==0.54.0
-requests
+requests==2.34.2
 numpy==1.26.2
 cryptography==42.0.8
-markdown-it-py
-pygments
+markdown-it-py==4.2.0
+pygments==2.21.0
 
 # Lecture des documents confiés : PDF, Word, PowerPoint, Excel, RTF, EPUB
-pypdf
-python-docx
-python-pptx
-openpyxl
-striprtf
+pypdf==6.21.1
+python-docx==1.2.0
+python-pptx==1.0.2
+openpyxl==3.1.5
+striprtf==0.0.33
 lxml==5.3.0
 pillow==11.0.0
+
+# Dépendances des précédents
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+certifi==2026.10.19
+cffi==1.17.1
+charset-normalizer==3.5.2
+click==8.5.0
+et-xmlfile==2.0.0
+h11==0.16.0
+idna==3.20
+mdurl==0.1.2
+opentelemetry-api==1.45.1
+pycparser==3.11
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+urllib3==2.8.0
+xlsxwriter==3.2.9

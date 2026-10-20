@@ -6,6 +6,10 @@ import { state, on, emit } from '../state.js';
 import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
 import { renderConnected } from './connected.js';
 
+/** Le pare-feu de Windows demande son accord au premier réseau : pas sur un téléphone. */
+const onWindows = () => (state.node?.os ? state.node.os.startsWith('Windows')
+  : navigator.userAgent.includes('Windows'));
+
 let root;
 let lastJson = '';
 
@@ -234,7 +238,7 @@ function renderState(net) {
       <label class="switch"><input type="checkbox" id="net-toggle" ${local ? 'checked' : ''}><span></span></label>
     </div>
     ${net.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(net.error)}</div></div>` : ''}
-    ${local ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>À l'activation,
+    ${local || !onWindows() ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>À l'activation,
       Windows demandera sans doute l'autorisation du pare-feu pour Python : accepte pour les
       <b>réseaux privés</b> seulement.</div></div>`}`;
   $('#net-toggle', box).onchange = async e => {

@@ -156,16 +156,71 @@ def test_in_the_app_only_its_own_programs_run(tmp_path, monkeypatch):
     assert llama.folder() == elsewhere
 
 
-def test_the_app_does_not_update_its_code_by_the_network(monkeypatch):
+def test_the_app_does_not_update_its_code_by_the_network(monkeypatch, tmp_path):
+    from aiodos import __version__
+    from aiodos.updates import launcher
     from aiodos.updates import service as updates
+    from aiodos.updates.store import Store
 
     class Service(updates.UpdateService):
         def __init__(self):
-            self.store = None
+            self.store = Store()
 
         def _best_offer(self):
             pytest.fail("version demandée aux autres machines dans l'appli")
+    newer = "99.0.0"
+    monkeypatch.setattr(launcher, "developer_checkout", lambda: False)   # comme l'appli
+    monkeypatch.setattr(Store, "installed", lambda self: [newer, __version__])
+    pending = {"pending": {"version": newer}}
+    monkeypatch.delenv(android_app.APP_ENV, raising=False)
+    assert Service().ready(pending) == newer            # hors de l'appli : elle démarrerait
     monkeypatch.setenv(android_app.APP_ENV, "1")
     settings.set_value("auto_update", True)
     Service().tick()
-    assert Service().ready({"pending": {"version": "9.9.9"}}) is None
+    assert Service().ready(pending) is None             # dans l'appli : jamais
+
+
+def test_a_phone_lends_no_rpc_server(monkeypatch):
+    """ggml-rpc-server n'a ni mot de passe ni chiffrement : dans l'appli, toute appli du
+    téléphone joindrait son port. Le téléphone ne prête donc pas aux gros modèles répartis."""
+    from aiodos.cluster import engine as llama_engine
+    from aiodos.cluster import helper
+    from aiodos.network import sharing
+    from aiodos.network.client import PeerError
+
+    class Manager:
+        def name(self):
+            return "Samsung SM-S911B"
+    settings.set_value("lend_gpu", True)
+    monkeypatch.setattr(sharing, "level", lambda sender: sharing.MINE)
+    monkeypatch.setattr(llama_engine, "rpc_server",
+                        lambda *a, **k: pytest.fail("serveur RPC lancé dans l'appli"))
+    monkeypatch.setenv(android_app.APP_ENV, "1")
+    with pytest.raises(PeerError, match="téléphone"):
+        helper.lend(Manager(), "pc", {"version": "11707-1268edac5"})
+
+
+def test_the_service_can_ask_whether_the_node_still_runs(monkeypatch):
+    class Node:
+        running = True
+
+        def alive(self):
+            return self.running
+    node = Node()
+    monkeypatch.setitem(android_app._running, "node", None)
+    assert android_app.alive() is False
+    monkeypatch.setitem(android_app._running, "node", node)
+    assert android_app.alive() is True
+    node.running = False
+    assert android_app.alive() is False
+
+
+def test_the_engine_is_called_llama_cpp_in_the_app_even_when_missing(monkeypatch):
+    """Dans l'appli, pas d'Ollama : l'interface ne doit jamais conseiller de le lancer."""
+    from aiodos.node import identity
+    from aiodos.services import ollama
+    monkeypatch.setattr(ollama, "use_integrated", lambda: False)
+    monkeypatch.delenv(android_app.APP_ENV, raising=False)
+    assert identity._engine() == "ollama"
+    monkeypatch.setenv(android_app.APP_ENV, "1")
+    assert identity._engine() == "llama.cpp"

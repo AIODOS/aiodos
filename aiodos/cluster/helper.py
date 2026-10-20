@@ -19,6 +19,7 @@ from aiodos import paths, settings
 from aiodos.cluster import engine
 from aiodos.network import peers, route, sharing
 from aiodos.network.client import PeerError
+from aiodos.node import android_app
 
 log = logging.getLogger("aiodos.cluster")
 
@@ -58,6 +59,11 @@ def lend(manager, sender, payload):
                         "« Prêter ma carte graphique pour les gros modèles »).")
     if sharing.level(sender) != sharing.MINE:
         raise PeerError("Seules mes machines peuvent emprunter cette carte graphique.")
+    if android_app.in_app():
+        # ggml-rpc-server n'a ni mot de passe ni chiffrement : sur un téléphone, n'importe
+        # quelle appli joindrait son port de 127.0.0.1
+        raise PeerError(f"« {manager.name()} » est un téléphone : il ne prête pas sa "
+                        "puissance aux gros modèles répartis.")
     peer = peers.get(sender) or {}
     if not peer.get("net_id"):
         raise PeerError("Clé Internet de ta machine inconnue ici : il faut le compagnon "

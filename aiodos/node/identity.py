@@ -19,7 +19,7 @@ from aiodos import __version__, db, settings
 from aiodos.cluster import engine
 from aiodos.imaging import catalog as images_catalog
 from aiodos.imaging import engine as images_engine
-from aiodos.node import android, power, priority
+from aiodos.node import android, android_app, power, priority
 from aiodos.services import ollama
 from aiodos.updates.store import Store
 
@@ -146,6 +146,13 @@ def _input_api():
     return user32, kernel32
 
 
+def _engine() -> str:
+    """« llama.cpp » quand le moteur intégré fait tourner les modèles, et toujours dans
+    l'appli Android (pas d'Ollama : un llama.cpp absent y reste « le moteur »), sinon
+    « ollama »."""
+    return "llama.cpp" if android_app.in_app() or ollama.use_integrated() else "ollama"
+
+
 def _models(vram_total) -> list:
     try:
         models = ollama.list_models()
@@ -213,7 +220,7 @@ def profile(max_age=5.0) -> dict:
         "idle_seconds": idle_seconds(),
         # « engine » : llama.cpp intégré (llm/) ou Ollama ; la clé garde son ancien nom
         "ollama": {"version": ollama.version(), "models": _models(vram_total),
-                   "engine": "llama.cpp" if ollama.use_integrated() else "ollama"},
+                   "engine": _engine()},
         "lends_models": bool(settings.get("lend_models")),
         # Réponses en flux avec signes de vie (network/p2p_app.ALIVE_S) : la machine qui
         # attend peut lire avec un délai court (remote_models.chat_stream)

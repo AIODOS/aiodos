@@ -18,9 +18,9 @@ public class BootReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
-                && !"android.intent.action.QUICKBOOT_POWERON".equals(action)) {
+        // Seulement l'annonce protégée du système : n'importe quelle appli pourrait envoyer
+        // QUICKBOOT_POWERON (ancien démarrage rapide de certains constructeurs)
+        if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
             return;
         }
         if (!new File(context.getFilesDir(), FLAG).isFile()) {

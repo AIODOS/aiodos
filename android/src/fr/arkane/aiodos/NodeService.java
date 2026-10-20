@@ -40,6 +40,7 @@ public class NodeService extends Service {
     private static final String CHANNEL = "noeud";
     private static final int NOTIFICATION = 1;
     private static final String TAG = "AIODOS";
+    private static final long WATCH_EVERY = 30_000;      // ms
 
     /** L'adresse de l'interface, jeton compris, une fois le nœud prêt (MainActivity). */
     static volatile String url;
@@ -82,8 +83,12 @@ public class NodeService extends Service {
             return START_NOT_STICKY;
         }
         String address = url;
-        foreground(address != null ? "Le nœud AIODOS est en marche."
-            : error != null ? "AIODOS n'a pas démarré." : "Démarrage du nœud AIODOS…");
+        String text = address != null ? "Le nœud AIODOS est en marche."
+            : error != null ? "AIODOS n'a pas démarré : " + error : "Démarrage du nœud AIODOS…";
+        if (!goForeground(text)) {
+            stopSelf();                 // refusé par Android (relance en arrière-plan…)
+            return START_NOT_STICKY;
+        }
         holdLocks();
         startNode();
         return START_STICKY;            // arrêté par Android : il redémarre le nœud
@@ -108,12 +113,34 @@ public class NodeService extends Service {
                 getApplicationInfo().nativeLibraryDir, getCacheDir().getAbsolutePath());
             url = address.toString();
             error = null;
-            foreground("Le nœud AIODOS est en marche.");
+            update("Le nœud AIODOS est en marche.");
             Log.i(TAG, "Nœud AIODOS prêt");
         } catch (Throwable e) {
             Log.e(TAG, "Le nœud AIODOS n'a pas démarré", e);
             error = summary(e);
-            foreground("AIODOS n'a pas démarré : " + error);
+            update("AIODOS n'a pas démarré : " + error);
+            return;
+        }
+        watch();
+    }
+
+    /** Le nœud tourne-t-il toujours ? Sinon, la notification le dit (rouvrir l'appli le
+     *  redémarre dans un processus neuf). */
+    private void watch() {
+        while (true) {
+            try {
+                Thread.sleep(WATCH_EVERY);
+                if (!node().callAttr("alive").toBoolean()) {
+                    error = "le nœud s'est arrêté";
+                    url = null;
+                    update("Le nœud AIODOS s'est arrêté : toucher pour rouvrir AIODOS.");
+                    return;
+                }
+            } catch (InterruptedException e) {
+                return;
+            } catch (Throwable e) {
+                Log.w(TAG, "Surveillance du nœud AIODOS", e);
+            }
         }
     }
 
@@ -136,7 +163,7 @@ public class NodeService extends Service {
      *  puis le processus : Python ne redémarre pas dans un même processus, la prochaine
      *  ouverture de l'appli repart à neuf. */
     private void stopNode() {
-        foreground("Arrêt du nœud AIODOS…");
+        update("Arrêt du nœud AIODOS…");
         new Thread(() -> {
             try {
                 if (Python.isStarted() && url != null) {
@@ -152,7 +179,33 @@ public class NodeService extends Service {
         }, "aiodos-arret").start();
     }
 
-    private void foreground(String text) {
+    /** Passer au premier plan, comme Android l'exige d'un service démarré par
+     *  startForegroundService ; faux s'il le refuse (relance en arrière-plan…), sans planter. */
+    private boolean goForeground(String text) {
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIFICATION, notification(text),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            } else {
+                startForeground(NOTIFICATION, notification(text));
+            }
+            return true;
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Service au premier plan refusé", e);
+            return false;
+        }
+    }
+
+    /** Le texte de la notification change ; le service reste au premier plan. */
+    private void update(String text) {
+        try {
+            getSystemService(NotificationManager.class).notify(NOTIFICATION, notification(text));
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Notification du nœud", e);
+        }
+    }
+
+    private Notification notification(String text) {
         Intent open = new Intent(this, MainActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent show = PendingIntent.getActivity(this, 0, open,
@@ -173,13 +226,7 @@ public class NodeService extends Service {
         if (Build.VERSION.SDK_INT >= 31) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         }
-        Notification notification = builder.build();
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIFICATION, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-        } else {
-            startForeground(NOTIFICATION, notification);
-        }
+        return builder.build();
     }
 
     private void holdLocks() {

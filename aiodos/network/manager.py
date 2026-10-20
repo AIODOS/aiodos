@@ -35,11 +35,26 @@ PORT_ATTEMPTS = 3           # port encore tenu par l'instance qui vient de s'arr
 PORT_RETRY_DELAY = 2
 
 
-def _spare_port(host: str) -> int:
-    """Un port libre choisi par le système, pour le réseau entre nœuds."""
-    with socket.socket() as s:
+LISTEN_TIMEOUT = 30         # s : un serveur qui démarre lentement n'est pas un port pris
+SPARE_PORTS = 9             # ports de secours essayés à la suite du port réglé
+
+
+def _spare_ports(host: str, wanted: int) -> list:
+    """Ports de secours : les suivants du port réglé (le même d'un lancement à l'autre tant
+    qu'il est libre), puis un port choisi par le système."""
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family) as s:
         s.bind((host, 0))
-        return s.getsockname()[1]
+        spare = s.getsockname()[1]
+    return [wanted + n for n in range(1, SPARE_PORTS + 1) if wanted + n < 65536] + [spare]
+
+
+def _holder(port: int) -> dict | None:
+    """Le nœud AIODOS qui garde ce port sur cette machine (son « hello »), ou None."""
+    try:
+        return client.hello("127.0.0.1", port, timeout=2)
+    except Exception:  # noqa: BLE001 — autre programme, ou rien de lisible
+        return None
 
 
 async def _serve(server):
@@ -131,6 +146,9 @@ class NetworkManager:
             try:
                 await discovery.start()
                 self._discovery = discovery
+                if not discovery.listening and not self.error:
+                    self.error = ("Un autre programme garde le port des annonces : ce nœud "
+                                  "s'annonce à tes machines, mais ne voit pas les leurs.")
             except OSError as exc:
                 self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
         elif not self.local and self._discovery is not None:
@@ -142,20 +160,13 @@ class NetworkManager:
         from aiodos.network.p2p_app import create_p2p_app
         self._loop = asyncio.get_running_loop()
         self.error = None
+        self.spare_port = None               # chaque démarrage retente d'abord le port réglé
         app = create_p2p_app(self)
         host = self._bound = self._listen_host()
         await self._listen(app, host)
-        if not self._server.started and not self.port_override:
-            # Port réglé pris par un autre programme (un ancien nœud sous Termux sur le même
-            # téléphone…) : un port libre, que les annonces et l'appairage donnent aux autres
-            wanted, self.spare_port = self.p2p_port, _spare_port(host)
-            await self._listen(app, host, attempts=1)
-            if self._server.started:
-                log.warning("Port %s pris par un autre programme : réseau entre machines sur "
-                            "le port %s", wanted, self.p2p_port)
-            else:
-                self.spare_port = None
-        if not self._server.started:
+        if self._failed() and not self.port_override:
+            await self._fall_back(app, host)
+        if self._failed():
             self.error = (f"Le port {self.p2p_port} est indisponible : le réseau n'a pas pu "
                           "démarrer.")
             log.warning(self.error)
@@ -175,22 +186,56 @@ class NetworkManager:
         else:
             log.info("Réseau local actif sur %s:%s", self.host, self.p2p_port)
 
+    def _failed(self) -> bool:
+        """Le serveur entre nœuds s'est arrêté sans démarrer (port pris)."""
+        return self._server_task is None or (self._server_task.done()
+                                             and not self._server.started)
+
     async def _listen(self, app, host: str, attempts: int = PORT_ATTEMPTS):
         """Le serveur entre nœuds sur p2p_port ; quelques essais (port encore tenu par
-        l'instance qui vient de s'arrêter, lors d'une mise à jour)."""
+        l'instance qui vient de s'arrêter, lors d'une mise à jour). Un serveur qui démarre
+        lentement est attendu (LISTEN_TIMEOUT), puis laissé démarrer : seul un serveur
+        arrêté compte comme un port pris."""
         for attempt in range(attempts):
             config = uvicorn.Config(app, host=host, port=self.p2p_port,
                                     log_config=None, log_level="warning", access_log=False)
             self._server = uvicorn.Server(config)
             self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
-            for _ in range(100):
-                if self._server.started or self._server_task.done():
-                    break
+            deadline = self._loop.time() + LISTEN_TIMEOUT
+            while (not (self._server.started or self._server_task.done())
+                   and self._loop.time() < deadline):
                 await asyncio.sleep(0.05)
-            if self._server.started or not self._server_task.done():
+            if not self._failed():
+                if not self._server.started:
+                    log.warning("Serveur entre nœuds lent à démarrer sur le port %s",
+                                self.p2p_port)
                 return
             if attempt + 1 < attempts:
                 await asyncio.sleep(PORT_RETRY_DELAY)
+
+    async def _fall_back(self, app, host: str):
+        """Port réglé pris par un autre programme, par exemple un ancien nœud AIODOS sous
+        Termux sur le même téléphone : un port de secours, que les annonces et l'appairage
+        donnent aux autres machines, et un avertissement qui dit quoi faire."""
+        wanted = self.p2p_port
+        other = await asyncio.to_thread(_holder, wanted)
+        for port in _spare_ports(host, wanted):
+            self.spare_port = port
+            await self._listen(app, host, attempts=1)
+            if not self._failed():
+                break
+        else:
+            self.spare_port = None
+            return
+        if other:
+            self.error = (f"Un autre nœud AIODOS (« {other.get('name') or '?'} ») tourne sur "
+                          f"cet appareil et garde le port {wanted} : arrête-le (l'ancien nœud "
+                          f"de Termux sur un téléphone : redémarrer le téléphone suffit). En "
+                          f"attendant, ce nœud passe par le port {port}.")
+        else:
+            self.error = (f"Le port {wanted} est pris par un autre programme : ce nœud passe "
+                          f"par le port {port}, qu'il annonce à tes machines.")
+        log.warning(self.error)
 
     async def _stop(self):
         if self.worker:

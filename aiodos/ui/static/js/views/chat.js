@@ -200,9 +200,17 @@ function fillModels() {
 function selectModel(id) {
   const value = /^(cloud|reparti):/.test(id || '') ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
-  // Sans choix connu : un modèle de cette machine d'abord
+  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines, puis un
+  // modèle du cloud qui a sa clé ; jamais d'office un modèle du cloud sans clé
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
-  el.model.value = values.includes(value) ? value : (here || values[0] || '');
+  const keyed = state.models.find(m => m.group === 'cloud' && m.has_key)?.id;
+  const usable = values.filter(v => v && (!/^cloud:/.test(v) || v === keyed));
+  if (!values.includes(value) && !here && !usable.length) {
+    if (!values.includes('')) el.model.prepend(new Option('Aucun modèle prêt pour l’instant', ''));
+    el.model.value = '';
+  } else {
+    el.model.value = values.includes(value) ? value : (here || usable[0] || values[0] || '');
+  }
   fillMachines(id);
 }
 

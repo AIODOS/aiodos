@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
     private static final int NOTIFICATIONS = 1;
     private static final int FILES = 2;
     private static final long SLOW = 15_000;          // première ouverture : mise en place
-    private static final long TOO_LONG = 180_000;     // jamais d'attente sans fin
+    private static final long TOO_LONG = 180_000;     // au-delà : on le dit, et on attend encore
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
@@ -67,8 +67,7 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                String host = uri.getHost();
-                if ("127.0.0.1".equals(host) || "localhost".equals(host)) {
+                if (sameOrigin(uri, shown)) {
                     return false;                     // l'interface du nœud, ici
                 }
                 try {
@@ -126,15 +125,26 @@ public class MainActivity extends Activity {
             return;
         }
         long waited = SystemClock.elapsedRealtime() - since;
-        if (waited > TOO_LONG) {
-            problem("AIODOS ne répond pas après 3 minutes.");
-            return;
-        }
-        if (waited > SLOW) {
+        if (waited > TOO_LONG) {           // on continue d'attendre : il peut encore venir
+            status.setText("AIODOS met plus de 3 minutes à démarrer. Il s'affichera ici dès "
+                + "qu'il sera prêt ; sinon, « Arrêter » dans sa notification, puis rouvre "
+                + "l'appli.");
+        } else if (waited > SLOW) {
             status.setText("Démarrage d'AIODOS…\n\nÀ la première ouverture, l'appli met en "
                 + "place Python et ses bibliothèques : jusqu'à une minute.");
         }
         handler.postDelayed(this::poll, 250);
+    }
+
+    /** Même schéma, même hôte et même port que l'interface du nœud : un autre service de
+     *  127.0.0.1 (llama-server, le compagnon…) n'a rien à faire dans cette fenêtre. */
+    static boolean sameOrigin(Uri uri, String address) {
+        if (address == null || uri == null) {
+            return false;
+        }
+        Uri node = Uri.parse(address);
+        return "http".equals(uri.getScheme()) && node.getHost() != null
+            && node.getHost().equals(uri.getHost()) && node.getPort() == uri.getPort();
     }
 
     private void show(String address) {

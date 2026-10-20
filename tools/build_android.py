@@ -190,15 +190,25 @@ def icons(res: Path):
         adaptive.resize((side, side), Image.LANCZOS).save(folder / "ic_launcher_foreground.png")
 
 
-def keystore() -> Path:
-    """Clé de développement (hors du dépôt) : une même clé d'une version à l'autre, sans quoi
-    Android refuse la mise à jour de l'application."""
-    KEYS.mkdir(parents=True, exist_ok=True)
+def keystore(create: bool = False) -> Path:
+    """Clé de signature (hors du dépôt), la même d'une version à l'autre : avec une autre
+    clé, Android refuse la mise à jour, et il faudrait désinstaller l'appli, ce qui efface
+    l'identité du nœud, ses appairages et ses modèles. Elle n'est donc jamais recréée en
+    silence : sur un autre PC, recopier ~/.aiodos/android/aiodos-debug.keystore (et la
+    sauvegarder) ; --nouvelle-cle seulement pour un tout premier téléphone. Son mot de passe
+    (« android ») ne protège rien : c'est le fichier qu'il faut garder pour soi."""
     store = KEYS / "aiodos-debug.keystore"
-    if not store.is_file():
-        run(jdk_tool("keytool"), "-genkeypair", "-keystore", store, "-storepass", "android",
-            "-keypass", "android", "-alias", "aiodos", "-keyalg", "RSA", "-keysize", "2048",
-            "-validity", "10000", "-dname", "CN=AIODOS, O=22eme Arkane, C=FR")
+    if store.is_file():
+        return store
+    if not create:
+        raise BuildError(f"clé de signature introuvable ({store}) : la recopier depuis le PC "
+                         "qui a construit l'appli installée, ou --nouvelle-cle pour en créer "
+                         "une (l'appli déjà installée devra alors être désinstallée)")
+    KEYS.mkdir(parents=True, exist_ok=True)
+    run(jdk_tool("keytool"), "-genkeypair", "-keystore", store, "-storepass", "android",
+        "-keypass", "android", "-alias", "aiodos", "-keyalg", "RSA", "-keysize", "2048",
+        "-validity", "10000", "-dname", "CN=AIODOS, O=22eme Arkane, C=FR")
+    print(f"  nouvelle clé de signature : {store} (à sauvegarder)", flush=True)
     return store
 
 
@@ -215,7 +225,7 @@ def stage_all() -> Path:
     return STAGE
 
 
-def build(out: Path) -> Path:
+def build(out: Path, new_key: bool = False) -> Path:
     root = sdk()
     stage = stage_all()
     name, code = version()
@@ -226,7 +236,7 @@ def build(out: Path) -> Path:
     ndk = companion_build.ndk()
     run(gradle, "--console=plain", "assembleRelease", f"-PaiodosStage={stage}",
         f"-PaiodosVersionName={name}", f"-PaiodosVersionCode={code}",
-        f"-PaiodosBuildPython={python313()}", f"-PaiodosKeystore={keystore()}",
+        f"-PaiodosBuildPython={python313()}", f"-PaiodosKeystore={keystore(new_key)}",
         *([f"-PaiodosNdk={ndk.name}"] if ndk else []), cwd=PROJECT, quiet=False, env=env)
     built = PROJECT / "build" / "outputs" / "apk" / "release" / "aiodos-release.apk"
     if not built.is_file():
@@ -251,15 +261,17 @@ def install(apk: Path):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", default=str(ROOT / "dist"))
+    parser.add_argument("--nouvelle-cle", action="store_true",
+                        help="créer la clé de signature si elle manque (premier téléphone)")
     parser.add_argument("--install", action="store_true",
                         help="installer sur le téléphone branché (adb)")
     args = parser.parse_args(argv)
     try:
-        apk = build(Path(args.out))
+        apk = build(Path(args.out), new_key=args.nouvelle_cle)
         print(f"Application : {apk} ({apk.stat().st_size / 1e6:.1f} Mo)")
         if args.install:
             install(apk)
-    except (BuildError, android_deps.DepError, android_wheels.WheelError) as exc:
+    except (BuildError, android_deps.DepError, android_wheels.WheelError, OSError) as exc:
         sys.exit(f"Application non construite : {exc}")
     return 0
 

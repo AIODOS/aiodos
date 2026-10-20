@@ -4,8 +4,10 @@ Le service au premier plan de l'appli démarre Python (Chaquopy) dans son propre
 puis appelle start() : les mêmes étapes que « python -m aiodos --headless » (__main__.py),
 sauf ce qui n'a pas de sens dans une appli :
 - le code ne se met pas à jour par le réseau : c'est celui de l'appli, et une nouvelle
-  version arrive avec une nouvelle appli (updates/service.py le reçoit et le transmet
-  quand même aux autres machines) ;
+  version arrive avec une nouvelle appli (updates/service.py ne demande ni ne reçoit
+  aucune version dans l'appli) ;
+- pas de serveur RPC pour les gros modèles répartis (cluster/helper.py) : sans mot de
+  passe, il serait joignable par toute appli du téléphone ;
 - les programmes (llama.cpp, le compagnon Internet) viennent du dossier des bibliothèques
   de l'appli, le seul d'où Android permet d'exécuter un programme. Rangés sous des noms en
   « lib….so » (tools/build_android.py), ils sont rendus à AIODOS sous leurs vrais noms par
@@ -155,6 +157,12 @@ def _check_engine():
     else:
         log.warning("llama.cpp introuvable ou inexécutable dans l'appli : aucun modèle ne "
                     "tournera sur ce téléphone")
+
+
+def alive() -> bool:
+    """Le nœud démarré par start() tourne-t-il toujours ? (surveillé par NodeService.java)"""
+    node = _running["node"]
+    return bool(node is not None and node.alive())
 
 
 def stop():

@@ -122,7 +122,10 @@ voir [dontkillmyapp.com](https://dontkillmyapp.com)).
   hors du dépôt dans `~/.aiodos/android/`) : le code d'une appli ne se remplace pas par le
   réseau.
 - **Les données** (identité, appairages, bibliothèques, modèles) restent dans le dossier
-  privé de l'appli, effacé avec elle.
+  privé de l'appli, effacé avec elle : ni sauvegarde, ni transfert vers un nouveau
+  téléphone (l'identité du nœud y serait copiée).
+- **Pas de serveur RPC** pour les gros modèles répartis : `ggml-rpc-server` n'a ni mot de
+  passe ni chiffrement, et toute appli du téléphone joindrait son port de 127.0.0.1.
 
 **Les « limites des processus enfants »** (le *phantom process killer*, qui gênait le
 nœud sous Termux) : `llama-server` et le compagnon sont bien des processus enfants de
@@ -160,7 +163,8 @@ téléphone, plusieurs heures écran éteint en charge, un modèle de conversati
 - **Arrêter le nœud de Termux** : dans Termux, `pkill -f "python3 -m aiodos"; pkill
   ollama; pkill aiodos-net`, ou redémarrer le téléphone. Ses programmes survivent à
   « Forcer l'arrêt » de Termux (constaté le 20/10). Tant qu'il tient le port 47701, le
-  nœud de l'appli en prend un autre, qu'il annonce aux autres machines.
+  nœud de l'appli prend le suivant (47702), l'annonce aux autres machines, et la vue Réseau
+  dit quel nœud garde le port et quoi faire.
 - Termux et Termux:API peuvent ensuite être désinstallés : l'ancien nœud part avec eux.
 
 ### Construire l'appli (sur le PC)
@@ -180,6 +184,10 @@ installe les paquets de l'appli avec la même version qu'elle.
 - `tools/android_deps.py` épingle ce que l'appli prend ailleurs (archive Android de
   llama.cpp, sources de pydantic-core, Python 3.13 de Chaquopy) : taille et SHA-256,
   téléchargés une fois dans `~/.aiodos/android/telechargements/`.
+- **La clé de signature** (`~/.aiodos/android/aiodos-debug.keystore`) n'est jamais
+  recréée en silence : avec une autre clé, Android refuse la mise à jour, et désinstaller
+  l'appli efface l'identité du nœud. Sur un autre PC, la recopier ; `--nouvelle-cle`
+  seulement pour un tout premier téléphone. La sauvegarder.
 - Gardés d'une construction à l'autre dans `build/android-cache/` : la roue de
   pydantic-core (une minute à compiler) et le compagnon (une fois par état de
   `compagnon/`). Une nouvelle construction prend ensuite une dizaine de secondes.

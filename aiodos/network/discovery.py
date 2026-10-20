@@ -49,12 +49,24 @@ class Discovery:
         self.extra_targets = extra_targets    # () -> [(ip, port)] ajoutées à la main
         self._transport = None
         self._task = None
+        self.listening = False                # entend-on les annonces des autres ?
 
     async def start(self):
         loop = asyncio.get_running_loop()
-        self._transport, _ = await loop.create_datagram_endpoint(
-            lambda: _Protocol(self.on_beacon),
-            local_addr=("0.0.0.0", self.port), allow_broadcast=True)
+        try:
+            self._transport, _ = await loop.create_datagram_endpoint(
+                lambda: _Protocol(self.on_beacon),
+                local_addr=("0.0.0.0", self.port), allow_broadcast=True)
+            self.listening = True
+        except OSError as exc:
+            # Port des annonces pris (un autre nœud AIODOS sur cet appareil, l'ancien nœud
+            # de Termux…) : on s'annonce quand même, depuis un port libre, sans entendre les
+            # autres ; les autres machines voient donc ce nœud et son port
+            log.warning("Port %s des annonces pris (%s) : annonces envoyées sans écoute",
+                        self.port, exc)
+            self._transport, _ = await loop.create_datagram_endpoint(
+                lambda: _Protocol(self.on_beacon), local_addr=("0.0.0.0", 0),
+                allow_broadcast=True)
         self._task = asyncio.create_task(self._announce(), name="aiodos-discovery")
 
     async def _announce(self):
