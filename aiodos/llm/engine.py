@@ -5,9 +5,16 @@ plus ancien au-delà de MODELS_MAX, comme Ollama.
 - Préréglages : un fichier INI (data/llm/modeles.ini) écrit d'après les modèles disponibles
   (llm/models.py) : poids, projecteur d'images, taille du contexte, « embeddings » pour un
   modèle d'embedding. Le routeur repart quand la liste change (modèle téléchargé, écarté).
+- Un modèle d'embedding lit chaque texte d'un seul tenant : ses lots (batch-size,
+  ubatch-size) ont la taille de son contexte, sinon llama-server les ramène à 512 jetons et
+  refuse tout texte plus long.
 - --fit on : llama.cpp place lui-même les couches dans la mémoire de la carte graphique.
-- Sur 127.0.0.1 seulement, avec une clé tirée à chaque lancement : le routeur accepte
-  qu'une page web l'appelle (CORS ouvert), sans la clé il répond 401.
+- Sur 127.0.0.1 seulement, avec une clé tirée à chaque lancement, exigée par le routeur et
+  par les llama-server qu'il lance pour chaque modèle (à un port au hasard) : sans elle, 401
+  partout sauf /health. Elle passe par l'environnement (LLAMA_API_KEY) : le routeur retire
+  « api-key » des arguments de ses llama-server, mais leur donne son environnement et leur
+  transmet l'en-tête Authorization de chaque demande (vérifié avec llama.cpp b11707). CORS
+  reste ouvert : une page web peut joindre ces ports, sans la clé elle n'obtient rien.
 - Le programme est celui de llama.cpp livré avec AIODOS (cluster/engine.folder()).
 """
 import hashlib
@@ -43,7 +50,8 @@ def presets(models: list) -> str:
         if m.mmproj:
             lines.append(f"mmproj = {m.mmproj}")
         if m.embedding:
-            lines += ["embeddings = true", f"ctx-size = {EMBED_CONTEXT}"]
+            lines += ["embeddings = true", f"ctx-size = {EMBED_CONTEXT}",
+                      f"batch-size = {EMBED_CONTEXT}", f"ubatch-size = {EMBED_CONTEXT}"]
         else:
             lines.append(f"ctx-size = {CHAT_CONTEXT}")
         sections.append("\n".join(lines))
@@ -80,9 +88,10 @@ class Router:
             port = programs.free_port()
             args = ["--models-preset", str(ini), "--models-max", str(MODELS_MAX),
                     "--models-autoload", "--host", "127.0.0.1", "--port", str(port),
-                    "--no-webui", "--fit", "on", "--api-key", self.key]
+                    "--no-webui", "--fit", "on"]
+            # La clé par l'environnement : les llama-server de chaque modèle en héritent
             process = programs.Process("llama-routeur", folder / f"{programs.SERVER}{programs.EXE}",
-                                       args, port)
+                                       args, port, env={"LLAMA_API_KEY": self.key})
             try:
                 process.start(START_TIMEOUT, ready=lambda: programs.loaded(port))
             except programs.EngineError as exc:

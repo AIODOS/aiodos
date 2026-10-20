@@ -18,8 +18,8 @@ images pour un modèle qui ne les voit pas, complétion de code sans ses jetons,
 long. Relevé le 20/10/2026 avec llama.cpp b11707 : outils (qwen3.5 ; en flux, les arguments
 arrivent par morceaux), images (qwen3.5 et son projecteur ; ailleurs, erreur 500), json_object
 et json_schema, n = 2, logprobs, /infill (qwen2.5-coder ; 501 pour mistral, qui n'a pas les
-jetons de complétion) ; un modèle d'embedding refuse un texte de plus de 512 jetons, et le
-gabarit de mistral deux messages de suite du même rôle.
+jetons de complétion) ; un modèle d'embedding refuse un texte de plus de 2048 jetons (ses
+lots, llm/engine.py), et le gabarit de mistral deux messages de suite du même rôle.
 
 Fonctions bloquantes : dans le thread d'answer.Stream ou par asyncio.to_thread.
 """

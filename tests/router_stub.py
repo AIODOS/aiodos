@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from aiodos.llm import models
+from aiodos.llm.engine import EMBED_CONTEXT
 from tests.conftest import _bag_of_words
 from tests.nodes import free_port
 
@@ -174,7 +175,7 @@ class RouterStub:
                 if len(text.split()) > MAX_WORDS:
                     return 500, (f"input ({2 * len(text.split())} tokens) is too large to "
                                  "process. increase the physical batch size (current batch "
-                                 "size: 512)"), "server_error"
+                                 f"size: {EMBED_CONTEXT})"), "server_error"
         return None
 
     def _app(self) -> FastAPI:

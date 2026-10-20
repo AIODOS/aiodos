@@ -411,6 +411,7 @@ def test_embeddings_by_the_integrated_engine(tool):
     assert chat.status_code == 400 and "pas un modèle d'embedding" in chat.json()["error"]
     long = tool.post("/v1/embeddings", {"model": EMBEDDING, "input": ["mot " * 80]})
     assert long.status_code == 400 and "Texte trop long" in long.json()["error"]["message"]
+    assert f"{EMBED_CONTEXT} au plus" in long.json()["error"]["message"]
     lent = tool.post("/v1/embeddings", {"model": f"peer:{PEER}:{EMBEDDING}", "input": "x"})
     assert lent.status_code == 400                    # jamais ailleurs que sur cette machine
 

@@ -85,6 +85,38 @@ def test_an_aiodos_model_comes_first_and_an_incompatible_one_is_set_aside(ollama
     assert models.find("qwen3.5:9b").source == "ollama"     # le fichier écarté, pas le nom
 
 
+def test_the_router_gives_its_key_to_each_model_server(ollama_dir, data_dir, monkeypatch):
+    """La clé par l'environnement : le routeur retire « api-key » des arguments de ses
+    llama-server, mais leur donne son environnement (vérifié avec llama.cpp b11707). Un
+    modèle d'embedding lit chaque texte d'un seul tenant (lots à la taille du contexte)."""
+    launched = []
+
+    class Launched:
+        def __init__(self, name, program, args, port, env=None):
+            self.args, self.env, self.port, self.alive = args, env, port, False
+            launched.append(self)
+
+        def start(self, timeout, ready=None):
+            self.alive = True
+            return self
+
+        def stop(self):
+            self.alive = False
+
+    monkeypatch.setattr(engine.programs, "folder", lambda: data_dir)
+    monkeypatch.setattr(engine.programs, "Process", Launched)
+    router = engine.Router()
+    router.url()
+    assert launched[0].env == {"LLAMA_API_KEY": router.key}
+    assert router.key not in " ".join(launched[0].args)
+    ini = (data_dir / "llm" / "modeles.ini").read_text(encoding="utf-8")
+    sections = {s.split("]")[0].strip("["): s for s in ini.split("\n\n")}
+    embedding = sections[models.find("nomic-embed-text").id]
+    assert f"batch-size = {engine.EMBED_CONTEXT}" in embedding
+    assert f"ubatch-size = {engine.EMBED_CONTEXT}" in embedding
+    assert "batch-size" not in sections["qwen3.5-9b"]
+
+
 # ------------------------------------------------------------------ faux routeur
 class FakeRouter(BaseHTTPRequestHandler):
     seen = []

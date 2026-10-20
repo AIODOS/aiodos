@@ -293,8 +293,9 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 - Pas de gestion des modèles par la passerelle (`/api/pull`, `create`, `delete`…) : on les
   installe dans AIODOS (« Installer un modèle ») ou avec Ollama.
 - Une machine appairée ne reçoit ni outils, ni images, ni format imposé (§ 2).
-- Moteur intégré : un texte à transformer en embedding fait au plus 512 jetons (au-delà,
-  refusé : à découper ; Ollama, lui, le tronquait) et le nombre de jetons lus n'est pas
+- Moteur intégré : un texte à transformer en embedding fait au plus 2048 jetons (de l'ordre
+  de 6 000 caractères de français avec nomic-embed-text ; au-delà, refusé : à découper ;
+  Ollama, lui, le tronquait) et le nombre de jetons lus n'est pas
   donné (0) ; le contexte est celui du moteur, quel que soit `num_ctx` ; `template` et
   `context` de `/api/generate` (propres à Ollama) sont refusés : la conversation passe par
   `/api/chat`.
