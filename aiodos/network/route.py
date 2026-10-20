@@ -28,6 +28,7 @@ NO_PROXY = {"http": None, "https": None}    # le compagnon est sur 127.0.0.1 : j
 _lock = threading.Lock()
 _companion = None          # compagnon actif (aiodos.network.companion.Companion)
 _lan_down = {}             # machine -> instant (monotonic) jusqu'auquel éviter le réseau local
+_lan_allowed = True        # réseau local coupé dans les réglages : Internet seulement
 
 
 @dataclass(frozen=True)
@@ -68,10 +69,16 @@ def _host(address: str) -> str:
     return f"[{address}]" if ":" in address and not address.startswith("[") else address
 
 
+def set_lan(allowed: bool):
+    """Réseau local activé ou coupé (network/manager.py)."""
+    global _lan_allowed
+    _lan_allowed = bool(allowed)
+
+
 def paths_for(peer: dict, pairing: bool = False) -> list:
     """Chemins à essayer, dans l'ordre, pour joindre cette machine."""
     lan = None
-    if peer.get("address") and peer.get("port"):
+    if _lan_allowed and peer.get("address") and peer.get("port"):
         lan = Path("lan", f"http://{_host(str(peer['address']))}:{int(peer['port'])}")
     net = None
     comp = _companion

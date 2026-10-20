@@ -3,6 +3,11 @@ une machine inactive depuis un jour (simulés : sur batterie, ou pendant que que
 sert du PC, le travail de fond et le prêt ralentiraient les tests, cf. jobs/pacing.py et
 network/worker.py ; les nœuds lancés par les tests en héritent)."""
 import hashlib
+import os
+
+# Réseau, Internet et prêt sont activés par défaut depuis le 20/10 : les essais les gardent
+# éteints tant qu'ils ne les demandent pas (settings.FOR_MY_MACHINES), nœuds lancés compris
+os.environ["AIODOS_QUIET"] = "1"
 
 import numpy as np
 import pytest

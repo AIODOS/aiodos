@@ -2,6 +2,7 @@ package fr.arkane.aiodos;
 
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -165,17 +166,32 @@ public class MainActivity extends Activity {
             | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
         run.putExtra("com.termux.RUN_COMMAND_PENDING_INTENT",
             PendingIntent.getActivity(this, 1, back, flags));
+        ComponentName started;
         try {
-            if (Build.VERSION.SDK_INT >= 26) {
-                startForegroundService(run);
-            } else {
-                startService(run);
-            }
+            started = Build.VERSION.SDK_INT >= 26 ? startForegroundService(run) : startService(run);
         } catch (RuntimeException e) {
             problem("Termux refuse la commande (" + e.getMessage() + "). Dans Termux : "
                 + "echo allow-external-apps=true >> ~/.termux/termux.properties");
+            return;
         }
+        if (started == null) {               // Termux mis en veille par Android : introuvable
+            problem(SLEEPING);
+            return;
+        }
+        final int attempt = ++attempts;
+        status.postDelayed(() -> {           // jamais d'attente sans fin
+            if (attempt == attempts && url == null && status.getVisibility() == View.VISIBLE) {
+                problem("Le nœud AIODOS ne répond pas après 3 minutes. " + SLEEPING);
+            }
+        }, 180_000);
     }
+
+    /** Termux en « Restreint » (batterie) : Android le cache aux autres applications. */
+    static final String SLEEPING = "Termux est mis en veille par Android. Paramètres → "
+        + "Applications → Termux → Batterie → « Non restreinte » (et pas dans les applications "
+        + "en veille profonde), puis rouvre AIODOS.";
+
+    private int attempts;
 
     @Override
     protected void onNewIntent(Intent intent) {

@@ -83,6 +83,7 @@ async def internet_status(request: Request):
 async def internet_enable(body: EnableIn, request: Request):
     manager = _manager(request)
     await asyncio.to_thread(settings.set_value, "internet_enabled", body.enabled)
+    await manager.apply()                 # réseau local coupé : le réseau suit Internet
     await manager.internet.apply()
     manager.changed()
     return await manager.internet.live_status()

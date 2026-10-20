@@ -14,7 +14,8 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import activity, client, consult, invitations, peers, placement, sharing
+from aiodos.network import (activity, client, consult, invitations, peers, placement, route,
+                            sharing)
 from aiodos.network.client import PeerError
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
@@ -63,6 +64,7 @@ class NetworkManager:
         self._server = None
         self._server_task = None
         self._discovery = None
+        self._bound = None                # adresse d'écoute du serveur entre machines
         self._refresh_task = None
         self._last_profile = {}
         self._loop = None
@@ -72,8 +74,22 @@ class NetworkManager:
         return settings.get("node_name")
 
     @property
-    def enabled(self) -> bool:
+    def local(self) -> bool:
+        """Réseau local : écoute sur le réseau, découverte, chemin direct entre machines."""
         return self.force or bool(settings.get("network_enabled"))
+
+    @property
+    def enabled(self) -> bool:
+        """Le réseau tourne si le réseau local OU Internet est activé : réseau local coupé,
+        mes machines restent jointes par Internet (comme les pairs d'un client BitTorrent)."""
+        return self.local or self.internet.enabled
+
+    def _listen_host(self) -> str:
+        """Réseau local coupé : le serveur entre machines n'écoute que sur cette machine,
+        pour le compagnon Internet qui lui relaie les requêtes."""
+        if self.local or self.host not in ("0.0.0.0", "::"):
+            return self.host
+        return "127.0.0.1"
 
     @property
     def p2p_port(self) -> int:
@@ -85,20 +101,42 @@ class NetworkManager:
 
     # --------------------------------------------------------- cycle de vie
     async def apply(self):
-        """Démarre ou arrête le réseau selon le réglage."""
+        """Démarre ou arrête le réseau selon les réglages (réseau local, Internet) ; le réseau
+        local allumé ou coupé, le serveur repart avec la bonne écoute."""
+        if self.enabled and self.running and self._bound != self._listen_host():
+            await self._stop()
         if self.enabled and not self.running:
             await self._start()
         elif not self.enabled and self.running:
             await self._stop()
+        elif self.running:
+            await self._sync_local()
         self.changed()
+
+    async def _sync_local(self):
+        """Réseau local allumé ou coupé : chemin direct entre machines, et découverte."""
+        route.set_lan(self.local)
+        if self.local and self.discovery_on and self._discovery is None:
+            discovery = Discovery(int(settings.get("discovery_port")), self._beacon,
+                                  self._on_beacon, self._manual_targets)
+            try:
+                await discovery.start()
+                self._discovery = discovery
+            except OSError as exc:
+                self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
+        elif not self.local and self._discovery is not None:
+            await self._discovery.stop()
+            self._discovery = None
+            self.visible.clear()
 
     async def _start(self):
         from aiodos.network.p2p_app import create_p2p_app
         self._loop = asyncio.get_running_loop()
         self.error = None
         app = create_p2p_app(self)
+        host = self._bound = self._listen_host()
         for attempt in range(PORT_ATTEMPTS):
-            config = uvicorn.Config(app, host=self.host, port=self.p2p_port,
+            config = uvicorn.Config(app, host=host, port=self.p2p_port,
                                     log_config=None, log_level="warning", access_log=False)
             self._server = uvicorn.Server(config)
             self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
@@ -116,20 +154,15 @@ class NetworkManager:
             log.warning(self.error)
             self._server_task = None
             return
-        if self.discovery_on:
-            self._discovery = Discovery(int(settings.get("discovery_port")), self._beacon,
-                                        self._on_beacon, self._manual_targets)
-            try:
-                await self._discovery.start()
-            except OSError as exc:
-                self._discovery = None
-                self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
+        await self._sync_local()
         self.internet.launch()                            # si activé ; prêt un peu plus tard
         self._refresh_task = asyncio.create_task(self._refresh_loop(), name="aiodos-peers")
         if self.worker:
             self.worker.start()
-        address = lan_address() if self.host == "0.0.0.0" else None
-        if address:
+        address = lan_address() if host == "0.0.0.0" else None
+        if not self.local:
+            log.info("Réseau local coupé : mes machines jointes par Internet seulement")
+        elif address:
             log.info("Réseau local actif sur %s:%s (pour ajouter cette machine depuis une "
                      "autre : %s:%s)", self.host, self.p2p_port, address, self.p2p_port)
         else:
@@ -335,7 +368,8 @@ class NetworkManager:
         working = self.worker.snapshot() if self.worker and self.running else None
         activity.annotate(paired, (working or {}).get("working"))   # en direct (activity.py)
         return {
-            "enabled": self.enabled, "running": self.running, "error": self.error,
+            "enabled": self.enabled, "local": self.local, "running": self.running,
+            "error": self.error,
             "node_id": self.node_id, "name": self.name(), "port": self.p2p_port,
             "discovery": self._discovery is not None,
             "peers": paired,

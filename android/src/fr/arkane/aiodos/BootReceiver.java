@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
+import android.util.Log;
 
 /**
  * Démarrage du téléphone : le nœud AIODOS démarre dans Termux, sans ouvrir l'appli, si
@@ -29,9 +30,11 @@ public class BootReceiver extends BroadcastReceiver {
             } else {
                 context.startService(run);
             }
+            Log.i("AIODOS", "Démarrage du téléphone : nœud AIODOS demandé à Termux");
         } catch (RuntimeException e) {
             // Termux absent, autorisation retirée, ou démarrage refusé : l'appli le dira
             // à sa prochaine ouverture
+            Log.w("AIODOS", "Démarrage du téléphone : Termux n'a pas pu être appelé", e);
         }
     }
 }

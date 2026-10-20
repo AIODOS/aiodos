@@ -26,10 +26,12 @@ def free_port() -> int:
 
 
 class Node:
-    def __init__(self, data_dir: Path, name: str, args=(), root: Path = APP_ROOT):
+    def __init__(self, data_dir: Path, name: str, args=(), root: Path = APP_ROOT,
+                 local: bool = True):
         self.data_dir = data_dir
         self.name = name
         self.args = list(args)            # options supplémentaires (ex. --slots embed=0)
+        self.local = local                # False : réseau local selon le réglage, pas forcé
         self.root = root                  # code lancé (une copie : machine installée)
         self.port = free_port()
         self.p2p_port = free_port()
@@ -66,7 +68,8 @@ class Node:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.process = subprocess.Popen(
             [sys.executable, "-m", "aiodos", "--headless", "--no-migrate",
-             "--port", str(self.port), "--network", "--p2p-host", "127.0.0.1",
+             "--port", str(self.port), *(["--network"] if self.local else []),
+             "--p2p-host", "127.0.0.1",
              "--p2p-port", str(self.p2p_port), "--no-discovery", *self.args],
             cwd=self.root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace")

@@ -123,3 +123,26 @@ def test_indexing_is_shared_through_the_companions(owner_and_lender, tmp_path):
     # B demande, A répond (au moins 3 × lease, blob, result)
     assert _seen_by_companion(b, a)["requests_out"] >= 9
     assert _seen_by_companion(a, b)["requests_in"] >= 9
+
+
+def test_with_the_local_network_off_my_machines_stay_reachable_by_internet(tmp_path):
+    """Réseau local coupé : mes machines restent jointes par Internet, comme les pairs d'un
+    client BitTorrent (demande de l'auteur, 20/10) ; plus de découverte ni de chemin direct."""
+    a = Node(tmp_path / "a", "PC portable", ["--internet-local"], local=False)
+    b = Node(tmp_path / "b", "PC fixe", ["--internet-local"], local=False)
+    a.preset(network_enabled=True).start()
+    b.preset(network_enabled=True).start()
+    try:
+        _, b_id = _connect_by_internet(a, b)
+        for node in (a, b):
+            node.api("PUT", "/settings", {"p2p_route": "auto"})
+            state = node.api("POST", "/network/enable", {"enabled": False})
+            assert state["enabled"] and state["local"] is False and not state["discovery"]
+            _ready(node)
+        peer = a.wait_for(lambda: (p := a.api("POST", f"/network/peers/{b_id}/refresh")["peers"][0])
+                          ["online"] and p, what="PC fixe jointe par Internet")
+        assert peer["profile"]["name"] == "PC fixe"
+        assert _seen_by_companion(a, b)["connected"]          # par les compagnons
+    finally:
+        a.stop()
+        b.stop()

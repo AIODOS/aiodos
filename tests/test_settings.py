@@ -53,3 +53,19 @@ def test_changing_a_companion_option_relaunches_it(data_dir, monkeypatch):
         assert values["internet_relays"] == ["n0", "https://relais.example.org/"]
         client.put("/api/settings", json={"internet_portmap": False}, headers=headers)
         assert relaunched == [True, True]
+
+
+def test_my_machines_compute_together_from_the_first_launch(monkeypatch):
+    """Décision de l'auteur (20/10) : réseau local, Internet, calcul et prêt entre mes
+    machines activés dès la première ouverture ; les amis et le réseau public restent sur
+    autorisation. Les essais automatiques (AIODOS_QUIET=1) les gardent éteints."""
+    monkeypatch.delenv("AIODOS_QUIET", raising=False)
+    for key in settings.FOR_MY_MACHINES:
+        assert settings.get(key) is True and settings.get_all()[key] is True
+    for key in ("public_network", "lend_images_friends", "images_from_friends",
+                "auto_route_friends"):
+        assert settings.get(key) is False
+    settings.set_value("internet_enabled", False)          # coupé ensuite : reste coupé
+    assert settings.get("internet_enabled") is False
+    monkeypatch.setenv("AIODOS_QUIET", "1")
+    assert settings.get("network_enabled") is False

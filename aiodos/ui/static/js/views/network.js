@@ -216,19 +216,25 @@ function renderPublic(net) {
 // --------------------------------------------------------------------- état
 function renderState(net) {
   const box = $('#net-state', root);
-  const detail = !net.enabled
-    ? "Rien ne sort de cette machine. Active le réseau pour l'appairer avec tes autres PC."
+  // Réseau local coupé, mes machines restent jointes par Internet (net.enabled : le réseau tourne)
+  const local = net.local ?? net.enabled;
+  const detail = !local
+    ? (net.internet?.enabled
+      ? 'Plus de découverte ni de chemin direct sur ton réseau : tes machines appairées restent jointes '
+        + 'par Internet.'
+      : "Rien ne sort de cette machine. Active le réseau local ou Internet pour l'appairer avec tes "
+        + 'autres machines.')
     : net.running
       ? `Cette machine (« ${esc(net.name)} ») est visible sur ton réseau, port ${net.port}` +
         (net.discovery ? ', découverte automatique active.' : '.')
       : 'Démarrage…';
   box.innerHTML = `
     <div class="setting-row" style="border:0;padding-top:0">
-      <div class="txt"><b>${net.enabled ? 'Réseau local activé' : 'Réseau local désactivé'}</b><small>${detail}</small></div>
-      <label class="switch"><input type="checkbox" id="net-toggle" ${net.enabled ? 'checked' : ''}><span></span></label>
+      <div class="txt"><b>${local ? 'Réseau local activé' : 'Réseau local désactivé'}</b><small>${detail}</small></div>
+      <label class="switch"><input type="checkbox" id="net-toggle" ${local ? 'checked' : ''}><span></span></label>
     </div>
     ${net.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(net.error)}</div></div>` : ''}
-    ${net.enabled ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>À l'activation,
+    ${local ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>À l'activation,
       Windows demandera sans doute l'autorisation du pare-feu pour Python : accepte pour les
       <b>réseaux privés</b> seulement.</div></div>`}`;
   $('#net-toggle', box).onchange = async e => {
@@ -474,9 +480,10 @@ async function showConsulted(peer) {
 // ----------------------------------------------------------- machines détectées
 function renderVisible(net) {
   const box = $('#net-visible', root);
-  if (!net.running) {
+  if (!net.running || !(net.local ?? true)) {
     box.innerHTML = `<h2>${icon('search')}Machines détectées</h2>
-      <p class="hint" style="margin:0">Active le réseau pour voir les autres machines AIODOS de ton réseau.</p>`;
+      <p class="hint" style="margin:0">Active le réseau local pour voir les autres machines AIODOS de ton réseau
+      (par Internet : « Inviter un ami » ou une de tes machines, plus haut).</p>`;
     return;
   }
   box.innerHTML = `

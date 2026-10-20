@@ -5,6 +5,7 @@ remplace par un indicateur « renseignée » et les 4 derniers caractères.
 """
 import json
 import logging
+import os
 import socket
 
 from aiodos import db
@@ -58,13 +59,17 @@ DEFAULTS = {
     "vision_model": "qwen2.5vl:7b",
     "media_transcribe": True,
     "whisper_model": "small",
-    # --- Réseau local (phase 1) : désactivé tant que l'utilisateur ne l'active pas ---
-    "network_enabled": False,
+    # --- Ce qui fait calculer mes machines ensemble est activé dès la première ouverture
+    # (décision de l'auteur, 20/10/2026 : « le logiciel doit fonctionner dès la première
+    # ouverture » ; on peut tout couper ensuite). Les amis et le réseau public restent sur
+    # autorisation (décisions du 18/10). Cf. FOR_MY_MACHINES plus bas.
+    # --- Réseau local (phase 1) ---
+    "network_enabled": True,
     "p2p_port": 47701,                # échanges chiffrés entre nœuds
     "discovery_port": 47700,          # annonces UDP sur le réseau local
     "manual_peers": [],               # adresses ajoutées à la main (« ip:port »)
-    # --- Internet (phase 2) : compagnon aiodos-net, désactivé tant que l'utilisateur ne l'active pas ---
-    "internet_enabled": False,        # relier mes machines appairées par Internet
+    # --- Internet (phase 2) : compagnon aiodos-net ---
+    "internet_enabled": True,         # relier mes machines appairées par Internet
     "internet_relays": ["n0"],        # « n0 » (relais publics de n0), « none », ou https://…
     "internet_directory": ["n0-dns", "dht"],   # DNS de n0 d'abord, DHT Mainline en secours
     "internet_portmap": True,         # ouverture de port automatique sur la box (UPnP, PCP…)
@@ -75,8 +80,8 @@ DEFAULTS = {
     # --- Nœud & partage de puissance ---
     "node_name": "",
     "offload_enabled": True,          # confier des unités à mes machines appairées
-    "share_enabled": False,           # calculer pour mes machines appairées
-    "lend_models": False,             # répondre aux conversations de mes machines appairées
+    "share_enabled": True,            # calculer pour mes machines appairées
+    "lend_models": True,              # répondre aux conversations de mes machines appairées
     # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
     # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
     # en priorité basse, jamais sur batterie (network/worker.py, docs/arriere-plan.md)
@@ -90,7 +95,7 @@ DEFAULTS = {
     "battery_mode": "eco",            # sur batterie : eco (ménagé) | pause | normal
     "close_to_tray": True,            # Windows : fermer la fenêtre la cache (ui/tray.py)
     # --- Gros modèles répartis entre mes machines (docs/gros-modeles.md) ---
-    "lend_gpu": False,                # prêter ma carte graphique à mes machines (llama.cpp RPC)
+    "lend_gpu": True,                 # prêter ma carte graphique à mes machines (llama.cpp RPC)
     "lend_gpu_device": "",            # carte prêtée (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "llamacpp_dir": "",               # dossier de llama.cpp ; vide : celui livré avec les versions
     # --- Images réparties entre mes machines (imaging/, docs/generation-repartie.md) ---
@@ -136,6 +141,18 @@ def rag_threshold(model) -> float:
     return DEFAULTS["rag_min_score"]
 
 
+# Activés par défaut depuis le 20/10/2026 ; AIODOS_QUIET=1 (essais automatiques : nœuds sans
+# réseau ni compagnon tant qu'un test ne les demande pas) les garde éteints.
+FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend_models",
+                   "lend_gpu")
+
+
+def default(key):
+    if key in FOR_MY_MACHINES and os.environ.get("AIODOS_QUIET") == "1":
+        return False
+    return DEFAULTS.get(key)
+
+
 def get(key):
     row = db.query_one("SELECT value FROM settings WHERE key=?", (key,))
     if row is None:
@@ -143,7 +160,7 @@ def get(key):
             return machine_name()
         if key == "rag_min_score":
             return rag_threshold(get("embed_model"))
-        return DEFAULTS.get(key)
+        return default(key)
     value = _decode(row["value"])
     return _open(key, value) if key in SECRET_KEYS else value
 
@@ -158,7 +175,7 @@ def _open(key, value):
 
 
 def get_all() -> dict:
-    values = dict(DEFAULTS)
+    values = {key: default(key) for key in DEFAULTS}
     values["node_name"] = machine_name()
     stored = set()
     for row in db.query("SELECT key, value FROM settings"):
