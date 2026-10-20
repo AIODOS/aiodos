@@ -1,5 +1,10 @@
-"""Client de l'API Ollama locale. Fonctions bloquantes (réseau) : à appeler hors
-de la boucle asyncio (thread de la file de tâches ou asyncio.to_thread)."""
+"""Les modèles de cette machine : le moteur intégré (llama.cpp, aiodos/llm/) quand il est
+là, sinon l'API d'Ollama. Décision de l'auteur (20/10/2026) : se passer d'Ollama ; ce module
+reste l'unique porte d'entrée, le reste d'AIODOS n'a pas à savoir qui répond. Réglage
+« llm_engine » : auto (le moteur intégré dès que llama.cpp est là), integrated, ollama.
+
+Fonctions bloquantes (réseau) : à appeler hors de la boucle asyncio (thread de la file de
+tâches ou asyncio.to_thread)."""
 import json
 import threading
 import time
@@ -8,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from aiodos import settings
+from aiodos.llm import integrated
 
 _caps_cache = {}
 _caps_lock = threading.Lock()
@@ -23,6 +29,14 @@ _threads = {"limit": None, "cpu": set(), "checked": {}}
 LOADED_TTL = 30
 
 
+def use_integrated() -> bool:
+    """Le moteur intégré répond-il ? (réglage llm_engine, et llama.cpp présent)"""
+    choice = str(settings.get("llm_engine") or "auto")
+    if choice == "ollama":
+        return False
+    return choice == "integrated" or integrated.available()
+
+
 def base() -> str:
     url = (settings.get("ollama_url") or "http://127.0.0.1:11434").rstrip("/")
     # Sous Windows, « localhost » se résout d'abord en IPv6 (::1) alors qu'Ollama
@@ -31,6 +45,8 @@ def base() -> str:
 
 
 def version():
+    if use_integrated():
+        return integrated.version()
     try:
         return requests.get(base() + "/api/version", timeout=2).json().get("version")
     except Exception:
@@ -39,6 +55,8 @@ def version():
 
 def list_models(max_age=MODELS_TTL) -> list:
     """Modèles installés (copies : l'appelant peut les modifier sans toucher au cache)."""
+    if use_integrated():
+        return integrated.list_models(max_age)
     with _caps_lock:
         cached = _models_cache["models"]
         if cached is not None and time.monotonic() - _models_cache["at"] < max_age:
@@ -63,6 +81,8 @@ def list_models(max_age=MODELS_TTL) -> list:
 
 def loaded_models() -> list:
     """Modèles actuellement chargés en mémoire (et part en VRAM)."""
+    if use_integrated():
+        return integrated.loaded_models()
     try:
         r = requests.get(base() + "/api/ps", timeout=3)
         return [{"name": m["name"], "size": m.get("size", 0),
@@ -76,6 +96,8 @@ def pull(model: str, progress=None, stop=None, timeout=(10, 600)) -> bool:
     """Télécharge un modèle (POST /api/pull, en flux). progress(reçu, total, étape) à
     chaque nouvelle : octets de toutes les couches. Vrai une fois installé ; faux si
     `stop` est levé en route ; RuntimeError si Ollama refuse."""
+    if use_integrated():
+        return integrated.pull(model, progress=progress, stop=stop)
     layers = {}
     with requests.post(base() + "/api/pull", json={"model": model, "stream": True},
                        stream=True, timeout=timeout) as r:
@@ -106,6 +128,8 @@ def unload_chat_models() -> list:
     """Décharge de la carte graphique les modèles de conversation (keep_alive 0) : sa
     mémoire va à un autre moteur (images). Les modèles d'embedding, petits, restent pour
     l'indexation ; la prochaine conversation recharge son modèle. → noms déchargés."""
+    if use_integrated():
+        return integrated.unload_chat_models()
     names = []
     for m in loaded_models():
         if not m["size_vram"] or "completion" not in capabilities(m["name"]):
@@ -121,6 +145,8 @@ def unload_chat_models() -> list:
 
 def capabilities(model: str) -> list:
     """Capacités déclarées par Ollama : completion, vision, thinking, tools, embedding…"""
+    if use_integrated():
+        return integrated.capabilities(model)
     with _caps_lock:
         if model in _caps_cache:
             return _caps_cache[model]
@@ -137,6 +163,8 @@ def capabilities(model: str) -> list:
 def capabilities_many(models) -> dict:
     """Capacités de plusieurs modèles, demandées en parallèle (/api/show peut
     prendre 2 s sur un gros modèle la première fois)."""
+    if use_integrated():
+        return integrated.capabilities_many(models)
     with _caps_lock:
         missing = [m for m in models if m not in _caps_cache]
     if missing:
@@ -155,6 +183,10 @@ def chat_stream(model, messages, think=None, stop=None, options=None, stats=Fals
     stats   : à la fin, un couple ("stats", {"prompt_tokens", "completion_tokens",
               "done_reason"}) en plus (passerelle vers les autres outils).
     """
+    if use_integrated():
+        yield from integrated.chat_stream(model, messages, think=think, stop=stop,
+                                          options=options, stats=stats, timeout=timeout)
+        return
     payload = {"model": model, "messages": messages, "stream": True}
     if think is False and "thinking" in capabilities(model):
         payload["think"] = False
@@ -222,6 +254,8 @@ def embed_options(model: str) -> dict:
 def embed(texts, model=None, timeout=180) -> list:
     """Vecteurs d'embedding d'une liste de textes (envoyés par lots). timeout : délai de
     chaque lot (plus court pour une recherche venue d'une autre machine)."""
+    if use_integrated():
+        return integrated.embed(texts, model, timeout)
     model = model or settings.get("embed_model")
     vectors = []
     for start in range(0, len(texts), 16):
@@ -241,6 +275,8 @@ def embed(texts, model=None, timeout=180) -> list:
 
 def generate_with_images(model, prompt, images_b64, timeout=300) -> str:
     """Appel ponctuel à un modèle de vision (OCR, description d'image)."""
+    if use_integrated():
+        return integrated.generate_with_images(model, prompt, images_b64, timeout)
     r = requests.post(base() + "/api/generate",
                       json={"model": model, "prompt": prompt,
                             "images": images_b64, "stream": False},

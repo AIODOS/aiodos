@@ -24,6 +24,7 @@ from pathlib import Path
 import requests
 
 from aiodos.cluster import engine, plan, weights
+from aiodos.llm.messages import SAMPLING, for_template  # noqa: F401  (aussi cluster.group.for_template)
 from aiodos.network import client, peers, route, sharing
 from aiodos.network.client import PeerError
 from aiodos.node import identity
@@ -37,12 +38,6 @@ KEEP_EVERY = 30               # nouvelles données aux machines qui prêtent (cf
 LOAD_TIMEOUT = 1800           # premier chargement : les poids traversent le réseau
 CONTEXT = 8192
 NO_PROXY = {"http": None, "https": None}
-PARAGRAPH = "\n\n"            # entre deux consignes réunies
-# Réglages d'échantillonnage d'Ollama (lending.SAMPLING) → champs de llama-server
-SAMPLING = {"num_predict": "max_tokens", "temperature": "temperature", "top_p": "top_p",
-            "top_k": "top_k", "min_p": "min_p", "seed": "seed", "stop": "stop",
-            "repeat_penalty": "repeat_penalty", "presence_penalty": "presence_penalty",
-            "frequency_penalty": "frequency_penalty"}
 
 _lock = threading.Lock()
 _groups = {}                  # modèle -> Group
@@ -253,6 +248,7 @@ class Group:
                                timeout=(10, 900), proxies=NO_PROXY) as r:
                 if r.status_code >= 400:
                     raise RuntimeError(f"llama-server : {r.text[:300]}")
+                r.encoding = "utf-8"          # flux sans encodage déclaré : pas de Latin-1
                 for line in r.iter_lines(decode_unicode=True):
                     if stop is not None and stop.is_set():
                         break
@@ -286,33 +282,6 @@ class Group:
                                "peut-être partie. Réessaie, il sera remonté.") from exc
         finally:
             self.last_used = time.monotonic()
-
-
-def for_template(messages) -> list:
-    """Messages acceptés par les modèles de conversation les plus stricts (Mistral exige
-    l'alternance utilisateur / assistant, Ollama le cachait) : une seule consigne
-    « system », en tête ; les consignes données plus loin (résultats web, rappel juste
-    avant la question) rejoignent le message de l'utilisateur qui les suit ; deux messages
-    de suite du même rôle sont réunis."""
-    head, rest, pending = [], [], []
-    for message in messages:
-        role, content = message["role"], message.get("content") or ""
-        if role == "system":
-            (pending if rest else head).append(content)
-            continue
-        if pending and role == "user":
-            content = PARAGRAPH.join(pending + [content])
-            pending = []
-        if rest and rest[-1]["role"] == role:
-            rest[-1]["content"] += PARAGRAPH + content
-        else:
-            rest.append({"role": role, "content": content})
-    if pending:
-        if rest and rest[-1]["role"] == "user":
-            rest[-1]["content"] += PARAGRAPH + PARAGRAPH.join(pending)
-        else:
-            head.extend(pending)
-    return ([{"role": "system", "content": PARAGRAPH.join(head)}] if head else []) + rest
 
 
 def _forget(group: Group):

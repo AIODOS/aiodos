@@ -123,4 +123,9 @@ def header(path) -> dict:
         "experts_used": int(get("expert_used_count")),
         "vocabulary": int(meta.get("tokenizer.ggml.tokens", 0) or 0),
         "size": path.stat().st_size,
+        # Moteur intégré (aiodos/llm/models.py) : un modèle d'embedding déclare sa mise en
+        # commun ; le modèle de conversation dit s'il sait réfléchir ou appeler des outils
+        "pooling": get("pooling_type", None),
+        "template": str(meta.get("tokenizer.chat_template") or ""),
+        "name": str(meta.get("general.name") or ""),
     }

@@ -5,7 +5,7 @@
 > jusqu'au 16/10/2026 ; ses données sont reprises telles quelles.
 
 Atelier d'IA **100 % local** : chat, code et documents avec des modèles open source
-(Mistral, Qwen…) via [Ollama], sur ta machine. **Plusieurs machines peuvent
+(Mistral, Qwen…), sur ta machine, servis par llama.cpp intégré à AIODOS (ou par [Ollama]). **Plusieurs machines peuvent
 travailler ensemble** : chaque gros travail est découpé en petites unités
 indépendantes, que tes PC appairés se partagent sur le réseau local.
 
@@ -185,7 +185,9 @@ mesures :
 
 **Windows, avec l'installeur** (`AIODOS-Setup-<version>.exe`) : il installe AIODOS pour
 toi seul, sans droits administrateur, avec son propre Python, le compagnon Internet,
-llama.cpp et stable-diffusion.cpp. Il propose de télécharger Ollama s'il manque. Tes
+llama.cpp et stable-diffusion.cpp. Plus besoin d'Ollama : le moteur intégré (llama.cpp)
+télécharge ses modèles lui-même, et lit tels quels ceux qu'Ollama a déjà téléchargés
+([docs/moteur-integre.md](docs/moteur-integre.md)). Tes
 données vont dans `%LOCALAPPDATA%\AIODOS`, et les versions suivantes arrivent par les
 mises à jour signées. L'installeur n'est pas encore signé : Windows demande de confirmer
 (« Informations complémentaires », puis « Exécuter quand même »). Pour le construire :
@@ -198,7 +200,8 @@ interface.
 
 **À la main**, depuis le code :
 
-1. Installer [Ollama] et quelques modèles, par exemple :
+1. Le moteur intégré a besoin de llama.cpp (réglage `llamacpp_dir`, ou celui livré avec
+   les versions) ; sinon, installer [Ollama] et quelques modèles, par exemple :
    ```
    ollama pull qwen2.5-coder:7b
    ollama pull mistral:7b
@@ -258,7 +261,11 @@ aiodos/
 ├── db.py              base SQLite unique (WAL, transactions)
 ├── settings.py        réglages (les clés API ne sortent jamais en clair)
 ├── render.py          Markdown → HTML sûr, coloration Pygments
-├── services/          Ollama, extraction de fichiers, médias, web, cloud
+├── llm/               moteur intégré : llama.cpp en mode routeur (engine.py), modèles
+│                      d'AIODOS et d'Ollama (models.py), catalogue et téléchargement
+│                      (catalog.py, download.py), mêmes fonctions qu'Ollama (integrated.py)
+├── services/          modèles (ollama.py : moteur intégré ou Ollama), extraction de
+│                      fichiers, médias, web, cloud
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
 │                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses

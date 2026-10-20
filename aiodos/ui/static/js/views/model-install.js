@@ -71,7 +71,9 @@ export async function cancelInstall() {
 export function finished(ev, reload) {
   if (ev?.running || ev?.done === null || ev?.done === undefined) return false;
   if (ev.done) {
-    toast(`${ev.model} installé : il répond maintenant sur ${here()}.`, 'ok', 6000);
+    toast(/^embeddinggemma/.test(ev.model)
+      ? `${ev.model} installé : tes bibliothèques fonctionnent sur ${here()}.`
+      : `${ev.model} installé : il répond maintenant sur ${here()}.`, 'ok', 6000);
     reload();
   } else if (ev.error) {
     toast(`Installation de ${ev.model} : ${ev.error}`, 'err', 8000);

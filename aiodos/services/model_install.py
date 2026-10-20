@@ -34,6 +34,12 @@ CATALOG = [
                                         "ou 16 Go de mémoire."},
     {"name": "phi4-mini", "label": "Phi-4 mini · 3,8 milliards", "size": 2_490_000_000,
      "license": "MIT", "about": "Microsoft : vif pour raisonner, moins à l'aise en français."},
+    # Le modèle des bibliothèques (docs/embeddings.md) : sans lui, pas de recherche dans
+    # les documents. Celui d'Ollama ne se charge pas dans le moteur intégré
+    # (docs/moteur-integre.md) : sa version standard, le même modèle, le remplace
+    {"name": "embeddinggemma", "label": "EmbeddingGemma · pour les bibliothèques",
+     "size": 333_590_944, "license": "Gemma", "kind": "embedding",
+     "about": "Range tes bibliothèques pour y chercher : indispensable pour elles, très léger."},
 ]
 NAMES = {m["name"] for m in CATALOG}
 

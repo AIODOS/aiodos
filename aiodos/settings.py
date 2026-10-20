@@ -36,6 +36,9 @@ DEFAULTS = {
         "Quand tu écris du code, utilise des blocs markdown avec le nom du langage."
     ),
     "ollama_url": "http://127.0.0.1:11434",
+    # Moteur des modèles (services/ollama.py) : « auto » = le moteur intégré (llama.cpp) dès
+    # qu'il est là, sinon Ollama ; « integrated » ; « ollama » (décision du 20/10/2026)
+    "llm_engine": "auto",
     # Mode automatique (network/placement.py) : mes machines seulement, sauf si l'on
     # accepte que la conversation passe aussi chez un ami le temps de la réponse
     "auto_route_friends": False,

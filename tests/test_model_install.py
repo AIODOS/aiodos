@@ -40,7 +40,10 @@ def test_the_advice_fits_the_device(monkeypatch, phone, vram, ram, best):
     assert found["phone"] is phone and found["ollama"] is True
     if phone:                                   # rien de plus de 3 Go sur un téléphone
         assert all(m["size"] <= 3 * GB for m in found["models"])
-    assert {m["license"] for m in found["models"]} <= {"Apache-2.0", "MIT"}
+    # Licences libres pour converser ; le modèle des bibliothèques, lui, affiche la sienne
+    chat = [m for m in found["models"] if m.get("kind") != "embedding"]
+    assert {m["license"] for m in chat} <= {"Apache-2.0", "MIT"}
+    assert [m["license"] for m in found["models"] if m.get("kind") == "embedding"] == ["Gemma"]
 
 
 def test_what_fits_and_what_is_already_there(monkeypatch):
