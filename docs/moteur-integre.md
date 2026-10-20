@@ -52,8 +52,10 @@ téléchargée sous le même nom, passe), avec un message qui dit de l'installer
 | embeddinggemma | ggml-org/embeddinggemma-300M-GGUF (Q8_0) | conditions de Gemma | 334 Mo |
 
 embeddinggemma est le modèle des bibliothèques (docs/embeddings.md) : sa version
-standard est le même modèle que celui d'Ollama ; à vérifier sur les vecteurs déjà
-enregistrés avant de décider s'il faut réindexer.
+standard est le même modèle que celui d'Ollama. **Mesuré le 20/10** sur les passages
+enregistrés de l'AIODOS installé : similarité 0,9996 en moyenne (0,9995 au moins) entre
+les vecteurs d'Ollama et ceux du moteur intégré, mêmes passages en tête de recherche :
+pas de réindexation à prévoir. Téléchargé et vérifié (SHA-256) en une dizaine de secondes.
 
 ## Reste à faire
 
