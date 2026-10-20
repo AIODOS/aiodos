@@ -66,6 +66,16 @@ téléchargée sous le même nom, passe), avec un message qui dit de l'installer
   modèle est chargé (carte graphique du PC : nomic-embed-text 25 → 104 Mio, bge-m3 19 → 80,
   qwen3-embedding:0.6b 24 → 96, embeddinggemma-2:270m 82 → 340), à mesurer sur le téléphone.
 
+**Essai réel par AIODOS** (nœud sans fenêtre, dossier de données à part, réglage
+`llamacpp_dir`, Ollama injoignable) : 18 vérifications sur 18. qwen2.5-coder:7b converse par
+l'interface (12,7 s chargement compris) et par la passerelle (`/v1/chat/completions` en
+flux). Chaque enfant, celui de la conversation puis celui de l'embedding, répond 401 sans
+clé ou avec une mauvaise clé (`/slots`, `/v1/models`, `/props`, `/v1/chat/completions`,
+`/v1/embeddings`), 200 sur `/health`. Déchargé (`keep_alive` 0 : l'enfant s'arrête), le
+modèle se recharge à la conversation suivante (6,9 s), dans un nouvel enfant protégé lui
+aussi. Embeddings de 4 662 et 6 438 caractères acceptés ; 6 882 (2 172 jetons) refusés,
+avec « 2048 au plus ». Le journal du routeur ne dit plus « no API key is set ».
+
 ## Catalogue (Hugging Face, relevé le 20/10/2026)
 
 | Nom | Dépôt | Licence | Taille |
