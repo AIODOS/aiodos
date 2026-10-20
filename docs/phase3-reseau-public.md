@@ -70,6 +70,23 @@ proposer une connexion, qu'Iroh authentifie, et rien n'est confié en 3.0) ; les
 la DHT qui gardent une case voient l'adresse IP de qui l'écrit, comme pour l'annuaire DHT
 d'Iroh. Reste à mesurer derrière une box en 4G (essai PC–téléphone).
 
+**Relecture indépendante du 20/10**, ce qui en est sorti :
+- *Adresse IP et relais d'un inconnu* : Iroh joint le relais qu'un autre nœud annonce
+  (dans l'annuaire, ou dans le groupe de discussion). Un inconnu qui fait tourner son
+  propre relais verrait donc l'adresse IP d'un nœud public, et sa clé publique. Le crochet
+  de connexion d'Iroh 1.3 passe avant la recherche d'adresse : on ne peut pas l'empêcher
+  depuis AIODOS. C'est dit dans la vue Réseau ; à reprendre avec une version d'Iroh qui
+  permet de s'en tenir à ses relais, ou avec les nœuds volontaires (§ 9, point 4).
+- *Mémoire du groupe de discussion* : iroh-gossip 0.101 garde sans limite les adresses que
+  ses voisins lui donnent. La session est donc renouvelée toutes les 6 heures (même clé).
+  Défaut à signaler aux auteurs d'iroh-gossip.
+- *Cases piégées* : une case bloquée au numéro de version maximal ne fait plus planter ni
+  taire un nœud (il prend la case suivante), et les clés datées du futur sont ignorées ;
+  les clés lues sont jointes dans un ordre tiré au hasard.
+- *Réseau relancé* : après un arrêt du réseau ou d'Internet, le nœud rejoint de nouveau le
+  réseau public (le premier essai du 18/10 restait bloqué sur « Connexion… »), et une
+  session arrêtée seule repart.
+
 **Ce qui existe déjà** : le compagnon et sa clé Ed25519, ses relais, la DHT pour résoudre
 les clés (mesurée en 2.2), le protocole scellé entre nœuds.
 

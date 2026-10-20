@@ -1,5 +1,5 @@
 // Cette machine : profil du nœud, modèles, préférences de partage de puissance.
-import { get, put } from '../api.js';
+import { get, post, put } from '../api.js';
 import { $, h, esc, bytes, duration, powerText } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
@@ -12,6 +12,7 @@ const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe'
 let root;
 let shareMobile = null;            // préférences dessinées pour un téléphone ?
 let trayRow = null;                // réglage de la zone de notification dessiné ?
+let autostart = null;              // démarrage avec l'appareil (node/autostart.py)
 
 export function mountNode(container) {
   root = h(`
@@ -30,7 +31,7 @@ export function mountNode(container) {
       <div class="card" id="node-network" style="margin-top:16px"></div>
     </div></div>`);
   container.append(root);
-  on('view:shown', view => { if (view === 'node') { loadNode(); loadExecutor(); } });
+  on('view:shown', view => { if (view === 'node') { loadNode(); loadExecutor(); loadAutostart(); } });
   on('settings:loaded', () => { renderShare(); renderBackground(); });
   on('network:loaded', () => { renderNetworkSummary(); renderShareStatus(); });
   on('executor:changed', () => { renderShareStatus(); renderBackgroundStatus(); });
@@ -139,12 +140,47 @@ function renderBackground() {
         `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',
       "Il reste dans la zone de notification, près de l'horloge : le nœud continue de servir tes machines "
-      + "et d'avancer le travail de fond. Clic sur l'icône pour rouvrir, clic droit pour quitter.") : ''}`;
+      + "et d'avancer le travail de fond. Clic sur l'icône pour rouvrir, clic droit pour quitter.") : ''}
+    <div id="autostart-row"></div>`;
   $('#battery-mode', box).onchange = e => save({ battery_mode: e.target.value });
   box.querySelectorAll('input[data-key]').forEach(input => {
     input.onchange = () => save({ [input.dataset.key]: input.checked });
   });
   renderBackgroundStatus();
+  renderAutostart();
+}
+
+async function loadAutostart() {
+  try { autostart = await get('/node/autostart'); } catch { autostart = null; }
+  renderAutostart();
+}
+
+/** Démarrer avec l'appareil, en arrière-plan : Windows (raccourci du dossier Démarrage) ou
+ *  téléphone (l'appli AIODOS démarre le nœud dans Termux). */
+function renderAutostart() {
+  const box = root && $('#autostart-row', root);
+  if (!box) return;
+  if (!autostart?.supported) { box.innerHTML = ''; return; }
+  const phone = autostart.device === 'android';
+  box.innerHTML = `<div class="setting-row"><div class="txt">
+      <b>${phone ? 'Démarrer avec le téléphone' : 'Démarrer avec Windows, en arrière-plan'}</b>
+      <small>${phone
+        ? "Le nœud démarre dans Termux quand le téléphone s'allume, sans ouvrir l'appli AIODOS (il faut "
+          + "l'appli AIODOS à jour, et Termux autorisé à tourner en arrière-plan)."
+        : "À l'ouverture de ta session, AIODOS démarre sans ouvrir sa fenêtre : le nœud sert tes machines "
+          + "et avance le travail de fond ; l'icône près de l'horloge rouvre la fenêtre."}</small></div>
+    <label class="switch"><input type="checkbox" id="autostart-toggle" ${autostart.enabled ? 'checked' : ''}>
+      <span></span></label></div>`;
+  $('#autostart-toggle', box).onchange = async e => {
+    try {
+      autostart = await post('/node/autostart', { enabled: e.target.checked });
+      toast(autostart.enabled ? 'AIODOS démarrera avec cet appareil, en arrière-plan.'
+        : 'AIODOS ne démarrera plus avec cet appareil.', 'ok', 5000);
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      errorToast(err);
+    }
+  };
 }
 
 // La fenêtre de Windows (pywebview) : la seule qui a une icône dans la zone de notification

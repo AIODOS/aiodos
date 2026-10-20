@@ -39,6 +39,7 @@ class Internet:
         self.local = bool(options.get("internet_local"))      # --internet-local (tests)
         self.relay_only = options.get("internet_relay_only")  # --internet-relay-only URL (tests)
         self.companion = None
+        self.launches = 0          # +1 à chaque nouveau compagnon (réseau ou Internet relancés)
         self._exchanged = {}       # machine -> (instant, infos qu'on lui a données)
         self._sent = None          # (lancement du compagnon, liste blanche envoyée)
         self._status = None        # dernier état du compagnon (pour l'interface)
@@ -84,6 +85,7 @@ class Internet:
             return
         companion = Companion(self.forward(), self.options())
         self.companion = companion
+        self.launches += 1
         route.attach(companion)        # utilisé seulement quand il tourne
         self._sent = None
         self._spawn(self._ready(companion))

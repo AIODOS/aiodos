@@ -15,7 +15,7 @@ import requests
 
 from aiodos import instance, paths
 from aiodos.network import companion as companion_mod
-from aiodos.network.companion import Companion, CompanionError
+from aiodos.network.companion import Companion
 
 pytestmark = pytest.mark.skipif(companion_mod.find_binary() is None,
                                 reason="compagnon aiodos-net non compilé (voir compagnon/README.md)")
@@ -133,8 +133,9 @@ def test_machines_outside_the_allowlist_are_refused(two_companions):
     refused = _via(a, b, "/p2p/v1/ping", {})
     assert refused.status_code >= 500
     assert b.status()["refused"]["count"] >= 1
-    with pytest.raises(CompanionError):
-        a.set_peers([{"id": "pas une clé"}])
+    # Une clé illisible (venue d'une machine d'ami, par exemple) est écartée seule
+    reply = a.set_peers([{"id": "pas une clé"}, {"id": info["id"], "addrs": info["addrs"]}])
+    assert reply["allowed"] == 1 and len(reply["skipped"]) == 1
 
 
 NODE_THEN_KILLED = """

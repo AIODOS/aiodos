@@ -9,8 +9,9 @@ from fastapi.staticfiles import StaticFiles
 from aiodos import paths, render
 from aiodos.api.events import EventBus
 from aiodos.api.security import Guard
-from aiodos.api.routes import (chat, cluster, conversations, creations, gateway, images, jobs,
-                               knowledge, model_install, network, node, system, updates)
+from aiodos.api.routes import (autostart, chat, cluster, conversations, creations, gateway,
+                               images, jobs, knowledge, model_install, network, node, system,
+                               updates)
 from aiodos.gateway.server import Gateway
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
@@ -66,7 +67,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
     app.state.show_key = show_key
-    for module in (chat, cluster, conversations, creations, gateway, images, knowledge, jobs,
+    for module in (autostart, chat, cluster, conversations, creations, gateway, images, knowledge, jobs,
                    model_install, network, node, system, updates):
         app.include_router(module.router)
     app.include_router(system.window_router)

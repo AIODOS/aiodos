@@ -99,8 +99,7 @@ pub fn merge(current: &[(EndpointId, u32)], me: EndpointId, now: SystemTime) -> 
     let minute = minute_of(now);
     let mut entries = vec![(me, minute)];
     for (id, at) in current {
-        let fresh = *at <= minute + 5 && minute.saturating_sub(*at) <= FRESH_MINUTES;
-        if fresh && !entries.iter().any(|(seen, _)| seen == id) {
+        if fresh(*at, minute) && !entries.iter().any(|(seen, _)| seen == id) {
             entries.push((*id, *at));
         }
     }
@@ -108,37 +107,54 @@ pub fn merge(current: &[(EndpointId, u32)], me: EndpointId, now: SystemTime) -> 
     entries
 }
 
-/// Inscrit ce nœud dans sa case du créneau en cours. → nombre de clés dans la case.
+/// Une inscription récente, et pas datée du futur (au-delà de 5 minutes d'écart d'horloge) :
+/// un tricheur ne passe pas devant les autres en datant ses clés de demain.
+fn fresh(at: u32, minute: u32) -> bool {
+    at <= minute.saturating_add(5) && minute.saturating_sub(at) <= FRESH_MINUTES
+}
+
+/// Inscrit ce nœud dans sa case du créneau en cours. → nombre de clés dans la case. Une
+/// case bloquée (numéro de version au maximum, réécrite sans cesse) : la suivante.
 pub async fn announce(dht: &Dht, me: EndpointId, now: SystemTime) -> Result<usize> {
     let slot = slot_of(now);
     let signer = slot_signer(slot);
     let key = signer.verifying_key().to_bytes();
-    let salt = salt(cell_of(&me, slot));
+    let first = cell_of(&me, slot);
     let mut last = None;
-    for _ in 0..3 {
-        let current = dht
-            .get_mutable_most_recent(&key, Some(&salt))
-            .await
-            .map_err(|_| anyhow!("DHT arrêtée"))?;
-        let (entries, cas) = match &current {
-            Some(item) => (decode(item.value()), Some(item.seq())),
-            None => (Vec::new(), None),
-        };
-        let next = merge(&entries, me, now);
-        let seq = cas.map_or(1, |seq| seq + 1);
-        let item = MutableItem::new(&signer, &encode(&next), seq, Some(&salt));
-        match dht.put_mutable(item, cas).await {
-            Ok(_) => return Ok(next.len()),
-            // Écrite entre-temps par un autre nœud : relire, puis réessayer
-            Err(PutMutableError::Concurrency(err)) => last = Some(anyhow!("{err}")),
-            Err(PutMutableError::Query(err)) => return Err(anyhow!("inscription dans la DHT : {err}")),
+    for step in 0..CELLS {
+        let salt = salt((first + step) % CELLS);
+        for _ in 0..3 {
+            let current = dht
+                .get_mutable_most_recent(&key, Some(&salt))
+                .await
+                .map_err(|_| anyhow!("DHT arrêtée"))?;
+            let (entries, cas) = match &current {
+                Some(item) => (decode(item.value()), Some(item.seq())),
+                None => (Vec::new(), None),
+            };
+            // Numéro au maximum : personne ne peut plus écrire cette case
+            let Some(seq) = cas.map_or(Some(1), |seq| seq.checked_add(1)) else {
+                last = Some(anyhow!("case bloquée"));
+                break;
+            };
+            let next = merge(&entries, me, now);
+            let item = MutableItem::new(&signer, &encode(&next), seq, Some(&salt));
+            match dht.put_mutable(item, cas).await {
+                Ok(_) => return Ok(next.len()),
+                // Écrite entre-temps par un autre nœud : relire, puis réessayer
+                Err(PutMutableError::Concurrency(err)) => last = Some(anyhow!("{err}")),
+                Err(PutMutableError::Query(err)) => {
+                    return Err(anyhow!("inscription dans la DHT : {err}"));
+                }
+            }
         }
     }
     Err(last.unwrap_or_else(|| anyhow!("inscription dans la DHT impossible")))
 }
 
-/// Clés inscrites dans les cases du créneau en cours et du précédent, sauf celle-ci,
-/// les plus récentes d'abord.
+/// Clés récentes inscrites dans les cases du créneau en cours et du précédent, sauf
+/// celle-ci, dans un ordre tiré au hasard : les dates sont écrites par n'importe qui, elles
+/// ne décident pas des nœuds joints en premier.
 pub async fn discover(dht: &Dht, me: EndpointId, now: SystemTime) -> Vec<EndpointId> {
     let slot = slot_of(now);
     let mut lookups = JoinSet::new();
@@ -152,20 +168,25 @@ pub async fn discover(dht: &Dht, me: EndpointId, now: SystemTime) -> Vec<Endpoin
             });
         }
     }
-    let mut seen: Vec<(EndpointId, u32)> = Vec::new();
+    let minute = minute_of(now);
+    let mut seen: Vec<EndpointId> = Vec::new();
     while let Some(Ok(entries)) = lookups.join_next().await {
         for (id, at) in entries {
-            if id == me {
-                continue;
-            }
-            match seen.iter_mut().find(|(known, _)| *known == id) {
-                Some(entry) => entry.1 = entry.1.max(at),
-                None => seen.push((id, at)),
+            if id != me && fresh(at, minute) && !seen.contains(&id) {
+                seen.push(id);
             }
         }
     }
-    seen.sort_by_key(|entry| std::cmp::Reverse(entry.1));
-    seen.into_iter().map(|(id, _)| id).collect()
+    shuffle(&mut seen);
+    seen
+}
+
+/// Mélange de Fisher-Yates, avec le hasard du système.
+fn shuffle<T>(items: &mut [T]) {
+    for i in (1..items.len()).rev() {
+        let j = getrandom::u64().map_or(0, |r| (r % (i as u64 + 1)) as usize);
+        items.swap(i, j);
+    }
 }
 
 #[cfg(test)]
@@ -219,5 +240,31 @@ mod tests {
         announce(&b, kb, now).await.unwrap();
         assert_eq!(discover(&a, ka, now).await, vec![kb]);
         assert_eq!(discover(&b, kb, now).await, vec![ka]);
+    }
+
+    /// Relecture du 20/10 : une case bloquée au numéro maximal (n'importe qui peut l'écrire)
+    /// ne fait ni planter ni taire le nœud ; des clés datées du futur sont ignorées.
+    #[tokio::test]
+    async fn a_jammed_cell_or_future_dated_keys_do_not_win() {
+        let testnet = n0_mainline::Testnet::new(5).await.unwrap();
+        let dht = Dht::builder().bootstrap(&testnet.bootstrap).build().unwrap();
+        let now = SystemTime::now();
+        let slot = slot_of(now);
+        let signer = slot_signer(slot);
+        let (me, honest, cheat) = (key(), key(), key());
+        let mine = salt(cell_of(&me, slot));
+        let jam = MutableItem::new(&signer, &encode(&[]), i64::MAX, Some(&mine));
+        dht.put_mutable(jam, None).await.unwrap();
+        announce(&dht, me, now).await.unwrap();          // dans la case suivante
+        announce(&dht, honest, now).await.unwrap();
+        // Une case qu'aucun des deux n'a prise (le tricheur ne réécrit pas la leur)
+        let used = [cell_of(&me, slot), (cell_of(&me, slot) + 1) % CELLS, cell_of(&honest, slot),
+                    (cell_of(&honest, slot) + 1) % CELLS];
+        let free = (0..CELLS).find(|cell| !used.contains(cell)).unwrap();
+        let other = salt(free);
+        let future = MutableItem::new(&signer, &encode(&[(cheat, u32::MAX)]), 1, Some(&other));
+        let _ = dht.put_mutable(future, None).await;
+        let found = discover(&dht, me, now).await;
+        assert!(found.contains(&honest) && !found.contains(&cheat));
     }
 }

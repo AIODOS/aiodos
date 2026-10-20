@@ -33,6 +33,7 @@ class Internet:
     def __init__(self, companion):
         self.companion = companion
         self.enabled = True
+        self.launches = 1
 
 
 class Manager:
@@ -67,6 +68,37 @@ def test_off_by_default_and_nothing_personal_when_on(models):
     companion.generation += 1                     # compagnon relancé : on lui redit tout
     asyncio.run(pub.sync())
     assert companion.calls[-1][0] == "PUT"
+
+
+def test_a_new_companion_is_told_again(models):
+    """Réseau local ou Internet relancés : un nouveau compagnon repart de zéro, et son
+    compteur de lancements vaut celui de l'ancien. Il faut lui redire de rejoindre le réseau
+    public (essai du 18/10 : après un arrêt du réseau, le PC n'y revenait jamais)."""
+    settings.set_value("public_network", True)
+    first = Companion()
+    manager = Manager(first)
+    pub = public_mod.Public(manager)
+    asyncio.run(pub.sync())
+    assert first.calls[-1][0] == "PUT"
+    second = Companion()                          # même generation que le premier
+    manager.internet.companion = second
+    manager.internet.launches += 1
+    asyncio.run(pub.sync())
+    assert second.calls == [("PUT", "/net/v1/public", first.calls[-1][2])]
+
+
+def test_a_companion_that_left_is_asked_again(models):
+    """Le compagnon dit ne plus être dans le réseau public alors qu'on le lui a demandé :
+    au tour suivant, on le lui redemande."""
+    settings.set_value("public_network", True)
+    companion = Companion()
+    pub = public_mod.Public(Manager(companion))
+    asyncio.run(pub.sync())
+    companion.api = lambda method, path, body=None, timeout=None: (
+        companion.calls.append((method, path, body)) or {"enabled": method == "PUT", "nodes": []})
+    asyncio.run(pub.sync())                       # GET : il n'y est plus
+    asyncio.run(pub.sync())
+    assert [c[0] for c in companion.calls] == ["PUT", "GET", "PUT"]
 
 
 def test_an_older_companion_is_said_plainly(models):

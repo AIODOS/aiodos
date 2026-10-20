@@ -2,8 +2,9 @@
 
 Désactivé par défaut (réglage « public_network », « Rejoindre le réseau public »). Activé,
 et quand Internet tourne, le compagnon (aiodos-net) rejoint le réseau public avec une clé
-à part, qui ne le relie pas aux machines appairées, et par les relais seulement : les
-inconnus ne voient pas l'adresse IP de cette machine. Il y diffuse un profil sans rien de
+à part, qui ne le relie pas aux machines appairées, et par les relais : l'adresse IP de
+cette machine n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre
+relais pourrait la voir (Iroh joint le relais qu'un autre nœud annonce : limite connue). Il y diffuse un profil sans rien de
 personnel : la version d'AIODOS et les modèles que cette machine sait calculer. En retour,
 la vue Réseau montre les nœuds publics en ligne.
 
@@ -56,7 +57,10 @@ class Public:
             self._status, self._sent = None, None
             return
         request = await asyncio.to_thread(self._request)
-        state = (companion.generation, json.dumps(request, sort_keys=True))
+        # Un nouveau compagnon (réseau ou Internet relancés) repart de zéro : il faut tout
+        # lui redire, même si son compteur de lancements vaut celui de l'ancien
+        state = (self.m.internet.launches, companion.generation,
+                 json.dumps(request, sort_keys=True))
         try:
             if state != self._sent:
                 self._status = await asyncio.to_thread(companion.api, "PUT", "/net/v1/public",
@@ -64,6 +68,8 @@ class Public:
                 self._sent = state
             elif self.wanted:
                 self._status = await asyncio.to_thread(companion.api, "GET", "/net/v1/public")
+                if not self._status.get("enabled"):
+                    self._sent = None      # le compagnon n'y est plus : redit au prochain tour
             self._error = None
         except CompanionError as exc:
             if "Chemin inconnu" in str(exc):

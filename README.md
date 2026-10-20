@@ -222,6 +222,11 @@ notification, près de l'horloge, et le nœud continue de tourner. Clic sur l'ic
 relancer AIODOS) : la fenêtre revient ; clic droit → « Quitter AIODOS » pour l'arrêter.
 Réglable dans « Cette machine » → « Travail de fond ».
 
+**Démarrer avec l'appareil, en arrière-plan** (« Cette machine » → « Travail de fond ») :
+sous Windows, un raccourci dans le dossier Démarrage lance AIODOS sans ouvrir sa fenêtre
+(`python -m aiodos --background`, l'icône près de l'horloge la rouvre) ; sur un téléphone,
+l'appli AIODOS démarre le nœud dans Termux quand le téléphone s'allume.
+
 Au premier lancement, les données de la v1 (`legacy/data`) sont importées
 automatiquement : conversations, dossiers, bibliothèques et réglages.
 
@@ -296,7 +301,8 @@ aiodos/
 │   └── netinfo.py     clés Internet échangées entre machines appairées (net/info)
 ├── node/              la machine : profil (identity.py), alimentation (power.py),
 │                      priorité du travail de fond (priority.py), Android (android.py),
-│                      programmes lancés arrêtés avec AIODOS (children.py)
+│                      programmes lancés arrêtés avec AIODOS (children.py), démarrage
+│                      avec l'appareil (autostart.py)
 ├── updates/           mises à jour signées : transmission entre machines, installation
 │                      à côté, lanceur avec retour en arrière, approbation sur un deuxième
 │                      appareil (approval.py), moteurs livrés (engines.py) — docs/mises-a-jour.md

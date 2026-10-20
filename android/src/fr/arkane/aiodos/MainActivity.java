@@ -145,14 +145,20 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void start() {
-        status.setText("Démarrage du nœud AIODOS…");
+    /** La commande Termux qui exécute ce script en arrière-plan (RUN_COMMAND). */
+    static Intent termuxCommand(String script) {
         Intent run = new Intent("com.termux.RUN_COMMAND");
         run.setClassName(TERMUX, "com.termux.app.RunCommandService");
         run.putExtra("com.termux.RUN_COMMAND_PATH", BASH);
-        run.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[] {"-c", SCRIPT});
+        run.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", new String[] {"-c", script});
         run.putExtra("com.termux.RUN_COMMAND_WORKDIR", HOME);
         run.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
+        return run;
+    }
+
+    private void start() {
+        status.setText("Démarrage du nœud AIODOS…");
+        Intent run = termuxCommand(SCRIPT);
         Intent back = new Intent(this, MainActivity.class).setAction(RESULT)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT

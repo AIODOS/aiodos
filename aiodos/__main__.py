@@ -76,6 +76,9 @@ def _windows_app_id():
 def main():
     parser = argparse.ArgumentParser(prog="aiodos", description="AIODOS — nœud local")
     parser.add_argument("--headless", action="store_true", help="nœud seul, sans fenêtre")
+    parser.add_argument("--background", action="store_true",
+                        help="sans ouvrir la fenêtre : l'icône près de l'horloge la rouvre "
+                             "(démarrage avec Windows, node/autostart.py)")
     parser.add_argument("--port", type=int, default=0, help="port local (défaut : libre)")
     network = parser.add_argument_group("réseau local (tests, machines de calcul)")
     network.add_argument("--network", action="store_true",
@@ -266,6 +269,8 @@ def _serve(args) -> int:
     token = secrets.token_urlsafe(24)
     show_key = secrets.token_urlsafe(24)        # pour faire revenir la fenêtre, sans le jeton
     if not instance.acquire(port, show_key):
+        if args.background:               # démarrage avec Windows : déjà là, rien à montrer
+            return launcher.ALREADY_RUNNING
         # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
         if args.headless or not instance.wake_running():
             _alert("AIODOS est déjà ouvert sur cette machine.")
@@ -291,7 +296,8 @@ def _serve(args) -> int:
             from aiodos.ui import window
             restart.on_request(window.close)
             window.run(node.start, on_closed=node.stop_soon,
-                       quit_on_error=os.environ.get(launcher.TRIAL_ENV) == "1")
+                       quit_on_error=os.environ.get(launcher.TRIAL_ENV) == "1",
+                       hidden=args.background)
     finally:
         node.stop()                               # même après une erreur : le port est rendu
         instance.release()

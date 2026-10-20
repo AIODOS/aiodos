@@ -192,8 +192,9 @@ function renderPublic(net) {
     <div class="setting-row" style="border:0;padding-top:0">
       <div class="txt"><b>Rejoindre le réseau public <span class="pill">essai</span></b>
         <small>Un annuaire sans propriétaire (la DHT de BitTorrent), où les nœuds AIODOS se trouvent sans invitation.
-        Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais
-        seulement : les inconnus ne voient pas ton adresse IP. Elle dit seulement sa version d'AIODOS et les modèles
+        Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais :
+        ton adresse IP n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre relais pourrait la
+        voir (limite connue de cet essai). Elle dit seulement sa version d'AIODOS et les modèles
         qu'elle sait calculer. Rien n'est confié aux inconnus, et rien n'est calculé pour eux : cela viendra plus
         tard, avec ton accord.</small></div>
       <label class="switch"><input type="checkbox" id="public-toggle" ${pub.wanted ? 'checked' : ''}

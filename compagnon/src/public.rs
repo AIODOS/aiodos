@@ -8,8 +8,11 @@
 //! les inconnus ne peuvent relier son identité publique à ses machines appairées. Son
 //! **point de terminaison est à part** aussi : il n'accepte que le groupe de discussion
 //! public (ALPN d'`iroh-gossip`), et le point de terminaison privé garde sa liste
-//! blanche. Il passe **par les relais seulement** : les inconnus ne voient pas son
-//! adresse IP (le relais, si). Sans relais (essais en local), il se connecte en direct.
+//! blanche. Il passe **par les relais seulement** : son adresse IP n'est pas donnée aux
+//! inconnus (le relais la voit). Limite connue (relecture du 20/10) : Iroh joint le relais
+//! qu'un autre nœud annonce, et un inconnu qui fait tourner son propre relais verrait donc
+//! l'adresse IP de ce nœud ; le crochet de connexion d'Iroh 1.3 passe avant la recherche
+//! d'adresse, il ne permet pas de l'empêcher ici. Sans relais (essais en local), direct.
 //!
 //! Le nœud trouve quelques autres clés par la DHT (rendezvous.rs), rejoint le sujet
 //! « aiodos/public/1 » du groupe de discussion, et y diffuse son profil signé chaque
@@ -59,6 +62,10 @@ const PROFILE_EVERY: Duration = Duration::from_secs(60);
 const RENDEZVOUS_EVERY: Duration = Duration::from_secs(5 * 60);
 /// Sans aucun voisin : nouvelle lecture après 20 s, puis 40, 80… jusqu'à 5 minutes.
 const ALONE_RETRY: Duration = Duration::from_secs(20);
+/// La session du groupe de discussion repart de zéro au bout de ce délai : iroh-gossip 0.101
+/// garde sans limite les adresses que ses voisins lui donnent (relecture du 20/10), et un
+/// inconnu pourrait le gonfler ; AIODOS la relance aussitôt (même clé).
+const RENEW_EVERY: Duration = Duration::from_secs(6 * 3600);
 /// Un nœud dont aucun profil n'est arrivé depuis ce délai sort de l'annuaire.
 const FORGET_AFTER: Duration = Duration::from_secs(5 * 60);
 /// Au plus autant de nœuds dans l'annuaire (les plus anciens sortent).
@@ -102,6 +109,7 @@ struct State {
 struct Session {
     router: Router,
     cancel: CancellationToken,
+    task: tokio::task::JoinHandle<()>,
 }
 
 /// Le réseau public du compagnon : arrêté tant qu'AIODOS ne le demande pas.
@@ -140,6 +148,12 @@ impl Public {
             changed
         };
         let mut session = self.session.lock().await;
+        if session.as_ref().is_some_and(|running| running.task.is_finished()) {
+            // Le groupe de discussion s'est arrêté seul : la session repart de zéro
+            if let Some(dead) = session.take() {
+                stop(dead).await;
+            }
+        }
         match (wanted.enabled, session.is_some()) {
             (true, false) => match self.start().await {
                 Ok(started) => {
@@ -233,12 +247,12 @@ impl Public {
             if created { "nouvelle" } else { "existante" },
             if self.relays == Relays::Disabled { ", en direct (essais)" } else { ", par les relais seulement" },
         );
-        tokio::spawn(run(
+        let task = tokio::spawn(run(
             Node { id, secret, dht, sender, state: self.state.clone() },
             receiver,
             cancel.clone(),
         ));
-        Ok(Session { router, cancel })
+        Ok(Session { router, cancel, task })
     }
 
     async fn bind_endpoint(&self, secret: SecretKey) -> Result<Endpoint> {
@@ -400,12 +414,19 @@ async fn run(node: Node, mut receiver: GossipReceiver, cancel: CancellationToken
     let rendezvous_at = tokio::time::sleep(Duration::ZERO);
     tokio::pin!(rendezvous_at);
     let mut alone_retry = ALONE_RETRY;
+    let renew_at = tokio::time::sleep(RENEW_EVERY);
+    tokio::pin!(renew_at);
+    let mut renewed = false;
     // Le rendez-vous dure quelques secondes (DHT) : à part, pour ne pas retarder les messages
     let node = Arc::new(node);
     let mut pending: Option<tokio::task::JoinHandle<()>> = None;
     loop {
         tokio::select! {
             _ = cancel.cancelled() => break,
+            _ = &mut renew_at => {
+                renewed = true;
+                break;
+            }
             _ = profile_tick.tick() => node.broadcast_profile(false).await,
             _ = &mut rendezvous_at => {
                 if pending.as_ref().is_none_or(|task| task.is_finished()) {
@@ -443,5 +464,20 @@ async fn run(node: Node, mut receiver: GossipReceiver, cancel: CancellationToken
     }
     if let Some(task) = pending {
         task.abort();
+    }
+    if !cancel.is_cancelled() {
+        // Renouvelée, ou arrêt imprévu : AIODOS le voit (plus de clé affichée) et redemande
+        // le réseau public au tour suivant (network/public.py)
+        let mut state = node.state.lock().expect("état");
+        state.key = None;
+        state.neighbors.clear();
+        state.error = if renewed {
+            None
+        } else {
+            Some("groupe de discussion public interrompu : nouvel essai".into())
+        };
+        if renewed {
+            info!("Réseau public : session renouvelée");
+        }
     }
 }

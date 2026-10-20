@@ -168,15 +168,17 @@ p {{ color: #8e99c0; margin: 16px 0 0; }}
 </style></head><body><main>{image}{text}</main></body></html>"""
 
 
-def run(start, on_closed, quit_on_error: bool = False):
+def run(start, on_closed, quit_on_error: bool = False, hidden: bool = False):
     """Ouvre la fenêtre aussitôt, sur l'écran d'attente, puis l'interface : start(), appelé
     hors du fil graphique, démarre le nœud et rend l'adresse de son interface. S'il échoue,
     l'écran le dit ; ou, quit_on_error, la fenêtre se ferme (premier démarrage d'une nouvelle
-    version : le lanceur rend alors la main à la précédente). Bloque jusqu'à la fermeture."""
+    version : le lanceur rend alors la main à la précédente). Bloque jusqu'à la fermeture.
+    hidden : la fenêtre reste cachée (démarrage avec Windows) ; l'icône près de l'horloge
+    la montre (pywebview la crée tout de même, puis la cache : l'icône naît avec elle)."""
     bridge = Bridge()
     window = webview.create_window(
         "AIODOS", html=waiting_page(), js_api=bridge, width=1320, height=860,
-        min_size=(980, 640), background_color="#080c1a", text_select=True)
+        min_size=(980, 640), background_color="#080c1a", text_select=True, hidden=hidden)
     bridge._window = window
     _open.append(window)
     window.events.closed += on_closed
