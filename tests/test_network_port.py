@@ -87,11 +87,58 @@ def test_port_of_the_settings_taken_for_good_gives_way_to_a_spare_one(busy_port,
 def test_an_other_aiodos_node_holding_the_port_is_named(busy_port, monkeypatch):
     """L'ancien nœud de Termux garde le port sur le même téléphone : on dit lequel, et quoi
     faire, plutôt qu'un « autre programme »."""
+    from aiodos.node import android
+    monkeypatch.setattr(android, "is_android", lambda: True)
     taken = busy_port.getsockname()[1]
     (running, error, port, _), _ = _start_on_settings_port(
         taken, monkeypatch, holder={"node_id": "autre", "name": "Samsung SM-S911B"})
-    assert running and "Un autre nœud AIODOS (« Samsung SM-S911B »)" in error
+    assert running and "Un autre AIODOS (« Samsung SM-S911B »)" in error
     assert "redémarrer le téléphone" in error and f"port {port}" in error
+
+
+def test_an_other_aiodos_on_a_pc_is_named_without_talking_of_phones(busy_port, monkeypatch):
+    """Sur un PC, un autre AIODOS ouvert (une autre copie, un nœud d'essai) : on le nomme, et
+    il n'est pas question de téléphone ; un port gardé par ce nœud même n'est pas « un
+    autre »."""
+    from aiodos.node import android
+    monkeypatch.setattr(android, "is_android", lambda: False)
+    taken = busy_port.getsockname()[1]
+    (running, error, port, _), _ = _start_on_settings_port(
+        taken, monkeypatch, holder={"node_id": "autre", "name": "PC fixe"})
+    assert running and "Un autre AIODOS (« PC fixe »)" in error and "ferme-le" in error
+    assert "téléphone" not in error and f"port {port}" in error
+    (running, error, port, _), _ = _start_on_settings_port(
+        taken, monkeypatch, holder={"node_id": "moi", "name": "PC fixe"})
+    assert running and "encore tenu par ce nœud" in error and "autre" not in error
+
+
+def test_two_switches_at_once_start_a_single_server(busy_port, monkeypatch):
+    """Un second interrupteur touché (réseau local, Internet) pendant que le premier démarrage
+    réessaie un port pris : un seul serveur, sur le premier port de secours, et rien ne reste
+    ouvert à l'arrêt (21/10/2026 : le second démarrage ouvrait un autre serveur, passait au
+    port suivant en prenant le premier pour un autre nœud, et le premier restait ouvert)."""
+    from aiodos import settings
+    taken = busy_port.getsockname()[1]
+    if taken + 2 > 65535:
+        pytest.skip("port en fin de plage")
+    settings.set_value("p2p_port", taken)
+    monkeypatch.setattr(manager_module, "_holder", lambda port: None)
+    net = NetworkManager("moi", Bus(), {"force": True, "host": "127.0.0.1", "discovery": False})
+
+    async def scenario():
+        async def later():
+            await asyncio.sleep(0.15)               # pendant les essais du premier démarrage
+            await net.apply()
+        await asyncio.gather(net.apply(), later())
+        outcome = (net.running, net.p2p_port, net.error)
+        await net.shutdown()
+        await asyncio.sleep(0.3)
+        return outcome
+    running, port, error = asyncio.run(scenario())
+    assert running and port == taken + 1 and f"port {taken} est pris" in error
+    for spare in (taken + 1, taken + 2):            # aucun serveur resté ouvert
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", spare))
 
 
 def test_a_slow_server_is_waited_for_not_mistaken_for_a_taken_port(data_dir, monkeypatch):

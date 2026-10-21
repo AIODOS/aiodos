@@ -15,6 +15,7 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
+from aiodos.node import android
 from aiodos.network import (activity, client, consult, invitations, peers, placement, profile,
                             route, sharing)
 from aiodos.network.beacons import BeaconChecks
@@ -96,6 +97,10 @@ class NetworkManager:
         self._refresh_task = None
         self._last_profile = {}
         self._loop = None
+        # Un démarrage ou un arrêt à la fois : deux interrupteurs touchés coup sur coup (réseau
+        # local, Internet) lançaient deux serveurs ; le second prenait le premier pour un autre
+        # nœud et passait au port suivant, le premier restait ouvert (21/10/2026)
+        self._applying = asyncio.Lock()
 
     # ------------------------------------------------------------- réglages
     def name(self) -> str:
@@ -130,15 +135,17 @@ class NetworkManager:
     # --------------------------------------------------------- cycle de vie
     async def apply(self):
         """Démarre ou arrête le réseau selon les réglages (réseau local, Internet) ; le réseau
-        local allumé ou coupé, le serveur repart avec la bonne écoute."""
-        if self.enabled and self.running and self._bound != self._listen_host():
-            await self._stop()
-        if self.enabled and not self.running:
-            await self._start()
-        elif not self.enabled and self.running:
-            await self._stop()
-        elif self.running:
-            await self._sync_local()
+        local allumé ou coupé, le serveur repart avec la bonne écoute. Un appel à la fois
+        (_applying) : chacun part de l'état que le précédent a laissé."""
+        async with self._applying:
+            if self.enabled and self.running and self._bound != self._listen_host():
+                await self._stop()
+            if self.enabled and not self.running:
+                await self._start()
+            elif not self.enabled and self.running:
+                await self._stop()
+            elif self.running:
+                await self._sync_local()
         self.changed()
 
     async def _sync_local(self):
@@ -221,9 +228,10 @@ class NetworkManager:
                 await asyncio.sleep(PORT_RETRY_DELAY)
 
     async def _fall_back(self, app, host: str):
-        """Port réglé pris par un autre programme, par exemple un ancien nœud AIODOS sous
-        Termux sur le même téléphone : un port de secours, que les annonces et l'appairage
-        donnent aux autres machines, et un avertissement qui dit quoi faire."""
+        """Port réglé pris par un autre programme, par exemple un autre AIODOS ouvert sur ce PC
+        ou un ancien nœud sous Termux sur le même téléphone : un port de secours, que les
+        annonces et l'appairage donnent aux autres machines, et un avertissement qui dit quoi
+        faire."""
         wanted = self.p2p_port
         other = await asyncio.to_thread(_holder, wanted)
         for port in _spare_ports(host, wanted):
@@ -234,11 +242,19 @@ class NetworkManager:
         else:
             self.spare_port = None
             return
-        if other:
-            self.error = (f"Un autre nœud AIODOS (« {other.get('name') or '?'} ») tourne sur "
-                          f"cet appareil et garde le port {wanted} : arrête-le (l'ancien nœud "
-                          f"de Termux sur un téléphone : redémarrer le téléphone suffit). En "
-                          f"attendant, ce nœud passe par le port {port}.")
+        if other and other.get("node_id") == self.node_id:
+            self.error = (f"Le port {wanted} est encore tenu par ce nœud : redémarre AIODOS pour "
+                          f"le retrouver. En attendant, il passe par le port {port}.")
+        elif other and android.is_android():
+            self.error = (f"Un autre AIODOS (« {other.get('name') or '?'} ») tourne sur ce "
+                          f"téléphone et garde le port {wanted} : l'ancien nœud de Termux, sans "
+                          f"doute ; redémarrer le téléphone suffit. En attendant, ce nœud passe "
+                          f"par le port {port}.")
+        elif other:
+            self.error = (f"Un autre AIODOS (« {other.get('name') or '?'} ») est ouvert sur cet "
+                          f"appareil et garde le port {wanted} : ferme-le s'il ne te sert pas "
+                          f"(une autre copie d'AIODOS, un nœud d'essai…). En attendant, ce nœud "
+                          f"passe par le port {port}.")
         else:
             self.error = (f"Le port {wanted} est pris par un autre programme : ce nœud passe "
                           f"par le port {port}, qu'il annonce à tes machines.")
@@ -267,8 +283,9 @@ class NetworkManager:
         log.info("Réseau local arrêté")
 
     async def shutdown(self):
-        if self.running:
-            await self._stop()
+        async with self._applying:
+            if self.running:
+                await self._stop()
 
     # ----------------------------------------------------------- découverte
     def _beacon(self) -> dict:
