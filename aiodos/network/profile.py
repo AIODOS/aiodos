@@ -166,6 +166,10 @@ SCHEMA = _object({
     "consult": _object({"open": _integer(0, 10_000)}),          # remote_search.MAX_OPEN
     "load": _object({"chats": _integer(0, 1000), "units": _integer(0, 1000)}),
     "sharing": _object({"enabled": _flag, "active": _flag, "detail": _text(300)}),
+    # Le ComfyUI accordé d'une de mes machines (engines/lending.summary)
+    "engines": _object({"comfyui": _object({
+        "version": _optional(_text(40)), "vram_mib": _optional(_integer(0, 1 << 30)),
+        "models": _mapping(_text(60), _items(_text(300), 2000), 64)})}),
 })
 
 

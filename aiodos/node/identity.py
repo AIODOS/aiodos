@@ -238,6 +238,14 @@ def _updates() -> dict:
     return {"offer": store.offer(), "files": store.available()}
 
 
+def _engines() -> dict:
+    try:
+        from aiodos.engines import lending
+        return lending.summary()
+    except Exception:                    # un profil se donne même sans ComfyUI lisible
+        return {}
+
+
 def profile(max_age=5.0) -> dict:
     with _cache_lock:
         if _cache["profile"] and time.monotonic() - _cache["at"] < max_age:
@@ -267,6 +275,9 @@ def profile(max_age=5.0) -> dict:
         "cluster": _cluster(),                   # gros modèles répartis (cluster/)
         "images": _images(),                     # images réparties (imaging/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
+        # ComfyUI accordé de ce PC : version, modèles (engines/lending.py) ; jamais vu
+        # d'un ami (network/sharing.FRIEND_PROFILE)
+        "engines": _engines(),
     }
     with _cache_lock:
         _cache.update(at=time.monotonic(), profile=data)

@@ -18,10 +18,10 @@ CIRCLES = ("here", "mine", "friends", "public")
 PRIORITIES = ("interactive", "background")
 # Cercles que cette version sert, par capacité : les conversations partent chez mes machines
 # et mes amis (prêt de modèles), pas encore chez les inconnus ; embeddings et bibliothèques
-# restent sur ce PC ; les travaux ComfyUI se calculent par le ComfyUI de ce PC (mes machines
-# ensuite, livraison L2b)
+# restent sur ce PC ; les travaux ComfyUI se calculent par le ComfyUI de ce PC et de mes
+# machines (livraison L2b ; les amis et les inconnus viendront en L3 et L4)
 SERVED = {"chat": frozenset({"here", "mine", "friends"}), "embed": frozenset({"here"}),
-          "libraries": frozenset({"here"}), "engines:comfyui": frozenset({"here"})}
+          "libraries": frozenset({"here"}), "engines:comfyui": frozenset({"here", "mine"})}
 # Les routes des travaux de moteur : toutes exigent le droit du moteur
 ENGINE_ROUTES = ("/aiodos/v1/engines", "/aiodos/v1/inputs/", "/aiodos/v1/jobs",
                  "/aiodos/v1/files/")

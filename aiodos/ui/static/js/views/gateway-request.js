@@ -16,8 +16,8 @@ const SCOPES = {
   chat: 'Converser avec tes modèles (textes, images jointes, outils de l\'application)',
   embed: 'Calculer des embeddings (représenter des textes pour les retrouver), sur ce PC',
   libraries: 'Lire des passages de tes bibliothèques',
-  'engines:comfyui': 'Faire tourner ses travaux ComfyUI (images, vidéos) sur le ComfyUI de ce PC, accordé dans '
-    + 'Réglages → Moteurs des applications',
+  'engines:comfyui': 'Faire tourner ses travaux ComfyUI (images, vidéos) sur les machines qui ont ComfyUI '
+    + '(ce PC, tes machines), accordé sur chacune dans Réglages → Moteurs des applications',
 };
 const CIRCLES = {
   here: ['Ce PC', ''],

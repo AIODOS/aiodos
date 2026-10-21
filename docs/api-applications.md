@@ -282,9 +282,10 @@ accordables : les réglages, le réseau, le cloud, la gestion des modèles.
 | `friends` | mes amis aussi, si le réglage général `auto_route_friends` le permet | un ami | — |
 | `public` | pas encore servi (confirmé à son arrivée) | — | — |
 
-Les travaux ComfyUI (`engines:comfyui`) se calculent dans cette version par le ComfyUI de ce
-PC (`here`), une fois accordé dans Réglages → Moteurs des applications ; `mine` (mes machines
-qui ont ComfyUI) suivra, confirmé à son arrivée.
+Les travaux ComfyUI (`engines:comfyui`) se calculent par le ComfyUI de ce PC (`here`) et par
+celui de mes machines (`mine`), chacun accordé sur sa machine dans Réglages → Moteurs des
+applications ; une unité ne part que chez une machine qui a ComfyUI et tous ses modèles. Les
+amis et les inconnus viendront ensuite (confirmés à leur arrivée).
 
 Lieu effectif : les cercles accordés à l'appli, resserrés par `X-Aiodos-Where`, et par les
 réglages généraux. Jamais le cloud, quelle que soit la clé. Un modèle hors du lieu permis
@@ -433,7 +434,10 @@ d'AIODOS).
 ### 5.7 Les travaux ComfyUI (`engines:comfyui`)
 
 AIODOS ne remplace pas le ComfyUI de l'appli : il rejoue ses graphes dans le ComfyUI accordé
-de ce PC (Réglages → Moteurs des applications), par son API, et garde les fichiers pour elle.
+de ce PC et de mes machines (Réglages → Moteurs des applications), par son API, plusieurs
+unités en même temps sur autant de machines, et garde les fichiers pour elle, sur ce PC. Une
+autre machine ne reçoit que l'ordre de calcul (le graphe, la graine, les modèles, les
+entrées tirées par empreinte) : ni l'appli, ni le libellé, ni `client_ref`.
 Le graphe se donne **au format API**, déjà rempli ; un fichier ne se donne que par un jeton.
 Conception complète : `docs/conception/partage-puissance.md` (§ 2 et 6).
 

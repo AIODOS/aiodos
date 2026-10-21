@@ -48,6 +48,7 @@ from collections import deque
 from pathlib import Path
 
 from aiodos import db, settings
+from aiodos.engines import lending
 from aiodos.jobs import leases, queue, registry
 from aiodos.jobs.models import MAX_ATTEMPTS, QUEUED, RUNNING
 from aiodos.knowledge import store
@@ -270,6 +271,9 @@ def can_serve(need: dict, caps: dict, mine: dict) -> bool:
         if (not theirs_images.get("engine")
                 or not set(images["files"]) <= set(theirs_images.get("files") or [])):
             return False
+    engine = need.get("engine")
+    if engine and not lending.can_serve(engine, caps):
+        return False              # un travail ComfyUI : le moteur, ses classes, ses modèles
     return True
 
 
@@ -428,8 +432,11 @@ def _fits(unit, spec, max_blob) -> bool:
 def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB) -> dict:
     """L'ordre de calcul envoyé à la machine qui a obtenu l'unité."""
     spec = registry.TASKS[unit["task"]]
+    # Un travail de moteur : l'ordre complet, sans ce qui ne quitte jamais ce PC (l'appli,
+    # le travail, les chemins de ses entrées, qui se demandent par empreinte : blob)
+    payload = registry.payload_for(unit, here=False) if spec.expand else unit["payload"]
     order = {"id": unit["id"], "task": unit["task"], "resource": unit["resource"],
-             "payload": {k: v for k, v in unit["payload"].items() if k != spec.file_key},
+             "payload": {k: v for k, v in payload.items() if k != spec.file_key},
              "options": options[unit["task"]], "lease_s": leases.LEASE_S, "blob": None,
              "result_max": _result_max(sender, unit)}
     if spec.file_key and unit["payload"].get(spec.file_key):
@@ -499,6 +506,8 @@ def blob(manager, sender, payload):
     s'il le demande : l'ordre est parti sans lui (_order ; audit du 20/10/2026)."""
     unit = leases.held(_unit_id(payload), sender)
     spec = registry.TASKS.get(unit["task"]) if unit else None
+    if spec is not None and spec.expand and payload.get("sha256"):
+        return _input_chunk(unit, payload)
     if spec is None or not spec.file_key or not unit["payload"].get(spec.file_key):
         raise PeerError("Cette unité ne t'est plus confiée.")
     if spec.file_optional is not None and sharing.is_friend(sender):
@@ -522,6 +531,32 @@ def blob(manager, sender, payload):
     return {"data": envelope.b64e(data)}
 
 
+def _input_chunk(unit, payload) -> dict:
+    """Un morceau d'une entrée d'un travail de moteur, par son empreinte : seulement une
+    entrée de l'unité confiée à cette machine (jamais une autre entrée de l'appli)."""
+    wanted = str(payload.get("sha256") or "")
+    try:
+        offset = int(payload.get("offset") or 0)
+        size = min(BLOB_CHUNK, max(1, int(payload.get("size") or BLOB_CHUNK)))
+        order = registry.payload_for(unit, here=True, fresh=False)
+    except (TypeError, ValueError, RuntimeError) as exc:
+        raise PeerError("Demande illisible, ou entrée disparue.") from exc
+    entry = next((e for e in order.get("inputs") or [] if e.get("sha256") == wanted), None)
+    if entry is None:
+        raise PeerError("Cette entrée n'est pas celle de l'unité qui t'est confiée.")
+    path = order["local"]["files"][entry["slot"]]
+    try:
+        total = os.path.getsize(path)
+    except OSError as exc:
+        raise PeerError("Cette entrée n'est plus là.") from exc
+    if not 0 <= offset <= total:
+        raise PeerError("Morceau demandé hors du fichier.")
+    with open(path, "rb") as f:
+        f.seek(offset)
+        data = f.read(size)
+    return {"data": envelope.b64e(data)}
+
+
 # ---------------------------------------------------------------- résultats
 def result(manager, sender, payload):
     unit_id = _unit_id(payload)
@@ -534,15 +569,19 @@ def result(manager, sender, payload):
     checked = False                   # résultat lu et contrôlé : une erreur ensuite est d'ici
     try:
         output = wire.unpack(payload.get("output") or {})
+        # Un travail de moteur se contrôle et s'intègre avec l'ordre de cette remise
+        # (bornes, sorties attendues, appli et travail, qui sont restés ici)
+        given = (registry.payload_for(unit, here=True, fresh=False) if spec.expand
+                 else unit["payload"])
         if spec.validate:
-            spec.validate(unit["payload"], output)
+            spec.validate(given, output)
         if friend and spec.sample:
             if not _sampled(manager, sender, unit, spec, output):
                 return {"accepted": False, "reason": "Vérification impossible pour l'instant "
                                                      "chez le propriétaire : unité remise en file."}
             output = sharing.restore_names(output, unit, spec)
         checked = True
-        outcome = spec.assimilate(unit["payload"], output) or {}
+        outcome = spec.assimilate(given, output) or {}
     except registry.SampleMismatch as exc:
         reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
         peers.set_aside(sender, reason[:300])

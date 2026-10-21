@@ -14,6 +14,7 @@ de ce PC, puis par celui de mes machines (livraison suivante).
 - compute : engines/comfyui.run ; assimilate : les fichiers rangés pour l'appli
   (gateway/file_store.py).
 """
+import base64
 import hashlib
 import json
 import logging
@@ -428,17 +429,18 @@ def forget_params(job_id=None):
             _params.pop(job_id, None)
 
 
-def expand(unit, here: bool = True) -> dict:
+def expand(unit, here: bool = True, fresh: bool = True) -> dict:
     """L'ordre complet d'une unité (§ 2.2), tiré de jobs.params. Pour ce PC (here), il
     porte aussi « local » : l'appli, le travail, l'unité et les chemins des entrées, qui ne
-    partent jamais ailleurs."""
+    partent jamais ailleurs. fresh : une remise, qui tire un nouveau run_uuid ; sinon celui
+    de la remise en cours (résultat revenu d'une autre machine)."""
     params = params_of(unit["job_id"])
     payload = unit["payload"] if isinstance(unit["payload"], dict) else json.loads(unit["payload"])
     item = params["items"][payload["item"]]
     graph = comfy_graph.apply_set(params["graphs"][item["graph"]], item["set"])
     graph, mapping = comfy_graph.renumber(graph)
     used = comfy_graph.tokens(graph)
-    run_id = _run_id(unit)
+    run_id = _run_id(unit) if fresh else _current_run_id(unit)
     contract = (params.get("contract") or {}).get(str(item["graph"])) or {}
     order = {"engine": ENGINE, "api": params["api"], "run_uuid": run_id, "graph": graph,
              "seed": item["seed"],
@@ -468,6 +470,11 @@ def _run_id(unit) -> str:
     run_id = comfy_client.new_run_id()
     db.execute("UPDATE units SET run_uuid=? WHERE id=?", (run_id, unit["id"]))
     return run_id
+
+
+def _current_run_id(unit) -> str:
+    row = db.query_one("SELECT run_uuid FROM units WHERE id=?", (unit["id"],))
+    return (row["run_uuid"] if row and row["run_uuid"] else None) or _run_id(unit)
 
 
 # ----------------------------------------------------------------- calculer
@@ -515,13 +522,32 @@ def _needs(model) -> list | None:
     return None
 
 
+def requires(unit, options) -> dict:
+    """Ce qu'il faut à une autre machine pour calculer cette unité (network/work.can_serve,
+    engines/lending.can_serve) : ComfyUI à la même version d'unité, les classes du graphe,
+    les modèles par dossier et par nom (mes machines seulement en L2b)."""
+    params = params_of(unit["job_id"])
+    payload = unit["payload"] if isinstance(unit["payload"], dict) else json.loads(unit["payload"])
+    item = params["items"][payload["item"]]
+    graph = params["graphs"][item["graph"]]
+    used = comfy_graph.tokens(graph)["models"]
+    return {"engine": {"name": ENGINE, "api": params["api"],
+                       "classes": sorted({n["class_type"] for n in graph.values()
+                                          if n["class_type"] not in comfy_graph.PREVIEWS}),
+                       "models": [{"folder": params["models"][n].get("folder"),
+                                   "name": params["models"][n]["name"]} for n in sorted(used)]}}
+
+
 def compute(order, file, options, stop=None):
-    """Joue l'unité dans le ComfyUI de ce PC (engines/comfyui.run) → les fichiers produits,
-    dans le dossier de calcul de l'unité."""
+    """Joue l'unité dans le ComfyUI de ce PC (engines/comfyui.run) → les fichiers produits.
+    Pour ce PC (l'ordre porte « local »), leurs chemins dans le dossier de calcul ; pour une
+    autre machine (ses entrées reçues dans « files »), leurs octets, qui repartent avec le
+    résultat (work/result)."""
     from aiodos.jobs import queue
     halt = stop if stop is not None else pacing.stopping()
     local = order.get("local") or {}
     unit_id = local.get("unit_id")
+    remote = not local
 
     def progress(stage, **info):
         if unit_id:
@@ -533,9 +559,9 @@ def compute(order, file, options, stop=None):
     pacing.wait_turn(halt, True)            # les conversations d'abord
     folder = paths.engine_runs_dir() / order["run_uuid"]
     began = time.monotonic()
+    files = (order.get("files") if remote else local.get("files")) or {}
     try:
-        outputs = comfyui.run(order, local.get("files") or {}, folder, halt, progress,
-                              url=found.url)
+        outputs = comfyui.run(order, files, folder, halt, progress, url=found.url)
     except comfyui.Refused as exc:
         shutil.rmtree(folder, ignore_errors=True)
         raise RuntimeError(f"Refusé par ce ComfyUI ({exc.reason}) : {exc}") from exc
@@ -549,29 +575,85 @@ def compute(order, file, options, stop=None):
     machine = str(settings.get("node_name") or settings.machine_name())[:80]
     version = (comfyui.inventory(found.url) or {}).get("version")
     progress("checking")
-    return {"files": [{"path": str(o.path), "node": o.node, "type": o.type, "size": o.size,
-                       "sha256": o.sha256} for o in outputs],
-            "machine": machine, "engine": f"comfyui {version}" if version else "comfyui",
+    produced = [{"path": str(o.path), "node": o.node, "type": o.type, "size": o.size,
+                 "sha256": o.sha256} for o in outputs]
+    if remote:                              # les octets repartent chez le propriétaire
+        for entry in produced:
+            path = Path(entry.pop("path"))
+            entry["name"] = path.name.split("-", 1)[-1]
+            entry["data"] = base64.b64encode(path.read_bytes()).decode("ascii")
+        shutil.rmtree(folder, ignore_errors=True)
+    return {"files": produced, "machine": machine,
+            "engine": f"comfyui {version}" if version else "comfyui",
             "seconds": round(time.monotonic() - began, 2)}
 
 
+MAX_FILES = 64
+
+
+def validate(order, output):
+    """Le résultat d'une autre machine, contrôlé avant d'entrer (chez le propriétaire) : des
+    fichiers en nombre et en poids bornés, leurs octets à l'empreinte annoncée, d'un genre
+    reconnu. ValueError sinon (le résultat est refusé, l'unité échoue)."""
+    from aiodos.engines import media
+    files = output.get("files") if isinstance(output, dict) else None
+    if not isinstance(files, list) or not files or len(files) > MAX_FILES:
+        raise ValueError("résultat sans fichiers, ou trop de fichiers")
+    limit = int(float((order.get("bounds") or {}).get("output_mb") or 200) * 1024 ** 2)
+    total, outputs = 0, set(order.get("outputs") or [])
+    for f in files:
+        if not isinstance(f, dict) or "data" not in f:
+            raise ValueError("fichier du résultat illisible")
+        try:
+            data = base64.b64decode(str(f["data"]), validate=True)
+        except ValueError as exc:
+            raise ValueError("fichier du résultat illisible") from exc
+        total += len(data)
+        if total > limit:
+            raise ValueError("résultat plus lourd que permis")
+        if len(data) != f.get("size") or hashlib.sha256(data).hexdigest() != f.get("sha256"):
+            raise ValueError("fichier du résultat incomplet ou modifié")
+        if str(f.get("node")) not in outputs:
+            raise ValueError("fichier d'un nœud qui n'est pas une sortie de l'unité")
+        if media.sniff(data[:media.HEAD]) is None:
+            raise ValueError("fichier du résultat d'un genre inconnu")
+
+
+def _safe_name(name) -> str:
+    text = re.sub(r"[^A-Za-z0-9._-]+", "_", str(name or ""))[:80].strip("._")
+    return text or "sortie"
+
+
 def assimilate(order, output) -> dict:
-    """Les fichiers produits, rangés pour l'appli (chez le propriétaire, ce PC)."""
+    """Les fichiers produits, rangés pour l'appli (chez le propriétaire, ce PC) : depuis le
+    dossier de calcul (calculés ici), ou depuis leurs octets (une de mes machines)."""
+    from aiodos.engines import media
     from aiodos.gateway import file_store
     local = order.get("local") or {}
     job = db.query_one("SELECT public_id FROM jobs WHERE id=?", (local["job_id"],))
+    folder = paths.engine_runs_dir() / order["run_uuid"]
+    place = "here"
     ids = []
-    for f in output.get("files") or []:
-        path = Path(f["path"])
-        if not path.is_file() or path.stat().st_size != int(f["size"]):
-            raise ValueError("sortie absente ou tronquée")
+    for n, f in enumerate(output.get("files") or [], 1):
+        if "data" in f:                       # calculé par une de mes machines
+            place = "mine"
+            data = base64.b64decode(str(f["data"]))
+            folder.mkdir(parents=True, exist_ok=True)
+            kind = media.sniff(data[:media.HEAD]) or "application/octet-stream"
+            path = folder / f"{n:03d}-{_safe_name(f.get('name'))}"
+            path.write_bytes(data)
+        else:
+            path, kind = Path(f["path"]), str(f["type"])
+            if not path.is_file() or path.stat().st_size != int(f["size"]):
+                raise ValueError("sortie absente ou tronquée")
         row = file_store.add(local["app_id"], local["job_id"], job["public_id"], local["item"],
-                             path, node=str(f["node"]), kind=str(f["type"]), size=int(f["size"]),
-                             sha256=str(f["sha256"]), machine=output.get("machine"),
-                             place="here", engine=output.get("engine"))
+                             path, node=str(f["node"]), kind=kind, size=int(f["size"]),
+                             sha256=str(f["sha256"]),
+                             machine=str(output.get("machine") or "")[:80] or None,
+                             place=place, engine=str(output.get("engine") or "")[:80] or None)
         ids.append(row["id"])
-    shutil.rmtree(paths.engine_runs_dir() / order["run_uuid"], ignore_errors=True)
-    return {"files": ids, "machine": output.get("machine"), "place": "here",
+    shutil.rmtree(folder, ignore_errors=True)
+    return {"files": ids, "machine": output.get("machine"), "place": place,
             "seconds": output.get("seconds"), "engine": output.get("engine")}
 
 
@@ -582,6 +664,6 @@ def finalize(job_id, params, units) -> dict:
             "units_done": len(done)}
 
 
-register_portable(TASK, compute, assimilate, here=runnable_here, mine_only=True,
-                  expand=expand)
+register_portable(TASK, compute, assimilate, requires=requires, validate=validate,
+                  here=runnable_here, mine_only=True, expand=expand)
 register_job_kind(KIND, split, finalize)

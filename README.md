@@ -323,6 +323,8 @@ aiodos/
 │   ├── comfy_find.py  ComfyUI de ce PC (Desktop, version portable, instance ouverte)
 │   ├── comfy_client.py son API ; comfyui.py : rejouer une unité (entrées, suivi, sorties)
 │   ├── comfy_graph.py graphes au format API, en fonctions pures ; comfy_contract.py : empreintes
+│   ├── lending.py     ce qu'une machine annonce de son ComfyUI à mes machines, appariement
+│   ├── machines.py    où un travail peut tourner (ce PC, mes machines qui ont ComfyUI)
 │   └── media.py       genre d'un fichier d'après ses octets
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │                      qui se comporte comme un torrent : pauses, reprise sans perte

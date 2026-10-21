@@ -15,7 +15,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from aiodos import db
-from aiodos.engines import comfy_client, comfyui
+from aiodos.engines import comfy_client, comfyui, machines
 from aiodos.gateway import errors, file_store, input_store, scopes
 from aiodos.gateway.errors import ApiError
 from aiodos.jobs import queue
@@ -198,7 +198,9 @@ def _prepare(app_id: str, body: dict, where: list) -> dict:
     if file_store.unfetched_bytes(app_id) >= file_store.QUOTA:
         raise ApiError("quota_exceeded", "Trop de fichiers pas encore récupérés par cette "
                        "application.", detail={"quota": "unfetched_files"})
-    found = engine.instance_here() if "here" in where else None
+    # Le ComfyUI de ce PC donne ses définitions (vérification complète, modèles par dossier) ;
+    # sans lui, celui de mes machines vérifiera à son tour (I14)
+    found = engine.instance_here()
     inventory = None
     if found is not None:
         try:
@@ -209,18 +211,22 @@ def _prepare(app_id: str, body: dict, where: list) -> dict:
         params = engine.normalize(body, app_id=app_id, where=where, inventory=inventory)
     except engine.Invalid as exc:
         raise _invalid(exc) from exc
-    if found is None:
-        raise ApiError("engine_unavailable", "Aucune machine permise n'a ComfyUI ouvert et "
-                       "accordé à AIODOS (sur ce PC : Réglages → Moteurs).", status=409,
-                       detail={"engine": "comfyui", "where": where})
-    missing = engine.missing_here(params, inventory)
-    if missing:
-        raise ApiError("model_unavailable", "Il manque des modèles au ComfyUI de ce PC : "
+    capable = machines.known(where)
+    if not capable:
+        raise ApiError("engine_unavailable", "Aucune machine permise n'a ComfyUI accordé à "
+                       "AIODOS (Réglages → Moteurs des applications, sur ce PC ou sur une de "
+                       "mes machines).", status=409, detail={"engine": "comfyui", "where": where})
+    needed = list(params["models"].values())
+    gaps = [(machines.missing_on(m, needed), m) for m in capable]
+    if all(missing for missing, _ in gaps):
+        missing, best = min(gaps, key=lambda g: len(g[0]))
+        raise ApiError("model_unavailable", f"Il manque des modèles à « {best['name']} » : "
                        + ", ".join(m["name"] for m in missing[:5]) + ".",
-                       detail={"models": missing})
+                       detail={"models": missing, "machine": best["name"]})
+    reach = ",".join(c for c in where if c in scopes.SERVED[CAPABILITY])
     public_id = "job_" + secrets.token_urlsafe(12)
     job_id = queue.create_job(engine.KIND, params, engine.priority_of(params),
-                              owner_app=app_id, label=params["label"], reach="here",
+                              owner_app=app_id, label=params["label"], reach=reach,
                               public_id=public_id, client_ref=params["client_ref"])
     input_store.link(job_id, app_id, [v["sha256"] for v in params["inputs"].values()])
     return db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))

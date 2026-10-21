@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from aiodos import settings
-from aiodos.engines import comfy_client, comfyui
+from aiodos.engines import comfy_client, comfyui, machines
 from aiodos.gateway import errors, scopes
 from aiodos.gateway.errors import ApiError
 from aiodos.jobs.kinds import engine
@@ -34,25 +34,35 @@ def _here():
 
 
 def describe(circles: set) -> dict:
+    """Le moteur ComfyUI tel que l'appli le voit : ce PC, le nombre de mes machines qui
+    l'ont, et chaque modèle avec où il se trouve (« mine » : les noms de mes machines)."""
     found, inv = _here() if "here" in circles else (None, None)
-    models = []
-    for folder, names in sorted(((inv or {}).get("models") or {}).items()):
-        for name in names:
-            models.append({"folder": folder, "name": name.replace("\\", "/"), "sha256": None,
-                           "size": None,
-                           "where": {"here": True, "mine": [], "friends": None, "public": None},
-                           "license": None})
-    machine = str(settings.get("node_name") or settings.machine_name())[:80]
+    known = machines.known(circles)
+    models = {}
+    for machine in known:
+        for folder, names in (machine.get("models") or {}).items():
+            for name in names:
+                key = (folder, name.replace("\\", "/"))
+                entry = models.setdefault(key, {
+                    "folder": folder, "name": key[1], "sha256": None, "size": None,
+                    "where": {"here": False, "mine": [] if "mine" in circles else None,
+                              "friends": None, "public": None}, "license": None})
+                if machine["place"] == "here":
+                    entry["where"]["here"] = True
+                elif machine["name"] not in entry["where"]["mine"]:
+                    entry["where"]["mine"].append(machine["name"])
     return {"id": "comfyui", "label": "ComfyUI",
             "here": ({"enabled": True, "version": found.version, "vram_mib": found.vram_mib}
                      if found is not None else
                      {"enabled": bool(settings.get("engines_comfyui_enabled")),
                       "version": None, "vram_mib": None}) if "here" in circles else None,
             "machines": {"here": 1 if found is not None else 0,
-                         "mine": 0 if "mine" in circles else None,
+                         "mine": sum(1 for m in known if m["place"] == "mine")
+                         if "mine" in circles else None,
                          "friends": None, "public": None},
-            "models": models,
-            "object_info": {"available": inv is not None, "machine": machine if inv else None,
+            "models": [models[k] for k in sorted(models)],
+            "object_info": {"available": inv is not None,
+                            "machine": machines.this_name() if inv else None,
                             "digest": inv.get("core") if inv else None},
             "recipes": 0}
 
@@ -79,19 +89,25 @@ async def plan(request: Request):
     where = [c for c in scopes.CIRCLES if c in circles]
 
     def check():
-        found, inv = _here() if "here" in circles else (None, None)
+        _, inv = _here()
         params = engine.normalize({k: v for k, v in body.items() if k != "where"},
                                   app_id=context.id, where=where, inventory=inv)
-        missing = [{**m, "machine": str(settings.get("node_name") or settings.machine_name())}
-                   for m in engine.missing_here(params, inv)] if inv else []
-        return {"ok": found is not None and not missing, "where_effective":
-                ["here"] if found is not None else [],
-                "where_reason": None if found is not None else
-                "ComfyUI n'est pas ouvert ou pas accordé sur ce PC",
-                "machines": {"here": found is not None, "mine": 0 if "mine" in circles else None,
+        known = machines.known(circles)
+        needed = list(params["models"].values())
+        gaps = [(machines.missing_on(m, needed), m) for m in known]
+        able = [m for missing, m in gaps if not missing]
+        reason = None if able else ("aucune machine permise n'a ComfyUI accordé à AIODOS"
+                                    if not known else "il manque des modèles")
+        return {"ok": bool(able),
+                "where_effective": [c for c in scopes.CIRCLES
+                                    if any(m["place"] == c for m in able)],
+                "where_reason": reason,
+                "machines": {"here": any(m["place"] == "here" for m in able),
+                             "mine": sum(1 for m in able if m["place"] == "mine")
+                             if "mine" in circles else None,
                              "friends": None, "public": None},
-                "missing": missing, "refused": {}, "licenses": [],
-                "units": len(params["items"]), "estimate": None}
+                "missing": [{**x, "machine": m["name"]} for missing, m in gaps for x in missing],
+                "refused": {}, "licenses": [], "units": len(params["items"]), "estimate": None}
     try:
         return JSONResponse(await asyncio.to_thread(check))
     except engine.Invalid as exc:

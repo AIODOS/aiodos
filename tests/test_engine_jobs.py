@@ -179,6 +179,28 @@ def test_a_failing_unit_says_why(comfy):
     assert "engine_error" in row["error"] and "nœud 1" in row["error"]
 
 
+def test_matching_a_machine_that_asks_for_work():
+    """engines/lending.can_serve, chez le propriétaire : le moteur, ses classes, ses modèles
+    (un modèle sans dossier se cherche dans tous) ; une annonce mal formée vaut un refus."""
+    from aiodos.engines import lending
+    need = {"name": "comfyui", "api": 1, "classes": ["KSampler", "SaveImage"],
+            "models": [{"folder": "checkpoints", "name": "sub/autre.safetensors"},
+                       {"folder": None, "name": "vae.safetensors"}]}
+    caps = {"engines": {"comfyui": {"api": 1, "state": "ready",
+                                    "classes": ["KSampler", "SaveImage", "LoadImage"],
+                                    "models": {"checkpoints": ["sub\\autre.safetensors"],
+                                               "vae": ["vae.safetensors"]}}}}
+    assert lending.can_serve(need, caps)
+    assert not lending.can_serve({**need, "classes": ["NoeudAjoute"]}, caps)
+    assert not lending.can_serve({**need, "api": 2}, caps)
+    busy = {"engines": {"comfyui": {**caps["engines"]["comfyui"], "state": "in_use"}}}
+    assert not lending.can_serve(need, busy)
+    for odd in ({}, {"engines": []}, {"engines": {"comfyui": {"api": 1, "classes": "KSampler",
+                                                             "models": {}}}},
+                {"engines": {"comfyui": {"api": 1, "classes": [], "models": [1, 2]}}}):
+        assert not lending.can_serve(need, odd)
+
+
 def test_inputs_are_checked_on_arrival():
     data = png()
     good = hashlib.sha256(data).hexdigest()

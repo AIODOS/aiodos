@@ -126,6 +126,7 @@ const SECTIONS = [
     { type: 'engines' },
     { key: 'engines_comfyui_enabled', label: 'Mettre ComfyUI au service de mes applications', type: 'switch',
       help: 'AIODOS enverra au ComfyUI ouvert de ce PC les travaux des applications que tu autorises (PANDORA…), '
+        + 'venus de ce PC ou de tes autres machines, '
         + 'en plus des tiens : ils s’ajoutent à sa file sous le nom « aiodos », et seul ce calcul-là est arrêté '
         + 'quand une appli annule. Rien n’est installé ni téléchargé.' },
     { key: 'engines_comfyui_path', label: 'Dossier de ComfyUI', type: 'folder',
