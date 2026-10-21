@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — recopie clients/contract/*.json dans clients/js/contract/ (le faux
+// aiodos-client 0.2.0 — recopie clients/contract/*.json dans clients/js/contract/ (le faux
 // serveur publié avec le paquet sert cette copie ; un essai vérifie qu'elle est à jour).
 
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';

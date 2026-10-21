@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — l'état vu par l'appli : status(), qui ne rejette jamais, et
+// aiodos-client 0.2.0 — l'état vu par l'appli : status(), qui ne rejette jamais, et
 // waitReady() (docs/api-applications.md § 6).
 //
 // Ordre : demande en cours dans ce client ; fichier de découverte ; GET /aiodos/v1/info

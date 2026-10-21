@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — petits outils communs : attente annulable, listes, cercles.
+// aiodos-client 0.2.0 — petits outils communs : attente annulable, listes, cercles, noms des
+// champs (snake_case d'AIODOS, camelCase du client), fonctions pas encore servies.
 
 import { clientError, makeError } from './errors.js';
 import { VERSION } from './version.js';
@@ -48,14 +49,20 @@ export function checkWhere(where, lang = 'fr') {
 }
 
 /**
- * La surface de L2 (moteurs, travaux, entrées) : NotSupported tant que `features` n'annonce
- * pas la fonction, sans rien essayer d'autre que GET /aiodos/v1/info ; et, si un AIODOS plus
- * récent l'annonce déjà, NotSupported aussi (detail.announced vrai) : ce client 0.1.0 n'en
- * connaît pas encore les routes, la version suivante les servira.
+ * Une fonction qu'AIODOS ne sert pas encore (object_info relayé et gabarits en L2c, recettes
+ * en L4, liens signés) : NotSupported. D'abord `needs`, la fonction qui la porte (absente :
+ * NotSupported, detail.announced faux, sans rien essayer d'autre que GET /aiodos/v1/info) ;
+ * puis `feature` elle-même : pas annoncée, NotSupported (« mets AIODOS à jour ») ; déjà
+ * annoncée par un AIODOS plus récent, NotSupported aussi (detail.announced vrai) : ce client
+ * n'en connaît pas encore les routes, une version suivante les servira.
  */
-export async function notYet(ctx, feature, signal) {
-  await ctx.session.requireFeature(feature, { signal });
-  throw clientError('not_supported', ctx.lang(), {
+export async function notYet(ctx, { needs, feature, signal }) {
+  const info = await ctx.session.requireFeature(needs ?? feature, { signal });
+  const lang = ctx.lang();
+  if (!(Array.isArray(info.features) && info.features.includes(feature))) {
+    throw clientError('not_supported', lang, { vars: { feature }, detail: { feature, announced: false } });
+  }
+  throw clientError('not_supported', lang, {
     textKey: 'client_too_old',
     vars: { feature, version: VERSION },
     detail: { feature, announced: true },
@@ -67,4 +74,28 @@ export function compact(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
   return out;
+}
+
+/**
+ * Une réponse d'AIODOS (snake_case) en camelCase, récursivement : client_ref → clientRef,
+ * elapsed_s → elapsedS, vram_mib → vramMib. Les valeurs ne changent pas.
+ */
+export function camelize(value, depth = 0) {
+  if (Array.isArray(value)) return value.map((v) => camelize(v, depth + 1));
+  if (!value || typeof value !== 'object' || depth > 12) return value;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())] = camelize(v, depth + 1);
+  return out;
+}
+
+/** Les clés d'un objet (un niveau) de camelCase en snake_case : unitSeconds → unit_seconds. */
+export function snakeKeys(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = v;
+  return out;
+}
+
+/** Vrai pour un objet simple ({…}, ni liste, ni octets). */
+export function isPlainObject(v) {
+  return Boolean(v) && typeof v === 'object' && !Array.isArray(v) && !ArrayBuffer.isView(v) && !(v instanceof ArrayBuffer);
 }

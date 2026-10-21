@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — trouver AIODOS : le fichier de découverte, l'installation, le
+// aiodos-client 0.2.0 — trouver AIODOS : le fichier de découverte, l'installation, le
 // lancement et le programme d'aide « --app-request » (docs/api-applications.md § 1 et § 4.4).
 //
 // Rien de ce qu'on lit n'est exécuté : du fichier de découverte, seule l'adresse est

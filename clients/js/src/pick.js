@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — choisir un modèle dans une liste rendue par models() (ou au format
+// aiodos-client 0.2.0 — choisir un modèle dans une liste rendue par models() (ou au format
 // d'ARKLIGHT : { id, size, caps }).
 
 import { toList } from './util.js';

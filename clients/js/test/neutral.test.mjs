@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : le format neutre d'ARKLIGHT ↔ OpenAI, dans les deux sens.
+// aiodos-client 0.2.0 — essais : le format neutre d'ARKLIGHT ↔ OpenAI, dans les deux sens.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

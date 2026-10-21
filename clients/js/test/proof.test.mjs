@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : la preuve d'identité (clients/contract/proof.json).
+// aiodos-client 0.2.0 — essais : la preuve d'identité (clients/contract/proof.json).
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

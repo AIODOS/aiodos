@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — un faux AIODOS, pour les essais du client et ceux des applis.
+// aiodos-client 0.2.0 — un faux AIODOS, pour les essais du client et ceux des applis.
 //
 // - createFakeFetch() : une fonction fetch, sans réseau ;
 // - startFakeServer() : un vrai serveur node:http sur 127.0.0.1:0 ;
 // Les deux servent le contrat partagé (contract/, copie de clients/contract/ vérifiée par
 // les essais) : info avec une preuve juste, demandes d'accès pilotables (approve, deny,
 // expire, slowDown), relève, revoke, models, chat en flux (rejoue chat.json, y compris
-// « : aiodos loading »), embeddings, erreurs à la demande (failNext).
+// « : aiodos loading »), embeddings, erreurs à la demande (failNext), et les travaux ComfyUI
+// (fake-engines.js : moteurs, entrées, travaux qui avancent, événements, fichiers par plages),
+// annoncés quand `features` vaut FAKE_FEATURES.
 // - writeFakeDiscovery() : un faux gateway.json dans un dossier temporaire ;
 // - createFakeHome() : un faux AIODOS_HOME dont l'interpréteur est un script Node (faux
 //   programme d'aide « --app-request », faux lancement « --background ») ;
@@ -21,14 +23,22 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { createClient, memoryKeyStore } from './client.js';
+import { FAKE_PNG, createFakeEngines } from './fake-engines.js';
 import { computeProof } from './proof.js';
+
+export { FAKE_PNG };
 
 const CONTRACT_DIR = new URL('../contract/', import.meta.url);
 const contractCache = new Map();
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const CIRCLES = ['here', 'mine', 'friends', 'public'];
-const KNOWN_SCOPES = new Set(['chat', 'embed', 'libraries']);
+const KNOWN_SCOPES = new Set(['chat', 'embed', 'libraries', 'engines:comfyui']);
 const FAKE_MARK = Symbol('aiodos-fake');
+// les routes sans clé qui écrivent exigent du JSON (comme web_guard de la passerelle)
+const PUBLIC_POSTS = new Set(['/aiodos/v1/access/requests', '/aiodos/v1/access/token']);
+
+/** Tout ce que sert le faux (celles d'AIODOS 2.1 avec les travaux ComfyUI), pour `features`. */
+export const FAKE_FEATURES = Object.freeze(['access', 'models', 'chat', 'embed', 'open', 'engines', 'engines.comfyui', 'jobs', 'jobs.pause', 'inputs', 'files']);
 
 /** Un fichier du contrat (copie neuve à chaque appel). */
 export function loadContract(name) {
@@ -78,8 +88,27 @@ const STATUS_OF = {
   engine_failed: 502,
   engine_unavailable: 503,
   approval_unavailable: 503,
+  graph_not_api: 400,
+  graph_invalid: 400,
+  patch_invalid: 400,
+  forbidden_value: 400,
+  forbidden_node: 400,
+  input_missing: 400,
+  input_hash_mismatch: 400,
+  engine_not_found: 404,
+  input_not_found: 404,
+  job_not_found: 404,
+  file_not_found: 404,
+  model_unavailable: 409,
+  model_unresolved: 409,
+  model_ambiguous: 409,
+  job_not_cancellable: 409,
+  job_not_pausable: 409,
+  graph_too_large: 413,
+  input_too_large: 413,
+  quota_exceeded: 429,
 };
-const RETRYABLE = new Set(['rate_limited', 'busy', 'peer_failed', 'engine_failed', 'engine_unavailable', 'no_machine']);
+const RETRYABLE = new Set(['rate_limited', 'busy', 'peer_failed', 'engine_failed', 'engine_unavailable', 'no_machine', 'model_unavailable', 'quota_exceeded']);
 
 const B32 = 'abcdefghijklmnopqrstuvwxyz234567';
 function base32(n) {
@@ -104,7 +133,7 @@ function list(v) {
 /** Toutes les réponses d'erreur du contrat, par code (la première trouvée). */
 function contractErrors() {
   const out = new Map();
-  for (const file of ['errors', 'access', 'chat', 'embed']) {
+  for (const file of ['errors', 'access', 'chat', 'embed', 'jobs']) {
     for (const it of loadContract(file).interactions) {
       const j = it.response && it.response.json;
       const code = j && (j.error && typeof j.error === 'object' ? j.error.code : j.code);
@@ -308,6 +337,8 @@ export function createFake(options = {}) {
     const description = known ? known.response.json.error_description : error;
     return { status: 400, headers: api(), json: { error, error_description: description } };
   };
+  // les travaux ComfyUI : entrées, travaux, événements, fichiers (fake-engines.js)
+  const engines = createFakeEngines(fake, { api, ok, fail, authOf, keyError }, options);
 
   function authOf(req) {
     const h = req.headers.authorization;
@@ -527,18 +558,30 @@ export function createFake(options = {}) {
     }
     if (m === 'POST' && p === '/v1/chat/completions') return chatResponse(req);
     if (m === 'POST' && p === '/v1/embeddings') return embeddings(req);
+    const r = engines.route(req);
+    if (r) return r;
     return fail('not_supported', { message: `Route inconnue : ${m} ${p}` });
   }
 
-  /** Une requête → la réponse { status, headers, json | text | sse, delayMs, stallAfter, hang }. */
+  /**
+   * Une requête → la réponse { status, headers, json | text | sse | live | bytes, delayMs,
+   * stallAfter, cutAfter, cutAt, hang }. Le corps reçu : un texte ou des octets.
+   */
   fake.handle = async (req) => {
-    const rec = { method: req.method, path: req.url.pathname + req.url.search, headers: { ...req.headers }, json: null, at: Date.now() };
-    try {
-      rec.json = req.body ? JSON.parse(req.body) : null;
-    } catch {
-      rec.json = undefined;
+    const raw = req.body == null ? null : Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body), 'utf8');
+    const ctype = String(req.headers['content-type'] || '');
+    // un corps brut (une entrée envoyée) n'est pas du JSON
+    const binary = req.method === 'PUT' || /^(image|video|audio)\/|octet-stream/i.test(ctype);
+    const rec = { method: req.method, path: req.url.pathname + req.url.search, headers: { ...req.headers }, json: null, size: raw ? raw.length : 0, at: Date.now() };
+    if (raw && raw.length && !binary) {
+      try {
+        rec.json = JSON.parse(raw.toString('utf8'));
+      } catch {
+        rec.json = undefined;
+      }
     }
     req.json = rec.json;
+    req.bytes = raw;
     fake.requests.push(rec);
     fake.emit('request', rec);
     const qi = fake.queue.findIndex(
@@ -560,7 +603,7 @@ export function createFake(options = {}) {
     const site = req.headers['sec-fetch-site'];
     const dest = req.headers['sec-fetch-dest'];
     if (req.headers.origin || site === 'cross-site' || site === 'same-site' || (dest && dest !== 'empty')) return fail('origin_refused');
-    if (req.method === 'POST' && req.url.pathname.startsWith('/aiodos/v1/') && !/^application\/json/i.test(req.headers['content-type'] || '')) {
+    if (req.method === 'POST' && PUBLIC_POSTS.has(req.url.pathname) && !/^application\/json/i.test(ctype)) {
       return fail('unsupported_media_type', { message: 'Corps non JSON.' });
     }
     if (rec.json === undefined) return fail('invalid_request', { message: 'Corps JSON illisible.' });
@@ -595,6 +638,25 @@ function abortError() {
   return new DOMException('This operation was aborted', 'AbortError');
 }
 
+/** Une connexion coupée en route, comme undici la rapporte. */
+function cutError() {
+  return new TypeError('terminated', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) });
+}
+
+/** Le corps d'un fetch : un texte, ou des octets (Buffer). */
+function bodyOf(body) {
+  if (body == null) return null;
+  if (typeof body === 'string') return body;
+  if (body instanceof ArrayBuffer) return Buffer.from(body);
+  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  return String(body);
+}
+
+/** Une ligne d'un flux SSE du contrat : « event: … » précède sa ligne « data: … » sans ligne vide. */
+function sseText(line) {
+  return /^(event|id|retry):/.test(line) ? `${line}\n` : `${line}\n\n`;
+}
+
 /**
  * Un fetch sans réseau, qui sert le faux AIODOS à son adresse (fake.url) et seulement là.
  * Il imite celui de Node : TypeError « fetch failed » avec cause.code (ECONNREFUSED…),
@@ -612,12 +674,8 @@ export function createFakeFetch(fakeOrOptions = {}) {
       throw netError('ECONNREFUSED', `connect ECONNREFUSED ${url.host}`);
     }
     if (!fake.listening) throw netError('ECONNREFUSED', `connect ECONNREFUSED ${url.host}`);
-    const out = await fake.handle({
-      method: String(init.method || 'GET').toUpperCase(),
-      url,
-      headers: lowerHeaders(init.headers),
-      body: init.body == null ? null : String(init.body),
-    });
+    const method = String(init.method || 'GET').toUpperCase();
+    const out = await fake.handle({ method, url, headers: lowerHeaders(init.headers), body: bodyOf(init.body) });
     if (out.hang) {
       await new Promise((resolve, reject) => {
         if (!signal) return;
@@ -625,14 +683,80 @@ export function createFakeFetch(fakeOrOptions = {}) {
       });
     }
     if (out.status >= 300 && out.status < 400 && init.redirect === 'error') throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
-    return toResponse(out, signal, fake);
+    return toResponse(out, signal, fake, method);
   }
   fakeFetch.fake = fake;
   return fakeFetch;
 }
 
-function toResponse(out, signal, fake) {
+/** Un flux d'événements en direct (les travaux) : out.live(puits) écrit, ferme ou coupe. */
+function liveResponse(out, signal, fake, headers) {
+  if (!headers.has('content-type')) headers.set('content-type', 'text/event-stream');
+  const enc = new TextEncoder();
+  let closed = false;
+  let cleanup = null;
+  let onAbort = null;
+  const finish = () => {
+    closed = true;
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+  };
+  const stream = new ReadableStream({
+    start(controller) {
+      onAbort = () => {
+        if (closed) return;
+        closed = true;
+        if (cleanup) cleanup();
+        fake.closed += 1;
+        fake.emit('closed');
+        controller.error(signal.reason ?? abortError());
+      };
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      cleanup = out.live({
+        send: (text) => {
+          if (!closed) controller.enqueue(enc.encode(text));
+        },
+        close: () => {
+          if (closed) return;
+          finish();
+          controller.close();
+        },
+        cut: () => {
+          if (closed) return;
+          finish();
+          controller.error(cutError());
+        },
+      });
+    },
+    cancel() {
+      if (closed) return;
+      finish();
+      if (cleanup) cleanup();
+      fake.closed += 1;
+      fake.emit('closed');
+    },
+  });
+  return new Response(stream, { status: out.status, headers });
+}
+
+/** Des octets (le contenu d'un fichier), coupés après out.cutAt octets s'il le faut. */
+function bytesResponse(out, headers) {
+  if (out.cutAt == null) return new Response(out.bytes, { status: out.status, headers });
+  let pulls = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      if (pulls === 1 && out.cutAt > 0) controller.enqueue(new Uint8Array(out.bytes.subarray(0, out.cutAt)));
+      else controller.error(cutError());
+    },
+  });
+  return new Response(stream, { status: out.status, headers });
+}
+
+function toResponse(out, signal, fake, method = 'GET') {
   const headers = new Headers(out.headers || {});
+  if (method === 'HEAD') return new Response(null, { status: out.status, headers }); // jamais de corps
+  if (out.live) return liveResponse(out, signal, fake, headers);
+  if (out.bytes) return bytesResponse(out, headers);
   if (out.sse) {
     if (!headers.has('content-type')) headers.set('content-type', 'text/event-stream');
     const enc = new TextEncoder();
@@ -658,7 +782,7 @@ function toResponse(out, signal, fake) {
             // connexion coupée en route, comme undici la rapporte
             closed = true;
             if (signal) signal.removeEventListener('abort', onAbort);
-            controller.error(new TypeError('terminated', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) }));
+            controller.error(cutError());
             return;
           }
           if (i >= out.sse.length) {
@@ -667,7 +791,7 @@ function toResponse(out, signal, fake) {
             controller.close();
             return;
           }
-          controller.enqueue(enc.encode(`${out.sse[i++]}\n\n`));
+          controller.enqueue(enc.encode(sseText(out.sse[i++])));
           if (i >= out.sse.length && out.stallAfter == null && out.cutAfter == null) {
             // le dernier événement : le flux se ferme aussitôt, comme celui de la passerelle
             closed = true;
@@ -716,7 +840,7 @@ export async function startFakeServer(fakeOrOptions = {}) {
     const url = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
     let out;
     try {
-      out = await fake.handle({ method: req.method, url, headers: lowerHeaders(req.headers), body: chunks.length ? Buffer.concat(chunks).toString('utf8') : null });
+      out = await fake.handle({ method: req.method, url, headers: lowerHeaders(req.headers), body: chunks.length ? Buffer.concat(chunks) : null });
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
       res.end(String(err && err.message));
@@ -724,6 +848,47 @@ export async function startFakeServer(fakeOrOptions = {}) {
     }
     if (out.hang) return; // ne répond jamais : le client finira par fermer
     const headers = { ...(out.headers || {}) };
+    if (req.method === 'HEAD') {
+      res.writeHead(out.status, headers);
+      res.end();
+      return;
+    }
+    if (out.live) {
+      // les événements d'un travail, en direct
+      headers['Content-Type'] = headers['Content-Type'] || 'text/event-stream';
+      res.writeHead(out.status, headers);
+      let over = false;
+      const cleanup = out.live({
+        send: (text) => {
+          if (!over && !res.destroyed) res.write(text);
+        },
+        close: () => {
+          if (over) return;
+          over = true;
+          res.end();
+        },
+        cut: () => {
+          if (over) return;
+          over = true;
+          res.socket?.destroy();
+        },
+      });
+      res.on('close', () => {
+        if (over) return;
+        over = true;
+        if (typeof cleanup === 'function') cleanup();
+        fake.closed += 1;
+        fake.emit('closed');
+      });
+      return;
+    }
+    if (out.bytes) {
+      // le contenu d'un fichier ; coupé en route après out.cutAt octets s'il le faut
+      res.writeHead(out.status, { ...headers, 'Content-Length': String(out.bytes.length) });
+      if (out.cutAt == null) res.end(out.bytes);
+      else res.write(out.bytes.subarray(0, out.cutAt), () => res.socket?.destroy());
+      return;
+    }
     if (out.sse) {
       headers['Content-Type'] = headers['Content-Type'] || 'text/event-stream';
       res.writeHead(out.status, headers);
@@ -750,7 +915,7 @@ export async function startFakeServer(fakeOrOptions = {}) {
           res.end();
           return;
         }
-        res.write(`${out.sse[i++]}\n\n`);
+        res.write(sseText(out.sse[i++]));
         if (i >= out.sse.length && out.stallAfter == null && out.cutAfter == null) {
           done = true;
           res.end();
