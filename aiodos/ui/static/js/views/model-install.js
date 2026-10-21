@@ -15,6 +15,8 @@ export const integrated = () => state.node?.ollama?.engine === 'llama.cpp';
 
 function fitText(m, phone) {
   if (m.fits === 'gpu') return ' Tient dans ta carte graphique : rapide.';
+  if (m.fits === 'moe') return ' Carte graphique et mémoire vive se partagent le modèle : '
+    + 'comme peu de paramètres travaillent à chaque mot, il reste rapide.';
   if (m.fits === 'ram') return phone ? ' Tourne sur le processeur du téléphone : lent, mais il répond.'
     : ' Tourne sur le processeur : plus lent qu\'avec une carte graphique.';
   return ' Lourd pour cette machine : très lent.';

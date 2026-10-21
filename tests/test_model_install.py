@@ -156,3 +156,34 @@ def test_the_api_publishes_the_progress(monkeypatch):
     assert final["done"] is True and final["completed"] == final["total"] == 1000
     assert events[0]["running"] is True and events[-1]["running"] is False
     assert events[-1]["done"] is True and events[-1]["model"] == "qwen3.5:9b"
+
+
+def test_gemma4_and_qwen36_come_through_the_integrated_engine(monkeypatch):
+    """Ajoutés le 21/10/2026 : seulement par le moteur intégré (fichiers épinglés de
+    llm/catalog.py), jamais sur un téléphone ; le modèle conseillé ne change pas."""
+    from aiodos.llm import catalog
+    _device(monkeypatch, vram=8 * GB, ram=32 * GB)
+    monkeypatch.setattr(ollama, "use_integrated", lambda: True)
+    found = model_install.suggestions()
+    models = {m["name"]: m for m in found["models"]}
+    assert found["recommended"] == "qwen3.5:9b"
+    assert models["gemma4:e4b"]["fits"] == "gpu" and models["gemma4:e4b"]["license"] == "Apache-2.0"
+    # Mixture d'experts : 23 Go entre la carte (8 Go) et la mémoire vive (32 Go)
+    assert models["qwen3.6:35b-a3b"]["fits"] == "moe"
+    for name in ("gemma4:e4b", "qwen3.6:35b-a3b"):
+        spec = catalog.entry(name)
+        assert spec and spec["license"] == "Apache-2.0"
+        assert catalog.total_size(spec) == models[name]["size"]
+    _device(monkeypatch, vram=8 * GB, ram=16 * GB)
+    assert {m["name"]: m for m in model_install.suggestions()["models"]}[
+        "qwen3.6:35b-a3b"]["fits"] == "heavy"
+    _device(monkeypatch, phone=True, ram=8 * GB)
+    names = {m["name"] for m in model_install.suggestions()["models"]}
+    assert not names & {"gemma4:e4b", "qwen3.6:35b-a3b"}
+
+
+def test_without_the_integrated_engine_they_are_not_offered(monkeypatch):
+    _device(monkeypatch, vram=8 * GB, ram=32 * GB)
+    monkeypatch.setattr(ollama, "use_integrated", lambda: False)
+    names = {m["name"] for m in model_install.suggestions()["models"]}
+    assert not names & {"gemma4:e4b", "qwen3.6:35b-a3b"}

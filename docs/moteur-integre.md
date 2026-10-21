@@ -49,6 +49,8 @@ téléchargée sous le même nom, passe), avec un message qui dit de l'installer
 | qwen3.5:0.8b, 2b, 4b, 9b | unsloth/Qwen3.5-…-GGUF (Q4_K_M + projecteur F16) | Apache-2.0 | 0,7 à 6,6 Go |
 | mistral:7b | bartowski/Mistral-7B-Instruct-v0.3-GGUF (Q4_K_M) | Apache-2.0 | 4,4 Go |
 | phi4-mini | unsloth/Phi-4-mini-instruct-GGUF (Q4_K_M) | MIT | 2,5 Go |
+| gemma4:e4b (ajouté le 21/10) | unsloth/gemma-4-E4B-it-GGUF (Q4_K_M + projecteur F16) | Apache-2.0 | 6,0 Go |
+| qwen3.6:35b-a3b (ajouté le 21/10) | unsloth/Qwen3.6-35B-A3B-GGUF (UD-Q4_K_M + projecteur F16) | Apache-2.0 | 23,0 Go |
 | embeddinggemma | ggml-org/embeddinggemma-300M-GGUF (Q8_0) | conditions de Gemma | 334 Mo |
 
 embeddinggemma est le modèle des bibliothèques (docs/embeddings.md) : sa version
@@ -56,6 +58,21 @@ standard est le même modèle que celui d'Ollama. **Mesuré le 20/10** sur les p
 enregistrés de l'AIODOS installé : similarité 0,9996 en moyenne (0,9995 au moins) entre
 les vecteurs d'Ollama et ceux du moteur intégré, mêmes passages en tête de recherche :
 pas de réindexation à prévoir. Téléchargé et vérifié (SHA-256) en une dizaine de secondes.
+
+**Gemma 4 E4B et Qwen 3.6 (21/10/2026)**, retenus par la veille des sorties :
+- leurs architectures (`gemma4`, `qwen35moe`) sont dans `src/llama-arch.cpp` de llama.cpp
+  b11707, celle que livre AIODOS ; licences Apache-2.0 (fiches Hugging Face) ;
+- proposés seulement par le moteur intégré (pas de nom vérifié chez Ollama), jamais sur un
+  téléphone (plus de 3 Go) ;
+- Qwen 3.6 est une mixture d'experts (35 milliards de paramètres, 3 actifs à chaque mot) :
+  carte graphique et mémoire vive se partagent le modèle (`--fit`). « Installer un
+  modèle » le dit utilisable quand les deux réunies suffisent (8 Go et 32 Go : oui ;
+  8 Go et 16 Go : non) ;
+- pas encore chargés pour de vrai ici : le premier essai sera leur installation par
+  l'auteur (un fichier que llama.cpp refuse est écarté avec un message, comme les autres).
+
+DeepSeek V4.1 (763 milliards de paramètres) n'y entre pas : llama.cpp ne sait encore que
+convertir ses fichiers (demande #28696), et même en 2 bits il pèse environ 246 Go.
 
 ## Reste à faire
 

@@ -2,8 +2,9 @@
 GGUF de Hugging Face, épinglés (révision du dépôt, taille, empreinte SHA-256) pour qu'un
 fichier ne change jamais sous nos pieds. Relevés le 20/10/2026 (API de Hugging Face) :
 dépôts publics, sans accès restreint ; licences libres pour la conversation (Apache-2.0
-pour Qwen et Mistral, MIT pour Phi), conditions de Gemma pour embeddinggemma, le modèle
-d'embedding déjà utilisé (docs/embeddings.md).
+pour Qwen, Mistral et Gemma 4, MIT pour Phi), conditions de Gemma pour embeddinggemma, le
+modèle d'embedding déjà utilisé (docs/embeddings.md). Gemma 4 et Qwen 3.6 ajoutés le
+21/10/2026.
 
 Mêmes noms que chez Ollama : réglages et conversations n'ont pas à changer. Les Qwen 3.5
 voient les images (projecteur « mmproj ») : ils remplacent qwen2.5vl pour la lecture des
@@ -60,6 +61,32 @@ MODELS = {
         "files": {"model": ("Phi-4-mini-instruct-Q4_K_M.gguf",
                             "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
                             2491874272)}},
+    # Ajoutés le 21/10/2026 (veille des sorties, accord de l'auteur) ; architectures gemma4
+    # et qwen35moe connues de llama.cpp b11707 (src/llama-arch.cpp). Google, sous
+    # Apache-2.0 depuis Gemma 4 : voit les images, tient dans une carte de 8 Go
+    "gemma4:e4b": {
+        "repo": "unsloth/gemma-4-E4B-it-GGUF",
+        "revision": "bfc15c382204943c3a8fff0c750b94ae2364d7a3", "license": "Apache-2.0",
+        "kind": "chat", "family": "gemma4", "parameters": "E4B", "quantization": "Q4_K_M",
+        "files": {"model": ("gemma-4-E4B-it-Q4_K_M.gguf",
+                            "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87",
+                            4977171584),
+                  "mmproj": ("mmproj-F16.gguf",
+                             "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51",
+                             990372672)}},
+    # Alibaba, mixture d'experts : 35 milliards de paramètres, dont 3 travaillent à chaque
+    # mot ; tourne en partie sur le processeur (--fit), avec 32 Go de mémoire vive
+    "qwen3.6:35b-a3b": {
+        "repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+        "revision": "a483e9e6cbd595906af30beda3187c2663a1118c", "license": "Apache-2.0",
+        "kind": "chat", "family": "qwen35moe", "parameters": "35B-A3B",
+        "quantization": "UD-Q4_K_M",
+        "files": {"model": ("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+                            "ac0e2c1189e055faa36eff361580e79c5bd6f8e76bffb4ce547f167d53e31a61",
+                            22134528992),
+                  "mmproj": ("mmproj-F16.gguf",
+                             "8971ee4f331ff0a4c609374f32984b3d4e6dc086c0aa35f1d637fad1829e887f",
+                             899283680)}},
     "embeddinggemma:latest": {
         "repo": "ggml-org/embeddinggemma-300M-GGUF",
         "revision": "0f741b5a6585bd53aeb15cd1372c56f2a0f65e12",

@@ -4,7 +4,8 @@ Sans modèle, AIODOS ne se contente plus de dire « aucun modèle » : il consei
 qui tiennent sur cette machine (téléphone, PC avec ou sans carte graphique) et les installe
 par Ollama (/api/pull), en suivant l'avancement. Seulement des licences libres, vérifiées
 dans le registre d'Ollama le 18/10/2026 (fiche et texte de licence de chaque modèle) :
-Apache-2.0 pour Qwen et Mistral, MIT pour Phi. Un seul à la fois ; l'interface lit
+Apache-2.0 pour Qwen et Mistral, MIT pour Phi. Gemma 4 et Qwen 3.6 (Apache-2.0, 21/10/2026)
+ne s'installent que par le moteur intégré (llm/catalog.py). Un seul à la fois ; l'interface lit
 progress() et reçoit un événement à chaque étape.
 """
 import logging
@@ -34,6 +35,16 @@ CATALOG = [
                                         "ou 16 Go de mémoire."},
     {"name": "phi4-mini", "label": "Phi-4 mini · 3,8 milliards", "size": 2_490_000_000,
      "license": "MIT", "about": "Microsoft : vif pour raisonner, moins à l'aise en français."},
+    # Ajoutés le 21/10/2026, seulement par le moteur intégré (fichiers épinglés de
+    # llm/catalog.py : pas de nom vérifié chez Ollama)
+    {"name": "gemma4:e4b", "label": "Gemma 4 · E4B", "size": 5_967_544_256,
+     "license": "Apache-2.0", "engine": "llama.cpp",
+     "about": "Google : vif, voit les images, à l'aise en français ; une carte graphique de "
+              "8 Go."},
+    {"name": "qwen3.6:35b-a3b", "label": "Qwen 3.6 · 35 milliards, dont 3 actifs",
+     "size": 23_033_812_672, "license": "Apache-2.0", "engine": "llama.cpp", "moe": True,
+     "about": "Le plus capable : une mixture d'experts de 35 milliards de paramètres, dont "
+              "3 travaillent à chaque mot. Il faut 32 Go de mémoire vive."},
     # Le modèle des bibliothèques (docs/embeddings.md) : sans lui, pas de recherche dans
     # les documents. Celui d'Ollama ne se charge pas dans le moteur intégré
     # (docs/moteur-integre.md) : sa version standard, le même modèle, le remplace
@@ -85,14 +96,22 @@ def suggestions() -> dict:
     except Exception:
         installed, ollama_ok = set(), False
     best = recommended(found)
+    integrated = ollama.use_integrated()
     models = []
     for spec in CATALOG:
         if found["phone"] and spec["size"] > 3e9:
             continue                          # trop lourd pour un téléphone
+        if spec.get("engine") == "llama.cpp" and not integrated:
+            continue                          # téléchargé seulement par le moteur intégré
         fits_gpu = bool(found["vram"]) and spec["size"] < found["vram"] * 0.92
         fits_ram = spec["size"] < found["ram"] * 0.5 if found["ram"] else True
+        # Mixture d'experts : peu de paramètres travaillent à chaque mot, le reste attend
+        # en mémoire vive ; la carte et la mémoire s'additionnent (llama.cpp --fit)
+        fits_moe = bool(spec.get("moe")) and spec["size"] < (found["vram"] * 0.92
+                                                             + found["ram"] * 0.6)
         models.append({**spec, "recommended": spec["name"] == best,
-                       "fits": "gpu" if fits_gpu else "ram" if fits_ram else "heavy",
+                       "fits": ("gpu" if fits_gpu else "moe" if fits_moe
+                                else "ram" if fits_ram else "heavy"),
                        "installed": spec["name"] in installed
                        or f"{spec['name']}:latest" in installed})
     models.sort(key=lambda m: (not m["recommended"], m["size"]))
