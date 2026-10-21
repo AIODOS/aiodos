@@ -124,6 +124,25 @@ def for_request(request, capability: str):
     return effective(context.reach, header, capability, context.consented(capability))
 
 
+def for_job(request, capability: str, asked) -> list:
+    """Les cercles d'un travail : ceux de la requête (for_request), resserrés par « where » du
+    corps, qui comme X-Aiodos-Where ne peut pas dépasser l'accord (403 where_denied). Un cercle
+    accordé que cette version ne sert pas encore est laissé de côté, sans erreur."""
+    allowed = for_request(request, capability)
+    allowed = set(CIRCLES) if allowed is None else set(allowed)
+    if asked is not None:
+        wanted = set(parse_where(asked))
+        context = getattr(request.state, "aiodos_app", None)
+        granted = set(context.reach) if context is not None else set(CIRCLES)
+        wider = [c for c in CIRCLES if c in wanted - granted]
+        if wider:
+            raise ApiError("where_denied", f"Lieu de calcul refusé : cette application n'a "
+                           f"pas accès à « {wider[0]} ».",
+                           detail={"allowed": [c for c in CIRCLES if c in granted]})
+        allowed &= wanted
+    return [c for c in CIRCLES if c in allowed]
+
+
 def priority_of(request) -> str:
     """interactive ou background pour cette requête."""
     context = getattr(request.state, "aiodos_app", None)

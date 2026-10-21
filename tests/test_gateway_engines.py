@@ -276,6 +276,37 @@ def test_a_link_to_a_file(node):
     assert too_long.status_code == 400 and too_long.json()["error"]["param"] == "ttl"
 
 
+def test_where_in_the_body_and_the_list_by_status(node):
+    """« where » du corps resserre l'accord comme X-Aiodos-Where : un cercle accordé mais pas
+    encore servi est laissé de côté, plus large que l'accord c'est 403 ; le pré-vol le suit
+    aussi. La liste des travaux se filtre par état."""
+    key = node.connect(ENGINES)                     # accordé : here, mine, friends, public
+    sha, _ = put(node, key, png())
+    body = {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}}
+    plan = node.call("POST", "/aiodos/v1/engines/comfyui/plan", key=key,
+                     json={**body, "where": ["mine"]}).json()
+    assert not plan["ok"] and plan["machines"]["here"] is False      # pas ce PC : seul mine
+    assert plan["machines"]["mine"] == 0 and plan["where_effective"] == []
+    reply = node.call("POST", "/aiodos/v1/jobs", key=key,
+                      json={**body, "where": ["here", "friends"]})
+    assert reply.status_code == 202, reply.text
+    job = wait_for(node, key, reply.json()["id"])
+    assert job["status"] == "completed"
+    assert db.query_one("SELECT reach FROM jobs WHERE public_id=?", (job["id"],))["reach"] == "here"
+    narrow = node.connect({**ENGINES, "client_id": "arkane.arklight"}, where=["here"])
+    for path in ("/aiodos/v1/jobs", "/aiodos/v1/engines/comfyui/plan"):
+        denied = node.call("POST", path, key=narrow, json={**body, "where": ["here", "mine"]})
+        assert denied.status_code == 403 and denied.json()["error"]["code"] == "where_denied"
+        assert denied.json()["error"]["aiodos"]["detail"]["allowed"] == ["here"]
+
+    def listed(status):
+        reply = node.call("GET", f"/aiodos/v1/jobs?status={status}", key=key)
+        return [j["id"] for j in reply.json()["jobs"]]
+    assert listed("completed") == [job["id"]]
+    assert listed("failed,completed") == [job["id"]]
+    assert listed("queued,in_progress") == [] and listed("inconnu") == []
+
+
 def test_without_the_right_or_comfyui(node):
     chat_only = node.connect({**ENGINES, "client_id": "arkane.texte", "scope": "chat"})
     reply = node.call("POST", "/aiodos/v1/jobs", key=chat_only, json={"graph": GRAPH})

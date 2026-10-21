@@ -166,8 +166,11 @@ J'ai travaillé en lecture seule le 20/10/2026 : rien n'a été modifié ni lanc
 | L4 | Les inconnus | Le réseau public calcule les recettes d'images, vérifiées |
 | L5 | Ensuite | sd-server (le H3 local de PANDORA) ; copie des modèles entre mes machines |
 
-**Réalisé (21/10/2026)** : L1, L2a et L2b, côté AIODOS (le client 0.2.0 suit). Écarts
-assumés de L2b, à reprendre en L2c :
+**Réalisé (21/10/2026)** : L1, L2a et L2b, côté AIODOS et dans les clients 0.2.0 ; de L2c,
+le ComfyUI lancé sans fenêtre quand celui de l'utilisateur n'est pas ouvert
+(`engines/comfy_instance.py`, réglage `engines_comfyui_launch`). Restent de L2c : PANDORA sur
+un PC sans ComfyUI (machine de référence, `object_info` relayé) et la reprise depuis
+l'historique (`recover`). Écarts assumés de L2b, à reprendre en L2c :
 - Le résultat d'une unité calculée par une de mes machines revient en une fois avec ses
   fichiers (`work/result`, comme les images d'AIODOS, 1 Gio au plus entre mes machines), sans
   boîte d'envoi ni `work/put` par morceaux : un propriétaire éteint quand l'autre finit fait

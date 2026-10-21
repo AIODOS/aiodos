@@ -649,6 +649,8 @@ export function createFakeEngines(fake, kit, options = {}) {
     if (active === '1' || active === 'true') jobs = jobs.filter((j) => ACTIVE.has(j.status));
     else if (active === '0' || active === 'false') jobs = jobs.filter((j) => !ACTIVE.has(j.status));
     if (q.get('client_ref')) jobs = jobs.filter((j) => j.clientRef === q.get('client_ref'));
+    const wanted = new Set((q.get('status') || '').split(',').map((s) => s.trim()).filter(Boolean));
+    if (wanted.size) jobs = jobs.filter((j) => wanted.has(SHOWN[j.status] ?? j.status));
     const limit = Math.max(1, Math.min(200, Number.parseInt(q.get('limit') || '50', 10) || 50));
     jobs.sort((a, b) => b.seq - a.seq);
     return ok({ object: 'list', jobs: jobs.slice(0, limit).map(jobObject) });

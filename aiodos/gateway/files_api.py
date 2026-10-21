@@ -81,17 +81,23 @@ def serve(row, request: Request):
         headers["Content-Range"] = f"bytes {start}-{end}/{size}"
 
     async def stream():
+        # Les octets remis comptent même si la réponse est coupée : la plage reprise ensuite
+        # complète le compte, et le fichier est bien récupéré. Un bloc compte dès qu'il part
+        # (l'appli a pu en recevoir une partie) ; le compte est écrit sans attendre, car une
+        # attente serait annulée avec la réponse.
         sent = 0
-        with open(path, "rb") as f:
-            f.seek(start)
-            while sent < length:
-                block = f.read(min(CHUNK, length - sent))
-                if not block:
-                    break
-                sent += len(block)
-                yield block
-        if sent == length:
-            await asyncio.to_thread(file_store.served, row["id"], start, end)
+        try:
+            with open(path, "rb") as f:
+                f.seek(start)
+                while sent < length:
+                    block = f.read(min(CHUNK, length - sent))
+                    if not block:
+                        break
+                    sent += len(block)
+                    yield block
+        finally:
+            if sent:
+                file_store.served(row["id"], start, start + sent - 1)
     return StreamingResponse(stream(), status_code=206 if span else 200,
                              media_type=row["type"], headers=headers)
 

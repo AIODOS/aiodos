@@ -110,6 +110,9 @@ def test_jobs_are_listed_and_filtered(comfy, manual):
     assert [j.id for j in client.jobs(active=None)] == [waiting.id, done.id]  # récents d'abord
     assert [j.id for j in client.jobs(active=None, status="completed")] == [done.id]
     assert [j.id for j in client.jobs(active=None, status=["queued", "failed"])] == [waiting.id]
+    asked = [e["path"].split("?", 1)[1] for e in fake.requests_to("/aiodos/v1/jobs")
+             if e["method"] == "GET"]
+    assert asked[-2:] == ["limit=200&status=completed", "limit=200&status=queued%2Cfailed"]
     with pytest.raises(ValueError):
         client.jobs(status="fini")
     with pytest.raises(ValueError):

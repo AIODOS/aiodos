@@ -672,6 +672,9 @@ class FakeJobs:
                 jobs = [j for j in jobs if _status(j) in FINISHED]
             if ref:
                 jobs = [j for j in jobs if j["client_ref"] == ref]
+            wanted = {s.strip() for v in query.get("status", []) for s in v.split(",")} - {""}
+            if wanted:
+                jobs = [j for j in jobs if _status(j) in wanted]
             jobs.sort(key=lambda j: j["seq"], reverse=True)
             return [self._public(j) for j in jobs[:limit]]
 

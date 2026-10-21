@@ -85,8 +85,11 @@ async def plan(request: Request):
     if not isinstance(body, dict):
         return errors.response(request.url.path, ApiError(
             "invalid_request", "Corps JSON attendu : un objet."), lang)
-    circles = _circles(request)
-    where = [c for c in scopes.CIRCLES if c in circles]
+    try:
+        where = scopes.for_job(request, CAPABILITY, body.get("where"))
+    except ApiError as exc:
+        return errors.response(request.url.path, exc, lang)
+    circles = set(where)
 
     def check():
         _, inv = _here()

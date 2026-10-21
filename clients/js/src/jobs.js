@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // aiodos-client 0.2.0 — retrouver ses travaux (docs/api-applications.md § 5.7), après un
-// redémarrage de l'appli comme d'AIODOS : GET /aiodos/v1/jobs?active=&client_ref=&limit= et
+// redémarrage de l'appli comme d'AIODOS : GET /aiodos/v1/jobs?active=&client_ref=&status=&limit= et
 // GET /aiodos/v1/jobs/{id}. Une appli ne voit que les siens : celui d'une autre est
 // introuvable (JobNotFound). Rejettent NotSupported tant que `features` n'annonce pas « jobs ».
 
@@ -35,7 +35,7 @@ export async function listJobs(ctx, { active, clientRef, status, limit, signal }
   const d = ctx.transport.expectOk(res);
   if (!d || !Array.isArray(d.jobs)) throw clientError('protocol', lang);
   const jobs = d.jobs.map((j) => new Job(ctx, j));
-  // l'état filtré ici aussi : cette version d'AIODOS ne lit pas « status »
+  // filtré ici aussi : un AIODOS qui ne lit pas « status » les rend tous
   return wanted.length ? jobs.filter((j) => wanted.includes(j.status)) : jobs;
 }
 

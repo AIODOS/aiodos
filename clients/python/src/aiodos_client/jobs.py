@@ -416,7 +416,7 @@ def _event_data(value, lang):
 def list_jobs(client, active=True, client_ref=None, status=None):
     """Les travaux de l'appli (`GET /aiodos/v1/jobs`), les plus récents d'abord : `active`
     True (en cours), False (finis) ou None (tous) ; `client_ref` ; `status` : un état ou
-    plusieurs (choisis ici)."""
+    plusieurs."""
     query = {"limit": str(LIST_LIMIT)}
     if active is True:
         query["active"] = "1"
@@ -432,12 +432,14 @@ def list_jobs(client, active=True, client_ref=None, status=None):
         unknown = wanted - set(STATUSES)
         if unknown:
             raise ValueError(f"status : parmi {', '.join(STATUSES)}")
+        query["status"] = ",".join(s for s in STATUSES if s in wanted)
     data = client._call("GET", "/aiodos/v1/jobs?" + urlencode(query), feature=FEATURE)
     entries = data.get("jobs") if isinstance(data, dict) else None
     if not isinstance(entries, list):
         raise errors.make("protocol", client.lang)
     jobs = [Job(client, entry["id"], entry) for entry in entries
             if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry["id"]]
+    # filtré ici aussi : un AIODOS qui ne lit pas « status » les rend tous
     return [job for job in jobs if wanted is None or job.status in wanted]
 
 

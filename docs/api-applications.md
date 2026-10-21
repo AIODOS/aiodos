@@ -65,8 +65,10 @@ suit aucune redirection et n'utilise aucun proxy.
 - Toutes les réponses portent `X-Aiodos-Api: 1`, « / » compris.
 - La clé : `Authorization: Bearer <clé>` (ou `X-Api-Key`). **Jamais dans l'adresse** : une clé
   dans l'adresse est ignorée.
-- JSON en UTF-8 ; les `POST` de `/aiodos/v1` exigent `Content-Type: application/json`
-  (sinon 415). Dates en secondes Unix.
+- JSON en UTF-8. Les `POST` sans clé (demandes d'accès, § 4.3) exigent
+  `Content-Type: application/json` (sinon 415) ; avec une clé, un corps est lu comme JSON
+  (envoie quand même `application/json`) ; `PUT /aiodos/v1/inputs/{sha256}` prend les octets
+  du fichier (§ 5.7). Dates en secondes Unix.
 - Une requête fait au plus 64 Mio (413 `file_too_large` au-delà, sans tout lire).
 - Les pages web n'atteignent pas la passerelle : `Host` exact ; sous `/aiodos/v1/` et sur les
   routes sans clé, tout `Origin` est refusé (403 `origin_refused`) ; ailleurs, un `Origin`
@@ -479,8 +481,10 @@ l'a déjà envoyé, 404 sinon. Une entrée est gardée tant qu'un travail en cou
   dans une valeur (y compris par `set`), un nœud d'un service en ligne, un graphe sans nœud de
   sortie, un champ inconnu (§ 3).
 - Le même `client_ref` (ou en-tête `Idempotency-Key`) rend le même travail (200). `where`
-  et `X-Aiodos-Where` ne peuvent que resserrer l'accord. `priority` : `high`, `normal` ou
-  `low`. `bounds` : `unit_seconds` (30 min par défaut), `output_mb` (200), `wait_s`.
+  et `X-Aiodos-Where` ne peuvent que resserrer l'accord (plus large : 403 `where_denied`) ;
+  un cercle accordé que cette version ne sert pas encore est laissé de côté. `priority` :
+  `high`, `normal` ou `low`. `bounds` : `unit_seconds` (30 min par défaut), `output_mb`
+  (200), `wait_s`.
 - `POST /aiodos/v1/engines/comfyui/plan` prend le même corps et ne met rien en file :
   `{"ok", "where_effective", "missing": [{folder, name, machine}], "units"}`.
 
@@ -514,8 +518,10 @@ l'a déjà envoyé, 404 sinon. Une entrée est gardée tant qu'un travail en cou
   le nœud ; `no_machine` : aucune machine ne l'a prise avant `bounds.wait_s`, 24 h par
   défaut). L'étape d'une unité calculée par une de mes machines arrive avec le
   renouvellement de son bail (toutes les 30 s).
-- `GET /aiodos/v1/jobs?active=1|0&client_ref=…&limit=…` : ses travaux ; retrouvés après un
-  redémarrage de l'appli comme d'AIODOS.
+- `GET /aiodos/v1/jobs?active=1|0&client_ref=…&status=…&limit=…` : ses travaux, les plus
+  récents d'abord (50 par défaut, 200 au plus) ; retrouvés après un redémarrage de l'appli
+  comme d'AIODOS. `status` : des états séparés par des virgules (`completed,failed`) ; un
+  état inconnu ne rend rien.
 
 **Les événements.** `GET /aiodos/v1/jobs/{id}/events` (SSE) : `job` (l'état complet, d'abord
 puis à chaque changement, 4 fois par seconde au plus), `file` (un nouveau fichier), `end` ;

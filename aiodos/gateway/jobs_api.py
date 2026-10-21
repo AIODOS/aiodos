@@ -30,6 +30,7 @@ EVENTS_EVERY = 0.25
 PING_EVERY = 15.0
 STATUS = {"queued": "queued", "running": "in_progress", "paused": "paused",
           "done": "completed", "failed": "failed", "cancelled": "cancelled"}
+DB_STATUS = {v: k for k, v in STATUS.items()}
 ACTIVE = ("queued", "running", "paused")
 PRIORITY_NAMES = {URGENT: "high", NORMAL: "normal", BACKGROUND: "low"}
 
@@ -168,20 +169,6 @@ def _message(done, total, running, machines, status) -> str:
 
 
 # ------------------------------------------------------------------ déposer
-def _where(request: Request, body) -> list:
-    allowed = scopes.for_request(request, CAPABILITY)
-    allowed = set(scopes.CIRCLES) if allowed is None else set(allowed)
-    asked = body.get("where") if isinstance(body, dict) else None
-    if asked is not None:
-        wanted = set(scopes.parse_where(asked))
-        wider = wanted - allowed
-        if wider:
-            raise ApiError("where_denied", "Lieu de calcul refusé : plus large que l'accès de "
-                           "cette application.", detail={"allowed": sorted(allowed)})
-        allowed = wanted
-    return [c for c in scopes.CIRCLES if c in allowed]
-
-
 def _existing(app_id, client_ref):
     if not client_ref:
         return None
@@ -255,7 +242,7 @@ async def submit(request: Request):
         old = await asyncio.to_thread(_existing, context.id, body.get("client_ref"))
         if old is not None:
             return JSONResponse(await asyncio.to_thread(job_object, old), status_code=200)
-        where = _where(request, body)
+        where = scopes.for_job(request, CAPABILITY, body.get("where"))
         body = {k: v for k, v in body.items() if k != "where"}
         row = await asyncio.to_thread(_prepare, context.id, body, where)
     except ApiError as exc:
@@ -283,6 +270,12 @@ async def list_jobs(request: Request):
     if query.get("client_ref"):
         clauses.append("client_ref=?")
         args.append(query["client_ref"])
+    if query.get("status"):                 # les états vus par l'appli, séparés par des virgules
+        wanted = {DB_STATUS.get(s.strip()) for s in query["status"].split(",")} - {None}
+        if not wanted:
+            return JSONResponse({"object": "list", "jobs": []})
+        clauses.append(f"status IN ({','.join('?' * len(wanted))})")
+        args.extend(sorted(wanted))
     try:
         limit = max(1, min(200, int(query.get("limit") or 50)))
     except ValueError:
