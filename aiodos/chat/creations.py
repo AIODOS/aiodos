@@ -14,7 +14,7 @@ qui sait ainsi ce qui a été créé, sans voir les images.
 import re
 
 from aiodos import db, settings
-from aiodos.chat import conversations, retouches
+from aiodos.chat import conversations, enrich, retouches
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -407,9 +407,14 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     frames = request.get("frames") if same and catalog.is_video(model_id) else None
     if catalog.is_video(model_id) and not frames:
         frames = frames_for(model_id, request.get("seconds") or found.get("seconds"))
+    # Une nouvelle création : la demande courte devient une description détaillée en anglais
+    # (chat/enrich.py) ; une retouche est déjà réécrite (_followed), une variante la reprend
+    prompt = request.get("prompt") or found.get("prompt") or text
+    if not request.get("followup") and enrich.wanted(prompt):
+        prompt = enrich.enrich(prompt, media_kind, chat_model)
     try:
         params = kind.normalize({
-            "model": model_id, "prompt": request.get("prompt") or found.get("prompt") or text,
+            "model": model_id, "prompt": prompt,
             "negative": request.get("negative") or "",
             "width": size[0] if size else None, "height": size[1] if size else None,
             "count": request.get("count") or found.get("count") or 1,

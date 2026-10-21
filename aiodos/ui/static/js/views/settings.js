@@ -32,7 +32,11 @@ const SECTIONS = [
   // du plus puissant au moins puissant ; l'onglet Images y renvoie (« settings:focus »)
   { title: 'Modèles', icon: 'layers', id: 'modeles', fields: [
     { type: 'models' },
-    { type: 'subhead', label: 'Images et vidéos : dossiers, carte et amis' },
+    { type: 'subhead', label: 'Images et vidéos : description, dossiers, carte et amis' },
+    { key: 'images_enrich', label: 'Enrichir la description avant de créer (conseillé)', type: 'switch',
+      help: 'Le modèle de conversation de ce PC précise ta demande (sujet, décor, lumière, style) et l\'écrit en '
+        + 'anglais, la langue que les modèles d\'images comprennent le mieux, comme le font les services en ligne. '
+        + 'Une description déjà détaillée part telle quelle ; celle utilisée se relit sous l\'image.' },
     { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
       help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
         + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },

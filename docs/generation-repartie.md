@@ -311,6 +311,15 @@ et les créations en cours.
 - **Rien ne change pour la répartition** : le travail est le même que celui de la vue
   Images (unités indépendantes, mes machines d'abord, un ami seulement avec l'accord des
   deux côtés), et la description ne part chez une autre machine que le temps du calcul.
+- **La description est enrichie** (21/10/2026, `chat/enrich.py`, réglage `images_enrich`,
+  activé par défaut) : avant une nouvelle création, le modèle de conversation de ce PC change
+  la demande courte en une description détaillée en anglais (sujet précisé, décor, lumière,
+  cadrage, style si la demande n'en donne pas), comme le font les services en ligne. C'est ce
+  qui change le plus le résultat d'un petit modèle : « un samouraï assis sur la carapace d'un
+  escargot » donnait à Z-Image Turbo un pratiquant de kendo assis sur une coquille ; la même
+  demande détaillée en anglais, un samouraï en armure sur un escargot géant, en estampe, à la
+  hauteur de Seedream (même modèle, même carte, 21 s par image en 1344 × 768). Une retouche,
+  une variante ou une description déjà détaillée (60 mots et plus) partent telles quelles.
 
 ## Sources
 

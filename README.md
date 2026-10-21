@@ -192,7 +192,9 @@ vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 demande comme à un autre assistant (« Crée une image d'un phare sous l'orage »), ou avec
 le bouton Image à côté du message (modèle, format, durée, nombre), et on les retouche de
 la même façon (« Fais-la de nuit » : la nouvelle image part de la précédente ; « Encore
-une » : une variante). Chacune devient une
+une » : une variante). Avant de créer, le modèle de conversation change la demande courte en
+une description détaillée en anglais, comme les services en ligne (désactivable dans
+Réglages → Modèles). Chacune devient une
 unité de la file, calculée ici ou par mes machines qui ont le même modèle et prêtent leur
 puissance ; elle s'affiche dans la conversation et n'est gardée qu'ici (dans
 `Images\AIODOS` pour AIODOS installé, ou le dossier choisi dans les Réglages). La vue

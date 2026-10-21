@@ -795,7 +795,8 @@ async function create(text, request, again = false, replace = null, askedNode = 
     stopEditing(false);
     asked = appendUser(text);
   }
-  const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…' : '');
+  const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…'
+    : !request.followup && state.settings?.images_enrich ? 'J\'écris une description détaillée…' : '');
   scrollBottom(true);
   let made;
   try {
