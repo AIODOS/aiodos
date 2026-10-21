@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -377,6 +377,23 @@ MIGRATIONS = {
     DELETE FROM settings WHERE key IN ('cloud_confirm', 'mistral_key', 'qwen_key',
                                        'mistral_cloud_model', 'qwen_cloud_model');
     DELETE FROM settings WHERE key = 'default_model' AND value LIKE '"cloud:%';
+    """,
+    # Les pièces jointes d'un message (chat/attachments.py) : le fichier reste sur ce PC
+    # (data/attachments/<id>/), ce qu'on en lit est gardé ici (text, text_state)
+    24: """
+    CREATE TABLE IF NOT EXISTS attachments (
+        id          TEXT PRIMARY KEY,
+        message_id  INTEGER,
+        name        TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        size        INTEGER NOT NULL,
+        sha256      TEXT NOT NULL,
+        created     REAL NOT NULL,
+        text        TEXT,
+        text_state  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS ix_attachments_message ON attachments(message_id);
     """,
 }
 

@@ -37,6 +37,11 @@ ensemble).
   recherche dans leur contenu ; « Régénérer » la dernière réponse (avec le modèle choisi
   à ce moment) et « Modifier » le dernier message, la suite de la conversation et sa
   trace en mémoire s'effaçant.
+- **Pièces jointes** (trombone, fichier glissé sur la conversation, image collée) : une
+  image, une vidéo, un son, un document ou un texte. Le modèle lit leur texte avec la
+  question (document, image décrite, son ou vidéo transcrits) ; un modèle de ce PC qui voit
+  les images les reçoit telles quelles ; une création d'image part de l'image jointe, sa
+  composition gardée. Elles restent sur ce PC et partent avec leur conversation.
 - **Réflexion des modèles** (Qwen3…) affichée en direct, désactivable pour aller vite.
 - **Bibliothèques de connaissance** : fichiers, dossiers entiers, pages web ; tous les
   formats (PDF, Word, Excel, PowerPoint, code…), images (OCR + description par un

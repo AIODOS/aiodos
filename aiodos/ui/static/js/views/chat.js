@@ -7,6 +7,7 @@ import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, here, integrated } from './model-install.js';
+import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 
@@ -112,6 +113,7 @@ export function mountChat(container) {
   el.list.addEventListener('click', onMessageClick);
   el.list.addEventListener('auxclick', onReplyLink);   // clic du milieu : sans passer par click
   mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
+  mountAttach(chat, el.input);              // trombone, fichier glissé, image collée
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
@@ -319,7 +321,7 @@ async function openConversation(id, { settled = false } = {}) {
   resetMedia();
   const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
-    if (m.role === 'user') { appendUser(m.content, m.id); continue; }
+    if (m.role === 'user') { appendUser(m.content, m.id, m.attachments); continue; }
     if (m.media) { appendMedia(el.list, m.media, m.id); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
     view.node.dataset.id = m.id;
@@ -346,11 +348,13 @@ function showWelcome() {
 }
 
 // ------------------------------------------------------------------- messages
-function appendUser(text, id = null) {
+function appendUser(text, id = null, attached = []) {
   el.list.querySelector('.welcome')?.remove();
+  // Les pièces jointes à côté de la bulle, jamais dedans : son texte est celui du message
+  const bubble = `<div class="bubble">${esc(text)}</div>`;
   const node = h(`<div class="msg user">
       <div class="turn-actions turn-only"><button class="icon-btn" data-act="edit" title="Modifier ce message">${icon('edit')}</button></div>
-      <div class="bubble">${esc(text)}</div></div>`);
+      ${attached?.length ? `<div class="user-col">${bubble}${attachmentsHtml(attached)}</div>` : bubble}</div>`);
   if (id) node.dataset.id = id;
   el.list.append(node);
   return node;
@@ -694,13 +698,27 @@ async function send(asText = null, replace = null) {
 }
 
 async function sendNow(asText, replace) {
-  const text = asText ?? el.input.value.trim();
+  if (asText === null && attaching()) {
+    toast('Une pièce jointe est encore en route : un instant…');
+    return false;
+  }
+  const typed = asText ?? el.input.value.trim();
+  const joined = asText === null ? pendingItems() : [];
+  const attached = joined.map(a => a.id);
+  const text = typed || (attached.length ? 'Que peux-tu me dire de la pièce jointe ?' : '');
   if (!text) return false;
   if (editing && !editing.node.isConnected) stopEditing(false);   // retiré entre-temps
   if (editing && asText === null) replace = replacing(editing.node, editing.text);
   const swap = replace ? { replace_from: replace.id, replace_text: replace.text } : {};
   const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
-  if (explicit) { await create(text, { ...explicit, ...swap }, false, replace); return true; }
+  if (explicit && !typed) {
+    toast('Décris l\'image à créer : l\'image jointe en sera le point de départ.');
+    return false;
+  }
+  if (explicit) {
+    await create(text, { ...explicit, ...swap, attachments: attached }, false, replace, null, joined);
+    return true;
+  }
   const model = selectedModel();
 
   let pre;
@@ -710,7 +728,8 @@ async function sendNow(asText, replace) {
       replace_from: replace?.id ?? null });
   } catch (e) { errorToast(e); return false; }
   if (pre.create && asText === null) {             // « Crée une image de… », reconnu au vol
-    await create(text, { ...autoRequest(pre.create), auto: true, ...swap }, false, replace);
+    await create(text, { ...autoRequest(pre.create), auto: true, ...swap, attachments: attached },
+      false, replace, null, joined);
     return true;
   }
   if (!model) {
@@ -727,7 +746,7 @@ async function sendNow(asText, replace) {
     autoresize();
   }
   stopEditing(false);
-  const asked = appendUser(text);
+  const asked = appendUser(text, null, joined);
   const view = appendAssistant(model);
   scrollBottom(true);
   setBusy(true);
@@ -736,11 +755,12 @@ async function sendNow(asText, replace) {
   let failure = null;
   try {
     await streamChat({
-      text, model, web: go.web, peer_libraries: go.peers,
+      text, model, web: go.web, peer_libraries: go.peers, attachments: attached,
       conversation_id: state.currentConversation?.id ?? null, ...swap,
     }, ev => {
       if (ev.type === 'start') {
         started = true;
+        if (attached.length) clearAttachments();   // le message les a emportées
         dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
@@ -784,7 +804,7 @@ async function sendNow(asText, replace) {
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
 // images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
 // remplacé (« Modifier »), retiré une fois la demande acceptée
-async function create(text, request, again = false, replace = null, askedNode = null) {
+async function create(text, request, again = false, replace = null, askedNode = null, joined = []) {
   if (creating) return false;        // une création déjà en route : pas une deuxième
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
@@ -793,7 +813,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
     el.input.value = '';
     autoresize();
     stopEditing(false);
-    asked = appendUser(text);
+    asked = appendUser(text, null, joined);
   }
   const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…'
     : !request.followup && state.settings?.images_enrich ? 'J\'écris une description détaillée…' : '');
@@ -835,6 +855,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
     creating = false;
   }
   done();
+  if (request.attachments?.length) clearAttachments();   // la demande les a emportées
   if (seen !== displayed) {          // une autre conversation entre-temps : celle-ci reste à sa place
     refreshTree();
     toast(`Création lancée dans « ${made.title || 'sa conversation'} ».`, 'info', 5000);

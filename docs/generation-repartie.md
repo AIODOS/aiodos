@@ -320,6 +320,12 @@ et les créations en cours.
   demande détaillée en anglais, un samouraï en armure sur un escargot géant, en estampe, à la
   hauteur de Seedream (même modèle, même carte, 21 s par image en 1344 × 768). Une retouche,
   une variante ou une description déjà détaillée (60 mots et plus) partent telles quelles.
+- **Une image jointe est une référence** (21/10/2026, `chat/attachments.py`) : la création
+  part d'elle, recadrée au centre au format du modèle le plus proche du sien, avec une force
+  de 0,65 (`retouches.REFERENCE`) : sa composition et ses couleurs restent, la demande change
+  le reste (à 0,875, la force d'un changement d'ambiance, la référence ne se voyait presque
+  plus). L'image de départ part avec l'unité chez la machine qui calcule (`file_key`). Une
+  vidéo ne part pas encore d'une image.
 
 ## Sources
 

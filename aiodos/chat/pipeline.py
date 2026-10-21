@@ -111,6 +111,31 @@ def runs_here(model) -> bool:
                 or cluster.parse(model))
 
 
+def sees_images(model) -> bool:
+    """Une image jointe va-t-elle telle quelle à ce modèle ? Seulement à un modèle de cette
+    machine qui sait les lire ; chez une autre machine, elle part décrite (texte)."""
+    if not runs_here(model) or placement.parse(model):
+        return False
+    try:
+        return "vision" in ollama.capabilities(model)
+    except Exception:
+        return False
+
+
+def with_attachments(messages, blocks: str, images=()) -> list:
+    """Les messages, la question précédée de ce qu'on a lu de ses pièces jointes, et ses
+    images (base64) pour un modèle qui les voit."""
+    found = [dict(m) for m in messages]
+    for message in reversed(found):
+        if message["role"] == "user":
+            if blocks:
+                message["content"] = f"{blocks}\n\n{message['content']}"
+            if images:
+                message["images"] = list(images)
+            break
+    return found
+
+
 def peers_allowed(model) -> bool:
     """Les passages trouvés chez mes machines et mes amis (et les réponses qui s'en servent)
     peuvent-ils aller à ce modèle ? Ils ne vont pas plus loin que mes machines : le
