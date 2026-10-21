@@ -26,6 +26,7 @@ from urllib.parse import unquote
 
 from . import _discovery, _transport, errors, texts
 from .access import normalize_where
+from .models import ModelList
 
 log = logging.getLogger("aiodos_client")
 
@@ -62,6 +63,19 @@ class ChatResult:
     place: str | None = None            # here, mine, friend
     truncated: bool = False             # coupée par max_tokens ou par la fin du contexte
     context_length: int | None = None
+
+
+class Vectors(list):
+    """Les vecteurs d'embed(), dans l'ordre des textes, et le modèle qui les a calculés
+    (`model`) : à garder avec eux, les vecteurs de deux modèles ne se comparent pas."""
+
+    def __init__(self, items=(), model=None):
+        super().__init__(items)
+        self.model = model
+
+    @property
+    def dimensions(self):
+        return len(self[0]) if self else None
 
 
 # --- Messages -------------------------------------------------------------------------
@@ -542,25 +556,47 @@ def chat(client, messages, model=None, system=None, tools=None, think=None, max_
         return read_chat(exchange, on_text, on_thinking, on_loading, lang)
 
 
-def embed(client, texts_, model=None) -> list:
-    """Les vecteurs des textes (un texte ou une liste), dans l'ordre : list[list[float]]."""
+def _embed_choice(client, without=()):
+    """Le modèle d'embedding d'une appli sans préférence : celui d'AIODOS (`default`) s'il
+    est sur ce PC, sinon le meilleur d'ici ; None s'il n'y en a pas."""
+    return ModelList(m for m in client.models("embed") if m.id not in without).best()
+
+
+def embed(client, texts_, model=None) -> Vectors:
+    """Les vecteurs des textes (un texte ou une liste), dans l'ordre : une liste de
+    list[float] (Vectors, avec `model`). Sans `model`, celui qu'AIODOS prend pour ses
+    bibliothèques s'il est sur ce PC (`default`), sinon le meilleur d'ici."""
     lang = client.lang
     items = [texts_] if isinstance(texts_, str) else list(texts_)
     if not all(isinstance(item, str) for item in items):
         raise TypeError("embed : des textes")
     if not items:
-        return []
-    if model is None:
-        chosen = client.models("embed").best()
+        return Vectors()
+
+    def send(model_id):
+        return client._call("POST", "/v1/embeddings", body={"model": model_id, "input": items},
+                            feature="embed")
+
+    if model is not None:
+        model_id = str(getattr(model, "id", model))
+        data = send(model_id)
+    else:
+        chosen = _embed_choice(client)
         if chosen is None:
             raise errors.make("model_not_found", lang,
                               message=texts.error("no_model", lang, needs="embed"),
                               hint=texts.hint("no_model", lang), detail={"needs": ["embed"]})
         model_id = chosen.id
-    else:
-        model_id = str(getattr(model, "id", model))
-    data = client._call("POST", "/v1/embeddings", body={"model": model_id, "input": items},
-                        feature="embed")
+        try:
+            data = send(model_id)
+        except errors.ModelNotFound:
+            # AIODOS vient d'écarter ce modèle (un format que son moteur ne charge pas) : le
+            # suivant, une fois. Un modèle demandé par l'appli, lui, n'est jamais remplacé.
+            other = _embed_choice(client, without=(model_id,))
+            if other is None:
+                raise
+            model_id = other.id
+            data = send(model_id)
     rows = data.get("data") if isinstance(data, dict) else None
     if not isinstance(rows, list) or len(rows) != len(items):
         raise errors.make("protocol", lang)
@@ -569,7 +605,9 @@ def embed(client, texts_, model=None) -> list:
         vectors = [[float(x) for x in row["embedding"]] for row in ordered]
     except (KeyError, TypeError, ValueError):
         raise errors.make("protocol", lang) from None
-    return vectors
+    answered = data.get("model")
+    return Vectors(vectors, model=answered if isinstance(answered, str) and answered
+                   else model_id)
 
 
 def open_in_aiodos(client, page, model=None) -> bool:

@@ -68,7 +68,7 @@ r = ai.chat(messages=msgs, model=model.id, system=SYS,          # blocs d'Anthro
             on_text=self.chunk.emit, cancel=self.isInterruptionRequested)
 r.text, r.truncated, r.finish_reason, r.stopped_by, r.usage, r.model, r.machine, r.place
 
-vectors = ai.embed(["un chat noir", "un chien blanc"])            # list[list[float]]
+vectors = ai.embed(["un chat noir", "un chien blanc"])   # list[list[float]], et vectors.model
 ai.chat(lot, batch=True)                             # découpages : priorité basse
 ai.disconnect()                                      # bouton « Se déconnecter d'AIODOS »
 ```
@@ -99,9 +99,9 @@ load_timeout=900)`
 | `connect(scopes, where=None, purpose=None, on_code=None, cancel=None, timeout=600)` | demande l'accès, donne le code, relève et range la clé ; rend un `Access` |
 | `request_access(scopes, where=None, purpose=None, cancel=None)` | la demande seule : `AccessRequest` (`user_code`, `wait(cancel, timeout)`) |
 | `disconnect()` | retire la clé dans AIODOS, puis l'efface du coffre |
-| `models(kind="chat")` | le catalogue (`ModelList` : `best(needs, prefer_local)`, `by_id`) ; `kind="embed"` |
+| `models(kind="chat")` | le catalogue (`ModelList` : `best(needs, prefer_local)`, `by_id`) ; `kind="embed"` ; `Model.default` : celui qu'AIODOS prend lui-même, que `best()` préfère |
 | `chat(messages, model=None, …)` | une conversation, toujours en flux : `ChatResult` |
-| `embed(texts, model=None)` | les vecteurs, sur ce PC |
+| `embed(texts, model=None)` | les vecteurs, sur ce PC (`Vectors`, avec `model` : à garder avec eux) ; sans modèle, celui des bibliothèques d'AIODOS |
 | `open_in_aiodos(page, model=None)` | ramène la fenêtre d'AIODOS sur `applications`, `models`, `jobs` ou `gallery` |
 | `comfy`, `jobs()`, `job(id)`, `inputs`, `engines()` | livraison 2 : `NotSupported` (voir plus bas) |
 

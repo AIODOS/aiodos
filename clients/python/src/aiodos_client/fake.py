@@ -59,7 +59,7 @@ OLD_401 = "Clé d'accès d'AIODOS manquante ou invalide (Réglages → Autres ou
 CHAT_MODELS = (
     {"id": "qwen3.5:9b", "kind": "chat", "label": "qwen3.5:9b", "installed": True,
      "context": 16384, "vision": True, "tools": True, "thinking": True,
-     "size_bytes": 6600000000, "loaded": False, "here": True,
+     "size_bytes": 6600000000, "loaded": False, "here": True, "default": True,
      "where": [{"id": "local:qwen3.5:9b", "machine": "PC-BUREAU", "place": "here",
                 "loaded": False, "context": 16384, "tools": True, "vision": True},
                {"id": "peer:9c2e41d0:qwen3.5:9b", "machine": "Portable", "place": "mine",
@@ -67,7 +67,7 @@ CHAT_MODELS = (
      "license": None},
     {"id": "mistral:7b", "kind": "chat", "label": "mistral:7b", "installed": True,
      "context": 16384, "vision": False, "tools": True, "thinking": False,
-     "size_bytes": 4400000000, "loaded": True, "here": True,
+     "size_bytes": 4400000000, "loaded": True, "here": True, "default": False,
      "where": [{"id": "local:mistral:7b", "machine": "PC-BUREAU", "place": "here",
                 "loaded": True, "context": 16384, "tools": True, "vision": False}],
      "license": None},
@@ -75,7 +75,7 @@ CHAT_MODELS = (
 EMBED_MODELS = (
     {"id": "embeddinggemma", "kind": "embed", "label": "embeddinggemma", "installed": True,
      "context": 2048, "dimensions": 768, "size_bytes": 334000000, "loaded": False,
-     "here": True,
+     "here": True, "default": True,
      "where": [{"id": "local:embeddinggemma", "machine": "PC-BUREAU", "place": "here",
                 "loaded": False, "context": 2048}],
      "license": None},

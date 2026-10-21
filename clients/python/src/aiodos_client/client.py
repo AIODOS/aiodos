@@ -170,7 +170,8 @@ class Aiodos:
                           timeout=timeout)
 
     def embed(self, texts, model=None):
-        """Les vecteurs de `texts` (un texte ou une liste) : list[list[float]], sur ce PC."""
+        """Les vecteurs de `texts` (un texte ou une liste), sur ce PC : une liste de
+        list[float] (Vectors), avec le modèle qui les a calculés (`vectors.model`)."""
         return _chat.embed(self, texts, model)
 
     def open_in_aiodos(self, page, model=None):

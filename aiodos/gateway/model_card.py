@@ -7,10 +7,14 @@ que les cercles de son lieu effectif (scopes.effective) ; la clé générale voi
 avant. Le contexte est celui, réel, du moteur intégré de ce PC (llm/context.py) ; celui d'une
 autre machine n'est pas transmis (null).
 """
+from aiodos import settings
+from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
 from aiodos.llm import catalog as llm_catalog
 from aiodos.llm import context as llm_context
+from aiodos.llm import models as llm_models
 from aiodos.llm.engine import EMBED_CONTEXT
+from aiodos.network import placement, remote_models
 from aiodos.node import identity
 from aiodos.services import ollama
 
@@ -62,6 +66,22 @@ def _license(name: str):
     return None
 
 
+def default_of(wanted_kind: str) -> str | None:
+    """Le modèle qu'AIODOS prend lui-même, en nom complet : celui de ses conversations
+    (default_model, « auto:qwen3.5:9b », « peer:… »…) ou de ses bibliothèques (embed_model).
+    Une appli qui n'a pas de préférence prend celui-là (« default » dans les fiches) : pour
+    les embeddings, des vecteurs d'un même modèle d'un jour à l'autre. Jamais un modèle du
+    cloud."""
+    wanted = settings.get("embed_model" if wanted_kind == "embed" else "default_model")
+    try:
+        model = catalog.internal(wanted)
+    except catalog.UnknownModel:
+        return None
+    peer = remote_models.parse(model)
+    name = peer[1] if peer else placement.parse(model) or cluster.parse(model) or model
+    return llm_models.full_name(name)
+
+
 def openai_entry(entry: dict, loaded: set) -> dict:
     """Une entrée de /v1/models, enrichie à la façon d'OpenRouter."""
     caps = entry.get("capabilities") or []
@@ -91,6 +111,7 @@ def logical(entries: list, wanted_kind: str) -> list:
     laisse AIODOS choisir la machine ; where[].id en désigne une."""
     loaded = _loaded()
     here_name = _machine_name()
+    default = default_of(wanted_kind)
     groups = {}
     for e in entries:
         if kind(e) != wanted_kind:
@@ -102,7 +123,8 @@ def logical(entries: list, wanted_kind: str) -> list:
         group = groups.setdefault(e["name"], {
             "id": e["name"], "kind": wanted_kind, "label": e["name"], "installed": True,
             "context": None, "size_bytes": e.get("size") or 0, "loaded": False, "here": False,
-            "where": [], "license": _license(e["name"])})
+            "default": llm_models.full_name(e["name"]) == default, "where": [],
+            "license": _license(e["name"])})
         if wanted_kind == "embed":
             group.setdefault("dimensions", None)           # inconnu tant qu'on n'a pas calculé
         item = {"id": f"{catalog.LOCAL}{e['name']}" if local else e["id"],

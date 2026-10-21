@@ -6,6 +6,7 @@ en-têtes ; les embeddings (embed.json) ; le catalogue (models.json) ; open_in_a
 import base64
 import json
 import threading
+from dataclasses import replace
 
 import pytest
 
@@ -153,6 +154,9 @@ def test_where_denied_and_model_not_found(ready, fake):
 
 def test_model_is_chosen_when_absent(ready, fake):
     client, _ = ready
+    client.chat([{"role": "user", "content": "Bonjour"}])           # celui d'AIODOS
+    assert fake.requests_to("/v1/chat/completions")[-1]["json"]["model"] == "qwen3.5:9b"
+    fake.chat_models[0]["default"] = False                          # sinon le chargé
     client.chat([{"role": "user", "content": "Bonjour"}])
     assert fake.requests_to("/v1/chat/completions")[-1]["json"]["model"] == "mistral:7b"
     client.chat([{"role": "user", "content": [{"type": "text", "text": "Que vois-tu ?"},
@@ -279,6 +283,7 @@ def test_embeddings_contract(ready, fake):
     vectors = client.embed(item["request"]["json"]["input"],
                            model=item["request"]["json"]["model"])
     assert vectors == [[0.6, 0.8], [0.8, -0.6]]
+    assert (vectors.model, vectors.dimensions) == ("embeddinggemma", 2)
     assert fake.requests_to("/v1/embeddings")[-1]["json"] == item["request"]["json"]
 
 
@@ -297,10 +302,41 @@ def test_embeddings_without_the_right(fake, make_client):
 
 def test_embeddings_choose_their_model(ready, fake):
     client, _ = ready
-    [vector] = client.embed("un chat noir")
-    assert len(vector) == 768
+    # Un modèle plus gros, déjà chargé, n'est pas celui d'AIODOS : embeddinggemma reste pris
+    # (des vecteurs d'un même modèle d'un appel à l'autre)
+    fake.embed_models.append({**fake.embed_models[0], "id": "bge-m3", "label": "bge-m3",
+                              "dimensions": 1024, "size_bytes": 1200000000, "loaded": True,
+                              "default": False})
+    vectors = client.embed("un chat noir")
+    assert len(vectors[0]) == 768 and vectors.model == "embeddinggemma"
     assert fake.requests_to("/v1/embeddings")[-1]["json"]["model"] == "embeddinggemma"
-    assert client.embed([]) == []
+    fake.embed_models[0]["installed"] = False          # plus là : le meilleur d'ici
+    assert client.embed("un chat noir").model == "bge-m3"
+    assert client.embed([]) == [] and client.embed([]).model is None
+
+
+def test_embeddings_try_another_model_once(ready, fake):
+    """Le modèle choisi par le client, qu'AIODOS écarte (un format que son moteur ne charge
+    pas) : le suivant, une fois. Celui que l'appli demande n'est jamais remplacé."""
+    client, _ = ready
+    fake.embed_models[0]["default"] = False
+    fake.embed_models.insert(0, {**fake.embed_models[0], "id": "gemma-ollama",
+                                 "label": "gemma-ollama", "default": True})
+    fake.fail_next("model_not_found", path="/v1/embeddings")
+    vectors = client.embed("un chat noir")
+    assert vectors.model == "embeddinggemma"
+    assert [r["json"]["model"] for r in fake.requests_to("/v1/embeddings")] == [
+        "gemma-ollama", "embeddinggemma"]
+    fake.fail_next("model_not_found", path="/v1/embeddings")
+    with pytest.raises(errors.ModelNotFound):
+        client.embed("un chat noir", model="gemma-ollama")
+    assert len(fake.requests_to("/v1/embeddings")) == 3
+    # Aucun autre modèle : l'erreur d'AIODOS, telle quelle (elle dit quoi installer)
+    del fake.embed_models[1:]
+    fake.fail_next("model_not_found", path="/v1/embeddings", message="Installe sa version.")
+    with pytest.raises(errors.ModelNotFound) as caught:
+        client.embed("un chat noir")
+    assert caught.value.message == "Installe sa version."
 
 
 def test_models_contract(ready, fake):
@@ -319,12 +355,16 @@ def test_models_contract(ready, fake):
             assert not qwen.loaded and qwen.here and qwen.size_bytes == 6600000000
             assert [w.place for w in qwen.where] == ["here", "mine"]
             assert qwen.where[1].id == "peer:9c2e41d0:qwen3.5:9b" and qwen.where[1].loaded
+            assert qwen.default and not models.by_id["mistral:7b"].default
             assert models.best(needs=["vision"]).id == "qwen3.5:9b"
-            assert models.best(needs=["tools"]).id == "mistral:7b"      # déjà chargé
+            assert models.best(needs=["tools"]).id == "qwen3.5:9b"      # celui d'AIODOS
             assert models.best(needs=["thinking"]).id == "qwen3.5:9b"
+            plain = ModelList(replace(m, default=False) for m in models)
+            assert plain.best(needs=["tools"]).id == "mistral:7b"       # puis le chargé
         else:
             [gemma] = models
             assert (gemma.kind, gemma.dimensions, gemma.context) == ("embed", 768, 2048)
+            assert gemma.default
             assert models.best().id == "embeddinggemma"
     with pytest.raises(ValueError):
         client.models("image")

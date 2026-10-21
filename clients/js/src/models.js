@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // aiodos-client 0.1.0 — le catalogue : GET /aiodos/v1/models?kind=chat|embed
 // (docs/api-applications.md § 5.2), rendu au format qu'ARKLIGHT attend déjà
-// ({ id, size, caps, params }), plus machine, context, loaded, here, where.
+// ({ id, size, caps, params }), plus machine, context, loaded, here, default, where.
+// `default` : le modèle qu'AIODOS prend lui-même (ses conversations, ses bibliothèques).
 
 import { clientError, makeError } from './errors.js';
 
@@ -56,6 +57,7 @@ export function toModel(m) {
     context: num(m.context),
     loaded: Boolean(m.loaded),
     here: Boolean(m.here),
+    default: m.default === true,
     installed: m.installed !== false,
     tools: Boolean(m.tools),
     vision: Boolean(m.vision),

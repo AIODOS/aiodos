@@ -9,7 +9,7 @@
         "json": {"object": "list", "models": [
           {"id": "qwen3.5:9b", "kind": "chat", "label": "qwen3.5:9b", "installed": true,
            "context": 16384, "vision": true, "tools": true, "thinking": true,
-           "size_bytes": 6600000000, "loaded": false, "here": true,
+           "size_bytes": 6600000000, "loaded": false, "here": true, "default": true,
            "where": [{"id": "local:qwen3.5:9b", "machine": "PC-BUREAU", "place": "here",
                       "loaded": false, "context": 16384, "tools": true, "vision": true},
                      {"id": "peer:9c2e41d0:qwen3.5:9b", "machine": "Portable", "place": "mine",
@@ -17,7 +17,7 @@
            "license": null},
           {"id": "mistral:7b", "kind": "chat", "label": "mistral:7b", "installed": true,
            "context": 16384, "vision": false, "tools": true, "thinking": false,
-           "size_bytes": 4400000000, "loaded": true, "here": true,
+           "size_bytes": 4400000000, "loaded": true, "here": true, "default": false,
            "where": [{"id": "local:mistral:7b", "machine": "PC-BUREAU", "place": "here",
                       "loaded": true, "context": 16384, "tools": true, "vision": false}],
            "license": null}]}
@@ -33,7 +33,7 @@
         "json": {"object": "list", "models": [
           {"id": "embeddinggemma", "kind": "embed", "label": "embeddinggemma", "installed": true,
            "context": 2048, "dimensions": 768, "size_bytes": 334000000, "loaded": false,
-           "here": true,
+           "here": true, "default": true,
            "where": [{"id": "local:embeddinggemma", "machine": "PC-BUREAU", "place": "here",
                       "loaded": false, "context": 2048}],
            "license": null}]}

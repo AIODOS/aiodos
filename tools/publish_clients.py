@@ -61,9 +61,9 @@ def versions() -> dict:
     found["package.json"] = package["version"]
     if package.get("dependencies") or package.get("devDependencies"):
         raise Problem("clients/js : le client JavaScript ne doit avoir aucune dépendance.")
-    index = (JS / "src" / "index.js").read_text(encoding="utf-8")
-    match = re.search(r"VERSION\s*=\s*'([^']+)'", index)
-    found["src/index.js VERSION"] = match.group(1) if match else None
+    sources = "\n".join(p.read_text(encoding="utf-8") for p in (JS / "src").glob("*.js"))
+    match = re.search(r"VERSION\s*=\s*'([^']+)'", sources)
+    found["src/*.js VERSION"] = match.group(1) if match else None
     if len(set(found.values())) != 1:
         raise Problem("Versions différentes : " + ", ".join(f"{k}={v}" for k, v in found.items()))
     return found
@@ -81,11 +81,16 @@ def licenses():
             str(p.relative_to(ROOT)) for p in missing))
 
 
+GENERIC = ("#", "//", "*", "/*", "import ", "from ", "return new Promise(")
+
+
 def _lines(path: Path) -> set:
+    """Les lignes de code qui disent quelque chose : ni commentaires, ni imports, ni tournures
+    que tout le monde écrit pareil."""
     out = set()
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         text = " ".join(line.split())
-        if len(text) >= MIN_LINE and not text.startswith(("#", "//", "*", "/*")):
+        if len(text) >= MIN_LINE and not text.startswith(GENERIC):
             out.add(text)
     return out
 
@@ -114,7 +119,7 @@ def tests():
     node = shutil.which("node")
     if not node:
         raise Problem("Node.js introuvable : les essais du client JavaScript n'ont pas tourné.")
-    js = subprocess.run([node, "--test", "test/"], cwd=JS)
+    js = subprocess.run([node, "--test"], cwd=JS)       # « test/ » : pris pour un module
     if js.returncode:
         raise Problem("Les essais du client JavaScript échouent.")
 

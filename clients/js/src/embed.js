@@ -18,9 +18,19 @@ function vectorOf(e, lang) {
   throw clientError('protocol', lang);
 }
 
+/** Le modèle d'une appli sans préférence : celui d'AIODOS (`default`) s'il est sur ce PC,
+ * sinon le premier d'ici ; null s'il n'y en a pas. */
+async function choice(ctx, signal, without = null) {
+  const list = (await models(ctx, { kind: 'embed', signal })).filter((m) => m.id !== without);
+  const here = list.filter((m) => m.here && m.installed);
+  return here.find((m) => m.default) ?? here[0] ?? list[0] ?? null;
+}
+
 /**
- * Les vecteurs d'un ou plusieurs textes. Sans `model`, le premier modèle d'embedding de ce PC.
- * Rend { embeddings: number[][], model, dimensions, usage }.
+ * Les vecteurs d'un ou plusieurs textes. Sans `model`, celui qu'AIODOS prend pour ses
+ * bibliothèques s'il est sur ce PC (`default`), sinon le premier d'ici : des vecteurs d'un même
+ * modèle d'un appel à l'autre. Rend { embeddings: number[][], model, dimensions, usage } :
+ * garder `model` avec les vecteurs, ceux de deux modèles ne se comparent pas.
  */
 export async function embed(ctx, { input, model, signal, timeout = ctx.timeout } = {}) {
   const lang = ctx.lang();
@@ -29,24 +39,38 @@ export async function embed(ctx, { input, model, signal, timeout = ctx.timeout }
   if (!texts || !texts.length || texts.some((t) => typeof t !== 'string')) {
     throw makeError('invalid_request', lang === 'en' ? 'input: a text, or a list of texts.' : 'input : un texte, ou une liste de textes.', { param: 'input' });
   }
+  const send = async (name) => {
+    const res = await ctx.session.keyed({
+      method: 'POST',
+      path: '/v1/embeddings',
+      json: { model: name, input: single ? input : texts },
+      signal,
+      timeout,
+      feature: 'embed',
+    });
+    return ctx.transport.expectOk(res);
+  };
   let name = typeof model === 'string' && model ? model : null;
-  if (!name) {
-    const list = await models(ctx, { kind: 'embed', signal });
-    const chosen = list.find((m) => m.here && m.installed) ?? list[0];
+  let d;
+  if (name) {
+    d = await send(name);
+  } else {
+    const chosen = await choice(ctx, signal);
     if (!chosen) {
       throw makeError('model_not_found', lang === 'en' ? 'No embedding model on this PC.' : "Aucun modèle d'embedding sur ce PC.", { param: 'model' });
     }
     name = chosen.id;
+    try {
+      d = await send(name);
+    } catch (e) {
+      // AIODOS vient d'écarter ce modèle (un format que son moteur ne charge pas) : le
+      // suivant, une fois. Un modèle demandé par l'appli, lui, n'est jamais remplacé.
+      const other = e && e.code === 'model_not_found' ? await choice(ctx, signal, name) : null;
+      if (!other) throw e;
+      name = other.id;
+      d = await send(name);
+    }
   }
-  const res = await ctx.session.keyed({
-    method: 'POST',
-    path: '/v1/embeddings',
-    json: { model: name, input: single ? input : texts },
-    signal,
-    timeout,
-    feature: 'embed',
-  });
-  const d = ctx.transport.expectOk(res);
   if (!d || !Array.isArray(d.data)) throw clientError('protocol', lang);
   const rows = [...d.data].sort((a, b) => (a && a.index ? a.index : 0) - (b && b.index ? b.index : 0));
   const embeddings = rows.map((row) => vectorOf(row && row.embedding, lang));

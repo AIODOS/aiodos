@@ -23,6 +23,8 @@ test('models() : le catalogue du contrat au format attendu par ARKLIGHT', async 
   assert.equal(qwen.context, 16384);
   assert.equal(qwen.loaded, false);
   assert.equal(qwen.here, true);
+  assert.equal(qwen.default, true);
+  assert.equal(mistral.default, false);
   assert.equal(mistral.loaded, true);
   assert.deepEqual(qwen.where, [
     { id: 'local:qwen3.5:9b', machine: 'PC-BUREAU', place: 'here', loaded: false, context: 16384, tools: true, vision: true },
@@ -72,10 +74,12 @@ test('paramsOf : la taille du modèle d’après son nom', () => {
   assert.equal(paramsOf('embeddinggemma'), '');
 });
 
-test('pickModel : exigences, vision préférée, ce PC, déjà chargé, le plus léger', async () => {
+test('pickModel : exigences, vision préférée, ce PC, celui d’AIODOS, déjà chargé, le plus léger', async () => {
   const list = await createFakeClient().client.models();
-  // outils exigés : les deux conviennent ; le chargé passe devant
-  assert.equal(pickModel(list, { needs: ['tools'] }).id, 'mistral:7b');
+  // outils exigés : les deux conviennent ; celui d'AIODOS passe devant, puis le chargé
+  assert.equal(pickModel(list, { needs: ['tools'] }).id, 'qwen3.5:9b');
+  const plain = list.map((m) => ({ ...m, default: false }));
+  assert.equal(pickModel(plain, { needs: ['tools'] }).id, 'mistral:7b');
   // la vision préférée (sans l'exiger)
   assert.equal(pickModel(list, { needs: ['tools'], vision: true, preferLocal: true }).id, 'qwen3.5:9b');
   // la vision exigée
@@ -87,8 +91,10 @@ test('pickModel : exigences, vision préférée, ce PC, déjà chargé, le plus 
   assert.equal(pickModel(null), null);
   // un modèle d'une autre machine passe après ceux de ce PC
   const far = { ...list[1], id: 'peer:x:grand', here: false, loaded: true, size: 1 };
-  assert.equal(pickModel([far, list[0]], { needs: ['tools'] }).id, 'qwen3.5:9b');
-  assert.equal(pickModel([far, list[0]], { needs: ['tools'], preferLocal: false }).id, 'peer:x:grand');
+  assert.equal(pickModel([far, plain[0]], { needs: ['tools'] }).id, 'qwen3.5:9b');
+  assert.equal(pickModel([far, plain[0]], { needs: ['tools'], preferLocal: false }).id, 'peer:x:grand');
+  // sans préférence de lieu, celui d'AIODOS passe encore devant le chargé
+  assert.equal(pickModel([far, list[0]], { needs: ['tools'], preferLocal: false }).id, 'qwen3.5:9b');
 });
 
 test('pickModel accepte aussi la liste d’Ollama d’ARKLIGHT ({id, size, caps})', () => {

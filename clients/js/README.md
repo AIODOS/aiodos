@@ -68,6 +68,7 @@ if (st.state !== 'ready') {
 }
 
 // le catalogue au format { id, size, caps, params } déjà connu, plus machine, context, loaded…
+// pickModel préfère ce PC, puis le modèle qu'AIODOS prend lui-même (default), puis le chargé
 const model = pickModel(await aiodos.models(), { needs: ['tools'], vision: true });
 
 // un tour de l'agent : messages neutres { role, content, images?, toolCalls?, toolCallId }
@@ -98,6 +99,9 @@ await aiodos.disconnect(); // retrait dans AIODOS, puis key.set(null)
   `raw` : le filet d'ARKLIGHT (appels écrits dans le texte) reste utile.
 - `batch: true` baisse la priorité ; `requireTools: false` accepte une réponse sans outils
   plutôt qu'une erreur `tools_unavailable`.
+- `embed({ input })` rend `{ embeddings, model, dimensions, usage }` ; sans `model`, celui des
+  bibliothèques d'AIODOS. Garder `model` avec les vecteurs : ceux de deux modèles ne se
+  comparent pas.
 - Réserver les messages `ai.*` du serveur aux clients de la machine : sinon un appareil du
   réseau se servirait d'AIODOS à travers ARKLIGHT.
 

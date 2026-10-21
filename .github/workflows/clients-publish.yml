@@ -35,7 +35,7 @@ jobs:
           python -m pytest -q clients/python/tests
       - name: Essais du client JavaScript
         working-directory: clients/js
-        run: node --test test/
+        run: node --test
 
   pypi:
     needs: verifier

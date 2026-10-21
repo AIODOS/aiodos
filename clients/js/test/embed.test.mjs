@@ -33,8 +33,33 @@ test('embed() : un seul texte ; sans modèle, celui de ce PC', async () => {
   assert.equal(fake.received('/aiodos/v1/models')[0].path, '/aiodos/v1/models?kind=embed');
   await assert.rejects(client.embed({ input: [] }), (e) => e.code === 'invalid_request' && e.param === 'input');
   await assert.rejects(client.embed({ input: [1, 2] }), (e) => e.param === 'input');
+  // un modèle plus gros, déjà chargé, et premier dans la liste, n'est pas celui d'AIODOS
+  fake.models.embed.unshift({ ...fake.models.embed[0], id: 'bge-m3', label: 'bge-m3', dimensions: 1024, size_bytes: 1200000000, loaded: true, default: false });
+  assert.equal((await client.embed({ input: 'x' })).model, 'embeddinggemma');
+  fake.models.embed[1].installed = false; // plus là : le premier d'ici
+  assert.equal(fake.received('/v1/embeddings').at(-1).json.model, 'embeddinggemma');
+  await client.embed({ input: 'x' });
+  assert.equal(fake.received('/v1/embeddings').at(-1).json.model, 'bge-m3');
   fake.models.embed = [];
   await assert.rejects(client.embed({ input: 'x' }), (e) => e.code === 'model_not_found');
+});
+
+test('embed() : le modèle choisi par le client, écarté par AIODOS : le suivant, une fois', async () => {
+  const { client, fake } = createFakeClient();
+  fake.models.embed[0].default = false;
+  fake.models.embed.unshift({ ...fake.models.embed[0], id: 'gemma-ollama', label: 'gemma-ollama', default: true });
+  fake.failNext('model_not_found', { path: '/v1/embeddings' });
+  const r = await client.embed({ input: 'un chat noir' });
+  assert.equal(r.model, 'embeddinggemma');
+  assert.deepEqual(fake.received('/v1/embeddings').map((q) => q.json.model), ['gemma-ollama', 'embeddinggemma']);
+  // celui que l'appli demande n'est jamais remplacé
+  fake.failNext('model_not_found', { path: '/v1/embeddings' });
+  await assert.rejects(client.embed({ input: 'x', model: 'gemma-ollama' }), (e) => e.code === 'model_not_found');
+  assert.equal(fake.received('/v1/embeddings').length, 3);
+  // aucun autre modèle : l'erreur d'AIODOS, telle quelle (elle dit quoi installer)
+  fake.models.embed.splice(1);
+  fake.failNext('model_not_found', { path: '/v1/embeddings', message: 'Installe sa version.' });
+  await assert.rejects(client.embed({ input: 'x' }), (e) => e.code === 'model_not_found' && e.message === 'Installe sa version.');
 });
 
 test('embed() : les vecteurs en base64 (float32) sont décodés', async () => {

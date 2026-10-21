@@ -25,7 +25,7 @@ logging.getLogger("aiodos_client").addHandler(logging.NullHandler())
 # Après les deux constantes : les modules du paquet s'en servent.
 from . import errors  # noqa: E402
 from .access import Access, AccessRequest  # noqa: E402
-from .chat import ChatResult, ToolCall  # noqa: E402
+from .chat import ChatResult, ToolCall, Vectors  # noqa: E402
 from .client import Aiodos  # noqa: E402
 from .errors import AiodosError  # noqa: E402
 from .keystore import Keystore  # noqa: E402
@@ -33,5 +33,5 @@ from .models import Model, ModelList, Placement  # noqa: E402
 from .status import Status  # noqa: E402
 
 __all__ = ["API_VERSION", "Access", "AccessRequest", "Aiodos", "AiodosError", "ChatResult",
-           "Keystore", "Model", "ModelList", "Placement", "Status", "ToolCall", "__version__",
-           "errors"]
+           "Keystore", "Model", "ModelList", "Placement", "Status", "ToolCall", "Vectors",
+           "__version__", "errors"]

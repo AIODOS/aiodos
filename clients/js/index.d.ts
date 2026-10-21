@@ -195,6 +195,8 @@ export interface Model {
   context: number | null;
   loaded: boolean;
   here: boolean;
+  /** Le modèle qu'AIODOS prend lui-même (ses conversations, ses bibliothèques). */
+  default: boolean;
   installed: boolean;
   tools: boolean;
   vision: boolean;
@@ -272,6 +274,7 @@ export interface ChatResult {
 
 export interface EmbedOptions {
   input: string | string[];
+  /** Sans modèle : celui des bibliothèques d'AIODOS (`default`), sinon le premier de ce PC. */
   model?: string;
   signal?: AbortSignal;
   timeout?: number;
@@ -279,6 +282,7 @@ export interface EmbedOptions {
 
 export interface EmbedResult {
   embeddings: number[][];
+  /** Le modèle qui a calculé les vecteurs : à garder avec eux (deux modèles ne se comparent pas). */
   model: string;
   dimensions: number | null;
   usage: { promptTokens: number | null; totalTokens: number | null } | null;
@@ -338,7 +342,7 @@ export declare function createClient(options: ClientOptions): AiodosClient;
 /** Un coffre en mémoire (essais, scripts). */
 export declare function memoryKeyStore(initial?: string | null): KeyStore;
 /** Le meilleur modèle pour un usage, ou null. */
-export declare function pickModel<M extends { id: string; caps?: string[]; size?: number; here?: boolean; loaded?: boolean; installed?: boolean; context?: number | null }>(
+export declare function pickModel<M extends { id: string; caps?: string[]; size?: number; here?: boolean; default?: boolean; loaded?: boolean; installed?: boolean; context?: number | null }>(
   list: M[] | null | undefined,
   options?: { needs?: string[] | string; vision?: boolean; preferLocal?: boolean; minContext?: number },
 ): M | null;

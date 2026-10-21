@@ -84,8 +84,9 @@ suit aucune redirection et n'utilise aucun proxy.
 | `X-Aiodos-Client` | `python/0.1.0`, `js/0.1.0` | journal |
 
 **En-têtes de réponse** : `X-Aiodos-Api` ; `X-Aiodos-Model` (identifiant concret qui a
-répondu), `X-Aiodos-Machine` (nom, encodé pour cent en UTF-8), `X-Aiodos-Place` (`here`,
-`mine`, `friend`) ; `Retry-After` sur 429 et 503.
+répondu) et `X-Aiodos-Machine` (nom), tous deux encodés pour cent en UTF-8 (« : » et « @ »
+restent tels quels dans le modèle) ; `X-Aiodos-Place` (`here`, `mine`, `friend`) ;
+`Retry-After` sur 429 et 503.
 
 ## 3. Les erreurs
 
@@ -330,7 +331,7 @@ Le catalogue par modèle logique, filtré selon les droits et le lieu de l'appli
 { "object": "list", "models": [
   { "id": "qwen3.5:9b", "kind": "chat", "label": "qwen3.5:9b", "installed": true,
     "context": 16384, "vision": true, "tools": true, "thinking": true,
-    "size_bytes": 6600000000, "loaded": false, "here": true,
+    "size_bytes": 6600000000, "loaded": false, "here": true, "default": true,
     "where": [ { "id": "local:qwen3.5:9b", "machine": "PC-BUREAU", "place": "here",
                  "loaded": false, "context": 16384, "tools": true, "vision": true },
                { "id": "peer:9c2e…:qwen3.5:9b", "machine": "Portable", "place": "mine",
@@ -343,6 +344,9 @@ Le catalogue par modèle logique, filtré selon les droits et le lieu de l'appli
 - `tools` et `vision` au niveau du modèle : vrais si **ce PC** les sert (une machine appairée
   ne reçoit en v1 qu'une conversation en texte).
 - `context` : le contexte réel du moteur de ce PC (null si inconnu).
+- `default` : le modèle qu'AIODOS prend lui-même, celui de ses conversations ou de ses
+  bibliothèques (Réglages). Une appli sans préférence le prend : les deux bibliothèques
+  clientes le font.
 - `kind=embed` : les modèles d'embedding de ce PC (`dimensions` quand il est connu).
 
 ### 5.3 `POST /aiodos/v1/open`
@@ -389,7 +393,10 @@ La forme d'OpenAI. Ce qu'AIODOS y ajoute :
 
 ### 5.6 `POST /v1/embeddings`
 
-La forme d'OpenAI ; sur ce PC seulement ; `encoding_format: "base64"` pris.
+La forme d'OpenAI ; sur ce PC seulement ; `encoding_format: "base64"` pris. Les vecteurs de
+deux modèles ne se comparent pas : une appli qui les garde garde aussi le nom du modèle, et le
+redonne ensuite (sans préférence, le modèle `default` du catalogue, celui des bibliothèques
+d'AIODOS).
 
 ## 6. Les bibliothèques clientes
 

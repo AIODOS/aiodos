@@ -7,6 +7,8 @@
   `Model.where[].id` désigne une machine précise.
 - `tools` et `vision` valent vrai si **ce PC** les sert (une machine appairée ne reçoit en
   v1 qu'une conversation en texte) ; `context` est le contexte réel du moteur de ce PC.
+- `default` : le modèle qu'AIODOS prend lui-même (ses conversations, ses bibliothèques) ;
+  `best()` le préfère, et embed() sans modèle le prend.
 """
 
 from dataclasses import dataclass
@@ -44,6 +46,7 @@ class Model:
     size_bytes: int | None = None
     loaded: bool = False
     here: bool = False
+    default: bool = False
     where: tuple = ()
     license: object = field(default=None, compare=False, hash=False)
     dimensions: int | None = None
@@ -66,8 +69,9 @@ class ModelList(list):
 
     def best(self, needs=(), prefer_local=True):
         """Le meilleur modèle installé qui sert tous les besoins (« vision », « tools »,
-        « thinking »), ou None : d'abord ceux de ce PC (si `prefer_local`), puis ceux déjà
-        chargés, puis le plus grand contexte, puis le plus gros."""
+        « thinking »), ou None : d'abord ceux de ce PC (si `prefer_local`), puis celui
+        qu'AIODOS prend lui-même (`default`), puis ceux déjà chargés, puis le plus grand
+        contexte, puis le plus gros."""
         if isinstance(needs, str):
             needs = [needs]
         needs = list(needs or ())
@@ -79,8 +83,8 @@ class ModelList(list):
             return None
 
         def rank(model):
-            return (model.here if prefer_local else True, model.loaded, model.context or 0,
-                    model.size_bytes or 0)
+            return (model.here if prefer_local else True, model.default, model.loaded,
+                    model.context or 0, model.size_bytes or 0)
 
         return max(fitting, key=rank)
 
@@ -106,7 +110,8 @@ def model_from(entry: dict) -> Model:
                  context=_int(entry.get("context")), vision=entry.get("vision") is True,
                  tools=entry.get("tools") is True, thinking=entry.get("thinking") is True,
                  size_bytes=_int(entry.get("size_bytes")), loaded=entry.get("loaded") is True,
-                 here=entry.get("here") is True, where=where, license=entry.get("license"),
+                 here=entry.get("here") is True, default=entry.get("default") is True,
+                 where=where, license=entry.get("license"),
                  dimensions=_int(entry.get("dimensions")), raw=dict(entry))
 
 

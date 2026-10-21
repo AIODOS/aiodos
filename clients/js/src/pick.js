@@ -13,7 +13,8 @@ const capsOf = (m) => (Array.isArray(m.caps) ? m.caps : []);
  *   dans `needs` pour l'exiger) ;
  * - `preferLocal` (vrai par défaut) : préférer les modèles de ce PC (`here`) ;
  * - `minContext` : écarter les modèles dont le contexte connu est plus petit.
- * Ensuite : un modèle déjà chargé, puis le plus léger.
+ * Ensuite : celui qu'AIODOS prend lui-même (`default`), un modèle déjà chargé, puis le plus
+ * léger.
  */
 export function pickModel(list, { needs = [], vision = false, preferLocal = true, minContext = 0 } = {}) {
   const need = toList(needs);
@@ -30,6 +31,7 @@ export function pickModel(list, { needs = [], vision = false, preferLocal = true
   const score = (m) => [
     vision && capsOf(m).includes('vision') ? 0 : 1,
     preferLocal && m.here !== false ? 0 : 1,
+    m.default ? 0 : 1,
     m.loaded ? 0 : 1,
     m.size > 0 ? m.size : Number.MAX_SAFE_INTEGER,
   ];
