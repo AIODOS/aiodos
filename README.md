@@ -316,6 +316,8 @@ aiodos/
 │   ├── answer.py      réponse par cette machine ou par une machine appairée, selon le lieu
 │   └── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
+│                      qui se comporte comme un torrent : pauses, reprise sans perte
+│                      (docs/file-de-travaux.md)
 │   ├── queue.py       persistance, priorités, réessais, reprise
 │   ├── executor.py    exécution selon les ressources (GPU, embeddings, CPU, réseau)
 │   ├── pacing.py      cadence du travail de fond : conversations d'abord, batterie ménagée

@@ -137,7 +137,7 @@ def test_cancelling_in_the_tasks_view_stops_reading_a_page_of_my_network(wiki):
         assert wiki.connected.wait(5)
         assert client.post(f"/api/jobs/{job_id}/cancel", headers=AUTH).json() == {"ok": True}
         assert wiki.left.wait(4), "la lecture aurait dû s'arrêter avec le travail"
-        wait_for(lambda: _unit(job_id)["status"] == "queued")
+        wait_for(lambda: _unit(job_id)["status"] == "cancelled")     # file en torrent : annulée
     job = queue.job_summary(job_id)
     assert job["status"] == "cancelled" and job["done"] == 0 and job["failed"] == 0
     assert _unit(job_id)["attempts"] == 0 and _unit(job_id)["error"] is None
@@ -212,7 +212,7 @@ def test_cancelling_a_job_stops_its_unit_running_here(running, slow_task):
     wait_for(lambda: _unit(job_id)["status"] != "running", 4)
     assert slow_task.stops[0] is not None and slow_task.stops[0].is_set()
     assert slow_task.finished == []               # pas allée au bout
-    assert _unit(job_id)["status"] == "queued" and _unit(job_id)["attempts"] == 0
+    assert _unit(job_id)["status"] == "cancelled" and _unit(job_id)["attempts"] == 0
     assert queue.job_summary(job_id)["status"] == "cancelled"
 
 
@@ -254,7 +254,7 @@ def test_an_error_after_the_stop_is_not_counted_as_a_failure(running, slow_task)
     running.wake()
     wait_for(lambda: _unit(job_id)["status"] != "running", 4)
     unit = _unit(job_id)
-    assert unit["status"] == "queued" and unit["error"] is None and unit["attempts"] == 0
+    assert unit["status"] == "cancelled" and unit["error"] is None and unit["attempts"] == 0
 
 
 def test_a_unit_whose_stop_is_already_raised_does_not_start(monkeypatch):

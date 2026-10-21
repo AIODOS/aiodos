@@ -8,7 +8,7 @@ import pytest
 
 from aiodos import db, settings
 from aiodos.jobs import kinds, leases, queue, registry  # noqa: F401  (enregistre les tâches)
-from aiodos.jobs.models import MAX_ATTEMPTS
+from aiodos.jobs.models import LOST_MINE_ONLY, MAX_LOST
 from aiodos.knowledge import store
 from aiodos.network import peers, wire, work
 from aiodos.network.client import PeerError
@@ -188,26 +188,48 @@ def test_result_from_another_machine_is_refused(owner):
     assert reply["accepted"] is False and _unit(order["id"])["node"] == B
 
 
-def test_expired_lease_counts_an_attempt_and_late_result_is_still_welcome(owner):
+def test_an_expired_lease_keeps_its_machine_which_can_resume_or_deliver(owner):
+    """La file comme un torrent : un bail échu ne coûte pas d'essai mais une disparition
+    (lost) ; l'unité garde sa machine, qui se raccroche à son renouvellement suivant tant
+    qu'elle n'est pas redonnée, ou livre son résultat."""
     order = _lease(owner)["unit"]
     db.execute("UPDATE units SET lease_until=1 WHERE id=?", (order["id"],))
     assert leases.expire() == [(owner["job"], False)]
     unit = _unit(order["id"])
-    assert unit["status"] == "queued" and unit["node"] == B and unit["attempts"] == 1
-    # renouvellement refusé : la machine sait qu'elle peut arrêter
-    assert work.renew(owner["manager"], B, {"unit": order["id"]}) == {"ok": False}
-    # mais son résultat, arrivé avant que l'unité soit redonnée, est accepté
+    assert unit["status"] == "queued" and unit["node"] == B and unit["attempts"] == 0
+    assert unit["lost"] == 1
+    # La machine se raccroche : l'unité repart chez elle, sans être redonnée
+    assert work.renew(owner["manager"], B, {"unit": order["id"]}) == {"ok": True,
+                                                                       "state": "resumed"}
+    unit = _unit(order["id"])
+    assert unit["status"] == "running" and unit["node"] == B and unit["lease_until"]
+    # Échue de nouveau : son résultat, arrivé avant qu'elle soit redonnée, est accepté
+    db.execute("UPDATE units SET lease_until=1 WHERE id=?", (order["id"],))
+    leases.expire()
     reply = work.result(owner["manager"], B, {"unit": order["id"],
                                               "output": wire.pack(_computed(order))})
     assert reply == {"accepted": True} and _unit(order["id"])["status"] == "done"
 
 
-def test_unit_failing_on_every_machine_ends_failed(owner):
+def test_a_unit_given_to_another_machine_is_not_resumed(owner):
     order = _lease(owner)["unit"]
-    for attempt in range(MAX_ATTEMPTS):
-        db.execute("UPDATE units SET status='running', node=?, lease_until=1, attempts=? "
-                   "WHERE id=?", (B, attempt + 1, order["id"]))
+    db.execute("UPDATE units SET lease_until=1 WHERE id=?", (order["id"],))
+    leases.expire()
+    db.execute("UPDATE units SET status='running', node=?, lease_until=? WHERE id=?",
+               (C, db.now() + 60, order["id"]))           # redonnée à une autre machine
+    assert work.renew(owner["manager"], B, {"unit": order["id"]}) == {"ok": False,
+                                                                       "state": "reassigned"}
+
+
+def test_a_unit_lost_too_many_times_fails_and_avoids_friends(owner):
+    order = _lease(owner)["unit"]
+    for lost in range(1, MAX_LOST + 1):
+        db.execute("UPDATE units SET status='running', node=?, lease_until=1 WHERE id=?",
+                   (B, order["id"]))
         leases.expire()
+        unit = _unit(order["id"])
+        if lost >= LOST_MINE_ONLY and lost < MAX_LOST:
+            assert unit["reach"] == "here,mine"           # plus chez un ami ni un inconnu
     assert _unit(order["id"])["status"] == "failed"
     assert queue.job_summary(owner["job"])["failed"] == 1
 

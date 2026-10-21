@@ -1388,10 +1388,11 @@ def test_a_friend_cannot_keep_a_unit_forever(friend_library):
     ses unités jusqu'au redémarrage, et le travail ne finissait jamais."""
     lib = friend_library
     order = _friend_lease(lib)
-    assert work.renew(lib["manager"], FRIEND, {"unit": order["id"]}) == {"ok": True}
+    assert work.renew(lib["manager"], FRIEND, {"unit": order["id"]}) == {"ok": True,
+                                                                         "state": "running"}
     db.execute("UPDATE units SET started=? WHERE id=?",
                (db.now() - work.FRIEND_LEASE_MAX - 1, order["id"]))
-    assert work.renew(lib["manager"], FRIEND, {"unit": order["id"]}) == {"ok": False}
+    assert work.renew(lib["manager"], FRIEND, {"unit": order["id"]})["ok"] is False
     unit = db.query_one("SELECT status, attempts, node, error FROM units WHERE id=?",
                         (order["id"],))
     assert (unit["status"], unit["attempts"], unit["node"]) == ("queued", 0, None)

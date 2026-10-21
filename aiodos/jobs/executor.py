@@ -16,7 +16,8 @@ retirée, réindexation remplacée ; vu à chaque tour de la boucle), et quand A
 s'arrête. La lecture d'une page, une transcription, une image s'interrompent alors au lieu
 d'aller au bout (une page lente jusqu'à son délai total, une longue vidéo jusqu'à sa fin),
 et ce qu'elles calculaient n'entre pas dans les bibliothèques d'un travail annulé : l'unité
-retourne en file sans compter d'essai. Une pause du travail n'arrête pas l'unité en cours.
+retourne en file sans compter d'essai. Une pause « après l'unité en cours » la laisse finir ;
+une pause « tout de suite » (du travail, ou de toute la file) l'arrête et la rend de même.
 Sur batterie en « attendre le secteur », une unité en cours est rendue de même au lot
 suivant (pacing.wait_turn rend toute unité qui a un arrêt) : refaite plus tard, au retour
 du secteur, ou par une de mes machines qui la demande.
@@ -28,9 +29,8 @@ import time
 
 import requests
 
-from aiodos import db
 from aiodos.jobs import leases, pacing, queue, registry
-from aiodos.jobs.models import CANCELLED, DEFAULT_SLOTS, GPU_BOUND
+from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.node import priority
 from aiodos.services import ollama
 
@@ -67,14 +67,9 @@ def _run_unit(task, payload, stop=None) -> tuple:
 
 
 def _withdrawn(job_ids) -> set:
-    """Parmi ces travaux, ceux annulés ou supprimés depuis : leurs unités en cours ici
-    n'ont plus à aller au bout."""
-    ids = sorted(job_ids)
-    if not ids:
-        return set()
-    rows = db.query(f"SELECT id, status FROM jobs WHERE id IN ({','.join('?' * len(ids))})",
-                    tuple(ids))
-    return set(ids) - {r["id"] for r in rows if r["status"] != CANCELLED}
+    """Parmi ces travaux, ceux annulés, supprimés, ou mis en pause « tout de suite » (eux
+    ou toute la file) depuis : leurs unités en cours ici n'ont plus à aller au bout."""
+    return queue.halted_now(job_ids)
 
 
 class Executor:
@@ -110,6 +105,12 @@ class Executor:
         pacing.shutdown()              # les lots en attente s'arrêtent : rien ne retient l'arrêt
         for _job, halt in self._halts.values():
             halt.set()                 # page en lecture, transcription, image : interrompues
+        # Rendues tout de suite, sans compter d'essai : le processus peut s'arrêter avant
+        # que leur calcul ait fini de s'interrompre (queue.recover rattrape un arrêt brutal)
+        try:
+            await asyncio.to_thread(queue.interrupt_units, list(self._halts))
+        except Exception:
+            log.exception("Unités en cours non rendues à l'arrêt")
         if self._task:
             self._task.cancel()
 
