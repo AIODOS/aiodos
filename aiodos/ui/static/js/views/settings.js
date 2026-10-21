@@ -6,6 +6,7 @@ import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
 import { appsCard, bindApps } from './gateway-apps.js';
+import { bindEngines, enginesCard, loadEngines } from './engines.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
@@ -121,6 +122,17 @@ const SECTIONS = [
   { title: 'Applications et autres outils', icon: 'plug', fields: [
     { type: 'gateway' },
   ] },
+  { title: 'Moteurs des applications', icon: 'image', fields: [
+    { type: 'engines' },
+    { key: 'engines_comfyui_enabled', label: 'Mettre ComfyUI au service de mes applications', type: 'switch',
+      help: 'AIODOS enverra au ComfyUI ouvert de ce PC les travaux des applications que tu autorises (PANDORA…), '
+        + 'en plus des tiens : ils s’ajoutent à sa file sous le nom « aiodos », et seul ce calcul-là est arrêté '
+        + 'quand une appli annule. Rien n’est installé ni téléchargé.' },
+    { key: 'engines_comfyui_path', label: 'Dossier de ComfyUI', type: 'folder',
+      help: 'Vide : trouvé seul (Comfy Desktop, version portable).' },
+    { key: 'engines_comfyui_url', label: 'Adresse de ComfyUI sur ce PC', type: 'text',
+      help: 'Vide : http://127.0.0.1:8188, puis :8000 (celle de Comfy Desktop). Seule une adresse de ce PC est prise.' },
+  ] },
   { title: 'Avancé', icon: 'settings', fields: [
     { key: 'ollama_url', label: 'Adresse d\'Ollama', type: 'text' },
   ] },
@@ -142,7 +154,7 @@ export function mountSettings(container) {
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
   window.addEventListener('pywebviewready', refresh);     // les boutons « Choisir… » des dossiers
-  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); } });
+  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); loadEngines(); } });
   on('updates:loaded', () => {
     const box = root && $('#updates-status', root);
     if (box) { box.innerHTML = updatesStatus(); bindUpdates(box); }
@@ -150,6 +162,10 @@ export function mountSettings(container) {
   on('gateway:loaded', () => {
     const box = root && $('#gateway-box', root);
     if (box) { box.innerHTML = gatewayCard(); bindGateway(box); }
+  });
+  on('engines:loaded', () => {
+    const box = root && $('#engines-box', root);
+    if (box) { box.innerHTML = enginesCard(); bindEngines(box); }
   });
   on('gateway-apps:loaded', () => {
     const box = root && $('#gateway-apps-box', root);
@@ -162,6 +178,7 @@ function field(f) {
   if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
   if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
   if (f.type === 'approval') return '<div id="approval-box"></div>';
+  if (f.type === 'engines') return `<div id="engines-box">${enginesCard()}</div>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
   if (f.type === 'switch') {
@@ -242,6 +259,7 @@ function render() {
   });
   bindUpdates(form);
   bindGateway(form);
+  bindEngines(form);
   renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
   $('#settings-cancel', root).onclick = render;           // le formulaire revient aux réglages

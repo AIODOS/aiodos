@@ -125,8 +125,27 @@ d'Ollama) : `{"error": "…", "code": "…", "hint": "…"}`. `/mcp` : le code d
 | 404 | `not_supported` | fonction absente de cette version |
 | 409 | `no_machine` | aucune machine permise n'a le modèle en ce moment |
 | 413 | `file_too_large` | corps trop gros |
-| 415 | `unsupported_media_type` | corps non JSON |
+| 415 | `unsupported_media_type` | corps non JSON ; entrée d'un genre non reconnu (§ 5.7) |
 | 429 | `rate_limited`, `busy` | voir `Retry-After` |
+
+Les travaux ComfyUI (§ 5.7) ajoutent :
+
+| HTTP | `code` | Quand |
+|---|---|---|
+| 400 | `graph_not_api` | graphe au format de l'éditeur (il faut « Exporter (API) ») |
+| 400 | `graph_invalid` | graphe mal formé, lien vers un nœud absent, cycle, aucune sortie (`detail.node`, `detail.graph`) |
+| 400 | `patch_invalid` | une retouche (`set`, `vary`) vise un lien, un nœud absent, ou change le type |
+| 400 | `forbidden_value` | chemin, adresse ou annotation de dossier (`detail.node`, `input`, `reason`) |
+| 400 | `forbidden_node` | nœud d'un service en ligne (`detail.class`) |
+| 400 | `input_missing` | jeton `@in:` sans entrée déclarée, ou entrée jamais envoyée par cette appli |
+| 400 | `input_hash_mismatch` | l'empreinte du corps reçu n'est pas celle de l'adresse |
+| 404 | `engine_not_found`, `job_not_found`, `file_not_found`, `input_not_found` | introuvable, ou à une autre appli |
+| 409 | `engine_unavailable` | aucune machine permise n'a ComfyUI ouvert et accordé |
+| 409 | `model_unavailable` | modèles absents (`detail.models` : `[{folder, name}]`) |
+| 409 | `model_unresolved`, `model_ambiguous` | jeton `@model:` non déclaré ; même nom dans plusieurs dossiers (`detail.candidates`) |
+| 409 | `job_not_cancellable`, `job_not_pausable` | travail déjà fini |
+| 413 | `graph_too_large`, `input_too_large` | 2 Mo par graphe, 8 Mo et 64 graphes par travail ; 100 Mo par entrée |
+| 429 | `quota_exceeded` | 50 travaux actifs, 10 Gio d'entrées, 20 Gio de fichiers non récupérés (`detail.quota`) |
 | 502 | `peer_failed`, `engine_failed` | échec de la machine choisie |
 | 503 | `engine_unavailable`, `approval_unavailable` | moteur en panne ou en démarrage ; AIODOS sans fenêtre |
 
@@ -248,6 +267,7 @@ d'`access_token` et `aiodos.upgraded` vaut `true`. Erreurs, statut 400, forme d'
 | `chat` | `/v1/chat/completions`, `/v1/completions`, `/api/chat`, `/api/generate`, `/api/show`, `/api/ps`, MCP `converser` |
 | `embed` | `/v1/embeddings`, `/api/embed`, `/api/embeddings` |
 | `libraries` | MCP `lister_bibliotheques`, `rechercher_bibliotheques` (bibliothèques choisies à l'accord) |
+| `engines:comfyui` | `/aiodos/v1/engines…`, `/aiodos/v1/inputs/…`, `/aiodos/v1/jobs…`, `/aiodos/v1/files/…` (§ 5.7) ; jamais avec la clé générale |
 
 Pour toute clé valide : `info`, `/v1/models`, `/api/tags`, `/aiodos/v1/models` (filtrés selon
 les droits et le lieu), `open`, `access/revoke`. Droit manquant : 403 `scope_denied`. Jamais
@@ -261,6 +281,10 @@ accordables : les réglages, le réseau, le cloud, la gestion des modèles.
 | `mine` | mes machines qui prêtent leurs modèles | une de mes machines | — |
 | `friends` | mes amis aussi, si le réglage général `auto_route_friends` le permet | un ami | — |
 | `public` | pas encore servi (confirmé à son arrivée) | — | — |
+
+Les travaux ComfyUI (`engines:comfyui`) se calculent dans cette version par le ComfyUI de ce
+PC (`here`), une fois accordé dans Réglages → Moteurs des applications ; `mine` (mes machines
+qui ont ComfyUI) suivra, confirmé à son arrivée.
 
 Lieu effectif : les cercles accordés à l'appli, resserrés par `X-Aiodos-Where`, et par les
 réglages généraux. Jamais le cloud, quelle que soit la clé. Un modèle hors du lieu permis
@@ -287,6 +311,11 @@ une requête.
 | `POST /v1/chat/completions`, `POST /v1/completions` | oui | `chat` |
 | `POST /v1/embeddings` | oui | `embed` |
 | `/api/*` (forme d'Ollama), `POST /mcp` | oui | `chat`, `embed`, `libraries` |
+| `GET /aiodos/v1/engines`, `POST /aiodos/v1/engines/comfyui/plan` | oui | `engines:comfyui` |
+| `HEAD`, `PUT /aiodos/v1/inputs/{sha256}` | oui | `engines:comfyui` |
+| `POST /aiodos/v1/jobs`, `GET /aiodos/v1/jobs`, `GET /aiodos/v1/jobs/{id}`, `…/events`, `…/files` | oui | `engines:comfyui` |
+| `POST /aiodos/v1/jobs/{id}/pause`, `/resume`, `/cancel`, `/retry` ; `DELETE /aiodos/v1/jobs/{id}` ; `POST /aiodos/v1/jobs/pause`, `/resume` | oui | `engines:comfyui` (ses travaux) |
+| `GET /aiodos/v1/files/{id}`, `/content` ; `DELETE /aiodos/v1/files/{id}` | oui | `engines:comfyui` (ses fichiers) |
 
 ### 5.1 `GET /aiodos/v1/info`
 
@@ -294,12 +323,15 @@ Sans clé, toujours 200 :
 
 ```json
 { "object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
-  "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+  "instance": "Hk3v9QmZ",
+  "features": ["access", "models", "chat", "embed", "open", "engines", "engines.comfyui",
+               "jobs", "jobs.pause", "inputs", "files"],
   "access": { "apps": true, "requests": true, "approval_ui": true }, "auth": "none" }
 ```
 
 - `features` dit ce que **cette version** sert ; un client ne compare jamais de numéros de
-  version. L2 ajoutera `engines`, `engines.comfyui`, `jobs`, `jobs.pause`, `inputs`, `files`.
+  version. Les travaux ComfyUI (§ 5.7) : `engines`, `engines.comfyui`, `jobs`, `jobs.pause`,
+  `inputs`, `files`.
 - Avec `Authorization`, `auth` vaut `valid`, `revoked`, `expired` ou `invalid` ; s'il vaut
   `valid` :
 
@@ -397,6 +429,108 @@ La forme d'OpenAI ; sur ce PC seulement ; `encoding_format: "base64"` pris. Les 
 deux modèles ne se comparent pas : une appli qui les garde garde aussi le nom du modèle, et le
 redonne ensuite (sans préférence, le modèle `default` du catalogue, celui des bibliothèques
 d'AIODOS).
+
+### 5.7 Les travaux ComfyUI (`engines:comfyui`)
+
+AIODOS ne remplace pas le ComfyUI de l'appli : il rejoue ses graphes dans le ComfyUI accordé
+de ce PC (Réglages → Moteurs des applications), par son API, et garde les fichiers pour elle.
+Le graphe se donne **au format API**, déjà rempli ; un fichier ne se donne que par un jeton.
+Conception complète : `docs/conception/partage-puissance.md` (§ 2 et 6).
+
+**Les moteurs.** `GET /aiodos/v1/engines` → `{"engines": [{"id": "comfyui", "here":
+{"enabled", "version", "vram_mib"}, "machines": {"here": 1, "mine": …}, "models": [{folder,
+name, size, where}], "object_info": {"available", "machine"}}]}`.
+
+**Les entrées.** Avant le travail, chaque fichier part une fois, par son empreinte :
+`PUT /aiodos/v1/inputs/{sha256}`, corps brut (100 Mo au plus) → 201 (ou 200 s'il était déjà
+là) `{"sha256", "size", "type"}`. Le genre se lit dans les premiers octets : images PNG, JPEG,
+WebP, GIF ; vidéos MP4, WebM ; sons WAV, MP3, FLAC, OGG. `HEAD` répond 200 si **cette appli**
+l'a déjà envoyé, 404 sinon. Une entrée est gardée tant qu'un travail en cours la cite, puis
+24 h.
+
+**Le travail.** `POST /aiodos/v1/jobs` → 202, `Location: /aiodos/v1/jobs/job_…`, et l'objet :
+
+```json
+{ "engine": "comfyui", "label": "Moods · Séq. 3", "client_ref": "pandora:mood:5f2c9a",
+  "graph": { "4":  { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" } },
+             "10": { "class_type": "LoadImage", "inputs": { "image": "@in:ref0" } },
+             "3":  { "class_type": "KSampler", "inputs": { "seed": "@seed", "…": "…" } },
+             "9":  { "class_type": "SaveImage", "inputs": { "images": ["8", 0], "filename_prefix": "mood" } } },
+  "inputs": { "ref0": { "sha256": "9f2c…" } },
+  "items": [ { "label": "Mood 1", "seed": 1201, "set": [["6", "text", "Salon baigné de lumière dorée"]] },
+             { "label": "Mood 2", "seed": 1202, "set": [["6", "text", "Cuisine de nuit, néons"]] } ],
+  "priority": "normal", "bounds": { "unit_seconds": 1800, "output_mb": 200 } }
+```
+
+- `graph` (ou `graphs`, 64 au plus) ; une **unité** par élément d'`items` (256 au plus) :
+  `graph` (indice), `label`, `seed`, `set` (`[nœud, entrée, valeur]` remplace une valeur déjà
+  présente, du même type, jamais un lien). À la place d'`items`, `repeat: {count, vary:
+  [{node, input, step}]}` (valeur + i × step). Sans l'un ni l'autre : une unité par graphe.
+- Jetons : `@in:<id>` (une entrée de `inputs`, la seule façon de donner un fichier),
+  `@seed` (la graine de l'élément, tirée au hasard s'il n'en donne pas), `@model:<clé>`
+  (avec `models: {clé: {folder, name}}`). Par défaut (`models: "auto"`), AIODOS relève
+  lui-même les noms de modèles dans les listes de fichiers des nœuds.
+- Refusés avant toute mise en file : un chemin, une adresse ou une annotation de dossier
+  dans une valeur (y compris par `set`), un nœud d'un service en ligne, un graphe sans nœud de
+  sortie, un champ inconnu (§ 3).
+- Le même `client_ref` (ou en-tête `Idempotency-Key`) rend le même travail (200). `where`
+  et `X-Aiodos-Where` ne peuvent que resserrer l'accord. `priority` : `high`, `normal` ou
+  `low`. `bounds` : `unit_seconds` (30 min par défaut), `output_mb` (200), `wait_s`.
+- `POST /aiodos/v1/engines/comfyui/plan` prend le même corps et ne met rien en file :
+  `{"ok", "where_effective", "missing": [{folder, name, machine}], "units"}`.
+
+**L'objet travail** (`GET /aiodos/v1/jobs/{id}`, et chaque événement `job`) :
+
+```json
+{ "id": "job_8Hk2Qp…", "object": "aiodos.job", "engine": "comfyui", "label": "Moods · Séq. 3",
+  "client_ref": "pandora:mood:5f2c9a", "status": "in_progress", "pause": null,
+  "priority": "normal", "where_effective": ["here"],
+  "progress": { "total": 2, "done": 1, "running": 1, "queued": 0, "failed": 0, "percent": 50,
+                "estimated": true, "elapsed_s": 14, "eta_s": null, "stage": "running",
+                "machines": [ { "name": "PC-BUREAU", "place": "here", "running": 1, "done": 1 } ],
+                "message": "1 sur 2 · 1 en cours sur 1 machine" },
+  "units": [ { "index": 0, "label": "Mood 1", "status": "completed", "place": "here",
+               "machine": "PC-BUREAU", "files": ["file_3Lq…"], "seconds": 10.6 },
+             { "index": 1, "label": "Mood 2", "status": "in_progress", "stage": "running" } ],
+  "files": [ { "id": "file_3Lq…", "unit": 0, "node": "9", "type": "image/png", "bytes": 1014522,
+               "sha256": "…", "width": 768, "height": 768, "machine": "PC-BUREAU",
+               "place": "here", "engine": "comfyui 0.35.1", "fetched": false,
+               "expires_at": null } ],
+  "error": null, "cancelled_by": null, "created_at": 1760950000, "started_at": 1760950001,
+  "completed_at": null }
+```
+
+- `status` : `queued`, `in_progress`, `pausing`, `paused`, `cancelling`, `completed`,
+  `failed` (aucune unité faite), `cancelled`. Étapes d'une unité (`stage`) :
+  `waiting_machine`, `sending_inputs`, `waiting_engine` (la file de ComfyUI : ses travaux
+  d'abord), `running`, `receiving`, `checking`.
+- Une unité en échec porte `error: {"code": "engine_error" | "engine_timeout" |
+  "output_invalid" | "output_too_large", "message"}` (le message de ComfyUI et le nœud).
+- `GET /aiodos/v1/jobs?active=1|0&client_ref=…&limit=…` : ses travaux ; retrouvés après un
+  redémarrage de l'appli comme d'AIODOS.
+
+**Les événements.** `GET /aiodos/v1/jobs/{id}/events` (SSE) : `job` (l'état complet, d'abord
+puis à chaque changement, 4 fois par seconde au plus), `file` (un nouveau fichier), `end` ;
+`: ping` toutes les 15 s. Rien n'est rejoué : à la reconnexion, l'état complet, puis les
+fichiers pas encore récupérés (`…/files?unfetched=1`).
+
+**Les commandes** (ses travaux seulement ; 202 et l'objet) :
+- `POST …/pause` `{"when": "after_current" | "now"}` : après l'unité en cours (rien ne se
+  perd), ou tout de suite (le calcul en cours s'arrête dans ComfyUI, l'unité est rendue sans
+  compter d'essai) ; `POST …/resume` ;
+- `POST …/cancel` : le calcul en cours s'arrête dans ComfyUI (**ce calcul seulement**, jamais
+  ceux de l'utilisateur) ; les fichiers déjà rendus restent ; `cancelled_by: "app"` ;
+- `POST …/retry` : les unités en échec repartent ; `DELETE /aiodos/v1/jobs/{id}?files=keep|delete`
+  oublie un travail fini ;
+- `POST /aiodos/v1/jobs/pause`, `/resume` : tous ses travaux.
+
+**Les fichiers.** `GET /aiodos/v1/files/{id}` (la fiche), `GET /aiodos/v1/files/{id}/content`
+(les octets ; `Range: bytes=…` pris, 206 et `Content-Range`), `DELETE`. En-têtes : `ETag` (le
+SHA-256), `X-Aiodos-Keep-Until` (`pending` tant que le fichier n'est pas récupéré, sinon
+l'échéance en secondes Unix), `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
+Un fichier servi jusqu'à son dernier octet est **récupéré** : AIODOS le garde encore 7 jours.
+Un fichier jamais récupéré n'est jamais effacé seul ; retirer l'appli fait commencer les
+7 jours.
 
 ## 6. Les bibliothèques clientes
 

@@ -41,6 +41,7 @@ PORT_RETRY_DELAY = 1
 STDIO_ARGS = ("-P", "-m", "aiodos.gateway.mcp_stdio")     # pont stdio (stdio_config)
 # Corps d'une requête : de quoi porter des images en base64 ; au-delà, 413 sans tout lire
 MAX_BODY = 64 * 1024 ** 2
+INPUT_BODY = 100 * 1024 ** 2         # une entrée de travail (input_store.MAX_INPUT)
 API_HEADER = (b"x-aiodos-api", b"1")
 _ROUTED = {b"x-aiodos-model": "model", b"x-aiodos-machine": "machine",
            b"x-aiodos-place": "place"}
@@ -99,14 +100,15 @@ class Guard:
         state["aiodos_caller"] = who
         state["aiodos_lang"] = lang
         declared = headers.get(b"content-length")
+        limit = body_limit(method, path)
         if declared is not None:          # h11 ne laisse pas passer plus que la taille dite
-            if not declared.isdigit() or int(declared) > MAX_BODY:
-                return await _answer(scope, receive, send, path, self._too_big(), lang)
+            if not declared.isdigit() or int(declared) > limit:
+                return await _answer(scope, receive, send, path, self._too_big(limit), lang)
             body_receive, size_in = receive, int(declared)
         else:
-            body = await _read(receive)   # envoi en morceaux : lu ici, jusqu'à la limite
+            body = await _read(receive, limit)   # envoi en morceaux : lu ici, jusqu'à la limite
             if body is None:
-                return await _answer(scope, receive, send, path, self._too_big(), lang)
+                return await _answer(scope, receive, send, path, self._too_big(limit), lang)
             body_receive, size_in = _replay(body, receive), len(body)
         seen = {"status": 500, "bytes": 0, "code": None, "first": b"", "started": False}
 
@@ -144,7 +146,10 @@ class Guard:
                 self._log(context, who, path, seen, started, size_in)
 
     @staticmethod
-    def _too_big() -> ApiError:
+    def _too_big(limit: int = MAX_BODY) -> ApiError:
+        if limit > MAX_BODY:
+            return ApiError("input_too_large", f"Entrée trop lourde : {INPUT_BODY // 1024 ** 2} "
+                            "Mio au plus.")
         return ApiError("file_too_large", f"Requête trop grosse : {MAX_BODY // 1024 ** 2} Mio "
                         "au plus.")
 
@@ -222,15 +227,23 @@ class Guard:
                 log.debug("Dernière utilisation de %s non notée", context.id, exc_info=True)
 
 
-async def _read(receive) -> bytes | None:
-    """Le corps envoyé en morceaux, ou None au-delà de MAX_BODY (ou client parti)."""
+def body_limit(method: str, path: str) -> int:
+    """Le corps le plus gros permis : MAX_BODY, sauf l'envoi d'une entrée de travail
+    (PUT /aiodos/v1/inputs/…, 100 Mo, gateway/input_store.py, lue au fil de l'eau)."""
+    if method == "PUT" and path.startswith("/aiodos/v1/inputs/"):
+        return INPUT_BODY
+    return MAX_BODY
+
+
+async def _read(receive, limit: int = MAX_BODY) -> bytes | None:
+    """Le corps envoyé en morceaux, ou None au-delà de la limite (ou client parti)."""
     body = bytearray()
     while True:
         message = await receive()
         if message["type"] != "http.request":
             return None
         body += message.get("body") or b""
-        if len(body) > MAX_BODY:
+        if len(body) > limit:
             return None
         if not message.get("more_body"):
             return bytes(body)
@@ -251,12 +264,13 @@ def _replay(body: bytes, receive):
 
 def create_gateway_app(node, port: int):
     """node : l'état de l'application du nœud (exécuteur, réseau…)."""
-    from aiodos.gateway import (access_api, info, mcp_server, models_api, ollama_api,
-                                open_page, openai_api)
+    from aiodos.gateway import (access_api, engines_api, files_api, info, inputs_api, jobs_api,
+                                mcp_server, models_api, ollama_api, open_page, openai_api)
     app = FastAPI(title="AIODOS — passerelle", docs_url=None, redoc_url=None,
                   openapi_url=None)
     app.state.node = node
-    for module in (info, access_api, models_api, open_page, openai_api, ollama_api, mcp_server):
+    for module in (info, access_api, models_api, open_page, openai_api, ollama_api, mcp_server,
+                   engines_api, inputs_api, jobs_api, files_api):
         app.include_router(module.router)
     return Guard(app, hosts(port))
 

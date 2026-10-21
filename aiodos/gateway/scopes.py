@@ -1,8 +1,8 @@
 """Les droits d'une application et le lieu de ses calculs (docs/api-applications.md § 4.5 à
 4.7).
 
-- Droits par capacité, pas par modèle : chat, embed, libraries. Chaque route de la
-  passerelle en exige un, ou se contente d'une clé valide (catalogues, info, retrait), ou est
+- Droits par capacité, pas par modèle : chat, embed, libraries, engines:comfyui (les
+  travaux ComfyUI, leurs entrées et leurs fichiers). Chaque route de la passerelle en exige un, ou se contente d'une clé valide (catalogues, info, retrait), ou est
   publique (la liste exacte : PUBLIC). Une route inconnue de cette table exige une clé.
 - Lieu : des cercles, here (ce PC), mine (mes machines), friends (mes amis), public (les
   inconnus du réseau public). L'appli a ceux qu'on lui a accordés ; une requête peut les
@@ -13,14 +13,18 @@
 """
 from aiodos.gateway.errors import ApiError
 
-SCOPES = ("chat", "embed", "libraries")
+SCOPES = ("chat", "embed", "libraries", "engines:comfyui")
 CIRCLES = ("here", "mine", "friends", "public")
 PRIORITIES = ("interactive", "background")
 # Cercles que cette version sert, par capacité : les conversations partent chez mes machines
 # et mes amis (prêt de modèles), pas encore chez les inconnus ; embeddings et bibliothèques
-# restent sur ce PC
+# restent sur ce PC ; les travaux ComfyUI se calculent par le ComfyUI de ce PC (mes machines
+# ensuite, livraison L2b)
 SERVED = {"chat": frozenset({"here", "mine", "friends"}), "embed": frozenset({"here"}),
-          "libraries": frozenset({"here"})}
+          "libraries": frozenset({"here"}), "engines:comfyui": frozenset({"here"})}
+# Les routes des travaux de moteur : toutes exigent le droit du moteur
+ENGINE_ROUTES = ("/aiodos/v1/engines", "/aiodos/v1/inputs/", "/aiodos/v1/jobs",
+                 "/aiodos/v1/files/")
 
 ANY = "any"                 # une clé valide suffit
 PUBLIC = "public"           # sans clé
@@ -39,6 +43,8 @@ def required(method: str, path: str) -> str:
     porte parfois une clé (droits en plus) : elle reste publique."""
     if (method.upper(), path) in PUBLIC_ROUTES:
         return PUBLIC
+    if path.startswith(ENGINE_ROUTES):
+        return "engines:comfyui"
     return _EXACT.get(path, ANY)
 
 

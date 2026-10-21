@@ -65,6 +65,10 @@ class TaskSpec:
     # contrôler ici (un document que je sais relire ; pas une image, un son, une vidéo, ni un
     # format sans lecteur ici) ? Sinon l'unité ne part pas chez un ami (friend_checkable)
     checkable: Optional[Callable] = None
+    # expand(unité, here) -> payload : l'ordre complet, assemblé au moment de calculer
+    # depuis jobs.params (un graphe de moteur ne se recopie pas dans chacune des 256
+    # unités) ; here : pour ce PC (avec ce qui ne le quitte jamais : chemins, appli)
+    expand: Optional[Callable] = None
 
     @property
     def portable(self) -> bool:
@@ -100,10 +104,21 @@ def task(name):
 def register_portable(name, compute, assimilate, file_key=None, options=None,
                       requires=None, validate=None, shared_keys=(), sample=None, here=None,
                       mine_only=False, friends_out=None, friends_in=None, file_optional=None,
-                      file_extras=(), checkable=None):
+                      file_extras=(), checkable=None, expand=None):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
                            tuple(shared_keys), sample, here, mine_only, friends_out, friends_in,
-                           file_optional, tuple(file_extras), checkable)
+                           file_optional, tuple(file_extras), checkable, expand)
+
+
+def payload_for(unit, here: bool = True) -> dict:
+    """Le payload d'une unité au moment de la calculer : complété par expand s'il y en a un
+    (unit : la ligne de la file, avec id, job_id et payload)."""
+    spec = TASKS.get(unit["task"])
+    payload = unit["payload"]
+    if isinstance(payload, str):
+        import json
+        payload = json.loads(payload)
+    return spec.expand(unit, here) if spec is not None and spec.expand else payload
 
 
 def friends_may_take(spec) -> bool:

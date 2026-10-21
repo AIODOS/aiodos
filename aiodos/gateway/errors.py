@@ -34,6 +34,39 @@ CODES = {
     "unsupported_parameter": (
         400, "Paramètre non pris en charge par AIODOS.", "Parameter not supported by AIODOS.",
         "", "", False),
+    # Travaux de moteur (docs/conception/partage-puissance.md § 6.9)
+    "graph_not_api": (
+        400, "Graphe au format de l'éditeur : il faut le format API.",
+        "Editor-format graph: the API format is required.",
+        "Exporte le graphe au format API dans ComfyUI.", "Export the graph in API format in ComfyUI.",
+        False),
+    "graph_invalid": (
+        400, "Graphe mal formé.", "Malformed graph.",
+        "Vérifie les liens, les nœuds et les sorties du graphe.",
+        "Check the graph's links, nodes and outputs.", False),
+    "patch_invalid": (
+        400, "Retouche invalide.", "Invalid patch.",
+        "Une retouche remplace une valeur déjà présente, du même type, jamais un lien.",
+        "A patch replaces an existing value of the same type, never a link.", False),
+    "forbidden_value": (
+        400, "Valeur refusée (chemin, adresse ou annotation de dossier).",
+        "Value refused (path, address or folder annotation).",
+        "Un fichier se donne par un jeton @in:, un modèle par son nom.",
+        "Give a file with an @in: token, a model by its name.", False),
+    "forbidden_node": (
+        400, "Nœud refusé.", "Node refused.",
+        "Les nœuds qui appellent un service en ligne ne passent pas par AIODOS.",
+        "Nodes that call an online service do not go through AIODOS.", False),
+    "input_missing": (
+        400, "Entrée absente.", "Missing input.",
+        "Envoie l'entrée (PUT /aiodos/v1/inputs/{sha256}) et déclare-la dans « inputs ».",
+        "Upload the input (PUT /aiodos/v1/inputs/{sha256}) and declare it in \"inputs\".",
+        False),
+    "input_hash_mismatch": (
+        400, "L'empreinte du fichier reçu ne correspond pas.",
+        "The received file's hash does not match.",
+        "Calcule le SHA-256 des octets envoyés.", "Compute the SHA-256 of the bytes sent.",
+        False),
     "invalid_api_key": (
         401, "Clé d'accès d'AIODOS manquante ou invalide.", "Missing or invalid AIODOS key.",
         "Connecte l'application à AIODOS.", "Connect the application to AIODOS.", False),
@@ -88,18 +121,50 @@ CODES = {
         404, "Fonction absente de cette version d'AIODOS.",
         "Feature not available in this AIODOS version.",
         "Mets AIODOS à jour.", "Update AIODOS.", False),
+    "engine_not_found": (404, "Moteur inconnu.", "Unknown engine.", "", "", False),
+    "input_not_found": (404, "Entrée introuvable.", "Input not found.", "", "", False),
+    "job_not_found": (404, "Travail introuvable.", "Job not found.", "", "", False),
+    "file_not_found": (404, "Fichier introuvable.", "File not found.", "", "", False),
     "no_machine": (
         409, "Aucune machine permise n'a ce modèle en ce moment.",
         "No allowed machine has this model right now.",
         "Réessaie plus tard, ou choisis un autre modèle.", "Retry later, or pick another model.",
         True),
+    "model_unavailable": (
+        409, "Aucune machine permise n'a ces modèles.", "No allowed machine has these models.",
+        "Installe les modèles qui manquent (detail.models), ou élargis le lieu de calcul.",
+        "Install the missing models (detail.models), or widen the compute location.", True),
+    "model_unresolved": (
+        409, "Modèle non résolu.", "Unresolved model.",
+        "Déclare le modèle dans « models » : {folder, name}.",
+        "Declare the model in \"models\": {folder, name}.", False),
+    "model_ambiguous": (
+        409, "Même nom de modèle dans plusieurs dossiers.",
+        "Same model name in several folders.",
+        "Déclare le modèle dans « models » avec son dossier.",
+        "Declare the model in \"models\" with its folder.", False),
+    "job_not_cancellable": (409, "Ce travail est déjà fini.", "This job has already finished.",
+                            "", "", False),
+    "job_not_pausable": (409, "Ce travail est déjà fini.", "This job has already finished.",
+                         "", "", False),
     "file_too_large": (413, "Requête trop grosse.", "Request too large.", "", "", False),
+    "graph_too_large": (
+        413, "Graphe trop gros.", "Graph too large.",
+        "2 Mo par graphe, 8 Mo et 64 graphes par travail.",
+        "2 MB per graph, 8 MB and 64 graphs per job.", False),
+    "input_too_large": (
+        413, "Entrée trop lourde.", "Input too large.", "100 Mo au plus.", "100 MB at most.",
+        False),
     "unsupported_media_type": (
         415, "Corps attendu en JSON (Content-Type: application/json).",
         "JSON body expected (Content-Type: application/json).", "", "", False),
     "rate_limited": (
         429, "Trop de demandes de cette application.", "Too many requests from this application.",
         "Réessaie dans quelques secondes.", "Retry in a few seconds.", True),
+    "quota_exceeded": (
+        429, "Quota de cette application dépassé.", "This application's quota is exceeded.",
+        "Récupère ou supprime des fichiers et des travaux finis.",
+        "Fetch or delete finished files and jobs.", True),
     "busy": (
         429, "Trop de demandes de cette application en même temps.",
         "Too many concurrent requests from this application.",

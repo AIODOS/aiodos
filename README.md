@@ -314,7 +314,16 @@ aiodos/
 │   ├── mcp_stdio.py   pont stdio, pour les assistants qui lancent un programme
 │   ├── catalog.py     modèles proposés et leurs identifiants
 │   ├── answer.py      réponse par cette machine ou par une machine appairée, selon le lieu
-│   └── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
+│   ├── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
+│   ├── jobs_api.py    travaux ComfyUI des applis (/aiodos/v1/jobs : déposer, suivre, commandes)
+│   ├── engines_api.py moteurs vus par l'appli et pré-vol ; inputs_api.py : entrées par empreinte
+│   ├── files_api.py   fichiers produits (plages) ; file_store.py, input_store.py : leur rangement
+│   └── retention.py   garde : récupérés + 7 jours ; ownership.py : accès remplacé ou retiré
+├── engines/           moteurs des applis : AIODOS rejoue leurs graphes, ne les remplace pas
+│   ├── comfy_find.py  ComfyUI de ce PC (Desktop, version portable, instance ouverte)
+│   ├── comfy_client.py son API ; comfyui.py : rejouer une unité (entrées, suivi, sorties)
+│   ├── comfy_graph.py graphes au format API, en fonctions pures ; comfy_contract.py : empreintes
+│   └── media.py       genre d'un fichier d'après ses octets
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │                      qui se comporte comme un torrent : pauses, reprise sans perte
 │                      (docs/file-de-travaux.md)
@@ -323,7 +332,7 @@ aiodos/
 │   ├── pacing.py      cadence du travail de fond : conversations d'abord, batterie ménagée
 │   ├── leases.py      baux : unités confiées pour un temps limité à une autre machine
 │   ├── registry.py    tâches portables : calcul (n'importe où) / intégration (chez soi)
-│   └── kinds/         types de travaux (indexation, réindexation, images…)
+│   └── kinds/         types de travaux (indexation, réindexation, images, travaux ComfyUI…)
 ├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
 │   ├── interfaces.py  vraies cartes réseau (Wi-Fi, Ethernet), sans celles d'un VPN

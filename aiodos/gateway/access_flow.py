@@ -288,7 +288,10 @@ def poll(device_code) -> tuple:
         replace = req.replace
         del _requests[req.id]
     if replace:
-        apps.revoke(replace)          # l'ancienne clé tombe quand la nouvelle est relevée
+        # Ses travaux, fichiers et entrées suivent la nouvelle clé, puis l'ancienne tombe
+        from aiodos.gateway import ownership
+        ownership.transfer(replace, granted["app_id"])
+        apps.revoke(replace)
     body = {"token_type": "Bearer", "scope": " ".join(granted["scopes"]),
             "aiodos": {"app_id": granted["app_id"], "where": granted["where"],
                        "priority": granted["priority"], "expires": granted["expires"]}}

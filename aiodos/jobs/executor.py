@@ -202,7 +202,9 @@ class Executor:
             halt.set()
         self._halts[unit["id"]] = (unit["job_id"], halt)
         try:
-            result, waited = await priority.run(_run_unit, unit["task"], unit["payload"], halt)
+            # L'ordre complet d'une unité de moteur s'assemble ici (registry.payload_for)
+            payload = await asyncio.to_thread(registry.payload_for, unit)
+            result, waited = await priority.run(_run_unit, unit["task"], payload, halt)
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {},
                 max(0.0, time.perf_counter() - started - waited))

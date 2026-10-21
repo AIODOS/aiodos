@@ -39,6 +39,9 @@ def family(path: str) -> str:
         return "models"
     if path.startswith("/aiodos/v1/access"):
         return "access"
+    if path.startswith(("/aiodos/v1/jobs", "/aiodos/v1/inputs/", "/aiodos/v1/files/",
+                        "/aiodos/v1/engines")):
+        return "engines"
     if path.startswith("/mcp"):
         return "mcp"
     return "other"

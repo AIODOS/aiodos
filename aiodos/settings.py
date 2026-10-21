@@ -139,6 +139,12 @@ DEFAULTS = {
     # selon la mémoire vidéo (16 384 jetons si elle le permet, sinon 8 192) ---
     "chat_context": 0,
     "chat_context_overrides": {},     # {"modèle": jetons} : exceptions par modèle
+    # --- Moteurs des applications (engines/, docs/conception/partage-puissance.md § 3.2) :
+    # AIODOS rejoue les travaux des applis dans le ComfyUI de ce PC seulement après le « oui »
+    # de la carte de détection ; vides : trouvés seuls (Desktop, version portable) ---
+    "engines_comfyui_enabled": False,
+    "engines_comfyui_path": "",
+    "engines_comfyui_url": "",
 }
 
 

@@ -772,7 +772,7 @@ Sur la machine qui calcule, ce PC compris, dans un thread de fond à priorité a
    - Pour un ami ou un inconnu, les PNG sont réécrits par Pillow sans les blocs `tEXt`, `iTXt` et `zTXt`, même avec `--disable-metadata`.
 10. **Nettoyer**
     - `POST /history {"delete": [run_uuid]}`.
-    - Effacer `input/aiodos/<run_uuid>` et `output/aiodos/<run_uuid>` quand on connaît les dossiers (`argv`, ou le dossier de base de Desktop : **à vérifier**).
+    - Effacer `input/aiodos/<run_uuid>` et `output/aiodos/<run_uuid>` quand on connaît les dossiers (`argv`). **Vérifié le 21/10/2026** : Desktop range ses entrées et ses sorties dans `%LOCALAPPDATA%\Comfy-Desktop\ComfyUI-Shared\input` et `\output`, et les dit dans sa ligne de commande (`--input-directory`, `--output-directory`).
     - Pour une instance AIODOS, vider tout son dossier d'unité.
 11. **Rendre** : sur ce PC, directement à `assimilate` ; ailleurs, dans la boîte d'envoi (§ 5.2), avec `fingerprint()`. L'étape devient `done` dans `work_assignments`.
 
@@ -784,6 +784,8 @@ Sur la machine qui calcule, ce PC compris, dans un thread de fond à priorité a
 L'historique ne vit qu'en mémoire : après un redémarrage de ComfyUI, on recalcule.
 
 **`here(model)`** est vrai quand ComfyUI est accordé, joignable et a tous les modèles de l'unité. L'exécuteur local passe par le même chemin.
+
+**Vérifié le 21/10/2026 sur ComfyUI 0.35.1 (Desktop de l'auteur, RTX 4070 portable)**, par un vrai travail passé par la passerelle (`engines/comfyui.py`) : `POST /prompt` prend `prompt_id` (UUID en minuscules) ; `GET /api/jobs/{id}` donne l'état (`pending`, `in_progress`, `completed`, `failed`, `cancelled`) ; `POST /api/jobs/{id}/cancel` n'arrête que ce calcul (I17) ; `POST /upload/image` range une entrée sous `input/aiodos/<run_uuid>/` et `LoadImage` la lit par ce chemin relatif ; deux images SDXL 768 × 768 en 10,6 s (chargement du modèle compris) puis 4,4 s ; une image à image depuis une entrée envoyée par l'appli ; une annulation en plein calcul. Desktop écoute sur 127.0.0.1:8188 (et non 8000).
 
 ### 3.7 Les instances lancées par AIODOS (`engines/comfy_instance.py`)
 
@@ -815,7 +817,7 @@ L'historique ne vit qu'en mémoire : après un redémarrage de ComfyUI, on recal
   - `models.yaml` désigne les dossiers de modèles de l'utilisateur, en lecture : rien n'y est écrit.
 - **Jamais `--enable-manager`.**
 - **`<python>`**
-  - `standalone-env\python.exe` pour Desktop (**à vérifier**, M3) ;
+  - pour Desktop, `ComfyUI\.venv\Scripts\python.exe` (**vérifié le 21/10/2026**, M3 : `standalone-env\python.exe` n'est que la base du .venv, sans torch ; le Python du .venv est un relais qui lance celui de `standalone-env`, d'où l'objet de tâche pour que les deux meurent avec AIODOS) ;
   - `python_embeded\python.exe` pour la version portable.
 - **Environnement**
   - Copié et nettoyé : `PYTHONPATH`, `PYTHONSTARTUP`, `PYTHONHOME` et `PYTHONUSERBASE` retirés.

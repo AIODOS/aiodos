@@ -8,7 +8,8 @@ import { icon } from '../icons.js';
 import { emit } from '../state.js';
 import { modal, toast, errorToast, confirmDanger } from '../ui.js';
 
-const SCOPE_LABELS = { chat: 'Conversation', embed: 'Embeddings', libraries: 'Bibliothèques' };
+const SCOPE_LABELS = { chat: 'Conversation', embed: 'Embeddings', libraries: 'Bibliothèques',
+  'engines:comfyui': 'ComfyUI' };
 const CIRCLE_LABELS = { here: 'ce PC', mine: 'mes machines', friends: 'mes amis', public: 'inconnus' };
 const KIND_LABELS = { app: 'Application', manual: 'Outil (clé à la main)' };
 const UNUSED_DAYS = 90;

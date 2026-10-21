@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -325,6 +325,51 @@ MIGRATIONS = {
         seconds   TEXT NOT NULL,
         PRIMARY KEY (signature, machine)
     );
+    """,
+    # Les travaux de moteur des applis (livraison L2b, docs/conception/partage-puissance.md
+    # § 5.1 à 5.3) : les entrées qu'une appli envoie avant son travail (par appli et par
+    # empreinte, jamais vues d'une autre), leur lien aux travaux qui les citent, les fichiers
+    # produits (gardés jusqu'à leur récupération par l'appli, puis 7 jours), et l'identifiant
+    # du calcul d'une unité dans le moteur (run_uuid, le prompt_id de ComfyUI)
+    22: """
+    CREATE TABLE IF NOT EXISTS gateway_inputs (
+        app_id   TEXT NOT NULL,
+        sha256   TEXT NOT NULL,
+        size     INTEGER NOT NULL,
+        type     TEXT NOT NULL,
+        created  REAL NOT NULL,
+        used     REAL NOT NULL,
+        PRIMARY KEY (app_id, sha256)
+    );
+    CREATE TABLE IF NOT EXISTS job_inputs (
+        job_id   INTEGER NOT NULL,
+        app_id   TEXT NOT NULL,
+        sha256   TEXT NOT NULL,
+        PRIMARY KEY (job_id, sha256)
+    );
+    CREATE INDEX IF NOT EXISTS ix_job_inputs_input ON job_inputs(app_id, sha256);
+    CREATE TABLE IF NOT EXISTS gateway_files (
+        id          TEXT PRIMARY KEY,
+        app_id      TEXT NOT NULL,
+        job_id      INTEGER,
+        unit_index  INTEGER,
+        node        TEXT,
+        type        TEXT NOT NULL,
+        bytes       INTEGER NOT NULL,
+        sha256      TEXT NOT NULL,
+        width       INTEGER,
+        height      INTEGER,
+        machine     TEXT,
+        place       TEXT,
+        engine      TEXT,
+        path        TEXT NOT NULL,
+        created     REAL NOT NULL,
+        fetched_at  REAL,
+        served      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS ix_gateway_files_job ON gateway_files(job_id, created);
+    CREATE INDEX IF NOT EXISTS ix_gateway_files_app ON gateway_files(app_id, fetched_at);
+    ALTER TABLE units ADD COLUMN run_uuid TEXT;
     """,
 }
 

@@ -240,6 +240,22 @@ def work_dir() -> Path:
     return d
 
 
+def gateway_dir(part: str) -> Path:
+    """Les fichiers des applications (gateway/input_store.py, file_store.py) : « inputs »
+    (ce qu'elles envoient avant un travail), « out » (ce que leurs travaux produisent). Hors
+    du dossier Images, qui peut être synchronisé."""
+    d = data_dir() / "gateway" / part
+    _make_dir(d, parents=True)
+    return d
+
+
+def engine_runs_dir() -> Path:
+    """Le dossier de calcul des unités de moteur (ComfyUI) : effacé au démarrage."""
+    d = data_dir() / "tmp" / "engine_runs"
+    _make_dir(d, parents=True)
+    return d
+
+
 def log_path() -> Path:
     d = data_dir() / "logs"
     _make_dir(d)

@@ -26,9 +26,11 @@ NO_PROGRESS = "Aucune machine n'a pu la finir : elle a été remise trop de fois
 
 
 def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=None,
-               label=None, reach=None) -> int:
+               label=None, reach=None, public_id=None, client_ref=None) -> int:
     """owner_app : l'appli qui dépose le travail (gateway/), None pour AIODOS ; reach : les
-    cercles où ses unités peuvent se calculer (« here,mine »…), None : les règles d'avant."""
+    cercles où ses unités peuvent se calculer (« here,mine »…), None : les règles d'avant ;
+    public_id : le numéro que voit l'appli (job_…) ; client_ref : sa référence, unique par
+    appli (le même client_ref rend le même travail)."""
     spec = registry.JOB_KINDS[kind]
     title, units, info = spec.split(params)
     now = db.now()
@@ -36,12 +38,12 @@ def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=N
     with db.transaction() as c:
         job_id = c.execute(
             "INSERT INTO jobs(kind, title, priority, status, params, owner_node, total, "
-            "skipped, result, created, finished, owner_app, label, reach) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "skipped, result, created, finished, owner_app, label, reach, public_id, "
+            "client_ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (kind, title, priority, status, json.dumps(params, ensure_ascii=False),
              owner_node, len(units), int(info.get("skipped", 0)),
              json.dumps(info, ensure_ascii=False), now, None if units else now, owner_app,
-             label, reach)).lastrowid
+             label, reach, public_id, client_ref)).lastrowid
         c.executemany(
             "INSERT INTO units(job_id, task, resource, payload, status, created, local_only, "
             "reach, queued_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -387,6 +389,13 @@ def failed_units(job_id, limit=50) -> list:
 def counts() -> dict:
     return {r["status"]: r["n"] for r in db.query(
         "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status")}
+
+
+def set_progress(unit_id, progress: dict):
+    """L'étape d'une unité en calcul (units.progress : {stage, at…}), pour l'avancement
+    que voit l'appli (sending_inputs, waiting_engine, running, receiving, checking)."""
+    db.execute("UPDATE units SET progress=? WHERE id=? AND status=?",
+               (json.dumps(progress, ensure_ascii=False), unit_id, RUNNING))
 
 
 def running_here() -> int:
