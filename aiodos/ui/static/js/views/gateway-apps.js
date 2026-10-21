@@ -12,6 +12,7 @@ import { modal, toast, errorToast, confirmDanger } from '../ui.js';
 // Libellés : des clés de textes (i18n/*/gateway_apps.json), traduites à l'affichage
 const SCOPE_LABELS = {
   chat: 'gateway_apps.scope_chat', embed: 'gateway_apps.scope_embed', libraries: 'gateway_apps.scope_libraries',
+  'engines:comfyui': 'gateway_apps.scope_engines_comfyui',
 };
 const CIRCLE_LABELS = {
   here: 'gateway_apps.circle_here', mine: 'gateway_apps.circle_mine',

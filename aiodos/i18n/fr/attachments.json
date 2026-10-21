@@ -1,0 +1,10 @@
+{
+  "too_big": "Pièce jointe trop grosse : {size} Mo au plus.",
+  "empty": "Pièce jointe vide.",
+  "reading": "Lecture de « {name} »…",
+  "reference_not_image": "Seule une image peut servir de départ à une création.",
+  "reference_unreadable": "Image jointe illisible : « {name} ».",
+  "video_from_image": "Une vidéo ne part pas encore d'une image : joins-la à une demande d'image.",
+  "not_found": "Pièce jointe introuvable.",
+  "not_found_or_sent": "Pièce jointe introuvable, ou déjà envoyée."
+}

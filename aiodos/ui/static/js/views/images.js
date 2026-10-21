@@ -1,14 +1,15 @@
-// Images et vidéos : les modèles qui les calculent (téléchargement, copie depuis mes machines),
-// les créations en cours et la galerie. Elles se demandent dans une discussion, comme dans les
-// autres assistants (chat-create.js) ; chacune est une unité de la file, calculée ici ou par
-// mes machines qui ont le modèle (docs/generation-repartie.md).
-import { get, post, put, del } from '../api.js';
-import { $, h, esc, bytes, debounce } from '../dom.js';
+// Images et vidéos : les créations en cours et la galerie. Elles se demandent dans une
+// discussion, comme dans les autres assistants (chat-create.js) ; chacune est une unité de la
+// file, calculée ici ou par mes machines qui ont le modèle (docs/generation-repartie.md). Les
+// modèles se gèrent dans Réglages → Modèles (settings-models.js) : ici, un résumé en bas.
+import { get, post } from '../api.js';
+import { $, h, esc, debounce } from '../dom.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
-import { errorToast, modal } from '../ui.js';
+import { errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
+import { byPower } from './models.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PAGE = 60;
@@ -25,20 +26,18 @@ export function mountImages(container) {
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>${esc(t('images.title'))}</h1>
-          <div class="sub">${esc(t('images.intro'))}</div></div>
-      </div>
-      <div class="card img-ask">
-        <div class="img-ask-text">${icon('chat')}<div>${ask}</div></div>
-        <div class="img-ask-buttons">
+        <div class="grow"><h1>${esc(t('images.title'))}</h1>
+          <div class="sub img-sub">${ask}</div></div>
+        <div class="page-actions">
           <button class="btn primary" data-create="image">${icon('image')}${esc(t('images.create_image'))}</button>
           <button class="btn" data-create="video">${icon('video')}${esc(t('images.create_video'))}</button>
         </div>
       </div>
-      <div id="img-models"></div>
+      <div id="img-banner"></div>
       <div id="img-pending"></div>
       <div class="img-grid" id="img-grid"></div>
       <div class="img-more"><button class="btn ghost" id="img-more" hidden>${esc(t('images.older'))}</button></div>
+      <div class="img-summary" id="img-summary"></div>
     </div></div>`);
   container.append(root);
   root.querySelectorAll('[data-create]').forEach(b => {
@@ -48,7 +47,7 @@ export function mountImages(container) {
   on('view:shown', view => { if (view === 'images') refresh(); });
   on('images:changed', debounce(() => { if (state.view === 'images') refresh(); }, 300));
   on('jobs:changed', () => { if (state.view === 'images') onJobs(); });
-  setInterval(() => {            // avancement d'un téléchargement
+  setInterval(() => {            // avancement d'un téléchargement, dans le résumé
     if (state.view === 'images' && info?.download?.running) loadModels();
   }, 1500);
 }
@@ -73,94 +72,38 @@ async function loadImages(more) {
 }
 
 // ------------------------------------------------------------------ modèles
-const modelOf = id => info?.models.find(m => m.id === id);
+/** Réglages → Modèles, la section affichée. */
+function manageModels() {
+  emit('view:show', 'settings');
+  emit('settings:focus', 'modeles');
+}
 
 function renderModels() {
-  const box = $('#img-models', root);
-  const engine = info.engine.found ? '' : `
-    <div class="banner warn">${icon('warn')}<div>${esc(t('images.engine_missing'))}
-      ${esc(t(anyHelper() ? 'images.engine_helpers' : 'images.engine_no_helpers'))}</div></div>`;
-  box.innerHTML = engine + info.models.map(modelCard).join('');
-  box.querySelectorAll('[data-download]').forEach(b => {
-    b.onclick = () => download(b.dataset.download, b.dataset.source || null);
-  });
-  box.querySelectorAll('[data-cancel]').forEach(b => { b.onclick = cancelDownload; });
-  box.querySelectorAll('[data-friends-ok]').forEach(b => {
-    b.onclick = async () => {
-      try { await put('/settings', { images_from_friends: true }); } catch (err) { errorToast(err); return; }
-      loadModels();
-    };
-  });
-}
-
-function anyHelper() {
-  return info.models.some(m => m.helpers.length);
-}
-
-function modelCard(m) {
-  const dl = info.download?.model === m.id ? info.download : null;
-  const helpers = m.helpers.length
-    ? `<div class="faint">${esc(t('images.helpers', { names: m.helpers.join(', ') }))}</div>` : '';
-  // Un ami propose sa carte graphique : avec ton accord, une fois pour toutes (Réglages)
-  const friends = !info.from_friends && m.state !== 'ready' && (m.friends || []).length ? `
-    <div class="banner info img-friends">${icon('network')}<div>${esc(t('images.friends', {
-      names: m.friends.join(', '), n: m.friends.length }))}</div>
-      <button class="btn sm" data-friends-ok>${esc(t('images.friends_allow'))}</button></div>` : '';
-  const glyph = icon(m.kind === 'video' ? 'video' : 'image');
-  const notice = m.notice ? `<div class="banner warn img-notice">${icon('warn')}<div>${esc(m.notice)}</div></div>` : '';
-  if (m.state === 'ready' && !dl?.running) {
-    const where = info.engine.device ? ` · ${esc(t('images.computing_on', { device: info.engine.device }))}` : '';
-    return `<div class="img-model ok">${icon('check')}<div><b>${esc(m.label)}</b>
-      <span class="pill ok">${esc(t('images.ready'))}</span> <span class="faint">${esc(m.license)}${where}</span>${helpers}
-      ${m.notice ? `<div class="faint">⚠ ${esc(m.notice)}</div>` : ''}</div></div>`;
+  // En haut, seulement quand rien ne peut calculer : ni ce PC, ni une de mes machines
+  const usable = info.models.some(m => (m.state === 'ready' && info.engine.found) || m.helpers.length);
+  $('#img-banner', root).innerHTML = usable ? '' : `
+    <div class="banner info wrap">${icon('image')}<div class="banner-text">${esc(t('images.no_model'))}</div>
+      <div class="banner-actions"><button class="btn sm primary" data-manage>${icon('download')}${esc(t('chat_create.choose_model'))}</button></div></div>`;
+  // En bas, le résumé, du plus puissant au moins puissant ; la gestion est dans les Réglages
+  const ready = info.models.filter(m => m.state === 'ready').sort(byPower);
+  const elsewhere = info.models.filter(m => m.state !== 'ready' && m.helpers.length).sort(byPower);
+  const missing = info.models.length - ready.length - elsewhere.length;
+  const dl = info.download?.running ? info.download : null;
+  const parts = [];                // des textes (échappés une fois assemblés)
+  if (ready.length) {
+    parts.push(t('images.summary_ready', { names: ready.map(m => m.label).join(', '), n: ready.length }));
   }
-  let action;
-  if (dl?.running) {
-    const pct = dl.total ? Math.floor(100 * dl.done / dl.total) : 0;
-    action = `<div class="img-dl"><div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <span class="faint">${esc(t('images.download_progress', { done: bytes(dl.done), total: bytes(dl.total),
-        rate: bytes(dl.rate), source: dl.source || 'Hugging Face' }))}</span>
-      <button class="btn sm ghost" data-cancel>${icon('x')}${esc(t('images.stop'))}</button></div>`;
-  } else if (m.state === 'checking') {
-    action = `<span class="faint">${esc(t('images.checking'))}</span>`;
-  } else {
-    // Fichiers identiques déjà sur ce PC (ComfyUI, PANDORA…) : repris d'abord, sans téléchargement
-    const local = m.local || [];
-    const localBytes = local.reduce((n, f) => n + f.size, 0);
-    const rest = Math.max(0, m.missing_bytes - localBytes);
-    const size = bytes(rest);
-    const here = local.length ? `<div class="faint">${esc(t('images.local', { n: local.length,
-      size: bytes(localBytes), sources: [...new Set(local.map(f => f.from))].join(', ') }))}</div>` : '';
-    const copies = rest ? [...m.sources].sort((a, b) => b.near - a.near).map(s => `
-      <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}${esc(t(
-        s.near ? 'images.copy_lan' : 'images.copy_internet', { name: s.name, size }))}</button>`).join('') : '';
-    const label = !rest ? t('images.take_local', { size: bytes(localBytes) })
-      : m.state === 'bad' ? t('images.download_again') : t('images.download_hf', { size });
-    action = `${here}<div class="img-dl">${copies}
-      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon(rest ? 'cloud' : 'check')}${esc(label)}</button>
-      ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}</div>`;
+  for (const m of elsewhere) parts.push(t('images.summary_elsewhere', { name: m.label, machines: m.helpers.join(', ') }));
+  if (dl) {
+    const label = info.models.find(m => m.id === dl.model)?.label || dl.model;
+    parts.push(t('images.summary_download', { name: label, pct: dl.total ? Math.floor(100 * dl.done / dl.total) : 0 }));
+  } else if (missing) {
+    parts.push(t('images.summary_missing', { n: missing }));
   }
-  return `<div class="card img-model-card">
-    <h2>${glyph}${esc(m.label)} <span class="pill${m.notice ? ' warn' : ''}">${esc(m.license)}</span></h2>
-    <p class="hint">${esc(m.about)} ${esc(t('images.about_size', { size: bytes(m.size) }))}</p>
-    ${notice}${helpers}${friends}${action}</div>`;
-}
-
-async function download(id, source) {
-  const model = modelOf(id);
-  if (model?.notice) {          // licence restrictive : lue et acceptée avant de télécharger
-    const { ok } = await modal({ title: t('images.license_title', { name: model.label }), text: model.notice,
-      iconName: 'warn', confirm: t('images.license_confirm'), cancel: t('ui.cancel') });
-    if (!ok) return;
-  }
-  try { info.download = await post(`/images/models/${encodeURIComponent(id)}/download`, { source }); }
-  catch (err) { errorToast(err); return; }
-  renderModels();
-}
-
-async function cancelDownload() {
-  try { await del('/images/models/download'); } catch (err) { errorToast(err); }
-  loadModels();
+  const summary = parts.length ? t('images.summary', { parts: parts.join(' · ') }) : t('images.summary_none');
+  $('#img-summary', root).innerHTML = `${icon('layers')}<span class="img-summary-text">${esc(summary)}</span>
+    <button class="btn sm ghost" data-manage>${esc(t('images.manage_models'))}${icon('chev-right')}</button>`;
+  root.querySelectorAll('[data-manage]').forEach(b => { b.onclick = manageModels; });
 }
 
 // --------------------------------------------------------- créations en cours

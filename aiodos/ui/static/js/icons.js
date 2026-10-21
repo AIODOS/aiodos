@@ -34,6 +34,8 @@ const PATHS = {
   bolt: '<path d="M13 3L5 13.5h6L10 21l9-11.5h-6z"/>',
   plug: '<path d="M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 0 1-11 0zM12 16.5V21"/>',
   cloud: '<path d="M7 18.5h10.5a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.8A3.2 3.2 0 0 0 7 18.5z"/>',
+  download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+  clip: '<path d="M16.5 7.5l-7.3 7.3a1.8 1.8 0 0 0 2.5 2.5l7.6-7.6a3.6 3.6 0 0 0-5.1-5.1l-7.8 7.8a5.4 5.4 0 0 0 7.6 7.6l6.7-6.7"/>',
   warn: '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.5v.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.01"/>',
   network: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="18" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M11 7l-4.8 9M13 7l4.8 9M7.2 18h9.6"/>',

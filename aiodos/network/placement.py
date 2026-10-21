@@ -72,9 +72,9 @@ def parse(model) -> str | None:
     return name or None
 
 
-# Préfixes qui ont un sens pour AIODOS : un modèle d'Ollama qui en porterait un (« cloud:x »
-# serait pris pour un modèle du cloud) n'est jamais choisi d'office.
-RESERVED = ("auto:", "peer:", "cloud:", "reparti:", "local:")
+# Préfixes qui ont un sens pour AIODOS : un modèle d'Ollama qui en porterait un n'est jamais
+# choisi d'office.
+RESERVED = ("auto:", "peer:", "reparti:", "local:")
 
 
 def reserved(name) -> bool:
@@ -242,7 +242,7 @@ def candidates(name: str, executor=None) -> list:
 
 def plan(model, executor=None) -> list:
     """Identifiants concrets à essayer, dans l'ordre. Un modèle précis (cette machine,
-    une machine appairée, le cloud) passe tel quel ; « auto:<modèle> » est réparti."""
+    une machine appairée) passe tel quel ; « auto:<modèle> » est réparti."""
     name = parse(model)
     if name is None:
         return [model]
@@ -267,10 +267,8 @@ def machine_of(model) -> str | None:
 
 
 def destination(model) -> str | None:
-    """Niveau de confiance de la machine qui répond : None (cette machine), « cloud » (un
-    modèle du cloud, après validation), « mine » ou « friend » (cf. pipeline.build_messages)."""
-    if str(model or "").startswith("cloud:"):
-        return "cloud"
+    """Niveau de confiance de la machine qui répond : None (cette machine), « mine » ou
+    « friend » (cf. pipeline.build_messages)."""
     parsed = remote_models.parse(model)
     if not parsed:
         return None
@@ -287,7 +285,7 @@ def _occupy(model, executor, interactive: bool = True):
     priorité basse, gateway/scopes.py) : rien n'est suspendu ici pour elle."""
     parsed = remote_models.parse(model)
     local = (executor is not None and interactive and not parsed
-             and not str(model).startswith("cloud:") and not cluster.parse(model))
+             and not cluster.parse(model))
     if local:
         executor.interactive_begin()
     elif parsed:

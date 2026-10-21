@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Les deux clients disent la même chose : les textes des états, des codes et des conseils
 sont ceux de clients/js/src/texts.js, mot pour mot, pour tout ce qu'ils ont en commun."""
 

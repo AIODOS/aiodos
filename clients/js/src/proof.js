@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — la preuve d'identité d'AIODOS (docs/api-applications.md § 5.1).
+// aiodos-client 0.2.0 — la preuve d'identité d'AIODOS (docs/api-applications.md § 5.1).
 //
 // Avant d'envoyer sa clé, le client tire un défi ; AIODOS répond
 //   proof = base64url_sans_égal(HMAC-SHA256(clé = SHA-256(clé d'accès en UTF-8), 32 octets bruts ;

@@ -22,10 +22,13 @@ from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, MAX_HANDO
                                 MAX_INTERRUPTS, NORMAL, PAUSE_AFTER, PAUSE_MODES, PAUSE_NOW,
                                 PAUSED, QUEUED, RECOVER_GRACE, RUNNING, SKIPPED)
 
+
 def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=None,
-               label=None, reach=None) -> int:
+               label=None, reach=None, public_id=None, client_ref=None) -> int:
     """owner_app : l'appli qui dépose le travail (gateway/), None pour AIODOS ; reach : les
-    cercles où ses unités peuvent se calculer (« here,mine »…), None : les règles d'avant."""
+    cercles où ses unités peuvent se calculer (« here,mine »…), None : les règles d'avant ;
+    public_id : le numéro que voit l'appli (job_…) ; client_ref : sa référence, unique par
+    appli (le même client_ref rend le même travail)."""
     spec = registry.JOB_KINDS[kind]
     title, units, info = spec.split(params)
     if isinstance(title, list):        # i18n.lazy : traduit dans la langue de qui le lit
@@ -36,12 +39,12 @@ def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=N
     with db.transaction() as c:
         job_id = c.execute(
             "INSERT INTO jobs(kind, title, priority, status, params, owner_node, total, "
-            "skipped, result, created, finished, owner_app, label, reach) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "skipped, result, created, finished, owner_app, label, reach, public_id, "
+            "client_ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (kind, title, priority, status, json.dumps(params, ensure_ascii=False),
              owner_node, len(units), int(info.get("skipped", 0)),
              json.dumps(info, ensure_ascii=False), now, None if units else now, owner_app,
-             label, reach)).lastrowid
+             label, reach, public_id, client_ref)).lastrowid
         c.executemany(
             "INSERT INTO units(job_id, task, resource, payload, status, created, local_only, "
             "reach, queued_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -192,6 +195,24 @@ def fail_unit(unit_id, error: str, compute_s: float):
                       (QUEUED, error, db.now(), unit_id))
             return job_id, False
         return job_id, _fail_locked(c, unit_id, job_id, error, compute_s)
+
+
+def expire_waiting(now: float | None = None) -> list:
+    """Les unités qu'aucune machine n'a prises avant l'échéance de leur travail
+    (jobs.wait_until : bounds.wait_s d'un travail d'appli) échouent, no_machine ; celles déjà
+    remises une fois suivent leur cours. → [(travail, terminé ?)]."""
+    now = db.now() if now is None else now
+    rows = db.query(
+        "SELECT u.id, u.job_id FROM units u JOIN jobs j ON j.id = u.job_id WHERE u.status=? "
+        "AND u.handouts=0 AND j.wait_until IS NOT NULL AND j.wait_until < ? AND j.status IN "
+        "(?, ?)", (QUEUED, now, QUEUED, RUNNING))
+    out = []
+    # Le code d'abord, suivi d'une espace : gateway/jobs_api._unit_error le relit
+    error = "no_machine : " + i18n.t("jobs.no_machine")
+    for row in rows:
+        with db.transaction() as c:
+            out.append((row["job_id"], _fail_locked(c, row["id"], row["job_id"], error, 0.0)))
+    return out
 
 
 def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
@@ -345,7 +366,7 @@ def recover():
 
 
 # ------------------------------------------------------------------- lecture
-def _summary(row, remote) -> dict:
+def _summary(row, remote, names=None) -> dict:
     job = dict(row)
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
@@ -356,7 +377,19 @@ def _summary(row, remote) -> dict:
     if lazy_title:
         job["title_t"] = lazy_title
         job["title"] = i18n.render(lazy_title) or job["title"]
+    if job.get("owner_app"):                        # l'appli qui l'a déposé (vue Travaux)
+        names = _app_names([job["owner_app"]]) if names is None else names
+        job["app_name"] = names.get(job["owner_app"])
     return job
+
+
+def _app_names(ids) -> dict:
+    ids = sorted({i for i in ids if i})
+    if not ids:
+        return {}
+    return {r["id"]: r["name"] for r in db.query(
+        f"SELECT id, name FROM gateway_apps WHERE id IN ({','.join('?' * len(ids))})",
+        tuple(ids))}
 
 
 def remote_counts(job_id=None) -> dict:
@@ -376,11 +409,13 @@ def job_summary(job_id) -> dict | None:
 
 def list_jobs(limit=200) -> list:
     remote = remote_counts()
-    return [_summary(r, remote) for r in db.query(
+    rows = db.query(
         "SELECT * FROM jobs ORDER BY CASE status WHEN 'running' THEN 0 "
         "WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, "
         "CASE WHEN status IN ('running','queued','paused') THEN priority ELSE 0 END, "
-        "COALESCE(finished, created) DESC LIMIT ?", (limit,))]
+        "COALESCE(finished, created) DESC LIMIT ?", (limit,))
+    names = _app_names(r["owner_app"] for r in rows)
+    return [_summary(r, remote, names) for r in rows]
 
 
 def failed_units(job_id, limit=50) -> list:
@@ -393,6 +428,13 @@ def failed_units(job_id, limit=50) -> list:
 def counts() -> dict:
     return {r["status"]: r["n"] for r in db.query(
         "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status")}
+
+
+def set_progress(unit_id, progress: dict):
+    """L'étape d'une unité en calcul (units.progress : {stage, at…}), pour l'avancement
+    que voit l'appli (sending_inputs, waiting_engine, running, receiving, checking)."""
+    db.execute("UPDATE units SET progress=? WHERE id=? AND status=?",
+               (json.dumps(progress, ensure_ascii=False), unit_id, RUNNING))
 
 
 def running_here() -> int:

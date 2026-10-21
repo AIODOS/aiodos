@@ -11,7 +11,8 @@ const PRIORITIES = [1, 2, 3];                      // libellés : jobs.priority_
 const STATUS = {
   running: 'run', queued: 'idle', paused: 'warn', done: 'ok', failed: 'err', cancelled: 'idle',
 };
-const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry' };
+const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry',
+  engine: 'image' };
 
 let root;
 const cards = new Map();             // job id → { el, shape }
@@ -185,7 +186,7 @@ function card(j) {
     <div class="job">
       <div class="top">
         ${icon(KIND_ICONS[j.kind] || 'layers')}
-        <span class="title" title="${esc(title)}">${esc(title)}</span>
+        <span class="title" title="${esc(title)}">${j.app_name ? `<b>${esc(j.app_name)}</b> · ` : ''}${esc(title)}</span>
         <span class="pill ${cls}">${esc(label)}</span>
         ${active ? `<select class="select" title="${esc(t('jobs.priority'))}">${PRIORITIES.map(v =>
           `<option value="${v}" ${v === j.priority ? 'selected' : ''}>${esc(t(`jobs.priority_${v}`))}</option>`).join('')}</select>` : ''}

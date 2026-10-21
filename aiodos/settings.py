@@ -1,7 +1,8 @@
 """Réglages de l'application, stockés dans la base (valeurs JSON).
 
-Les clés API ne sortent jamais en clair vers l'interface : public_view() les
-remplace par un indicateur « renseignée » et les 4 derniers caractères.
+Une clé d'API (SECRET_KEYS) ne sortirait jamais en clair vers l'interface : public_view()
+la remplace par un indicateur « renseignée » et ses 4 derniers caractères. Il n'y en a plus
+depuis le retrait du cloud (21/10/2026), mais la clé de la passerelle est protégée de même.
 """
 import json
 import logging
@@ -13,7 +14,7 @@ from aiodos.node import android, vault
 
 log = logging.getLogger("aiodos")
 
-SECRET_KEYS = {"mistral_key", "qwen_key"}
+SECRET_KEYS: set = set()
 # Secrets gardés dans la table des réglages mais hors de DEFAULTS (ni lus ni écrits par
 # PUT /api/settings) : protégés par DPAPI comme les clés d'API (gateway/access.py les relit)
 PROTECTED_ELSEWHERE = ("gateway_key",)
@@ -50,14 +51,9 @@ DEFAULTS = {
     "knowledge_enabled": True,
     "conversations_enabled": True,    # mémoire inter-conversations
     "peer_libraries_enabled": True,   # chercher aussi chez mes machines et mes amis (la question part)
-    # --- Web & cloud ---
+    # --- Web ---
     "web_search_enabled": True,       # cherche quand la question le demande, après accord
     "web_results": 3,
-    "cloud_confirm": True,
-    "mistral_key": "",
-    "qwen_key": "",
-    "mistral_cloud_model": "mistral-large-latest",
-    "qwen_cloud_model": "qwen-max",
     # --- Médias dans la base de connaissance ---
     "media_vision": True,
     "media_vision_mode": "both",      # ocr | describe | both
@@ -121,6 +117,7 @@ DEFAULTS = {
     "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
     "lend_images_friends": False,     # calculer les images de mes amis (jobs/kinds/images.py)
     "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
+    "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
     # --- AIODOS ouvert aux autres outils (gateway/, docs/autres-outils.md) : API compatible
@@ -138,6 +135,16 @@ DEFAULTS = {
     # selon la mémoire vidéo (16 384 jetons si elle le permet, sinon 8 192) ---
     "chat_context": 0,
     "chat_context_overrides": {},     # {"modèle": jetons} : exceptions par modèle
+    # --- Moteurs des applications (engines/, docs/conception/partage-puissance.md § 3.2) :
+    # AIODOS rejoue les travaux des applis dans le ComfyUI de ce PC seulement après le « oui »
+    # de la carte de détection ; vides : trouvés seuls (Desktop, version portable) ---
+    "engines_comfyui_enabled": False,
+    "engines_comfyui_path": "",
+    "engines_comfyui_url": "",
+    # Lancer ComfyUI sans fenêtre quand il n'est pas ouvert et qu'un travail attend
+    # (engines/comfy_instance.py, livraison L2c) : sur demande de l'utilisateur
+    "engines_comfyui_launch": False,
+    "keep_awake_jobs": True,          # sur secteur, pas de veille pendant un travail d'appli
 }
 
 

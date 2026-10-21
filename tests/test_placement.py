@@ -118,7 +118,7 @@ def test_only_my_machines_answer_on_their_own(monkeypatch):
 
 def test_a_precise_choice_passes_as_it_is(monkeypatch):
     local_models(monkeypatch)
-    for model in (MODEL, "peer:x:qwen3.5:9b", "cloud:mistral"):
+    for model in (MODEL, "peer:x:qwen3.5:9b", "reparti:qwen3.5:9b"):
         assert placement.plan(model, Executor()) == [model]
 
 
@@ -227,13 +227,13 @@ def test_a_malformed_profile_is_ignored_when_choosing(monkeypatch):
 
 def test_untagged_names_and_reserved_prefixes(monkeypatch):
     """« llama3 » trouve « llama3:latest », comme pour Ollama ; un modèle d'Ollama nommé
-    comme un identifiant d'AIODOS (« cloud:x ») n'est jamais choisi d'office."""
-    local_models(monkeypatch, "llama3:latest", "cloud:mistral")
+    comme un identifiant d'AIODOS (« peer:x ») n'est jamais choisi d'office."""
+    local_models(monkeypatch, "llama3:latest", "peer:x")
     lender("fixe", "PC fixe", "llama3:latest")
     assert placement.plan("auto:llama3", Executor()) == [
         "llama3:latest", remote_models.model_id("fixe", "llama3:latest")]
     with pytest.raises(placement.NoMachine):
-        placement.plan("auto:cloud:mistral", Executor())
+        placement.plan("auto:peer:x", Executor())
     assert placement.same_model("qwen3.5:9b", "qwen3.5:9b")
     assert not placement.same_model("qwen3.5:9b", "qwen3.5")
     assert placement.same_model("moi/modele:latest", "moi/modele")
@@ -332,10 +332,6 @@ def test_extracts_follow_the_machine_that_answers(fake_embed):
     assert mine == {"maison.txt", "partage.txt"} and "secret" not in text
     friend, text = seen("friend")
     assert friend == {"partage.txt"} and "maison" not in text
-    # Le cloud (décision du 18/10/2026) : ni ce qui est gardé sur ce PC, ni la mémoire
-    cloud, text = seen("cloud")
-    assert cloud == {"maison.txt", "partage.txt"} and "secret" not in text and "Conv" not in text
-    assert placement.destination("cloud:mistral") == "cloud"
 
 
 # ----------------------------------------------- la conversation de l'interface

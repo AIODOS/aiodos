@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — le refus de tourner dans une page (navigateur, rendu d'Electron).
+// aiodos-client 0.2.0 — le refus de tourner dans une page (navigateur, rendu d'Electron).
 //
 // La passerelle d'AIODOS refuse les pages web, et la clé d'une appli ne doit jamais vivre
 // dans un rendu. Le client vit dans Node ou dans le processus principal d'Electron.

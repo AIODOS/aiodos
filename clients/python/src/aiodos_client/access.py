@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """L'accès d'une appli à AIODOS (docs/api-applications.md § 4) : une appli, une clé.
 
 - `connect()` : l'entrée principale. Passerelle ouverte : `POST /aiodos/v1/access/requests` ;

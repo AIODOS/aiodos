@@ -2,17 +2,25 @@
 
 *Version française : [README.md](README.md).*
 
-> *AI* + *hodos*, Greek for “the way”, as in “method” and “synod” (travelling together):
-> **the way of AI, made together**. The project was called Cœur IA until 16/10/2026; its
-> data is carried over as is.
+**The way of AI, made together.** AIODOS runs AI on your own machines and makes them work
+together: your PCs, your phone, your friends' machines and, in time, those of everyone on
+the public network. Each large job is split into small units that free machines share, like
+the pieces of a torrent; a model too large for a single graphics card is split across
+several.
 
-A **100% local** AI workshop: chat, code and documents with open source models (Mistral,
-Qwen…), on your machine, served by the llama.cpp built into AIODOS (or by [Ollama]).
-**Several machines can work together**: each large job is split into small independent
-units, shared by your paired PCs over the local network.
+- **Chat, code, search your documents** with open models (Mistral, Qwen…), served by
+  llama.cpp, built into AIODOS (or by [Ollama]); the AI cites its sources.
+- **Create images and videos** in the conversation, computed by the machines that have the
+  model.
+- **Plug in your applications and tools** (PANDORA, ARKLIGHT PC, a code editor, an
+  assistant…): they benefit from the same shared power.
 
-> **Local by default, distributed on demand.** Nothing leaves the machine without an
-> explicit action: the web and the cloud are optional and confirmed before each sending.
+> **Your machines first, the rest with your consent.** Your paired machines compute
+> together from the first opening; your friends and the public network, only if you accept
+> it. Between machines, everything is encrypted, and nothing is kept by the one that
+> computes. Never any cloud; the web remains optional, and each search is confirmed first.
+
+*AI* + *hodos*: Greek for “the way”, as in “method” and “synod” (travelling together).
 
 AIODOS speaks French and English: it follows the language of the system (browser, Windows,
 Android), English when that language is neither, and it can be changed in Settings →
@@ -31,11 +39,15 @@ The documents in `docs/` are written in French.
 
 ## What phase 0 does
 
-- **Conversations** with local models (and Mistral/Qwen in the cloud, optionally),
-  streamed answers, Markdown rendering and code highlighting, folders, renaming,
-  search in their content; “Regenerate” the last answer (with the model chosen at that
-  moment) and “Edit” the last message, the rest of the conversation and its trace in
-  memory being erased.
+- **Conversations** with the models of your machines (no cloud model), streamed answers,
+  Markdown rendering and code highlighting, folders, renaming, search in their content;
+  “Regenerate” the last answer (with the model chosen at that moment) and “Edit” the last
+  message, the rest of the conversation and its trace in memory being erased.
+- **Attachments** (paperclip, file dropped on the conversation, pasted image): an image, a
+  video, a sound, a document or a text. The model reads their text with the question
+  (document, described image, transcribed sound or video); a model of this PC that sees
+  images receives them as they are; an image creation starts from the attached image,
+  keeping its composition. They stay on this PC and go with their conversation.
 - **Model reasoning** (Qwen3…) shown live, can be turned off to go faster.
 - **Knowledge libraries**: files, whole folders, web pages; all formats (PDF, Word,
   Excel, PowerPoint, code…), images (OCR + description by a vision model) and
@@ -50,8 +62,9 @@ The documents in `docs/` are written in French.
 
 ## Making several machines work together (phase 1)
 
-1. **Turn on the local network** on each PC (Network view). Windows asks for the
-   firewall permission for Python: accept it for **private networks** only.
+1. **The local network** is on from the first opening (Network view, to turn it off).
+   Windows asks for the firewall permission for Python: accept it for **private networks**
+   only.
 2. **Pair**: the AIODOS machines of the network show up by themselves (otherwise, add
    them by IP address). A 6-digit code appears on both screens: pairing only succeeds
    if it is confirmed **on each of the two machines**. **Behind a VPN** (NordVPN…):
@@ -89,7 +102,8 @@ How the work flows:
 - **Reciprocity**: each machine keeps count of the computing time given and received;
   those that computed the most for you are served first.
 
-**Lending your models for conversations** (“This machine” view, off by default): a
+**Lending your models for conversations** (“This machine” view, on by default between my
+machines): a
 machine without a GPU, or whose model does not fit in memory, has its conversations
 answered by the model of another machine. The answer is computed there and arrives as an
 encrypted stream, piece by piece; the Stop button stops the generation there. The text of
@@ -106,8 +120,7 @@ by default if you accept it (Settings → Conversation). Whatever the machine, a
 kept on this PC and the conversation memory never follow it, nor the answers that used
 them, nor those that may have reused them later in the same conversation (the history
 sent replaces them with a note); at a friend's, only the libraries shared with your
-friends give their excerpts. A cloud model, after confirmation, receives neither the
-libraries kept on this PC nor the conversation memory.
+friends give their excerpts.
 
 **Opening AIODOS to applications** (PANDORA, ARKLIGHT PC…): each app asks for access by
 itself; a card shows up in AIODOS with a 6-digit code to compare, what it will be able to
@@ -170,8 +183,9 @@ French).
 **Over the Internet (phase 2, in progress)**: a small companion program,
 [`aiodos-net`](compagnon/README.md) (Rust, Iroh), links the paired machines when they are
 no longer on the same network (phone on 4G…): one encrypted connection per machine,
-directly or through a relay, which only accepts the paired machines. It is off by default
-(setting `internet_enabled`); the local network remains the first path tried. Study and
+directly or through a relay, which only accepts the paired machines. It is on from the
+first opening (setting `internet_enabled`, to turn it off); the local network remains the
+first path tried. Study and
 plan: [docs/phase2-internet.md](docs/phase2-internet.md) (in French).
 
 **A model too large for a single machine (prototype)** is split across my machines with
@@ -190,13 +204,16 @@ images and video: [docs/generation-repartie.md](docs/generation-repartie.md) (in
 them as you would ask another assistant (“Create an image of a lighthouse in a
 thunderstorm”), or with the Image button next to the message (model, format, duration,
 number), and you edit them the same way (“Make it at night”: the new image starts from
-the previous one; “Another one”: a variation). Each one becomes a unit of the queue,
+the previous one; “Another one”: a variation). Before creating, the chat model turns the
+short request into a detailed description in English, like online services (can be turned
+off in Settings → Models). Each one becomes a unit of the queue,
 computed here or by my machines that have the same model and lend their power; it shows
 up in the conversation and is kept only here (in `Pictures\AIODOS` for installed AIODOS,
-or the folder chosen in Settings). The Images and videos view brings together the gallery
-and the models. The engine is [stable-diffusion.cpp], which comes with the updates, and
+or the folder chosen in Settings). The Images and videos view brings together the creations
+in progress and the gallery; the models are managed in Settings → Models, with the chat
+models, from the most powerful to the least. The engine is [stable-diffusion.cpp], which comes with the updates, and
 the model Z-Image Turbo (Apache-2.0, 6.7 GB, each file checked by its hash): downloaded
-from the view, or copied from one of my machines that already has it, without the
+from the Settings, or copied from one of my machines that already has it, without the
 Internet. On a laptop RTX 4070: 22 s per image at 1024 × 1024. For video, Wan 2.1
 (Apache-2.0, 7.2 GB): 2 s of 480p video in under 4 minutes; MiniMax H3 (video and sound)
 is also offered, its license shown (it notably excludes the European Union: up to
@@ -288,7 +305,7 @@ aiodos/
 │                      AIODOS and Ollama (models.py), catalog and download
 │                      (catalog.py, download.py), the same functions as Ollama (integrated.py)
 ├── services/          models (ollama.py: built-in engine or Ollama), file extraction,
-│                      media, web, cloud
+│                      media, web
 ├── knowledge/         libraries: storage, chunking, vector search, what other machines
 │                      can search (visibility.py)
 ├── chat/              conversations and answer preparation
@@ -318,7 +335,20 @@ aiodos/
 │   ├── mcp_stdio.py   stdio bridge, for assistants that start a program
 │   ├── catalog.py     models offered and their identifiers
 │   ├── answer.py      answer by this machine or by a paired machine, according to the place
-│   └── engine.py      answer by the built-in engine, without Ollama (llama.cpp router)
+│   ├── engine.py      answer by the built-in engine, without Ollama (llama.cpp router)
+│   ├── jobs_api.py    ComfyUI jobs of the apps (/aiodos/v1/jobs: submit, follow, commands)
+│   ├── engines_api.py engines seen by the app and pre-flight; inputs_api.py: inputs by hash
+│   ├── files_api.py   files produced (ranges); file_store.py, input_store.py: their storage
+│   ├── links_api.py   links to a file, read without a key (1 h and 5 reads at most)
+│   └── retention.py   keeping: fetched + 7 days; ownership.py: access replaced or revoked
+├── engines/           the apps' engines: AIODOS replays their graphs, does not replace them
+│   ├── comfy_find.py  ComfyUI on this PC (Desktop, portable version, open instance)
+│   ├── comfy_client.py its API; comfyui.py: replaying a unit (inputs, follow-up, outputs)
+│   ├── comfy_instance.py ComfyUI started without a window when it is not open (L2c)
+│   ├── comfy_graph.py graphs in the API format, as pure functions; comfy_contract.py: hashes
+│   ├── lending.py     what a machine announces of its ComfyUI to my machines, matching
+│   ├── machines.py    where a job can run (this PC, my machines that have ComfyUI)
+│   └── media.py       kind of a file from its bytes
 ├── jobs/              task queue: jobs split into units (BOINC model)
 │                      that behaves like a torrent: pauses, resumption without loss
 │                      (docs/file-de-travaux.md)
@@ -327,7 +357,7 @@ aiodos/
 │   ├── pacing.py      pace of background work: conversations first, battery eased
 │   ├── leases.py      leases: units given to another machine for a limited time
 │   ├── registry.py    portable tasks: computing (anywhere) / integration (at home)
-│   └── kinds/         job kinds (indexing, reindexing, images…)
+│   └── kinds/         job kinds (indexing, reindexing, images, ComfyUI jobs…)
 ├── network/           local network (protocol “aiodos/1”)
 │   ├── discovery.py   UDP announcements on the local network
 │   ├── interfaces.py  real network cards (Wi-Fi, Ethernet), without a VPN's
@@ -388,7 +418,7 @@ or an email. The gateway for other tools, closed by default, also only listens o
 `127.0.0.1`, checks `Host` and `Origin` (a web page cannot use it) and requires its access
 key, stable and renewable.
 
-**Audit of 20/10/2026**: 37 confirmed flaws, fixed on 21/10 for version 2.0.2, except one
+**Audit of 20/10/2026**: 37 confirmed flaws, fixed on 21/10 for version 1.0.0, except one
 (the gateway's MCP bridge, rewritten separately). Threat model, flaws, limits,
 compatibility and what remains open: [docs/securite.md](docs/securite.md) (in French).
 **Pairing by code moves to protocol 2**: update all the machines, phone included, before
@@ -396,7 +426,8 @@ pairing new ones; existing pairs keep talking to each other.
 
 ## Data
 
-Everything is in `data/` (database `aiodos.db`, logs): this folder is never versioned.
+Everything is in `data/` (database `aiodos.db`, logs): this folder is never versioned. The
+project was called Cœur IA until 16/10/2026: its data is carried over as is.
 
 ## Tests
 

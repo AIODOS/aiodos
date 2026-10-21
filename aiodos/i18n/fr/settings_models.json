@@ -1,0 +1,33 @@
+{
+  "split": "{size} · réparti entre {machines}",
+  "none_phone": "Aucun modèle de discussion sur ce téléphone ni sur tes machines pour l'instant.",
+  "none_pc": "Aucun modèle de discussion sur ce PC ni sur tes machines pour l'instant.",
+  "reading": "Lecture des modèles…",
+  "engine_missing": "stable-diffusion.cpp n'est pas installé sur cette machine (dossier ci-dessous).",
+  "engine_helpers": "Tes machines qui ont le modèle calculeront à sa place.",
+  "engine_no_helpers": "Sans lui, seules tes machines qui ont le modèle peuvent calculer.",
+  "to_download": "À télécharger",
+  "helpers": "Machines qui l'ont et peuvent le calculer pour toi : {names}.",
+  "computing_on": "calcul sur {device}",
+  "ready": "Prêt",
+  "friends": {
+    "one": "{names} peut calculer ce modèle pour toi : ta description et le résultat passeront chez lui le temps du calcul, sans y être gardés.",
+    "other": "{names} peuvent calculer ce modèle pour toi : ta description et le résultat passeront chez eux le temps du calcul, sans y être gardés."
+  },
+  "friends_allow": "Autoriser mes amis",
+  "download_progress": "{done} sur {total} · {rate}/s · depuis {source}",
+  "stop": "Arrêter",
+  "checking": "Vérification des fichiers déjà présents…",
+  "local": {
+    "one": "{size} déjà sur ce PC ({sources}) : repris sans le retélécharger, après vérification.",
+    "other": "{size} déjà sur ce PC ({sources}) : repris sans les retélécharger, après vérification."
+  },
+  "copy_lan": "Copier depuis {name} (réseau local, {size})",
+  "copy_internet": "Copier depuis {name} (Internet, {size})",
+  "take_local": "Reprendre depuis ce PC ({size})",
+  "download_again": "Retélécharger",
+  "download_hf": "Télécharger depuis Hugging Face ({size})",
+  "about_size": "{size}, chaque fichier vérifié par son empreinte.",
+  "license_title": "Licence de {name}",
+  "license_confirm": "J'ai lu, télécharger"
+}

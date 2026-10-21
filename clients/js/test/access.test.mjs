@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : connect() passerelle ouverte (accord, refus, expiration,
+// aiodos-client 0.2.0 — essais : connect() passerelle ouverte (accord, refus, expiration,
 // slow_down) et passerelle fermée (faux programme d'aide), droits en plus, disconnect().
 
 import assert from 'node:assert/strict';

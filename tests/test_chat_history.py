@@ -56,8 +56,7 @@ def _received(conv, destination, peers_ok) -> list:
 
 def test_each_machine_receives_only_the_answers_it_may_see(answers):
     every = ["autres", "journal", "mémoire", "projets", "recettes", "renommée", "rien", "web"]
-    # Cette machine (ou le cloud, validé) : tout, sauf les passages d'autres machines si
-    # le modèle n'y a pas droit
+    # Cette machine : tout, sauf les passages d'autres machines si le modèle n'y a pas droit
     assert _received(answers, None, True) == every
     assert _received(answers, None, False) == [a for a in every if a != "autres"]
     # Une de mes machines : ni la mémoire, ni ce qui reste sur ce PC, ni une bibliothèque
@@ -65,8 +64,6 @@ def test_each_machine_receives_only_the_answers_it_may_see(answers):
     assert _received(answers, "mine", True) == ["autres", "projets", "recettes", "rien", "web"]
     # La machine d'un ami : seulement ce que je partage avec mes amis
     assert _received(answers, "friend", False) == ["recettes", "rien", "web"]
-    # Un modèle du cloud : ni la mémoire, ni ce qui reste sur ce PC (18/10/2026)
-    assert _received(answers, "cloud", False) == ["projets", "recettes", "rien", "web"]
 
 
 def test_a_renamed_library_or_a_reused_name_changes_nothing():

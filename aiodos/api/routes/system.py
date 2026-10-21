@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from aiodos import instance, settings
+from aiodos.api.routes import engines
 from aiodos.i18n import t
 from aiodos.jobs.kinds import reindex
 
@@ -40,6 +41,9 @@ def write_settings(values: dict, request: Request):
         request.app.state.network.internet.relaunch_from_thread()
     if GATEWAY_OPTIONS & set(values):
         request.app.state.gateway.apply_from_thread()
+    if engines.ENGINE_OPTIONS & set(values):     # ComfyUI accordé, déplacé : relu
+        engines.forget()
+        request.app.state.executor.wake()
     job_id = reindex.schedule()            # nouveau modèle d'embedding : tout recalculer
     if job_id:
         executor = request.app.state.executor

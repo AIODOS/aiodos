@@ -1,0 +1,13 @@
+{
+  "app_id_invalid": "invalid app identifier",
+  "sha_expected": "Expected hash: 64 lowercase hexadecimal characters (SHA-256).",
+  "input_too_large": "Input too large: {size} MB at most.",
+  "hash_mismatch": "The hash of the received file does not match the one in the address.",
+  "type_unknown": "Unrecognized file type: images (PNG, JPEG, WebP, GIF), videos (MP4, WebM) or audio (WAV, MP3, FLAC, OGG).",
+  "inputs_quota": "Too many inputs stored for this application: delete finished jobs.",
+  "app_key_required": "Inputs are uploaded with an application's key.",
+  "file_gone": "The file is no longer on this PC.",
+  "integer_range": "“{name}”: an integer from {low} to {high}.",
+  "too_many_links": "Too many open links: wait for them to expire.",
+  "link_unknown": "Link unknown, expired or already used."
+}

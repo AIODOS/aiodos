@@ -19,8 +19,7 @@ _MARKER = "legacy_migrated"
 _V1_CONV_COLLECTION = "💬 Conversations"
 _SETTING_KEYS = ("default_model", "embed_model", "knowledge_enabled",
                  "conversations_enabled", "web_search_enabled", "web_results",
-                 "cloud_confirm", "mistral_key", "qwen_key", "mistral_cloud_model",
-                 "qwen_cloud_model", "media_vision", "media_vision_mode", "vision_model",
+                 "media_vision", "media_vision_mode", "vision_model",
                  "media_transcribe", "whisper_model", "system_prompt")
 
 

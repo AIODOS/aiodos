@@ -6,8 +6,7 @@
   d'un ami qui me prête ses modèles (network/remote_models.py) ;
 - « local:qwen3.5:9b » : cette machine seulement (accepté, pas listé) ;
 - « reparti:qwen3.6 » : un gros modèle réparti entre mes machines (cluster/group.py).
-Les modèles du cloud n'y figurent pas : leur envoi se valide dans l'interface, message par
-message. Les modèles d'embedding ne servent que sur cette machine.
+Les modèles d'embedding ne servent que sur cette machine.
 """
 import threading
 import time
@@ -18,7 +17,7 @@ import requests
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.network import placement, remote_models
-from aiodos.services import cloud, ollama
+from aiodos.services import ollama
 
 LOCAL = "local:"
 TAGS_TTL = 10               # la liste des modèles d'Ollama change rarement
@@ -33,13 +32,10 @@ class UnknownModel(Exception):
 
 def internal(model_id) -> str:
     """Identifiant donné par un outil → identifiant d'AIODOS (« auto:… », nom seul pour
-    cette machine, « peer:… », « reparti:… »). Jamais un modèle du cloud, même déguisé
-    (« local:cloud:… ») : son envoi se valide dans l'interface, message par message."""
+    cette machine, « peer:… », « reparti:… »)."""
     name = str(model_id or "").strip()
     if not name:
         raise UnknownModel(t("gateway_api.model_missing"))
-    if name.startswith(cloud.MODEL_PREFIX):
-        raise UnknownModel(t("gateway_api.cloud_refused", model=name))
     if remote_models.parse(name) or placement.parse(name) or cluster.parse(name):
         return name
     if name.startswith(LOCAL):

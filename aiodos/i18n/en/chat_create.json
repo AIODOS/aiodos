@@ -17,6 +17,7 @@
   "model_on": "{label} · on {names}",
   "no_model_image": "No image model ready.",
   "no_model_video": "No video model ready.",
+  "choose_model": "Choose a model",
   "count_image": {
     "one": "1 image",
     "other": "{n} images"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — createClient() : le client d'une appli, sans état global.
+// aiodos-client 0.2.0 — createClient() : le client d'une appli, sans état global.
 //
 // La clé est lue par key.get() à chaque appel et rangée par key.set() (ARKLIGHT la garde
 // par safeStorage d'Electron) ; le client ne la garde jamais, ne la met dans aucun journal,
@@ -7,10 +7,12 @@
 
 import { connect, disconnect, requestAccess } from './access.js';
 import { chat } from './chat.js';
-import { createComfy, engines } from './comfy.js';
+import { createComfy } from './comfy.js';
 import { discoveryUrl, launchAiodos, readDiscovery } from './discovery.js';
 import { embed } from './embed.js';
+import { engines } from './engines.js';
 import { redact, redactDeep } from './errors.js';
+import { getFile } from './file.js';
 import { assertNotRenderer } from './guard.js';
 import { createInputs } from './inputs.js';
 import { createJobs } from './jobs.js';
@@ -148,15 +150,17 @@ export function createClient(options = {}) {
     embed: (opts) => embed(ctx, opts),
     /** Ramène la fenêtre d'AIODOS sur une page (« L'installer dans AIODOS »). */
     openInAiodos: (opts) => openInAiodos(ctx, opts),
-    /** Les moteurs (L2). */
+    /** Les moteurs : qui a ComfyUI, sa version, ses modèles. */
     engines: (opts) => engines(ctx, opts),
-    /** ComfyUI (L2). */
+    /** ComfyUI : plan, tokenize, submit, run. */
     comfy: createComfy(ctx),
-    /** Les travaux (L2). */
+    /** Ses travaux (après un redémarrage) : { active, clientRef, status, limit }. */
     jobs: jobs.jobs,
-    /** Un travail (L2). */
+    /** Un de ses travaux, par son identifiant. */
     job: jobs.job,
-    /** Les entrées des travaux (L2). */
+    /** Un de ses fichiers, par son identifiant. */
+    file: (id, opts) => getFile(ctx, id, opts),
+    /** Les entrées des travaux : put(octets ou chemin) → sha256. */
     inputs: createInputs(ctx),
     toJSON: () => ({ client: 'aiodos-client', version: VERSION, app: ctx.app }),
     toString: describe,

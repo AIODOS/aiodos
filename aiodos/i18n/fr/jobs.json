@@ -75,6 +75,7 @@
   "pacing_pause": "Sur batterie : le travail de fond attend le retour du secteur.",
   "pacing_eco": "Sur batterie : travail de fond ménagé (une unité à la fois par ressource, pauses entre les lots, moins de fils de calcul).",
   "lease_lost": "Les machines qui la calculaient ont disparu trop de fois.",
+  "no_machine": "aucune machine n'a pu la prendre avant l'échéance du travail (machine éteinte, ComfyUI fermé, ou un modèle qui manque).",
   "no_progress": "Aucune machine n'a pu la finir : elle a été remise trop de fois.",
   "pause_mode_invalid": "Pause : « after_current » ou « now ».",
   "pause_all": "Tout mettre en pause",

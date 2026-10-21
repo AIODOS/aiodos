@@ -5,9 +5,10 @@ import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
-import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
+import { AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated } from './model-install.js';
+import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 
@@ -102,7 +103,7 @@ export function mountChat(container) {
     }
   });
   document.addEventListener('keydown', e => {
-    // Échap déjà pris par une fenêtre de dialogue (validation du cloud…) : rien de plus
+    // Échap déjà pris par une fenêtre de dialogue (validation d'une recherche web…) : rien de plus
     if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (busy) stop();
     else if (editing) stopEditing();
@@ -112,6 +113,7 @@ export function mountChat(container) {
   el.list.addEventListener('click', onMessageClick);
   el.list.addEventListener('auxclick', onReplyLink);   // clic du milieu : sans passer par click
   mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
+  mountAttach(chat, el.input);              // trombone, fichier glissé, image collée
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
@@ -149,10 +151,10 @@ function vramTotal() {
 }
 
 /** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
- *  précise, un gros modèle réparti, ou un modèle du cloud. */
+ *  précise, ou un gros modèle réparti. */
 function selectedModel() {
   const value = el.model.value;
-  if (/^(cloud|reparti):/.test(value)) return value;
+  if (/^reparti:/.test(value)) return value;
   const entry = entries.find(e => e.name === value);
   return entry ? (el.machine.value || defaultChoice(entry)) : '';
 }
@@ -163,8 +165,7 @@ function fillModels() {
   entries = catalog();
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
-  const cloud = state.models.filter(m => m.group === 'cloud');
-  const cluster = state.models.filter(m => m.group === 'cluster');
+  const cluster = state.models.filter(m => m.group === 'cluster').sort(byPower);
   el.model.innerHTML = '';
   const group = (label, items) => {
     if (!items.length) return;
@@ -181,8 +182,6 @@ function fillModels() {
   group(t('chat.group_cluster'), cluster.map(m => [m.id,
     t(m.complete ? 'chat.cluster_option' : 'chat.cluster_option_partial',
       { label: m.label, size: bytes(m.size), machines: m.machines.join(', ') })]));
-  group(t('chat.group_cloud'), cloud.map(m => [m.id,
-    m.has_key ? m.label : t('chat.cloud_no_key', { label: m.label })]));
   selectModel(wanted);
   // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un
   const phone = isPhone();
@@ -201,15 +200,13 @@ function fillModels() {
 }
 
 /** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,
- *  « reparti:x », « cloud:… »). */
+ *  « reparti:x »). */
 function selectModel(id) {
-  const value = /^(cloud|reparti):/.test(id || '') ? id : modelName(id);
+  const value = /^reparti:/.test(id || '') ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
-  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines, puis un
-  // modèle du cloud qui a sa clé ; jamais d'office un modèle du cloud sans clé
+  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
-  const keyed = state.models.find(m => m.group === 'cloud' && m.has_key)?.id;
-  const usable = values.filter(v => v && (!/^cloud:/.test(v) || v === keyed));
+  const usable = values.filter(Boolean);
   if (!values.includes(value) && !here && !usable.length) {
     if (!values.includes('')) el.model.prepend(new Option(t('chat.no_model_ready'), ''));
     el.model.value = '';
@@ -268,7 +265,7 @@ function showPreparation(ev) {
 
 async function rememberModel() {
   const id = selectedModel();
-  if (id && !id.startsWith('cloud:')) {
+  if (id) {
     try { state.settings = await put('/settings', { default_model: id }); } catch { /* sans gravité */ }
   }
 }
@@ -329,7 +326,7 @@ async function openConversation(id, { settled = false } = {}) {
   resetMedia();
   const auto = !!conv.model?.startsWith(AUTO);   // les réponses disent quelle machine a répondu
   for (const m of conv.messages) {
-    if (m.role === 'user') { appendUser(m.content, m.id); continue; }
+    if (m.role === 'user') { appendUser(m.content, m.id, m.attachments); continue; }
     if (m.media) { appendMedia(el.list, m.media, m.id); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
     view.node.dataset.id = m.id;
@@ -356,11 +353,13 @@ function showWelcome() {
 }
 
 // ------------------------------------------------------------------- messages
-function appendUser(text, id = null) {
+function appendUser(text, id = null, attached = []) {
   el.list.querySelector('.welcome')?.remove();
+  // Les pièces jointes à côté de la bulle, jamais dedans : son texte est celui du message
+  const bubble = `<div class="bubble">${esc(text)}</div>`;
   const node = h(`<div class="msg user">
       <div class="turn-actions turn-only"><button class="icon-btn" data-act="edit" title="${esc(t('chat.edit_message'))}">${icon('edit')}</button></div>
-      <div class="bubble">${esc(text)}</div></div>`);
+      ${attached?.length ? `<div class="user-col">${bubble}${attachmentsHtml(attached)}</div>` : bubble}</div>`);
   if (id) node.dataset.id = id;
   el.list.append(node);
   return node;
@@ -660,36 +659,7 @@ async function confirmOutgoing(text, model, pre) {
 
   const peers = await confirmPeers(text, pre);
 
-  let cloudConfirmed = false;
-  if (pre.cloud) {
-    const label = state.models.find(m => m.id === model)?.label || pre.cloud;
-    if (!pre.cloud_has_key) {
-      const r = await modal({
-        title: t('chat.no_key_title'), iconName: 'cloud',
-        text: t('chat.no_key_text', { label }),
-        confirm: t('chat.open_settings'),
-      });
-      if (r.ok) emit('view:show', 'settings');
-      return null;
-    }
-    if (pre.cloud_confirm && !session.cloudConsent.has(pre.cloud)) {
-      const leaving = [t('chat.leaving_message'), t('chat.leaving_history')];
-      // Ce que reçoit le cloud (pipeline.visible_libraries) : ni les bibliothèques gardées
-      // sur ce PC, ni la mémoire des conversations
-      if (state.settings?.knowledge_enabled) leaving.push(t('chat.leaving_libraries'));
-      if (web) leaving.push(t('chat.leaving_web'));
-      const r = await modal({
-        title: t('chat.cloud_title'), iconName: 'cloud',
-        text: t('chat.cloud_text', { label, host: pre.cloud_host, leaving: leaving.join(', ') }),
-        quote: text.slice(0, 400), confirm: t('chat.send'), cancel: t('ui.cancel'),
-        check: t('chat.ask_no_more_provider'),
-      });
-      if (!r.ok) return null;
-      if (r.checked) session.cloudConsent.add(pre.cloud);
-    }
-    cloudConfirmed = true;
-  }
-  return { web, cloudConfirmed, peers };
+  return { web, peers };
 }
 
 // « Chez les autres » : la question part chez les machines qui m'ouvrent leurs bibliothèques
@@ -730,13 +700,28 @@ async function send(asText = null, replace = null) {
 }
 
 async function sendNow(asText, replace) {
-  const text = asText ?? el.input.value.trim();
+  if (asText === null && attaching()) {
+    toast(t('chat.attachment_sending'));
+    return false;
+  }
+  const typed = asText ?? el.input.value.trim();
+  const joined = asText === null ? pendingItems() : [];
+  const attached = joined.map(a => a.id);
+  // Une pièce jointe seule : une question par défaut, dans la langue de l'interface
+  const text = typed || (attached.length ? t('chat.attachment_question') : '');
   if (!text) return false;
   if (editing && !editing.node.isConnected) stopEditing(false);   // retiré entre-temps
   if (editing && asText === null) replace = replacing(editing.node, editing.text);
   const swap = replace ? { replace_from: replace.id, replace_text: replace.text } : {};
   const explicit = asText === null && creationRequest(text);     // mode « Créer » ouvert
-  if (explicit) { await create(text, { ...explicit, ...swap }, false, replace); return true; }
+  if (explicit && !typed) {
+    toast(t('chat.attachment_describe'));
+    return false;
+  }
+  if (explicit) {
+    await create(text, { ...explicit, ...swap, attachments: attached }, false, replace, null, joined);
+    return true;
+  }
   const model = selectedModel();
 
   let pre;
@@ -746,7 +731,8 @@ async function sendNow(asText, replace) {
       replace_from: replace?.id ?? null });
   } catch (e) { errorToast(e); return false; }
   if (pre.create && asText === null) {             // « Crée une image de… », reconnu au vol
-    await create(text, { ...autoRequest(pre.create), auto: true, ...swap }, false, replace);
+    await create(text, { ...autoRequest(pre.create), auto: true, ...swap, attachments: attached },
+      false, replace, null, joined);
     return true;
   }
   if (!model) {
@@ -763,7 +749,7 @@ async function sendNow(asText, replace) {
     autoresize();
   }
   stopEditing(false);
-  const asked = appendUser(text);
+  const asked = appendUser(text, null, joined);
   const view = appendAssistant(model);
   scrollBottom(true);
   setBusy(true);
@@ -772,11 +758,12 @@ async function sendNow(asText, replace) {
   let failure = null;
   try {
     await streamChat({
-      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
+      text, model, web: go.web, peer_libraries: go.peers, attachments: attached,
       conversation_id: state.currentConversation?.id ?? null, ...swap,
     }, ev => {
       if (ev.type === 'start') {
         started = true;
+        if (attached.length) clearAttachments();   // le message les a emportées
         dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
@@ -820,7 +807,7 @@ async function sendNow(asText, replace) {
 // Une image ou une vidéo à créer (chat-create.js) : le message et la réponse qui montrera les
 // images s'ajoutent à la conversation, le calcul part dans la file. replace : l'échange
 // remplacé (« Modifier »), retiré une fois la demande acceptée
-async function create(text, request, again = false, replace = null, askedNode = null) {
+async function create(text, request, again = false, replace = null, askedNode = null, joined = []) {
   if (creating) return false;        // une création déjà en route : pas une deuxième
   creating = true;
   const seen = displayed;            // la conversation affichée au départ
@@ -829,9 +816,10 @@ async function create(text, request, again = false, replace = null, askedNode = 
     el.input.value = '';
     autoresize();
     stopEditing(false);
-    asked = appendUser(text);
+    asked = appendUser(text, null, joined);
   }
-  const done = appendWaiting(el.list, request.followup === 'edit' ? t('chat.retouching') : '');
+  const done = appendWaiting(el.list, request.followup === 'edit' ? t('chat.retouching')
+    : !request.followup && state.settings?.images_enrich ? t('chat.enriching') : '');
   scrollBottom(true);
   let made;
   try {
@@ -870,6 +858,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
     creating = false;
   }
   done();
+  if (request.attachments?.length) clearAttachments();   // la demande les a emportées
   if (seen !== displayed) {          // une autre conversation entre-temps : celle-ci reste à sa place
     refreshTree();
     toast(made.title ? t('chat.creation_started', { title: made.title })

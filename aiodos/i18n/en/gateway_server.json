@@ -1,4 +1,5 @@
 {
+  "input_too_large": "Input too large: {size} MB at most.",
   "too_large": "Request too large: {size} MB at most.",
   "port_taken_by": "Port {port} is already in use on this machine ({program}): choose another one in Settings.",
   "port_taken": "Port {port} is already in use on this machine: choose another one in Settings.",

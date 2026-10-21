@@ -7,9 +7,11 @@ import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
 import { appsCard, bindApps } from './gateway-apps.js';
+import { bindEngines, enginesCard, loadEngines } from './engines.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
+import { modelsCard, bindModels, loadImageModels, mountModels } from './settings-models.js';
 
 // Titres, libellés, aides et choix sont des clés de textes (i18n/*/settings.json), traduites
 // à l'affichage. Le choix d'une liste : [valeur, clé de son libellé].
@@ -28,6 +30,23 @@ const SECTIONS = [
       help: 'settings.chat_context_help' },
     { key: 'system_prompt', label: 'settings.system_prompt', type: 'textarea' },
   ] },
+  // Les modèles : ceux des discussions, puis ceux des images et des vidéos (settings-models.js),
+  // du plus puissant au moins puissant ; l'onglet Images y renvoie (« settings:focus »)
+  { title: 'settings.section_models', icon: 'layers', id: 'modeles', fields: [
+    { type: 'models' },
+    { type: 'subhead', label: 'settings.models_images' },
+    { key: 'images_enrich', label: 'settings.images_enrich', type: 'switch', help: 'settings.images_enrich_help' },
+    { key: 'images_from_friends', label: 'settings.images_from_friends', type: 'switch',
+      help: 'settings.images_from_friends_help' },
+    { key: 'images_device', label: 'settings.images_device', type: 'text', help: 'settings.images_device_help' },
+    { key: 'images_models_dir', label: 'settings.images_models_dir', type: 'folder',
+      help: 'settings.images_models_dir_help' },
+    { key: 'images_other_dirs', label: 'settings.images_other_dirs', type: 'textarea',
+      help: 'settings.images_other_dirs_help' },
+    { key: 'images_out_dir', label: 'settings.images_out_dir', type: 'folder',
+      help: 'settings.images_out_dir_help' },
+    { key: 'sdcpp_dir', label: 'settings.sdcpp_dir', type: 'folder', help: 'settings.sdcpp_dir_help' },
+  ] },
   { title: 'settings.section_knowledge', icon: 'book', fields: [
     { key: 'knowledge_enabled', label: 'settings.knowledge_enabled', type: 'switch' },
     { key: 'conversations_enabled', label: 'settings.conversations_enabled', type: 'switch',
@@ -43,14 +62,7 @@ const SECTIONS = [
       help: 'settings.web_search_enabled_help' },
     { key: 'web_results', label: 'settings.web_results', type: 'number', min: 1, max: 8 },
   ] },
-  { title: 'settings.section_cloud', icon: 'cloud', fields: [
-    { key: 'cloud_confirm', label: 'settings.cloud_confirm', type: 'switch', help: 'settings.cloud_confirm_help' },
-    { key: 'mistral_key', label: 'settings.mistral_key', type: 'secret' },
-    { key: 'mistral_cloud_model', label: 'settings.mistral_cloud_model', type: 'text' },
-    { key: 'qwen_key', label: 'settings.qwen_key', type: 'secret' },
-    { key: 'qwen_cloud_model', label: 'settings.qwen_cloud_model', type: 'text' },
-  ] },
-  { title: 'settings.section_media', icon: 'image', fields: [
+  { title: 'settings.section_media', icon: 'eye', fields: [
     { key: 'media_vision', label: 'settings.media_vision', type: 'switch' },
     { key: 'media_vision_mode', label: 'settings.media_vision_mode', type: 'select', options: [
       ['both', 'settings.vision_mode_both'], ['ocr', 'settings.vision_mode_ocr'],
@@ -79,18 +91,6 @@ const SECTIONS = [
     { key: 'lend_gpu_device', label: 'settings.lend_gpu_device', type: 'text',
       help: 'settings.lend_gpu_device_help' },
   ] },
-  { title: 'settings.section_images', icon: 'image', fields: [
-    { key: 'sdcpp_dir', label: 'settings.sdcpp_dir', type: 'folder', help: 'settings.sdcpp_dir_help' },
-    { key: 'images_models_dir', label: 'settings.images_models_dir', type: 'folder',
-      help: 'settings.images_models_dir_help' },
-    { key: 'images_other_dirs', label: 'settings.images_other_dirs', type: 'textarea',
-      help: 'settings.images_other_dirs_help' },
-    { key: 'images_out_dir', label: 'settings.images_out_dir', type: 'folder',
-      help: 'settings.images_out_dir_help' },
-    { key: 'images_from_friends', label: 'settings.images_from_friends', type: 'switch',
-      help: 'settings.images_from_friends_help' },
-    { key: 'images_device', label: 'settings.images_device', type: 'text', help: 'settings.images_device_help' },
-  ] },
   { title: 'settings.section_updates', icon: 'retry', fields: [
     { key: 'auto_update', label: 'settings.auto_update', type: 'switch', help: 'settings.auto_update_help' },
     { type: 'updates' },
@@ -98,6 +98,19 @@ const SECTIONS = [
   ] },
   { title: 'settings.section_other_tools', icon: 'plug', fields: [
     { type: 'gateway' },
+  ] },
+  { title: 'settings.section_engines', icon: 'image', fields: [
+    { type: 'engines' },
+    { key: 'engines_comfyui_enabled', label: 'settings.engines_comfyui_enabled', type: 'switch',
+      help: 'settings.engines_comfyui_enabled_help' },
+    { key: 'engines_comfyui_path', label: 'settings.engines_comfyui_path', type: 'folder',
+      help: 'settings.engines_comfyui_path_help' },
+    { key: 'engines_comfyui_launch', label: 'settings.engines_comfyui_launch', type: 'switch',
+      help: 'settings.engines_comfyui_launch_help' },
+    { key: 'keep_awake_jobs', label: 'settings.keep_awake_jobs', type: 'switch',
+      help: 'settings.keep_awake_jobs_help' },
+    { key: 'engines_comfyui_url', label: 'settings.engines_comfyui_url', type: 'text',
+      help: 'settings.engines_comfyui_url_help' },
   ] },
   { title: 'settings.section_advanced', icon: 'settings', fields: [
     { key: 'ollama_url', label: 'settings.ollama_url', type: 'text' },
@@ -131,7 +144,18 @@ export function mountSettings(container) {
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
   window.addEventListener('pywebviewready', refresh);     // les boutons « Choisir… » des dossiers
-  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); } });
+  on('view:shown', view => {
+    if (view === 'settings') { render(); loadUpdates(); loadGateway(); loadEngines(); loadImageModels(); }
+  });
+  mountModels();
+  const refreshModels = () => {
+    const box = root && $('#models-box', root);
+    if (box) { box.innerHTML = modelsCard(); bindModels(box); }
+  };
+  on('image-models:loaded', refreshModels);
+  on('models:loaded', refreshModels);
+  // Depuis l'onglet Images (« Gérer les modèles ») : la section Modèles, tout de suite visible
+  on('settings:focus', id => $(`#settings-${id}`, root)?.scrollIntoView({ block: 'start' }));
   on('updates:loaded', () => {
     const box = root && $('#updates-status', root);
     if (box) { box.innerHTML = updatesStatus(); bindUpdates(box); }
@@ -139,6 +163,10 @@ export function mountSettings(container) {
   on('gateway:loaded', () => {
     const box = root && $('#gateway-box', root);
     if (box) { box.innerHTML = gatewayCard(); bindGateway(box); }
+  });
+  on('engines:loaded', () => {
+    const box = root && $('#engines-box', root);
+    if (box) { box.innerHTML = enginesCard(); bindEngines(box); }
   });
   on('gateway-apps:loaded', () => {
     const box = root && $('#gateway-apps-box', root);
@@ -151,6 +179,9 @@ function field(f, section) {
   if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
   if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
   if (f.type === 'approval') return '<div id="approval-box"></div>';
+  if (f.type === 'engines') return `<div id="engines-box">${enginesCard()}</div>`;
+  if (f.type === 'models') return `<div id="models-box">${modelsCard()}</div>`;
+  if (f.type === 'subhead') return `<h3 class="settings-sub">${esc(t(f.label))}</h3>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(t(f.help))}</div>` : '';
   if (f.type === 'switch') {
@@ -167,12 +198,6 @@ function field(f, section) {
     const named = f.label ? '' : ` aria-label="${esc(t(section.title))}"`;
     control = `<select class="select" id="${id}" data-key="${f.key}"${named}>${options.map(([v, l]) =>
       `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  } else if (f.type === 'secret') {
-    const placeholder = s[`${f.key}_set`]
-      ? t('settings.secret_saved', { hint: s[`${f.key}_hint`] || '••••' }) : t('settings.secret_none');
-    control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
-      autocomplete="off" placeholder="${esc(placeholder)}">${s[`${f.key}_set`]
-        ? `<button class="btn" data-clear="${f.key}" type="button">${esc(t('settings.clear'))}</button>` : ''}</div>`;
   } else if (f.type === 'folder') {       // un dossier : tapé, ou choisi dans la fenêtre d'AIODOS
     control = `<div class="folder-field"><input class="input" type="text" id="${id}" data-key="${f.key}"
       value="${esc(s[f.key])}">${window.pywebview?.api?.pick_folder
@@ -209,7 +234,7 @@ function render() {
   draft = {};
   const form = $('#settings-form', root);
   form.innerHTML = SECTIONS.map(sec => `
-    <div class="card"><h2>${icon(sec.icon)}${esc(t(sec.title))}</h2>${sec.fields.map(f => field(f, sec)).join('')}</div>`).join('') +
+    <div class="card"${sec.id ? ` id="settings-${sec.id}"` : ''}><h2>${icon(sec.icon)}${esc(t(sec.title))}</h2>${sec.fields.map(f => field(f, sec)).join('')}</div>`).join('') +
     // N'apparaît qu'avec des modifications à enregistrer : toujours affichée, elle cachait
     // le réglage du dessous en faisant défiler la page
     `<div class="save-bar" hidden><div class="save-box"><span>${esc(t('settings.unsaved'))}</span>
@@ -227,9 +252,6 @@ function render() {
     input.addEventListener(input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input',
       () => { draft[key] = read(); bar.hidden = false; });
   });
-  form.querySelectorAll('[data-clear]').forEach(b => {
-    b.onclick = () => { draft[b.dataset.clear] = null; save(); };
-  });
   form.querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = async () => {
       let chosen;
@@ -242,6 +264,8 @@ function render() {
   });
   bindUpdates(form);
   bindGateway(form);
+  bindEngines(form);
+  bindModels($('#models-box', root));
   renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
   $('#settings-cancel', root).onclick = render;           // le formulaire revient aux réglages

@@ -1,14 +1,15 @@
 {
   "name": "aiodos-client",
-  "version": "0.1.0",
-  "description": "Client JavaScript d'AIODOS pour les applications (Node, processus principal d'Electron) : découverte, accès par appli, catalogue, conversation en flux, embeddings. Sans dépendance.",
+  "version": "0.2.0",
+  "description": "Client JavaScript d'AIODOS pour les applications (Node, processus principal d'Electron) : découverte, accès par appli, catalogue, conversation en flux, embeddings, travaux ComfyUI (entrées, suivi en direct, fichiers repris et vérifiés). Sans dépendance.",
   "keywords": [
     "aiodos",
     "llm",
     "local",
     "openai",
     "client",
-    "electron"
+    "electron",
+    "comfyui"
   ],
   "homepage": "https://github.com/AIODOS/aiodos/tree/main/clients/js#readme",
   "repository": {

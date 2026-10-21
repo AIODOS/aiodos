@@ -1,0 +1,12 @@
+{
+  "cut": "[… the rest is not read here: for the whole document, add it to a library]",
+  "image": "Attached image “{name}”:\n{body}",
+  "image_empty": "Attached image “{name}” (nothing to read here).",
+  "video": "Attached video “{name}”:\n{body}",
+  "video_empty": "Attached video “{name}” (nothing to read here).",
+  "audio": "Attached audio “{name}”:\n{body}",
+  "audio_empty": "Attached audio “{name}” (nothing to read here).",
+  "file": "Attached file “{name}”:\n{body}",
+  "file_empty": "Attached file “{name}” (nothing to read here).",
+  "image_seen": "Attached image “{name}” (included with this message)."
+}

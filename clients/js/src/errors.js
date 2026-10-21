@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — les erreurs : AiodosError, ses sous-classes, et la lecture des
+// aiodos-client 0.2.0 — les erreurs : AiodosError, ses sous-classes, et la lecture des
 // réponses d'erreur de la passerelle (enveloppe d'OpenAI, forme d'Ollama, forme d'OAuth).
 //
 // Une clé n'apparaît jamais dans une erreur : les textes venus du serveur passent par
@@ -160,10 +160,103 @@ export class Busy extends AiodosError {}
 export class PeerFailed extends AiodosError {}
 /** Échec du moteur. */
 export class EngineFailed extends AiodosError {}
-/** Moteur en panne ou en démarrage (retryAfter). */
+/**
+ * Moteur pas prêt : en panne ou en démarrage (503, retryAfter), ou aucune machine permise n'a
+ * ComfyUI ouvert et accordé (409).
+ */
 export class EngineUnavailable extends AiodosError {}
 /** AIODOS tourne sans fenêtre : personne ne peut accorder l'accès. */
 export class ApprovalUnavailable extends AiodosError {}
+
+// --- les travaux ComfyUI (docs/api-applications.md § 3 et § 5.7) -----------------------------
+
+/**
+ * Graphe refusé : au format de l'éditeur (graph_not_api : il faut « Exporter (API) »), mal
+ * formé (graph_invalid), ou retouche invalide (patch_invalid). `code` dit lequel.
+ */
+export class GraphInvalid extends AiodosError {
+  get node() {
+    return this.detail.node ?? null;
+  }
+  get graph() {
+    return this.detail.graph ?? null;
+  }
+}
+/** Graphe trop gros (2 Mo par graphe, 8 Mo et 64 graphes par travail). */
+export class GraphTooLarge extends AiodosError {}
+/** Valeur refusée : chemin, adresse ou annotation de dossier (detail.node, input, reason). */
+export class ForbiddenValue extends AiodosError {
+  get node() {
+    return this.detail.node ?? null;
+  }
+  get input() {
+    return this.detail.input ?? null;
+  }
+  get reason() {
+    return this.detail.reason ?? null;
+  }
+}
+/** Nœud d'un service en ligne (detail.class). */
+export class ForbiddenNode extends AiodosError {
+  get nodeClass() {
+    return this.detail.class ?? null;
+  }
+}
+/** Jeton @in: sans entrée déclarée, ou entrée jamais envoyée par cette appli (detail.input). */
+export class InputMissing extends AiodosError {
+  get input() {
+    return this.detail.input ?? null;
+  }
+}
+/** L'empreinte des octets reçus n'est pas celle de l'adresse (detail.sha256 : celle reçue). */
+export class InputHashMismatch extends AiodosError {}
+/** Entrée de plus de 100 Mo : refusée avant l'envoi. */
+export class InputTooLarge extends AiodosError {}
+/** Moteur inconnu. */
+export class EngineNotFound extends AiodosError {}
+/** Entrée introuvable, ou à une autre appli. */
+export class InputNotFound extends AiodosError {}
+/** Travail introuvable, ou à une autre appli. */
+export class JobNotFound extends AiodosError {}
+/** Fichier introuvable, ou à une autre appli. */
+export class FileNotFound extends AiodosError {}
+/** Modèles absents des machines permises (models : [{ folder, name }]). */
+export class ModelUnavailable extends AiodosError {
+  get models() {
+    return Array.isArray(this.detail.models) ? this.detail.models : [];
+  }
+}
+/** Jeton @model: non déclaré dans « models » (detail.model). */
+export class ModelUnresolved extends AiodosError {
+  get model() {
+    return this.detail.model ?? null;
+  }
+}
+/** Le même nom de modèle dans plusieurs dossiers : le déclarer avec son dossier (candidates). */
+export class ModelAmbiguous extends AiodosError {
+  get candidates() {
+    return Array.isArray(this.detail.candidates) ? this.detail.candidates : [];
+  }
+}
+/** Le travail est déjà fini : rien à annuler. */
+export class JobNotCancellable extends AiodosError {}
+/** Le travail est déjà fini : rien à mettre en pause ni à reprendre. */
+export class JobNotPausable extends AiodosError {}
+/** Quota de l'appli dépassé : travaux actifs, entrées, fichiers non récupérés (detail.quota). */
+export class QuotaExceeded extends AiodosError {
+  get quota() {
+    return this.detail.quota ?? null;
+  }
+}
+/**
+ * comfy.run() : le travail a fini sans résultat, en échec (aucune unité faite) ou annulé
+ * ailleurs que par l'appli (detail.job, detail.status, detail.units).
+ */
+export class JobFailed extends AiodosError {
+  get job() {
+    return this.detail.job ?? null;
+  }
+}
 
 /** Code stable → sous-classe. Un code inconnu donne une AiodosError. */
 const CLASSES = {
@@ -211,6 +304,26 @@ const CLASSES = {
   engine_failed: EngineFailed,
   engine_unavailable: EngineUnavailable,
   approval_unavailable: ApprovalUnavailable,
+  graph_not_api: GraphInvalid,
+  graph_invalid: GraphInvalid,
+  patch_invalid: GraphInvalid,
+  graph_too_large: GraphTooLarge,
+  forbidden_value: ForbiddenValue,
+  forbidden_node: ForbiddenNode,
+  input_missing: InputMissing,
+  input_hash_mismatch: InputHashMismatch,
+  input_too_large: InputTooLarge,
+  engine_not_found: EngineNotFound,
+  input_not_found: InputNotFound,
+  job_not_found: JobNotFound,
+  file_not_found: FileNotFound,
+  model_unavailable: ModelUnavailable,
+  model_unresolved: ModelUnresolved,
+  model_ambiguous: ModelAmbiguous,
+  job_not_cancellable: JobNotCancellable,
+  job_not_pausable: JobNotPausable,
+  quota_exceeded: QuotaExceeded,
+  job_failed: JobFailed,
 };
 
 const RETRYABLE = new Set([
@@ -222,6 +335,8 @@ const RETRYABLE = new Set([
   'engine_failed',
   'engine_unavailable',
   'no_machine',
+  'model_unavailable',
+  'quota_exceeded',
 ]);
 
 /** La sous-classe d'un code (AiodosError s'il est inconnu). */

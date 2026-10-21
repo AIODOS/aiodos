@@ -23,10 +23,15 @@ foi, et le contrat est corrigé.
 ```
 
 - `request.headers` peut contenir `{key}` (la clé de l'appli d'essai) ; `request.path` et
-  `request.json`, `{device_code}`, `{challenge}`, `{key_id}` : à remplacer par l'essai.
+  `request.json`, `{device_code}`, `{challenge}`, `{key_id}`, `{sha256}` (l'empreinte de
+  l'entrée envoyée), `{job_id}`, `{file_id}` : à remplacer par l'essai.
+- Un corps brut (envoi d'une entrée, contenu d'un fichier) : `request.body` ou
+  `response.body` vaut `"{png}"` (un petit PNG de l'essai, le même des deux côtés) ou
+  `"{png:0-9}"` (ses octets 0 à 9).
 - `response` porte soit `json` (le corps), soit `sse` (les événements d'un flux, dans l'ordre :
-  chaque chaîne est une ligne `data: …` ou un commentaire `: …`, suivie d'une ligne vide dans
-  le flux réel), soit `ndjson` (lignes d'un flux de l'API d'Ollama).
+  chaque chaîne est une ligne `data: …`, `event: …` (le nom de l'événement qui suit : `job`,
+  `file`, `end` pour les travaux) ou un commentaire `: …` ; un événement finit par une ligne
+  vide dans le flux réel), soit `ndjson` (lignes d'un flux de l'API d'Ollama).
 - Comparaison par le serveur : chaque clé de l'exemple doit exister dans la vraie réponse avec
   le même type JSON, récursivement (pour une liste, son premier élément quand les deux en
   ont) ; les chemins de `exact` (notation pointée, `models.0.kind`) doivent être égaux.
@@ -45,5 +50,6 @@ foi, et le contrat est corrigé.
 | `models.json` | `/aiodos/v1/models` et `/v1/models` |
 | `chat.json` | conversation en flux (texte, réflexion, chargement, outils, erreur en route) et sans flux |
 | `embed.json` | `/v1/embeddings` |
+| `jobs.json` | les travaux ComfyUI : moteurs, entrées, pré-vol, dépôt, suivi (objet et événements), commandes, fichiers (livraison L2b) |
 | `errors.json` | une erreur par code stable |
 | `proof.json` | un vecteur d'essai de la preuve (clé, défi, preuve attendue) |

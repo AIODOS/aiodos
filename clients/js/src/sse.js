@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — la lecture d'un flux SSE (lignes « data: », commentaires « : … »).
+// aiodos-client 0.2.0 — la lecture d'un flux SSE (lignes « data: », commentaires « : … »).
 
 const MAX_BUFFER = 32 * 1024 * 1024; // une ligne de plus de 32 Mio : réponse incomprise
 

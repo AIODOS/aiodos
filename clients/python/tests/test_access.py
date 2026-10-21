@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """L'accès : connect() passerelle ouverte (accord, refus, expiration, slow_down, droits en
 plus) et passerelle fermée (un faux programme d'aide), la relève du contrat, le retrait,
 le lancement d'AIODOS."""
@@ -55,7 +55,7 @@ def test_connect_with_the_gateway_open(fake, make_client):
     assert outcome["codes"] == ["482 197"] and outcome["threads"] == [outcome["thread"]]
     sent = fake.requests_to("/aiodos/v1/access/requests")[0]
     assert sent["headers"]["Content-Type"] == "application/json"
-    assert sent["headers"]["X-Aiodos-Client"] == "python/0.1.0"
+    assert sent["headers"]["X-Aiodos-Client"] == "python/0.2.0"
     assert "Authorization" not in sent["headers"] and "Origin" not in sent["headers"]
     polls = fake.requests_to("/aiodos/v1/access/token")
     assert polls and all("Authorization" not in poll["headers"] for poll in polls)

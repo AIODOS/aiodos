@@ -1,0 +1,22 @@
+{
+  "progress_done": "{done} of {total}: done",
+  "progress_paused": "{done} of {total} · paused",
+  "progress_cancelled": "{done} of {total} · cancelled",
+  "progress": "{done} of {total}",
+  "progress_running": {
+    "one": "{done} of {total} · {running} running on {n} machine",
+    "other": "{done} of {total} · {running} running on {n} machines"
+  },
+  "active_quota": {
+    "one": "At most {n} active job per application.",
+    "other": "At most {n} active jobs per application."
+  },
+  "unfetched_quota": "Too many files not yet fetched by this application.",
+  "no_comfyui": "No allowed machine has made its ComfyUI available to AIODOS (Settings → Engines for applications, on this PC or on one of my machines).",
+  "models_missing": "“{machine}” is missing models: {models}.",
+  "app_key_required": "Jobs are submitted with an application's key.",
+  "when_invalid": "“when”: after_current or now.",
+  "cancel_first": "Cancel the job before forgetting it.",
+  "no_comfyui_reason": "no allowed machine has made its ComfyUI available to AIODOS",
+  "models_missing_reason": "models are missing"
+}

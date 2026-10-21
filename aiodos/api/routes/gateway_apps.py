@@ -16,7 +16,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from aiodos.gateway import access_flow, apps, scopes, usage
+from aiodos.gateway import access_flow, apps, ownership, scopes, usage
 from aiodos.gateway.errors import ApiError
 from aiodos.i18n import t
 
@@ -145,6 +145,9 @@ async def change_app(app_id: str, body: AppIn, request: Request):
 async def revoke_app(app_id: str, request: Request):
     if not await asyncio.to_thread(apps.revoke, app_id):
         raise HTTPException(404, t("gateway_access.app_already_revoked"))
+    # Ses travaux en cours s'arrêtent, ses fichiers commencent leurs 7 jours de garde
+    await asyncio.to_thread(ownership.release, app_id)
+    request.app.state.executor.wake()
     _refresh(request)
     return {"revoked": True}
 

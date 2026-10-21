@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : les embeddings (embed.json) et openInAiodos.
+// aiodos-client 0.2.0 — essais : les embeddings (embed.json) et openInAiodos.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

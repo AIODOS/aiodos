@@ -33,15 +33,15 @@ def test_token_and_host_are_required(client):
     assert client.get("/").status_code == 200        # l'interface elle-même est publique
 
 
-def test_api_keys_never_leave_in_clear(client):
+def test_no_cloud_left(client):
+    """Le cloud est retiré (21/10/2026) : ni réglage ni clé d'API, rien à faire valider avant
+    l'envoi, et un ancien identifiant « cloud:… » n'est qu'un modèle inconnu."""
     view = client.put("/api/settings", json={"mistral_key": "sk-test-12345678"},
                       headers=AUTH).json()
-    assert view["mistral_key"] == "" and view["mistral_key_set"]
-    assert view["mistral_key_hint"] == "••••5678"
-    view = client.put("/api/settings", json={"mistral_key": ""}, headers=AUTH).json()
-    assert view["mistral_key_set"]                       # chaîne vide = inchangé
-    view = client.put("/api/settings", json={"mistral_key": None}, headers=AUTH).json()
-    assert not view["mistral_key_set"]                   # null = effacé
+    assert not [k for k in view if "cloud" in k or k.startswith(("mistral", "qwen_"))]
+    pre = client.post("/api/chat/preflight", json={"text": "Bonjour", "model": "cloud:mistral"},
+                      headers=AUTH).json()
+    assert not [k for k in pre if k.startswith("cloud")]
 
 
 def test_folder_indexing_runs_through_the_queue(client, tmp_path):
@@ -85,15 +85,6 @@ def test_chat_streams_and_saves(client, monkeypatch):
     assert conv["title"] == "Salut"
     assert [m["role"] for m in conv["messages"]] == ["user", "assistant"]
     assert conv["messages"][1]["thinking"] == "Je réfléchis…"
-
-
-def test_cloud_needs_key_and_confirmation(client):
-    body = {"text": "Bonjour", "model": "cloud:mistral"}
-    assert client.post("/api/chat", json=body, headers=AUTH).status_code == 400   # pas de clé
-    client.put("/api/settings", json={"mistral_key": "sk-test-12345678"}, headers=AUTH)
-    assert client.post("/api/chat", json=body, headers=AUTH).status_code == 409   # pas validé
-    pre = client.post("/api/chat/preflight", json=body, headers=AUTH).json()
-    assert pre["cloud"] == "mistral" and pre["cloud_host"] == "api.mistral.ai"
 
 
 def test_preflight_detects_web_intent(client):

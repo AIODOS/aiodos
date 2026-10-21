@@ -57,15 +57,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aiodos import __version__, i18n, paths, settings
+from aiodos.engines import lending as engine_lending
 from aiodos.i18n import t
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
+from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
-from aiodos.node import android, identity, power, priority
+from aiodos.node import android, identity, keep_awake, power, priority
 from aiodos.services import extract, media
 
 log = logging.getLogger("aiodos.worker")
@@ -466,7 +468,9 @@ class Worker:
                     "version": __version__, "models": work.local_models(),
                     "whisper": importlib.util.find_spec("faster_whisper") is not None,
                     "readers": extract.readable_documents(),
-                    "images": images_engine.capabilities()}
+                    "images": images_engine.capabilities(),
+                    # Le ComfyUI accordé de ce PC (travaux des applis de mes machines)
+                    "engines": engine_lending.capabilities()}
             self._caps = (time.monotonic(), caps)
         return caps
 
@@ -478,6 +482,10 @@ class Worker:
         if sharing.level(peer["node_id"]) != sharing.MINE and caps.get("images") \
                 and not settings.get("lend_images_friends"):
             caps = {k: v for k, v in caps.items() if k != "images"}   # pas sans mon accord
+        if sharing.level(peer["node_id"]) != sharing.MINE:
+            # ComfyUI : à mes machines seulement (L2b). Ses nœuds ajoutés et ses modèles
+            # diraient trop de cette machine à un ami (conception, § 3.5)
+            caps = {k: v for k, v in caps.items() if k != "engines"}
         try:
             reply = client.call(self.m.node_id, full, "work/lease",
                                 {"resources": offered, "caps": caps}, timeout=LEASE_TIMEOUT,
@@ -530,9 +538,14 @@ class Worker:
         every = max(5.0, float(a.order.get("lease_s") or leases.LEASE_S) / 3)
         while True:
             await asyncio.sleep(every)
+            asked = {"unit": a.order["id"]}
+            payload = a.order.get("payload") or {}
+            if payload.get("engine"):         # l'étape du calcul, pour l'appli qui attend
+                stage = engine_kind.stage_of(payload.get("run_uuid"))
+                if stage:
+                    asked["progress"] = {"stage": stage}
             try:
-                reply = await asyncio.to_thread(self._call, a, "work/renew",
-                                                {"unit": a.order["id"]}, 8)
+                reply = await asyncio.to_thread(self._call, a, "work/renew", asked, 8)
             except PeerError:
                 continue
             if not reply.get("ok"):
@@ -568,6 +581,7 @@ class Worker:
         def computed() -> float:
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
             return max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
+        awake = False
         try:
             mine = sharing.level(a.peer_id) == sharing.MINE
             spec = registry.TASKS.get(a.order["task"])
@@ -580,6 +594,14 @@ class Worker:
             if not welcomes(a.peer_id):
                 raise _NotNow()
             file = self._download(a, folder) if a.order.get("blob") else None
+            if a.order["payload"].get("engine"):
+                # Un travail de moteur : pas de veille sur secteur pendant l'unité, et ses
+                # entrées, par empreinte, avant le calcul
+                # i18n: tel quel (raison de keep_awake : une clé interne, jamais affichée)
+                keep_awake.hold("unité de moteur")
+                awake = True
+                if a.order["payload"].get("inputs"):
+                    a.order["payload"]["files"] = self._download_inputs(a, folder)
             # Un modèle Whisper qui manque se télécharge pour une de mes machines, jamais pour
             # un ami (services/media.py). Le calcul se fait dans ce thread : le contexte y est vu
             with media.downloads(mine):
@@ -639,6 +661,8 @@ class Worker:
                         compute_s=computed())
             return f"échec : {exc}"                                 # i18n: tel quel (journal)
         finally:
+            if awake:
+                keep_awake.release("unité de moteur")   # i18n: tel quel (clé interne)
             shutil.rmtree(folder, ignore_errors=True)
 
     @staticmethod
@@ -703,20 +727,68 @@ class Worker:
             raise _BadOrder("worker.file_altered")
         return str(target)
 
-    def _chunk(self, a: Assignment, offset: int, size: int) -> dict:
+    def _download_inputs(self, a: Assignment, folder: Path) -> dict:
+        """Les entrées d'un travail de moteur ({slot: chemin}), chacune morceau par morceau
+        et vérifiée par son empreinte. Tailles et empreintes viennent de l'autre machine :
+        bornées ici avant d'écrire quoi que ce soit."""
+        entries = a.order["payload"]["inputs"]
+        if not isinstance(entries, list) or len(entries) > 64:
+            raise _BadOrder("worker.inputs_unreadable")
+        sizes = [e.get("size") if isinstance(e, dict) else None for e in entries]
+        if any(isinstance(s, bool) or not isinstance(s, int) or s < 0 for s in sizes):
+            raise _BadOrder("worker.input_size_unreadable")
+        if sum(sizes) > work.MAX_BLOB:
+            raise _BadOrder("worker.inputs_too_big", size=sum(sizes) // 1024 ** 2,
+                            limit=work.MAX_BLOB // 1024 ** 2)
+        folder.mkdir(parents=True, exist_ok=True)
+        if shutil.disk_usage(folder).free - sum(sizes) < DISK_MARGIN:
+            raise _NoRoom()
+        found = {}
+        owner = peers.get(a.peer_id)
+        chunk = work.BLOB_CHUNK if owner and route.lan_first(owner) else work.INTERNET_CHUNK
+        for n, entry in enumerate(entries, 1):
+            sha, size = str(entry.get("sha256") or ""), entry["size"]
+            if not re.fullmatch(r"[0-9a-f]{64}", sha):
+                raise _BadOrder("worker.input_hash_unreadable")
+            target = folder / f"entree-{n}"
+            received, digest = 0, hashlib.sha256()
+            with open(target, "wb") as f:
+                while received < size:
+                    if a.stop.is_set():
+                        raise registry.Interrupted()
+                    want = min(chunk, size - received)
+                    reply = self._chunk(a, received, want, sha256=sha)
+                    text = reply.get("data") or ""
+                    if not isinstance(text, str) or len(text) > 4 * ((want + 2) // 3):
+                        raise _BadOrder("worker.input_chunk_too_long")
+                    data = b64d(text)
+                    if len(data) > want:
+                        raise _BadOrder("worker.input_chunk_too_long")
+                    if not data:
+                        break
+                    f.write(data)
+                    digest.update(data)
+                    received += len(data)
+            if received != size or digest.hexdigest() != sha:
+                raise _BadOrder("worker.input_altered")
+            found[str(entry.get("slot"))] = str(target)
+        return found
+
+    def _chunk(self, a: Assignment, offset: int, size: int, sha256: str | None = None) -> dict:
         """Un morceau du fichier. Coupure (4G, relais, changement de réseau) : redemandé au
         même endroit après une pause qui s'allonge, tant que le bail tient (le
         renouvellement continue à côté) et que personne n'arrête l'unité."""
+        asked = {"unit": a.order["id"], "offset": offset, "size": size}
+        if sha256:                        # une entrée d'un travail de moteur
+            asked["sha256"] = sha256
         for delay in (*CHUNK_RETRY_DELAYS, None):
             try:
-                return self._call(a, "work/blob", {"unit": a.order["id"], "offset": offset,
-                                                   "size": size}, timeout=60)
+                return self._call(a, "work/blob", asked, timeout=60)
             except PeerError as exc:
                 if delay is None or a.stop.is_set():
                     raise
-                log.info("Unité %s de « %s » : transfert coupé à %s/%s octets (%s), reprise "
-                         "dans %s s", a.order["id"], a.peer_name, offset,
-                         a.order["blob"]["size"], exc, delay)
+                log.info("Unité %s de « %s » : transfert coupé à %s octets (%s), reprise "
+                         "dans %s s", a.order["id"], a.peer_name, offset, exc, delay)
                 if a.stop.wait(delay):
                     raise registry.Interrupted() from exc
         raise PeerError(t("worker.transfer_failed"))

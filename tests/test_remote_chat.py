@@ -212,7 +212,6 @@ def test_a_malformed_profile_never_breaks_the_model_list(monkeypatch):
 def test_model_ids_keep_colons_in_model_names():
     assert remote_models.parse("peer:abc:qwen3.5:9b") == ("abc", "qwen3.5:9b")
     assert remote_models.parse("qwen3.5:9b") is None
-    assert remote_models.parse("cloud:mistral") is None
 
 
 def test_generation_is_routed_to_the_machine_that_lends(monkeypatch):
@@ -229,7 +228,7 @@ def test_generation_is_routed_to_the_machine_that_lends(monkeypatch):
     assert calls == {"peer": B, "action": "chat",
                      "payload": {"model": "qwen3.6:latest", "messages": QUESTION, "think": False}}
     assert not pipeline.runs_here("peer:machine-b:qwen3.6:latest")
-    assert pipeline.runs_here("qwen3.6:latest") and not pipeline.runs_here("cloud:mistral")
+    assert pipeline.runs_here("qwen3.6:latest") and not pipeline.runs_here("reparti:qwen3.6:latest")
     assert pipeline.preflight("Salut", "peer:machine-b:qwen3.6:latest")["remote"] == "PC fixe"
 
 

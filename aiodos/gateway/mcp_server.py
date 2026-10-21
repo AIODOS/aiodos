@@ -358,7 +358,7 @@ async def _search(request: Request, arguments: dict):
 
 def _default_model() -> str:
     chosen = str(settings.get("default_model") or "")
-    if chosen and not chosen.startswith("cloud:"):
+    if chosen:
         return chosen
     # Pas un modèle d'embedding : le moteur intégré les range par nom (bge-m3 d'abord…)
     entries = [e for e in catalog.entries()

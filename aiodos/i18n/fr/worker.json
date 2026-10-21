@@ -20,5 +20,11 @@
   "file_too_big": "fichier annoncé trop gros ({size} Mio, {limit} Mio au plus)",
   "chunk_too_long": "morceau du fichier plus long que demandé",
   "file_altered": "fichier reçu incomplet ou modifié pendant le transfert",
+  "inputs_unreadable": "entrées illisibles dans l'ordre reçu",
+  "input_size_unreadable": "taille d'une entrée illisible dans l'ordre reçu",
+  "inputs_too_big": "entrées trop lourdes ({size} Mio, {limit} Mio au plus)",
+  "input_hash_unreadable": "empreinte d'une entrée illisible",
+  "input_chunk_too_long": "morceau d'une entrée plus long que demandé",
+  "input_altered": "entrée reçue incomplète ou modifiée pendant le transfert",
   "transfer_failed": "Transfert impossible."
 }

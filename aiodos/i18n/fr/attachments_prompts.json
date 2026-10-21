@@ -1,0 +1,12 @@
+{
+  "cut": "[… la suite n'est pas lue ici : pour tout le document, ajoute-le à une bibliothèque]",
+  "image": "Image jointe « {name} » :\n{body}",
+  "image_empty": "Image jointe « {name} » (rien à en lire ici).",
+  "video": "Vidéo jointe « {name} » :\n{body}",
+  "video_empty": "Vidéo jointe « {name} » (rien à en lire ici).",
+  "audio": "Son joint « {name} » :\n{body}",
+  "audio_empty": "Son joint « {name} » (rien à en lire ici).",
+  "file": "Fichier joint « {name} » :\n{body}",
+  "file_empty": "Fichier joint « {name} » (rien à en lire ici).",
+  "image_seen": "Image jointe « {name} » (ci-jointe)."
+}

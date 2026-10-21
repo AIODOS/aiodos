@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : le contrat partagé (la copie embarquée, le faux serveur qui
+// aiodos-client 0.2.0 — essais : le contrat partagé (la copie embarquée, le faux serveur qui
 // le sert avec la même règle que l'essai de la passerelle) et les règles du paquet.
 
 import assert from 'node:assert/strict';
@@ -89,7 +89,7 @@ const sources = readdirSync(srcDir).filter((f) => f.endsWith('.js'));
 test('package.json : nom, version, module ES, exports, Node 20.3, Apache-2.0, aucune dépendance', () => {
   assert.equal(pkg.name, 'aiodos-client');
   assert.equal(pkg.version, VERSION);
-  assert.equal(VERSION, '0.1.0');
+  assert.equal(VERSION, '0.2.0');
   assert.equal(API_VERSION, 1);
   assert.equal(pkg.type, 'module');
   assert.equal(pkg.exports['.'].default, './src/index.js');

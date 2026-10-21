@@ -20,5 +20,11 @@
   "file_too_big": "announced file too large ({size} MB, at most {limit} MB)",
   "chunk_too_long": "file chunk longer than requested",
   "file_altered": "file received incomplete or changed during the transfer",
+  "inputs_unreadable": "unreadable inputs in the order received",
+  "input_size_unreadable": "unreadable input size in the order received",
+  "inputs_too_big": "inputs too large ({size} MB, at most {limit} MB)",
+  "input_hash_unreadable": "unreadable input hash",
+  "input_chunk_too_long": "input chunk longer than requested",
+  "input_altered": "input received incomplete or changed during the transfer",
   "transfer_failed": "Transfer failed."
 }

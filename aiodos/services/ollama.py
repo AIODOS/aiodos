@@ -53,6 +53,14 @@ def version():
         return None
 
 
+def is_cloud(entry: dict) -> bool:
+    """Un modèle « cloud » d'Ollama, calculé sur ses serveurs (« gpt-oss:120b-cloud ») :
+    jamais proposé, AIODOS ne calcule que sur des machines (le cloud est retiré le 21/10/2026)."""
+    tag = str(entry.get("name") or "").rpartition(":")[2]
+    return bool(entry.get("remote_host") or entry.get("remote_model")) or tag == "cloud" \
+        or tag.endswith("-cloud")
+
+
 def list_models(max_age=MODELS_TTL) -> list:
     """Modèles installés (copies : l'appelant peut les modifier sans toucher au cache)."""
     if use_integrated():
@@ -65,6 +73,8 @@ def list_models(max_age=MODELS_TTL) -> list:
     r.raise_for_status()
     out = []
     for m in r.json().get("models", []):
+        if is_cloud(m):
+            continue
         details = m.get("details") or {}
         out.append({
             "name": m["name"],

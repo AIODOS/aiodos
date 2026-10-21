@@ -1,0 +1,13 @@
+{
+  "app_id_invalid": "identifiant d'appli invalide",
+  "sha_expected": "Empreinte attendue : 64 caractères hexadécimaux en minuscules (SHA-256).",
+  "input_too_large": "Entrée trop lourde : {size} Mo au plus.",
+  "hash_mismatch": "L'empreinte du fichier reçu ne correspond pas à celle de l'adresse.",
+  "type_unknown": "Genre de fichier non reconnu : images (PNG, JPEG, WebP, GIF), vidéos (MP4, WebM) ou sons (WAV, MP3, FLAC, OGG).",
+  "inputs_quota": "Trop d'entrées gardées pour cette application : supprime des travaux finis.",
+  "app_key_required": "Les entrées s'envoient avec la clé d'une application.",
+  "file_gone": "Le fichier n'est plus sur ce PC.",
+  "integer_range": "« {name} » : un entier de {low} à {high}.",
+  "too_many_links": "Trop de liens ouverts : attends qu'ils expirent.",
+  "link_unknown": "Lien inconnu, expiré ou déjà lu."
+}

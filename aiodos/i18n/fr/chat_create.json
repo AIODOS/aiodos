@@ -17,6 +17,7 @@
   "model_on": "{label} · chez {names}",
   "no_model_image": "Aucun modèle d'images prêt.",
   "no_model_video": "Aucun modèle de vidéos prêt.",
+  "choose_model": "Choisir un modèle",
   "count_image": {
     "one": "{n} image",
     "other": "{n} images"

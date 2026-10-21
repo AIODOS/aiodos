@@ -5,8 +5,8 @@ tout de suite et suspend les nouvelles unités GPU le temps de répondre (si le
 modèle tourne ici ; servi par une machine appairée, c'est elle qui suspend les siennes).
 En mode automatique (« auto:<modèle> »), la machine qui répond est choisie au moment
 d'envoyer (network/placement.py) ; l'événement « route » dit laquelle.
-La validation des envois sortants (web, cloud) est revérifiée ici : même si
-l'interface était contournée, rien ne part dans le cloud sans accord.
+La recherche web n'a lieu que si l'envoi la dit validée : même si l'interface était
+contournée, rien ne part sur le web sans accord.
 """
 import asyncio
 import contextvars
@@ -20,11 +20,10 @@ from pydantic import BaseModel
 
 from aiodos import db, render, settings
 from aiodos.api.events import sse
-from aiodos.chat import conversations, creations, pending, pipeline
+from aiodos.chat import attachments, conversations, creations, pending, pipeline
 from aiodos.i18n import t
 from aiodos.jobs.kinds import index
 from aiodos.network import placement
-from aiodos.services import cloud
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger("aiodos.chat")
@@ -42,7 +41,6 @@ class ChatIn(BaseModel):
     model: str
     conversation_id: int | None = None
     web: bool = False                   # recherche web validée par l'utilisateur
-    cloud_confirmed: bool = False       # envoi cloud validé par l'utilisateur
     libraries: bool | None = None
     conversations: bool | None = None
     think: bool | None = None
@@ -51,6 +49,8 @@ class ChatIn(BaseModel):
     # demande les nomme, jamais d'après un réglage, ni chez une machine arrivée après
     # l'accord (une autre application cliente ne l'enverra pas sans le savoir)
     peer_libraries: list[str] = []
+    # Pièces jointes envoyées avant (api/routes/attachments.py) : liées à ce message
+    attachments: list[str] = []
     # « Régénérer », « Modifier » : ce message de l'utilisateur (replace_text : son texte, tel
     # que l'interface le croit) et la suite sont retirés, une fois la demande acceptée
     replace_from: int | None = None
@@ -76,13 +76,12 @@ async def chat(body: ChatIn, request: Request):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, t("chat.empty_message"))
-    provider = cloud.provider_of(body.model)
-    if provider:
-        if not cloud.has_key(provider):
-            raise HTTPException(400, t("chat.no_api_key", name=cloud.PROVIDERS[provider]["label"]))
-        if settings.get("cloud_confirm") and not body.cloud_confirmed:
-            raise HTTPException(409, t("chat.cloud_not_confirmed"))
-
+    asked = list(dict.fromkeys(body.attachments))
+    if len(asked) > attachments.MAX_PER_MESSAGE:
+        raise HTTPException(400, t("chat.attachments_max", n=attachments.MAX_PER_MESSAGE))
+    joined = await asyncio.to_thread(attachments.pending, asked)
+    if len(joined) != len(asked):
+        raise HTTPException(400, t("chat.attachment_missing"))
     executor = request.app.state.executor
     bus = request.app.state.bus
     try:                          # machines à essayer, la mieux placée d'abord
@@ -101,14 +100,15 @@ async def chat(body: ChatIn, request: Request):
     # conversation neuve n'est créée qu'à l'acceptation (ask)
     marker = pending.begin(conv_id) if conv_id is not None else None
     try:
-        return await _answer(body, request, text, plan, conv_id, executor, bus)
+        return await _answer(body, request, text, plan, conv_id, executor, bus, joined)
     finally:
         if marker is not None:
             pending.end(conv_id, marker)
 
 
-async def _answer(body, request, text, plan, conv_id, executor, bus):
-    """La suite de chat(), une fois la conversation connue."""
+async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
+    """La suite de chat(), une fois la conversation connue. joined : les pièces jointes de
+    la question (attachments.pending)."""
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -127,12 +127,16 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
                 cid, body.replace_from, body.replace_text)
             rows = conversations.history_rows(cid, 30)
             asked = conversations.add_message(cid, "user", text)
+            attachments.link(joined, asked)
             named = conversations.auto_title(cid, text)
-        return cid, stopped, rows, asked, named
+        # Ce qu'on a déjà lu des pièces jointes des messages précédents les accompagne
+        earlier = attachments.of_messages([r["id"] for r in rows if r["role"] == "user"])
+        extra = {mid: attachments.history_blocks(found) for mid, found in earlier.items()}
+        return cid, stopped, rows, asked, named, extra
     if await request.is_disconnected():   # parti (Stop) avant l'acceptation : rien ne change
         raise HTTPException(400, t("chat.abandoned"))
     try:
-        conv_id, stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
+        conv_id, stopped, rows, user_message_id, title, extra = await asyncio.to_thread(ask)
     except creations.CreationError as exc:
         raise HTTPException(exc.status, str(exc))
     for job_id in stopped:                # créations retirées : la vue des tâches le voit
@@ -153,11 +157,25 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
             # Arrêtée pendant la préparation (recherche web, bibliothèques des autres) : rien
-            # ne part ensuite, ni au cloud, ni à une autre machine. Et l'arrêt va à la
+            # ne part ensuite vers aucune autre machine. Et l'arrêt va à la
             # recherche web elle-même : Stop (ou le client parti) interrompt la page en cours
             # de lecture, et les suivantes ne sont pas lues
             web = pipeline.web_context(text, stop) if body.web and not stop.is_set() else None
             built = {}                    # messages selon la machine qui répond
+            read = {}                     # pièces jointes lues, selon que le modèle voit les images
+
+            def attached(model, messages):
+                """La question avec ses pièces jointes : une image va telle quelle à un modèle
+                de cette machine qui voit les images, décrite (texte) à tous les autres."""
+                images = [r for r in joined if r["kind"] == "image"]
+                native = bool(images) and pipeline.sees_images(model)
+                if native not in read:
+                    seen = images if native else []
+                    read[native] = (attachments.question_blocks(
+                        joined, stop, {r["id"] for r in seen}, status=lambda t: put(("status", t))),
+                        attachments.images_b64(seen))
+                blocks, pictures = read[native]
+                return pipeline.with_attachments(messages, blocks, pictures)
 
             def attempt(model):
                 if stop.is_set():
@@ -166,7 +184,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
                 ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
                 if (level, ok) not in built:
                     keep = pipeline.history_filter(level, ok)
-                    history = conversations.as_history(rows, keep)
+                    history = conversations.as_history(rows, keep, extra)
                     shown = {}            # noms du sommaire montrés à cette machine
                     built[level, ok] = (*pipeline.build_messages(
                         history, text, libraries=libraries, conversations=memory,
@@ -174,6 +192,10 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
                         web=web, peers=body.peer_libraries if ok else None,
                         summary=shown), shown, pipeline.inherited(rows, keep))
                 messages, sources, shown, marks = built[level, ok]
+                if joined:
+                    messages = attached(model, messages)
+                    if stop.is_set():
+                        return
                 yield "summary", shown
                 yield "inherit", marks
                 yield "sources", sources

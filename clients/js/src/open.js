@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — ouvrir une page d'AIODOS : POST /aiodos/v1/open
+// aiodos-client 0.2.0 — ouvrir une page d'AIODOS : POST /aiodos/v1/open
 // (docs/api-applications.md § 5.3). Par exemple « L'installer dans AIODOS » : l'utilisateur
 // choisit et installe le modèle dans AIODOS, où la licence est affichée ; rien n'est
 // jamais téléchargé par l'appli.

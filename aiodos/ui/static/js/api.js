@@ -44,6 +44,18 @@ export async function api(method, path, body) {
 // Fichier de l'API pour une balise <img> ou un lien (pas d'en-tête possible : jeton en paramètre)
 export const fileUrl = path => `/api${path}?t=${encodeURIComponent(token)}`;
 
+/** Un fichier envoyé tel quel (corps brut), son nom dans X-File-Name : une pièce jointe. */
+export async function rawUpload(path, file, name) {
+  const res = await fetch('/api' + path, {
+    method: 'POST', body: file,
+    headers: { 'X-Aiodos-Token': token, 'Accept-Language': lang,
+               'Content-Type': file.type || 'application/octet-stream',
+               'X-File-Name': encodeURIComponent(name || file.name || 'fichier') },
+  });
+  if (!res.ok) throw await failure(res);
+  return res.json();
+}
+
 export const get = path => api('GET', path);
 export const post = (path, body = {}) => api('POST', path, body);
 export const put = (path, body) => api('PUT', path, body);

@@ -2,6 +2,7 @@
   "scope_chat": "Chat with your models (text, attached images, the application's tools)",
   "scope_embed": "Compute embeddings (represent text so it can be found again), on this PC",
   "scope_libraries": "Read passages from your libraries",
+  "scope_engines_comfyui": "Run its ComfyUI jobs (images, videos) on the machines that have ComfyUI (this PC, your machines), allowed on each one in Settings → Engines for applications",
   "circle_here": "This PC",
   "circle_mine": "My machines",
   "circle_mine_help": "the ones I paired as “my machines”",

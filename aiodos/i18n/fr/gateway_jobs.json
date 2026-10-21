@@ -1,0 +1,22 @@
+{
+  "progress_done": "{done} sur {total} : fini",
+  "progress_paused": "{done} sur {total} · en pause",
+  "progress_cancelled": "{done} sur {total} · annulé",
+  "progress": "{done} sur {total}",
+  "progress_running": {
+    "one": "{done} sur {total} · {running} en cours sur {n} machine",
+    "other": "{done} sur {total} · {running} en cours sur {n} machines"
+  },
+  "active_quota": {
+    "one": "{n} travail actif au plus par application.",
+    "other": "{n} travaux actifs au plus par application."
+  },
+  "unfetched_quota": "Trop de fichiers pas encore récupérés par cette application.",
+  "no_comfyui": "Aucune machine permise n'a ComfyUI accordé à AIODOS (Réglages → Moteurs des applications, sur ce PC ou sur une de mes machines).",
+  "models_missing": "Il manque des modèles à « {machine} » : {models}.",
+  "app_key_required": "Les travaux se déposent avec la clé d'une application.",
+  "when_invalid": "« when » : after_current ou now.",
+  "cancel_first": "Annule le travail avant de l'oublier.",
+  "no_comfyui_reason": "aucune machine permise n'a ComfyUI accordé à AIODOS",
+  "models_missing_reason": "il manque des modèles"
+}

@@ -14,7 +14,7 @@ qui sait ainsi ce qui a été créé, sans voir les images.
 import re
 
 from aiodos import db, settings
-from aiodos.chat import conversations, retouches
+from aiodos.chat import attachments, conversations, enrich, retouches
 from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
@@ -412,6 +412,20 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     model_id = pick(media_kind, request.get("model"))
     if model_id is None:
         raise _nothing_can(media_kind)
+    # Une image jointe : l'image de départ, recadrée au format du modèle (une référence)
+    joined = attachments.pending(request.get("attachments"))
+    pictures = [r for r in joined if r["kind"] == "image"]
+    if pictures and media_kind == "video":
+        raise CreationError(t("attachments.video_from_image"))
+    if pictures:
+        spec = catalog.MODELS[model_id]
+        try:
+            start = attachments.reference_png(pictures[0], [s[:2] for s in spec["sizes"]],
+                                              spec["multiple"])
+        except attachments.AttachmentError as exc:
+            raise CreationError(str(exc)) from exc
+        request = {**request, "model": model_id, "init_path": str(start),
+                   "strength": retouches.REFERENCE, "reference": True}
     # Un format choisi (largeur, hauteur) l'emporte sur celui que la phrase suggère ; il ne
     # vaut que pour le modèle demandé (un autre a ses propres formats et durées)
     same = model_id == request.get("model")
@@ -422,9 +436,14 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     frames = request.get("frames") if same and catalog.is_video(model_id) else None
     if catalog.is_video(model_id) and not frames:
         frames = frames_for(model_id, request.get("seconds") or found.get("seconds"))
+    # Une nouvelle création : la demande courte devient une description détaillée en anglais
+    # (chat/enrich.py) ; une retouche est déjà réécrite (_followed), une variante la reprend
+    prompt = request.get("prompt") or found.get("prompt") or text
+    if not request.get("followup") and enrich.wanted(prompt):
+        prompt = enrich.enrich(prompt, media_kind, chat_model)
     try:
         params = kind.normalize({
-            "model": model_id, "prompt": request.get("prompt") or found.get("prompt") or text,
+            "model": model_id, "prompt": prompt,
             "negative": request.get("negative") or "",
             "width": size[0] if size else None, "height": size[1] if size else None,
             "count": request.get("count") or found.get("count") or 1,
@@ -435,7 +454,8 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
     return {"text": text, "conv_id": conv_id, "chat_model": chat_model, "model_id": model_id,
-            "params": params, "auto": bool(request.get("auto"))}
+            "params": params, "auto": bool(request.get("auto")),
+            "attachments": [r["id"] for r in joined], "reference": bool(request.get("reference"))}
 
 
 def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
@@ -450,6 +470,7 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
         if conv_id is None:
             conv_id = conversations.create(model=plan["chat_model"] or None)
         user_message_id = conversations.add_message(conv_id, "user", text)
+        attachments.link(attachments.pending(plan.get("attachments")), user_message_id)
         title = conversations.auto_title(conv_id, text)
         job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
                                   URGENT)
@@ -461,7 +482,9 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
             media["frames"] = params["frames"]
         if plan["auto"]:
             media["auto"] = True      # reconnue dans le message : « Répondre en texte » possible
-        if params.get("init_path"):
+        if plan.get("reference"):
+            media["reference"] = True     # partie de l'image jointe (dit sous l'image)
+        elif params.get("init_path"):
             media["retouch"] = True   # partie de l'image précédente (dit sous l'image)
         message_id = conversations.add_message(conv_id, "assistant", describe(media),
                                                media=media)

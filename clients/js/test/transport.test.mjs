@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : le transport (hôte local vérifié avant tout envoi, aucune
+// aiodos-client 0.2.0 — essais : le transport (hôte local vérifié avant tout envoi, aucune
 // redirection suivie, aucun proxy, fetch relu à chaque appel, annulation, délais).
 
 import assert from 'node:assert/strict';
@@ -90,7 +90,7 @@ test('les en-têtes : X-Aiodos-Client, Accept-Language, jamais Origin', async ()
   const { client, fake } = createFakeClient({ lang: 'en' });
   await client.models();
   for (const r of fake.requests) {
-    assert.equal(r.headers['x-aiodos-client'], 'js/0.1.0');
+    assert.equal(r.headers['x-aiodos-client'], 'js/0.2.0');
     assert.equal(r.headers['accept-language'], 'en');
     assert.equal(r.headers.origin, undefined);
   }

@@ -18,6 +18,7 @@ const SCOPES = {
   chat: 'gateway_request.scope_chat',
   embed: 'gateway_request.scope_embed',
   libraries: 'gateway_request.scope_libraries',
+  'engines:comfyui': 'gateway_request.scope_engines_comfyui',
 };
 const CIRCLES = {                    // [libellé, aide]
   here: ['gateway_request.circle_here', ''],

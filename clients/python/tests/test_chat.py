@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """La conversation (les flux de chat.json, rejoués), les messages d'OpenAI et d'Anthropic, les
 en-têtes ; les embeddings (embed.json) ; le catalogue (models.json) ; open_in_aiodos()."""
 
@@ -58,7 +58,7 @@ def test_stream_with_loading_thinking_and_text(ready, fake):
     assert headers["Authorization"] == f"Bearer {key}"
     assert headers["Accept"] == "text/event-stream"
     assert headers["Content-Type"] == "application/json"
-    assert headers["X-Aiodos-Client"] == "python/0.1.0" and headers["Accept-Language"] == "fr"
+    assert headers["X-Aiodos-Client"] == "python/0.2.0" and headers["Accept-Language"] == "fr"
     assert request["json"]["stream_options"] == {"include_usage": True}
 
 

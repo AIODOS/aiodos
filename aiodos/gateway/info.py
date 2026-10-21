@@ -25,7 +25,8 @@ from aiodos.gateway import access, access_flow, apps, limits
 router = APIRouter(prefix="/aiodos/v1")
 
 API = 1
-FEATURES = ["access", "models", "chat", "embed", "open"]
+FEATURES = ["access", "models", "chat", "embed", "open", "engines", "engines.comfyui", "jobs",
+            "jobs.pause", "inputs", "files", "files.link"]
 INSTANCE = secrets.token_urlsafe(6)          # tiré à chaque lancement
 PROOF_CONTEXT = b"aiodos-proof/1\n"
 _CHALLENGE = re.compile(r"[A-Za-z0-9_-]{16,128}")

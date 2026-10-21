@@ -1,0 +1,25 @@
+{
+  "no_install": "No ComfyUI installation found on this PC (Comfy Desktop, portable version). Enter its folder below if it is somewhere else.",
+  "kind_portable": "Portable version",
+  "kind_folder": "Configured folder",
+  "install_html": "{kind}: ComfyUI {version} — {path}",
+  "launched": "Started by AIODOS, without a window, for the current jobs.",
+  "closed": "Closed: AIODOS will start it without a window when a job is waiting.",
+  "closed_first": "Closed: AIODOS will start it without a window when a job is waiting (it starts it once to learn what it can do).",
+  "not_open": "ComfyUI is not open: open it so that the applications' jobs can start. Until then, they wait in the queue.",
+  "open_vram": {
+    "one": "Running at {url}: ComfyUI {version} · {vram} GB of video memory · {n} model.",
+    "other": "Running at {url}: ComfyUI {version} · {vram} GB of video memory · {n} models."
+  },
+  "open": {
+    "one": "Running at {url}: ComfyUI {version} · {n} model.",
+    "other": "Running at {url}: ComfyUI {version} · {n} models."
+  },
+  "searching": "Looking for ComfyUI…",
+  "jobs_active": {
+    "one": "{n} application job in progress.",
+    "other": "{n} application jobs in progress."
+  },
+  "title": "ComfyUI on this PC",
+  "refresh": "Search again"
+}

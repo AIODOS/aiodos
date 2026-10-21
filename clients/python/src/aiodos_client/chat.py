@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """La conversation (`POST /v1/chat/completions`, toujours en flux), les embeddings
 (`POST /v1/embeddings`) et l'ouverture d'une page d'AIODOS (`POST /aiodos/v1/open`).
 

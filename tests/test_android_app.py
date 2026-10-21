@@ -246,3 +246,15 @@ def test_the_engine_is_called_llama_cpp_in_the_app_even_when_missing(monkeypatch
     assert identity._engine() == "ollama"
     monkeypatch.setenv(android_app.APP_ENV, "1")
     assert identity._engine() == "llama.cpp"
+
+
+def test_the_app_installs_over_the_2_0_x_already_there():
+    """L'APK s'installe par-dessus une version d'essai d'avant la 1.0.0 (versionCode
+    jusqu'à 20002) sans qu'il faille la désinstaller : le nœud garde ses données."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import build_android
+    name, code = build_android.version()
+    assert name == __import__("aiodos").__version__
+    assert code == build_android.CODE_OFFSET + 10000 * int(name.split(".")[0]) \
+        + 100 * int(name.split(".")[1]) + int(name.split(".")[2].split("-")[0])
+    assert code > 20002

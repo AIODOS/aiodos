@@ -478,6 +478,16 @@ def _reap():
                 _stop_locked()
 
 
+def yield_gpu() -> bool:
+    """La carte graphique à un autre moteur (une unité ComfyUI d'une appli,
+    engines/gpu_share.py) : sd-server inoccupé s'arrête. → vrai s'il tournait."""
+    with _lock:
+        if _state["process"] is not None and _state["busy"] == 0:
+            _stop_locked()
+            return True
+    return False
+
+
 def _yield_to_chat():
     """Une conversation commence ici : sd-server inoccupé rend aussitôt la carte (une
     image en cours finit d'abord ; _reap l'arrête ensuite)."""

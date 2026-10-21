@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : la conversation (chat.json rejoué), les en-têtes, les outils,
+// aiodos-client 0.2.0 — essais : la conversation (chat.json rejoué), les en-têtes, les outils,
 // les délais, l'erreur en route et l'annulation réelle.
 
 import assert from 'node:assert/strict';

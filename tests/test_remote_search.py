@@ -223,7 +223,7 @@ def test_passages_of_others_go_only_to_allowed_models(circle, monkeypatch):
     assert pipeline.peers_allowed("reparti:qwen3.6:latest")
     assert pipeline.peers_allowed(f"peer:{PORTABLE}:qwen3.6:latest")
     for refused in (f"peer:{LEA}:qwen3.6:latest", "peer:inconnue:qwen3.6:latest",
-                    "cloud:mistral", "api:quelque-chose", "pas-installe:7b", ""):
+                    "api:quelque-chose", "pas-installe:7b", ""):
         assert not pipeline.peers_allowed(refused), refused
 
     def down(max_age=10):
@@ -320,7 +320,7 @@ def test_preflight_says_where_the_question_would_go(api):
         ("PC de Léa", True), ("Portable", False)]
     assert pre["consult_allowed"] is True
     db.execute("UPDATE peers SET profile=? WHERE node_id=?", (json.dumps([1]), LEA))
-    pre = api.post("/api/chat/preflight", json={"text": "x", "model": "cloud:mistral"},
+    pre = api.post("/api/chat/preflight", json={"text": "x", "model": "pas-installe:7b"},
                    headers=TOKEN).json()                      # profil faux : pas d'erreur
     assert pre["consult_allowed"] is False and [m["name"] for m in pre["consult"]] == ["Portable"]
 

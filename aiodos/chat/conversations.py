@@ -2,6 +2,7 @@
 import json
 
 from aiodos import db, i18n
+from aiodos.chat import attachments
 from aiodos.i18n import t
 from aiodos.knowledge import store
 
@@ -66,6 +67,9 @@ def get(conv_id) -> dict | None:
              media=json.loads(m["media"]) if m["media"] else None)
         for m in db.query("SELECT id, role, content, thinking, model, sources, media, created "
                           "FROM messages WHERE conversation_id=? ORDER BY id", (conv_id,))]
+    joined = attachments.of_messages([m["id"] for m in conv["messages"]])
+    for m in conv["messages"]:
+        m["attachments"] = [attachments.public(r) for r in joined.get(m["id"], [])]
     return conv
 
 
@@ -116,6 +120,7 @@ def delete(conv_id):
     """Supprime la conversation ET sa trace dans la mémoire inter-conversations."""
     db.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
     store.remove_by_origin(store.conversation_collection_id(), str(conv_id))
+    attachments.purge()                   # ses pièces jointes avec elle
 
 
 def add_message(conv_id, role, content, thinking=None, model=None, sources=None,
@@ -266,15 +271,16 @@ def history(conv_id, limit=30, with_others=True) -> list:
 def history_rows(conv_id, limit=30) -> list:
     """Les derniers messages, dans l'ordre, avec leurs sources (lus avant d'ajouter la
     question : routes/chat.py en tire l'historique de chaque machine qui peut répondre)."""
-    rows = db.query("SELECT role, content, sources, created FROM messages "
+    rows = db.query("SELECT id, role, content, sources, created FROM messages "
                     "WHERE conversation_id=? ORDER BY id DESC LIMIT ?", (conv_id, limit))
     return [dict(r) for r in reversed(rows)]
 
 
-def as_history(rows, keep=None) -> list:
+def as_history(rows, keep=None, extra=None) -> list:
     """Messages au format des modèles. keep(sources) faux : la réponse est remplacée par
     withheld() (elle s'appuie sur ce que cette machine ne doit pas recevoir). Les réponses
-    qui ne sont qu'une erreur n'y vont pas."""
+    qui ne sont qu'une erreur n'y vont pas. extra : {message: texte} placé avant le texte
+    d'un message de l'utilisateur (ce qu'on a lu de ses pièces jointes)."""
     found = []
     for r in rows:
         if r["role"] == "assistant":
@@ -283,7 +289,10 @@ def as_history(rows, keep=None) -> list:
             if keep is not None and not keep(_sources(r["sources"])):
                 found.append({"role": "assistant", "content": withheld()})
                 continue
-        found.append({"role": r["role"], "content": r["content"]})
+        content = r["content"]
+        if extra and r["role"] == "user" and "id" in r.keys() and r["id"] in extra:
+            content = f"{extra[r['id']]}\n\n{content}"
+        found.append({"role": r["role"], "content": content})
     return found
 
 

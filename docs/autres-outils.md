@@ -80,8 +80,7 @@ La liste des modèles (`/v1/models`, `/api/tags`) donne :
 | `reparti:qwen3.6` | un gros modèle réparti entre tes machines ([gros-modeles.md](gros-modeles.md)), tel quel |
 
 Les machines d'un ami ne répondent d'office que si tu l'acceptes (Réglages → Conversation,
-« faire aussi répondre les machines de mes amis »). Les modèles du cloud ne passent pas par
-la passerelle : leur envoi se valide dans AIODOS, message par message.
+« faire aussi répondre les machines de mes amis »). AIODOS n'envoie rien au cloud.
 
 Une demande calculée par **cette machine** va à son moteur : le moteur intégré d'AIODOS
 (llama.cpp, [moteur-integre.md](moteur-integre.md)), ou Ollama là où il n'est pas encore.

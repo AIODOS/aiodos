@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aiodos-client"
-version = "0.1.0"
+version = "0.2.0"
 description = "Bibliothèque Python des applications pour la passerelle locale d'AIODOS, sans dépendance."
 readme = "README.md"
 requires-python = ">=3.10"

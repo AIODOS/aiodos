@@ -32,6 +32,7 @@ class CreateIn(BaseModel):
     auto: bool = False                  # reconnue dans le message (et non demandée au bouton)
     replace_from: int | None = None     # « Modifier » : ce message et la suite sont remplacés
     replace_text: str | None = None     # son texte, tel que l'interface le croit
+    attachments: list[str] = []         # une image jointe : l'image de départ (référence)
 
 
 @router.post("/create/{message_id}/undo")

@@ -2,6 +2,7 @@
   "scope_chat": "Conversation",
   "scope_embed": "Embeddings",
   "scope_libraries": "Libraries",
+  "scope_engines_comfyui": "ComfyUI",
   "circle_here": "this PC",
   "circle_mine": "my machines",
   "circle_friends": "my friends",

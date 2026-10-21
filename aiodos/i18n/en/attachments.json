@@ -1,0 +1,10 @@
+{
+  "too_big": "Attachment too large: {size} MB at most.",
+  "empty": "Empty attachment.",
+  "reading": "Reading “{name}”…",
+  "reference_not_image": "Only an image can be the starting point of a creation.",
+  "reference_unreadable": "Unreadable attached image: “{name}”.",
+  "video_from_image": "A video can't start from an image yet: attach it to an image request.",
+  "not_found": "Attachment not found.",
+  "not_found_or_sent": "Attachment not found, or already sent."
+}

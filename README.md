@@ -2,17 +2,26 @@
 
 *English version: [README.en.md](README.en.md).*
 
-> *AI* + *hodos*, « le chemin » en grec, celui de « méthode » et de « synode » (faire
-> route ensemble) : **la voie de l'IA, faite ensemble**. Le projet s'appelait Cœur IA
-> jusqu'au 16/10/2026 ; ses données sont reprises telles quelles.
+**La voie de l'IA, faite ensemble.** AIODOS fait tourner l'IA sur tes propres machines et
+les fait travailler ensemble : tes PC, ton téléphone, ceux de tes amis et, à terme, ceux de
+tous les participants du réseau public. Chaque gros travail est découpé en petites unités
+que les machines libres se partagent, comme les morceaux d'un torrent ; un modèle trop gros
+pour une seule carte graphique se répartit entre plusieurs.
 
-Atelier d'IA **100 % local** : chat, code et documents avec des modèles open source
-(Mistral, Qwen…), sur ta machine, servis par llama.cpp intégré à AIODOS (ou par [Ollama]). **Plusieurs machines peuvent
-travailler ensemble** : chaque gros travail est découpé en petites unités
-indépendantes, que tes PC appairés se partagent sur le réseau local.
+- **Converser, coder, chercher dans tes documents** avec des modèles ouverts (Mistral,
+  Qwen…), servis par llama.cpp, intégré à AIODOS (ou par [Ollama]) ; l'IA cite ses sources.
+- **Créer des images et des vidéos** dans la conversation, calculées par les machines qui
+  ont le modèle.
+- **Brancher tes applications et tes outils** (PANDORA, ARKLIGHT PC, un éditeur de code, un
+  assistant…) : ils profitent de la même puissance partagée.
 
-> **Local par défaut, distribué à la demande.** Rien ne quitte la machine sans
-> action explicite : le web et le cloud sont optionnels et validés avant chaque envoi.
+> **Tes machines d'abord, le reste avec ton accord.** Tes machines appairées calculent
+> ensemble dès la première ouverture ; tes amis et le réseau public, seulement si tu
+> l'acceptes. Entre machines, tout est chiffré, et rien n'est gardé par celle qui calcule.
+> Jamais de cloud ; le web reste optionnel, et chaque recherche se valide d'abord.
+
+*AI* + *hodos* : « le chemin » en grec, celui de « méthode » et de « synode » (faire route
+ensemble).
 
 AIODOS parle français et anglais : il suit la langue du système (navigateur, Windows,
 Android), l'anglais quand celle-ci n'est ni l'une ni l'autre, et se change dans Réglages →
@@ -29,11 +38,16 @@ Langue.
 
 ## Ce que fait la phase 0
 
-- **Conversations** avec les modèles locaux (et Mistral/Qwen cloud en option),
+- **Conversations** avec les modèles de tes machines (aucun modèle du cloud),
   réponses en streaming, rendu Markdown et coloration du code, dossiers, renommage,
   recherche dans leur contenu ; « Régénérer » la dernière réponse (avec le modèle choisi
   à ce moment) et « Modifier » le dernier message, la suite de la conversation et sa
   trace en mémoire s'effaçant.
+- **Pièces jointes** (trombone, fichier glissé sur la conversation, image collée) : une
+  image, une vidéo, un son, un document ou un texte. Le modèle lit leur texte avec la
+  question (document, image décrite, son ou vidéo transcrits) ; un modèle de ce PC qui voit
+  les images les reçoit telles quelles ; une création d'image part de l'image jointe, sa
+  composition gardée. Elles restent sur ce PC et partent avec leur conversation.
 - **Réflexion des modèles** (Qwen3…) affichée en direct, désactivable pour aller vite.
 - **Bibliothèques de connaissance** : fichiers, dossiers entiers, pages web ; tous les
   formats (PDF, Word, Excel, PowerPoint, code…), images (OCR + description par un
@@ -48,8 +62,9 @@ Langue.
 
 ## Faire travailler plusieurs machines (phase 1)
 
-1. **Activer le réseau local** sur chaque PC (vue « Réseau local »). Windows demande
-   l'autorisation du pare-feu pour Python : l'accepter pour les **réseaux privés** seulement.
+1. **Le réseau local** est actif dès la première ouverture (vue « Réseau local » pour le
+   couper). Windows demande l'autorisation du pare-feu pour Python : l'accepter pour les
+   **réseaux privés** seulement.
 2. **Appairer** : les machines AIODOS du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
@@ -90,8 +105,8 @@ Comment le travail circule :
 - **Réciprocité** : chaque machine tient le compte du temps de calcul donné et reçu ;
   celles qui ont le plus calculé pour toi sont servies en premier.
 
-**Prêter ses modèles pour les conversations** (vue « Cette machine », désactivé par
-défaut) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, fait répondre
+**Prêter ses modèles pour les conversations** (vue « Cette machine », activé par défaut
+entre mes machines) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, fait répondre
 ses conversations par le modèle d'une autre machine. La réponse est calculée là-bas et
 arrive en flux chiffré, morceau par morceau ; le bouton Stop coupe la génération là-bas.
 Le texte de la conversation passe par la machine qui prête le temps de la réponse, sans y
@@ -108,8 +123,7 @@ Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC e
 des conversations ne la suivent jamais, ni les réponses qui s'en sont servies, ni celles qui
 ont pu les reprendre ensuite dans la même conversation (l'historique envoyé les remplace par
 une mention) ; chez un ami, seules les bibliothèques partagées avec tes amis donnent leurs
-extraits. Un modèle du cloud, après validation, ne reçoit ni les bibliothèques gardées sur ce
-PC, ni la mémoire des conversations.
+extraits.
 
 **Ouvrir AIODOS aux applications** (PANDORA, ARKLIGHT PC…) : chaque appli demande l'accès
 d'elle-même ; une carte s'affiche dans AIODOS avec un code à 6 chiffres à comparer, ce qu'elle
@@ -169,8 +183,8 @@ recherche reçue est notée dans la vue Réseau, sans la question. Détails :
 [`aiodos-net`](compagnon/README.md) (Rust, Iroh), relie les machines appairées quand
 elles ne sont plus sur le même réseau (téléphone en 4G…) : une connexion chiffrée par
 machine, en direct ou par un relais, qui n'accepte que les machines appairées. Il est
-désactivé par défaut (réglage `internet_enabled`) ; le réseau local reste le premier
-chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
+actif dès la première ouverture (réglage `internet_enabled`, pour le couper) ; le réseau
+local reste le premier chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
 
 **Un modèle trop gros pour une seule machine (prototype)** se découpe entre mes machines
 avec [llama.cpp] : chacune en garde une tranche de couches sur sa carte graphique le temps
@@ -189,13 +203,16 @@ vidéo : [docs/generation-repartie.md](docs/generation-repartie.md).
 demande comme à un autre assistant (« Crée une image d'un phare sous l'orage »), ou avec
 le bouton Image à côté du message (modèle, format, durée, nombre), et on les retouche de
 la même façon (« Fais-la de nuit » : la nouvelle image part de la précédente ; « Encore
-une » : une variante). Chacune devient une
+une » : une variante). Avant de créer, le modèle de conversation change la demande courte en
+une description détaillée en anglais, comme les services en ligne (désactivable dans
+Réglages → Modèles). Chacune devient une
 unité de la file, calculée ici ou par mes machines qui ont le même modèle et prêtent leur
 puissance ; elle s'affiche dans la conversation et n'est gardée qu'ici (dans
 `Images\AIODOS` pour AIODOS installé, ou le dossier choisi dans les Réglages). La vue
-Images et vidéos réunit la galerie et les modèles. Le moteur est
+Images et vidéos réunit les créations en cours et la galerie ; les modèles se gèrent dans
+Réglages → Modèles, avec ceux des discussions, du plus puissant au moins puissant. Le moteur est
 [stable-diffusion.cpp], livré avec les mises à jour, et le modèle Z-Image Turbo
-(Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis la vue,
+(Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis les Réglages,
 ou copié d'une de mes machines qui l'a déjà, sans Internet. Sur une
 RTX 4070 de portable : 22 s par image en 1024 × 1024. Pour la vidéo, Wan 2.1 (Apache-2.0,
 7,2 Go) : 2 s de vidéo en 480p en moins de 4 minutes ; MiniMax H3 (vidéo et son) est aussi
@@ -292,7 +309,7 @@ aiodos/
 │                      d'AIODOS et d'Ollama (models.py), catalogue et téléchargement
 │                      (catalog.py, download.py), mêmes fonctions qu'Ollama (integrated.py)
 ├── services/          modèles (ollama.py : moteur intégré ou Ollama), extraction de
-│                      fichiers, médias, web, cloud
+│                      fichiers, médias, web
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
 │                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses
@@ -322,7 +339,20 @@ aiodos/
 │   ├── mcp_stdio.py   pont stdio, pour les assistants qui lancent un programme
 │   ├── catalog.py     modèles proposés et leurs identifiants
 │   ├── answer.py      réponse par cette machine ou par une machine appairée, selon le lieu
-│   └── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
+│   ├── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
+│   ├── jobs_api.py    travaux ComfyUI des applis (/aiodos/v1/jobs : déposer, suivre, commandes)
+│   ├── engines_api.py moteurs vus par l'appli et pré-vol ; inputs_api.py : entrées par empreinte
+│   ├── files_api.py   fichiers produits (plages) ; file_store.py, input_store.py : leur rangement
+│   ├── links_api.py   liens vers un fichier, lus sans clé (1 h et 5 lectures au plus)
+│   └── retention.py   garde : récupérés + 7 jours ; ownership.py : accès remplacé ou retiré
+├── engines/           moteurs des applis : AIODOS rejoue leurs graphes, ne les remplace pas
+│   ├── comfy_find.py  ComfyUI de ce PC (Desktop, version portable, instance ouverte)
+│   ├── comfy_client.py son API ; comfyui.py : rejouer une unité (entrées, suivi, sorties)
+│   ├── comfy_instance.py ComfyUI lancé sans fenêtre quand il n'est pas ouvert (L2c)
+│   ├── comfy_graph.py graphes au format API, en fonctions pures ; comfy_contract.py : empreintes
+│   ├── lending.py     ce qu'une machine annonce de son ComfyUI à mes machines, appariement
+│   ├── machines.py    où un travail peut tourner (ce PC, mes machines qui ont ComfyUI)
+│   └── media.py       genre d'un fichier d'après ses octets
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │                      qui se comporte comme un torrent : pauses, reprise sans perte
 │                      (docs/file-de-travaux.md)
@@ -331,7 +361,7 @@ aiodos/
 │   ├── pacing.py      cadence du travail de fond : conversations d'abord, batterie ménagée
 │   ├── leases.py      baux : unités confiées pour un temps limité à une autre machine
 │   ├── registry.py    tâches portables : calcul (n'importe où) / intégration (chez soi)
-│   └── kinds/         types de travaux (indexation, réindexation, images…)
+│   └── kinds/         types de travaux (indexation, réindexation, images, travaux ComfyUI…)
 ├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
 │   ├── interfaces.py  vraies cartes réseau (Wi-Fi, Ethernet), sans celles d'un VPN
@@ -392,7 +422,7 @@ seule, et ses liens ne s'ouvrent que vers le web ou un courriel. La passerelle d
 outils, fermée par défaut, n'écoute elle aussi que sur `127.0.0.1`, vérifie `Host` et
 `Origin` (une page web ne s'en sert pas) et exige sa clé d'accès, stable et renouvelable.
 
-**Audit du 20/10/2026** : 37 failles confirmées, corrigées le 21/10 pour la version 2.0.2,
+**Audit du 20/10/2026** : 37 failles confirmées, corrigées le 21/10 pour la version 1.0.0,
 sauf une (le pont MCP de la passerelle, réécrite à part). Modèle de menace, failles,
 bornes, compatibilité et ce qui reste ouvert : [docs/securite.md](docs/securite.md).
 **L'appairage par code passe au protocole 2** : mettre à jour toutes les machines,
@@ -401,7 +431,8 @@ se parler.
 
 ## Données
 
-Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais versionné.
+Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais versionné. Le
+projet s'appelait Cœur IA jusqu'au 16/10/2026 : ses données sont reprises telles quelles.
 
 ## Tests
 

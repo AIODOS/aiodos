@@ -1,8 +1,8 @@
 """Les droits d'une application et le lieu de ses calculs (docs/api-applications.md § 4.5 à
 4.7).
 
-- Droits par capacité, pas par modèle : chat, embed, libraries. Chaque route de la
-  passerelle en exige un, ou se contente d'une clé valide (catalogues, info, retrait), ou est
+- Droits par capacité, pas par modèle : chat, embed, libraries, engines:comfyui (les
+  travaux ComfyUI, leurs entrées et leurs fichiers). Chaque route de la passerelle en exige un, ou se contente d'une clé valide (catalogues, info, retrait), ou est
   publique (la liste exacte : PUBLIC). Une route inconnue de cette table exige une clé.
 - Lieu : des cercles, here (ce PC), mine (mes machines), friends (mes amis), public (les
   inconnus du réseau public). L'appli a ceux qu'on lui a accordés ; une requête peut les
@@ -14,20 +14,26 @@
 from aiodos.gateway.errors import ApiError
 from aiodos.i18n import t
 
-SCOPES = ("chat", "embed", "libraries")
+SCOPES = ("chat", "embed", "libraries", "engines:comfyui")
 CIRCLES = ("here", "mine", "friends", "public")
 PRIORITIES = ("interactive", "background")
 # Cercles que cette version sert, par capacité : les conversations partent chez mes machines
 # et mes amis (prêt de modèles), pas encore chez les inconnus ; embeddings et bibliothèques
-# restent sur ce PC
+# restent sur ce PC ; les travaux ComfyUI se calculent par le ComfyUI de ce PC et de mes
+# machines (livraison L2b ; les amis et les inconnus viendront en L3 et L4)
 SERVED = {"chat": frozenset({"here", "mine", "friends"}), "embed": frozenset({"here"}),
-          "libraries": frozenset({"here"})}
+          "libraries": frozenset({"here"}), "engines:comfyui": frozenset({"here", "mine"})}
+# Les routes des travaux de moteur : toutes exigent le droit du moteur
+ENGINE_ROUTES = ("/aiodos/v1/engines", "/aiodos/v1/inputs/", "/aiodos/v1/jobs",
+                 "/aiodos/v1/files/")
 
 ANY = "any"                 # une clé valide suffit
 PUBLIC = "public"           # sans clé
 PUBLIC_ROUTES = {("GET", "/"), ("HEAD", "/"), ("GET", "/aiodos/v1/info"),
                  ("HEAD", "/aiodos/v1/info"), ("POST", "/aiodos/v1/access/requests"),
-                 ("POST", "/aiodos/v1/access/token")}
+                 ("POST", "/aiodos/v1/access/token"), ("GET", "/aiodos/v1/links/{token}")}
+# Un lien vers un fichier se lit sans clé : son jeton tient lieu de clé (gateway/links_api.py)
+LINKS = "/aiodos/v1/links/"
 _EXACT = {
     "/v1/chat/completions": "chat", "/v1/completions": "chat", "/v1/embeddings": "embed",
     "/api/chat": "chat", "/api/generate": "chat", "/api/show": "chat", "/api/ps": "chat",
@@ -40,6 +46,10 @@ def required(method: str, path: str) -> str:
     porte parfois une clé (droits en plus) : elle reste publique."""
     if (method.upper(), path) in PUBLIC_ROUTES:
         return PUBLIC
+    if method.upper() == "GET" and path.startswith(LINKS):
+        return PUBLIC
+    if path.startswith(ENGINE_ROUTES):
+        return "engines:comfyui"
     return _EXACT.get(path, ANY)
 
 
@@ -111,6 +121,24 @@ def for_request(request, capability: str):
     if context.kind == "general":
         return effective(context.reach, header, capability) if header else None
     return effective(context.reach, header, capability, context.consented(capability))
+
+
+def for_job(request, capability: str, asked) -> list:
+    """Les cercles d'un travail : ceux de la requête (for_request), resserrés par « where » du
+    corps, qui comme X-Aiodos-Where ne peut pas dépasser l'accord (403 where_denied). Un cercle
+    accordé que cette version ne sert pas encore est laissé de côté, sans erreur."""
+    allowed = for_request(request, capability)
+    allowed = set(CIRCLES) if allowed is None else set(allowed)
+    if asked is not None:
+        wanted = set(parse_where(asked))
+        context = getattr(request.state, "aiodos_app", None)
+        granted = set(context.reach) if context is not None else set(CIRCLES)
+        wider = [c for c in CIRCLES if c in wanted - granted]
+        if wider:
+            raise ApiError("where_denied", t("gateway_access.where_refused", circle=wider[0]),
+                           detail={"allowed": [c for c in CIRCLES if c in granted]})
+        allowed &= wanted
+    return [c for c in CIRCLES if c in allowed]
 
 
 def priority_of(request) -> str:

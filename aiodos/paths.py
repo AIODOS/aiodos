@@ -2,7 +2,7 @@
 
 Hors Windows (Linux, macOS, Android), les données ne sont lisibles que par l'utilisateur :
 dossier en 0700, fichiers en 0600 (keep_private). La base y garde en clair les clés des
-machines appairées et du cloud (node/vault.py), les conversations et les bibliothèques ;
+machines appairées (node/vault.py), les conversations et les bibliothèques ;
 un autre compte de la machine ne doit pas pouvoir la lire. Ce qu'AIODOS écrit pour
 l'utilisateur hors de ses données reprend les droits habituels de celui-ci (for_user). Sous
 Windows, ce sont les droits du profil (%LOCALAPPDATA%) et DPAPI qui s'en chargent ; une copie
@@ -243,6 +243,22 @@ def _adopt_old_database(path: Path):
 def work_dir() -> Path:
     """Fichiers reçus d'autres machines le temps de calculer pour elles."""
     d = data_dir() / "tmp" / "work"
+    _make_dir(d, parents=True)
+    return d
+
+
+def gateway_dir(part: str) -> Path:
+    """Les fichiers des applications (gateway/input_store.py, file_store.py) : « inputs »
+    (ce qu'elles envoient avant un travail), « out » (ce que leurs travaux produisent). Hors
+    du dossier Images, qui peut être synchronisé."""
+    d = data_dir() / "gateway" / part
+    _make_dir(d, parents=True)
+    return d
+
+
+def engine_runs_dir() -> Path:
+    """Le dossier de calcul des unités de moteur (ComfyUI) : effacé au démarrage."""
+    d = data_dir() / "tmp" / "engine_runs"
     _make_dir(d, parents=True)
     return d
 

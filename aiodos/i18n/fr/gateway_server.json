@@ -1,4 +1,5 @@
 {
+  "input_too_large": "Entrée trop lourde : {size} Mio au plus.",
   "too_large": "Requête trop grosse : {size} Mio au plus.",
   "port_taken_by": "Le port {port} est déjà pris sur cette machine ({program}) : choisis-en un autre dans les Réglages.",
   "port_taken": "Le port {port} est déjà pris sur cette machine : choisis-en un autre dans les Réglages.",

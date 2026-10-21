@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : les erreurs du contrat (code, sous-classe, hint, retryable,
+// aiodos-client 0.2.0 — essais : les erreurs du contrat (code, sous-classe, hint, retryable,
 // detail, retryAfter), et la clé absente des messages, des JSON et du journal.
 
 import assert from 'node:assert/strict';
@@ -142,6 +142,58 @@ test('la clé n’apparaît jamais : messages, toString, JSON, inspection, journ
   assert.ok(logs.length > 0);
   for (const line of logs) assert.ok(!line.includes(SECRET), line);
   for (const s of [String(client), JSON.stringify(client), inspect(client, { depth: 5 })]) assert.ok(!s.includes(SECRET), s);
+});
+
+test('les codes des travaux ComfyUI : une classe chacun, des messages de secours en français et en anglais', () => {
+  const classes = {
+    graph_not_api: 'GraphInvalid',
+    graph_invalid: 'GraphInvalid',
+    patch_invalid: 'GraphInvalid',
+    graph_too_large: 'GraphTooLarge',
+    forbidden_value: 'ForbiddenValue',
+    forbidden_node: 'ForbiddenNode',
+    input_missing: 'InputMissing',
+    input_hash_mismatch: 'InputHashMismatch',
+    input_too_large: 'InputTooLarge',
+    engine_not_found: 'EngineNotFound',
+    input_not_found: 'InputNotFound',
+    job_not_found: 'JobNotFound',
+    file_not_found: 'FileNotFound',
+    engine_unavailable: 'EngineUnavailable',
+    model_unavailable: 'ModelUnavailable',
+    model_unresolved: 'ModelUnresolved',
+    model_ambiguous: 'ModelAmbiguous',
+    job_not_cancellable: 'JobNotCancellable',
+    job_not_pausable: 'JobNotPausable',
+    quota_exceeded: 'QuotaExceeded',
+    job_failed: 'JobFailed',
+  };
+  for (const [code, name] of Object.entries(classes)) {
+    assert.equal(errorClassFor(code).name, name, code);
+    // une réponse sans message : celui du client, dans la langue demandée
+    if (code !== 'job_failed') {
+      const fr = errorFromResponse({ status: 409, json: { error: { code } } });
+      const en = errorFromResponse({ status: 409, json: { error: { code } }, lang: 'en' });
+      assert.equal(fr.name, name, code);
+      assert.ok(fr.message && fr.message !== code && !/HTTP/.test(fr.message), `${code} : ${fr.message}`);
+      assert.ok(en.message && en.message !== fr.message, `${code} : ${en.message}`);
+    }
+  }
+  // les champs portés par les sous-classes
+  const detail = (code, d) => errorFromResponse({ status: 400, json: { error: { code, message: 'x', aiodos: { detail: d } } } });
+  assert.deepEqual(detail('model_unavailable', { models: [{ folder: null, name: 'a.safetensors' }] }).models, [{ folder: null, name: 'a.safetensors' }]);
+  assert.deepEqual(detail('model_unavailable', {}).models, []);
+  assert.deepEqual(detail('model_ambiguous', { candidates: ['checkpoints', 'loras'] }).candidates, ['checkpoints', 'loras']);
+  assert.equal(detail('model_unresolved', { model: 'ckpt' }).model, 'ckpt');
+  const fv = detail('forbidden_value', { node: '10', input: 'image', reason: 'file_input' });
+  assert.deepEqual([fv.node, fv.input, fv.reason], ['10', 'image', 'file_input']);
+  assert.equal(detail('forbidden_node', { class: 'OpenAIDalle3' }).nodeClass, 'OpenAIDalle3');
+  assert.equal(detail('input_missing', { input: 'ref0' }).input, 'ref0');
+  assert.deepEqual([detail('graph_invalid', { node: '3', graph: 1 }).node, detail('graph_invalid', { node: '3', graph: 1 }).graph], ['3', 1]);
+  assert.equal(detail('quota_exceeded', { quota: 'active_jobs' }).quota, 'active_jobs');
+  // réessayer a un sens pour ces deux-là (comme la passerelle le dit)
+  assert.equal(errorFromResponse({ status: 409, json: { error: { code: 'model_unavailable' } } }).retryable, true);
+  assert.equal(errorFromResponse({ status: 429, json: { error: { code: 'quota_exceeded' } } }).retryable, true);
 });
 
 test('redact masque les clés d’appli, la clé générale et les en-têtes Bearer', () => {

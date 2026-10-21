@@ -1,0 +1,1766 @@
+{
+ "interactions": [
+  {
+   "name": "moteurs",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/engines",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "object": "list",
+     "engines": [
+      {
+       "id": "comfyui",
+       "label": "ComfyUI",
+       "here": {
+        "enabled": true,
+        "version": "0.35.1",
+        "vram_mib": 8187
+       },
+       "machines": {
+        "here": 1,
+        "mine": null,
+        "friends": null,
+        "public": null
+       },
+       "models": [
+        {
+         "folder": "checkpoints",
+         "name": "sd_xl_base_1.0.safetensors",
+         "sha256": null,
+         "size": null,
+         "where": {
+          "here": true,
+          "mine": [],
+          "friends": null,
+          "public": null
+         },
+         "license": null
+        }
+       ],
+       "object_info": {
+        "available": true,
+        "machine": "PC-BUREAU",
+        "digest": "c0a1f3e29b7d4e51"
+       },
+       "recipes": 0
+      }
+     ]
+    }
+   },
+   "exact": [
+    "object",
+    "engines.0.id"
+   ]
+  },
+  {
+   "name": "entrée envoyée",
+   "request": {
+    "method": "PUT",
+    "path": "/aiodos/v1/inputs/{sha256}",
+    "headers": {
+     "Authorization": "Bearer {key}",
+     "Content-Type": "image/png"
+    },
+    "body": "{png}"
+   },
+   "response": {
+    "status": 201,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "sha256": "a0c0ac6fdc1bfd7e453c59eb5f6cbbcac9f4e7fb16731694bd16cc3408671505",
+     "size": 74,
+     "type": "image/png"
+    }
+   },
+   "exact": [
+    "type"
+   ]
+  },
+  {
+   "name": "entrée déjà là",
+   "request": {
+    "method": "HEAD",
+    "path": "/aiodos/v1/inputs/{sha256}",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": null
+   }
+  },
+  {
+   "name": "entrée inconnue",
+   "request": {
+    "method": "HEAD",
+    "path": "/aiodos/v1/inputs/0000000000000000000000000000000000000000000000000000000000000000",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 404,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": null
+   }
+  },
+  {
+   "name": "entrée à la mauvaise empreinte",
+   "request": {
+    "method": "PUT",
+    "path": "/aiodos/v1/inputs/0000000000000000000000000000000000000000000000000000000000000000",
+    "headers": {
+     "Authorization": "Bearer {key}",
+     "Content-Type": "image/png"
+    },
+    "body": "{png}"
+   },
+   "response": {
+    "status": 400,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "L'empreinte du fichier reçu ne correspond pas à celle de l'adresse.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "input_hash_mismatch",
+      "aiodos": {
+       "hint": "Calcule le SHA-256 des octets envoyés.",
+       "retryable": false,
+       "detail": {
+        "sha256": "a0c0ac6fdc1bfd7e453c59eb5f6cbbcac9f4e7fb16731694bd16cc3408671505"
+       }
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code"
+   ]
+  },
+  {
+   "name": "pré-vol",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/engines/comfyui/plan",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "engine": "comfyui",
+     "graph": {
+      "4": {
+       "class_type": "CheckpointLoaderSimple",
+       "inputs": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+       }
+      },
+      "6": {
+       "class_type": "CLIPTextEncode",
+       "inputs": {
+        "text": "Une cabane",
+        "clip": [
+         "4",
+         1
+        ]
+       }
+      },
+      "10": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "@in:ref0"
+       }
+      },
+      "3": {
+       "class_type": "KSampler",
+       "inputs": {
+        "model": [
+         "4",
+         0
+        ],
+        "seed": "@seed",
+        "steps": 20,
+        "cfg": 7.0,
+        "positive": [
+         "6",
+         0
+        ],
+        "negative": [
+         "6",
+         0
+        ],
+        "latent_image": [
+         "10",
+         0
+        ]
+       }
+      },
+      "8": {
+       "class_type": "VAEDecode",
+       "inputs": {
+        "samples": [
+         "3",
+         0
+        ],
+        "vae": [
+         "4",
+         2
+        ]
+       }
+      },
+      "9": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": [
+         "8",
+         0
+        ],
+        "filename_prefix": "mood"
+       }
+      }
+     },
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "inputs": {
+      "ref0": {
+       "sha256": "{sha256}"
+      }
+     },
+     "items": [
+      {
+       "label": "Mood 1",
+       "seed": 1201,
+       "set": [
+        [
+         "6",
+         "text",
+         "Salon baigné de lumière dorée"
+        ]
+       ]
+      },
+      {
+       "label": "Mood 2",
+       "seed": 1202,
+       "set": [
+        [
+         "6",
+         "text",
+         "Cuisine de nuit, néons"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "ok": true,
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "machines": {
+      "here": true,
+      "mine": null,
+      "friends": null,
+      "public": null
+     },
+     "missing": [],
+     "refused": {},
+     "licenses": [],
+     "units": 2,
+     "estimate": null
+    }
+   },
+   "exact": [
+    "ok",
+    "units"
+   ]
+  },
+  {
+   "name": "travail déposé",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "engine": "comfyui",
+     "graph": {
+      "4": {
+       "class_type": "CheckpointLoaderSimple",
+       "inputs": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+       }
+      },
+      "6": {
+       "class_type": "CLIPTextEncode",
+       "inputs": {
+        "text": "Une cabane",
+        "clip": [
+         "4",
+         1
+        ]
+       }
+      },
+      "10": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "@in:ref0"
+       }
+      },
+      "3": {
+       "class_type": "KSampler",
+       "inputs": {
+        "model": [
+         "4",
+         0
+        ],
+        "seed": "@seed",
+        "steps": 20,
+        "cfg": 7.0,
+        "positive": [
+         "6",
+         0
+        ],
+        "negative": [
+         "6",
+         0
+        ],
+        "latent_image": [
+         "10",
+         0
+        ]
+       }
+      },
+      "8": {
+       "class_type": "VAEDecode",
+       "inputs": {
+        "samples": [
+         "3",
+         0
+        ],
+        "vae": [
+         "4",
+         2
+        ]
+       }
+      },
+      "9": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": [
+         "8",
+         0
+        ],
+        "filename_prefix": "mood"
+       }
+      }
+     },
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "inputs": {
+      "ref0": {
+       "sha256": "{sha256}"
+      }
+     },
+     "items": [
+      {
+       "label": "Mood 1",
+       "seed": 1201,
+       "set": [
+        [
+         "6",
+         "text",
+         "Salon baigné de lumière dorée"
+        ]
+       ]
+      },
+      {
+       "label": "Mood 2",
+       "seed": 1202,
+       "set": [
+        [
+         "6",
+         "text",
+         "Cuisine de nuit, néons"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 202,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "queued",
+     "pause": null,
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 0,
+      "running": 0,
+      "queued": 2,
+      "failed": 0,
+      "percent": 0,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "queued",
+      "machines": [],
+      "message": "0 sur 2"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "queued",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null,
+       "stage": "waiting_machine"
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "queued",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null,
+       "stage": "waiting_machine"
+      }
+     ],
+     "files": [],
+     "error": null,
+     "cancelled_by": null,
+     "created_at": 1760950000,
+     "started_at": null,
+     "completed_at": null
+    }
+   },
+   "exact": [
+    "object",
+    "engine",
+    "label",
+    "client_ref",
+    "progress.total"
+   ]
+  },
+  {
+   "name": "même client_ref : le même travail",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "engine": "comfyui",
+     "graph": {
+      "4": {
+       "class_type": "CheckpointLoaderSimple",
+       "inputs": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+       }
+      },
+      "6": {
+       "class_type": "CLIPTextEncode",
+       "inputs": {
+        "text": "Une cabane",
+        "clip": [
+         "4",
+         1
+        ]
+       }
+      },
+      "10": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "@in:ref0"
+       }
+      },
+      "3": {
+       "class_type": "KSampler",
+       "inputs": {
+        "model": [
+         "4",
+         0
+        ],
+        "seed": "@seed",
+        "steps": 20,
+        "cfg": 7.0,
+        "positive": [
+         "6",
+         0
+        ],
+        "negative": [
+         "6",
+         0
+        ],
+        "latent_image": [
+         "10",
+         0
+        ]
+       }
+      },
+      "8": {
+       "class_type": "VAEDecode",
+       "inputs": {
+        "samples": [
+         "3",
+         0
+        ],
+        "vae": [
+         "4",
+         2
+        ]
+       }
+      },
+      "9": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": [
+         "8",
+         0
+        ],
+        "filename_prefix": "mood"
+       }
+      }
+     },
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "inputs": {
+      "ref0": {
+       "sha256": "{sha256}"
+      }
+     },
+     "items": [
+      {
+       "label": "Mood 1",
+       "seed": 1201,
+       "set": [
+        [
+         "6",
+         "text",
+         "Salon baigné de lumière dorée"
+        ]
+       ]
+      },
+      {
+       "label": "Mood 2",
+       "seed": 1202,
+       "set": [
+        [
+         "6",
+         "text",
+         "Cuisine de nuit, néons"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "queued",
+     "pause": null,
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 0,
+      "running": 0,
+      "queued": 2,
+      "failed": 0,
+      "percent": 0,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "queued",
+      "machines": [],
+      "message": "0 sur 2"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "queued",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null,
+       "stage": "waiting_machine"
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "queued",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null,
+       "stage": "waiting_machine"
+      }
+     ],
+     "files": [],
+     "error": null,
+     "cancelled_by": null,
+     "created_at": 1760950000,
+     "started_at": null,
+     "completed_at": null
+    }
+   },
+   "exact": [
+    "object",
+    "client_ref"
+   ]
+  },
+  {
+   "name": "travail en cours",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs/{job_id}",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "in_progress",
+     "pause": null,
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 1,
+      "running": 1,
+      "queued": 0,
+      "failed": 0,
+      "percent": 50,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "running",
+      "machines": [
+       {
+        "name": "PC-BUREAU",
+        "place": "here",
+        "running": 1,
+        "done": 1
+       }
+      ],
+      "message": "1 sur 2 · 1 en cours sur 1 machine"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "completed",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [
+        "file_juJXvOesHQXzSYVLCmYBXw"
+       ],
+       "seconds": 10.6
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "in_progress",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [],
+       "seconds": null,
+       "stage": "running"
+      }
+     ],
+     "files": [
+      {
+       "id": "file_juJXvOesHQXzSYVLCmYBXw",
+       "unit": 0,
+       "node": "9",
+       "type": "image/png",
+       "bytes": 1014522,
+       "sha256": "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7",
+       "width": 768,
+       "height": 768,
+       "machine": "PC-BUREAU",
+       "place": "here",
+       "engine": "comfyui 0.35.1",
+       "verified": "none",
+       "fetched": false,
+       "expires_at": null,
+       "created_at": 1760950013
+      }
+     ],
+     "error": null,
+     "cancelled_by": null,
+     "created_at": 1760950000,
+     "started_at": 1760950001,
+     "completed_at": null
+    }
+   },
+   "exact": [
+    "object"
+   ],
+   "server": "client"
+  },
+  {
+   "name": "travail fini",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs/{job_id}",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "completed",
+     "pause": null,
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 2,
+      "running": 0,
+      "queued": 0,
+      "failed": 0,
+      "percent": 100,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "done",
+      "machines": [
+       {
+        "name": "PC-BUREAU",
+        "place": "here",
+        "running": 0,
+        "done": 2
+       }
+      ],
+      "message": "2 sur 2 : fini"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "completed",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [
+        "file_juJXvOesHQXzSYVLCmYBXw"
+       ],
+       "seconds": 10.6
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "completed",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [
+        "file_bvuRVoags4c-28D6pPV-yw"
+       ],
+       "seconds": 4.4
+      }
+     ],
+     "files": [
+      {
+       "id": "file_juJXvOesHQXzSYVLCmYBXw",
+       "unit": 0,
+       "node": "9",
+       "type": "image/png",
+       "bytes": 1014522,
+       "sha256": "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7",
+       "width": 768,
+       "height": 768,
+       "machine": "PC-BUREAU",
+       "place": "here",
+       "engine": "comfyui 0.35.1",
+       "verified": "none",
+       "fetched": false,
+       "expires_at": null,
+       "created_at": 1760950013
+      },
+      {
+       "id": "file_bvuRVoags4c-28D6pPV-yw",
+       "unit": 1,
+       "node": "9",
+       "type": "image/png",
+       "bytes": 1004275,
+       "sha256": "5d41402abc4b2a76b9719d911017c592e3a1fcb4cd3b4dbb6c0bb68e3e4a1b5c",
+       "width": 768,
+       "height": 768,
+       "machine": "PC-BUREAU",
+       "place": "here",
+       "engine": "comfyui 0.35.1",
+       "verified": "none",
+       "fetched": false,
+       "expires_at": null,
+       "created_at": 1760950017
+      }
+     ],
+     "error": null,
+     "cancelled_by": null,
+     "created_at": 1760950000,
+     "started_at": 1760950001,
+     "completed_at": 1760950017
+    }
+   },
+   "exact": [
+    "object",
+    "status",
+    "progress.done"
+   ]
+  },
+  {
+   "name": "ses travaux",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs?client_ref=pandora:mood:5f2c9a",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "object": "list",
+     "jobs": [
+      {
+       "id": "job_EUi5rlF-uTASX7Pm",
+       "object": "aiodos.job",
+       "engine": "comfyui",
+       "label": "Moods · Séq. 3",
+       "client_ref": "pandora:mood:5f2c9a",
+       "status": "completed",
+       "pause": null,
+       "priority": "normal",
+       "where": [
+        "here"
+       ],
+       "where_effective": [
+        "here"
+       ],
+       "where_reason": null,
+       "progress": {
+        "total": 2,
+        "done": 2,
+        "running": 0,
+        "queued": 0,
+        "failed": 0,
+        "percent": 100,
+        "estimated": true,
+        "elapsed_s": 11,
+        "eta_s": null,
+        "stage": "done",
+        "machines": [
+         {
+          "name": "PC-BUREAU",
+          "place": "here",
+          "running": 0,
+          "done": 2
+         }
+        ],
+        "message": "2 sur 2 : fini"
+       },
+       "waiting": null,
+       "units": [
+        {
+         "index": 0,
+         "label": "Mood 1",
+         "status": "completed",
+         "place": "here",
+         "machine": "PC-BUREAU",
+         "files": [
+          "file_juJXvOesHQXzSYVLCmYBXw"
+         ],
+         "seconds": 10.6
+        },
+        {
+         "index": 1,
+         "label": "Mood 2",
+         "status": "completed",
+         "place": "here",
+         "machine": "PC-BUREAU",
+         "files": [
+          "file_bvuRVoags4c-28D6pPV-yw"
+         ],
+         "seconds": 4.4
+        }
+       ],
+       "files": [
+        {
+         "id": "file_juJXvOesHQXzSYVLCmYBXw",
+         "unit": 0,
+         "node": "9",
+         "type": "image/png",
+         "bytes": 1014522,
+         "sha256": "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7",
+         "width": 768,
+         "height": 768,
+         "machine": "PC-BUREAU",
+         "place": "here",
+         "engine": "comfyui 0.35.1",
+         "verified": "none",
+         "fetched": false,
+         "expires_at": null,
+         "created_at": 1760950013
+        },
+        {
+         "id": "file_bvuRVoags4c-28D6pPV-yw",
+         "unit": 1,
+         "node": "9",
+         "type": "image/png",
+         "bytes": 1004275,
+         "sha256": "5d41402abc4b2a76b9719d911017c592e3a1fcb4cd3b4dbb6c0bb68e3e4a1b5c",
+         "width": 768,
+         "height": 768,
+         "machine": "PC-BUREAU",
+         "place": "here",
+         "engine": "comfyui 0.35.1",
+         "verified": "none",
+         "fetched": false,
+         "expires_at": null,
+         "created_at": 1760950017
+        }
+       ],
+       "error": null,
+       "cancelled_by": null,
+       "created_at": 1760950000,
+       "started_at": 1760950001,
+       "completed_at": 1760950017
+      }
+     ]
+    }
+   },
+   "exact": [
+    "object"
+   ]
+  },
+  {
+   "name": "événements jusqu'à la fin",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs/{job_id}/events",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1",
+     "Content-Type": "text/event-stream"
+    },
+    "sse": [
+     "event: job",
+     "data: {\"id\":\"job_EUi5rlF-uTASX7Pm\",\"object\":\"aiodos.job\",\"engine\":\"comfyui\",\"label\":\"Moods · Séq. 3\",\"client_ref\":\"pandora:mood:5f2c9a\",\"status\":\"queued\",\"pause\":null,\"priority\":\"normal\",\"where\":[\"here\"],\"where_effective\":[\"here\"],\"where_reason\":null,\"progress\":{\"total\":2,\"done\":0,\"running\":0,\"queued\":2,\"failed\":0,\"percent\":0,\"estimated\":true,\"elapsed_s\":11,\"eta_s\":null,\"stage\":\"queued\",\"machines\":[],\"message\":\"0 sur 2\"},\"waiting\":null,\"units\":[{\"index\":0,\"label\":\"Mood 1\",\"status\":\"queued\",\"place\":null,\"machine\":null,\"files\":[],\"seconds\":null,\"stage\":\"waiting_machine\"},{\"index\":1,\"label\":\"Mood 2\",\"status\":\"queued\",\"place\":null,\"machine\":null,\"files\":[],\"seconds\":null,\"stage\":\"waiting_machine\"}],\"files\":[],\"error\":null,\"cancelled_by\":null,\"created_at\":1760950000,\"started_at\":null,\"completed_at\":null}",
+     "event: job",
+     "data: {\"id\":\"job_EUi5rlF-uTASX7Pm\",\"object\":\"aiodos.job\",\"engine\":\"comfyui\",\"label\":\"Moods · Séq. 3\",\"client_ref\":\"pandora:mood:5f2c9a\",\"status\":\"in_progress\",\"pause\":null,\"priority\":\"normal\",\"where\":[\"here\"],\"where_effective\":[\"here\"],\"where_reason\":null,\"progress\":{\"total\":2,\"done\":1,\"running\":1,\"queued\":0,\"failed\":0,\"percent\":50,\"estimated\":true,\"elapsed_s\":11,\"eta_s\":null,\"stage\":\"running\",\"machines\":[{\"name\":\"PC-BUREAU\",\"place\":\"here\",\"running\":1,\"done\":1}],\"message\":\"1 sur 2 · 1 en cours sur 1 machine\"},\"waiting\":null,\"units\":[{\"index\":0,\"label\":\"Mood 1\",\"status\":\"completed\",\"place\":\"here\",\"machine\":\"PC-BUREAU\",\"files\":[\"file_juJXvOesHQXzSYVLCmYBXw\"],\"seconds\":10.6},{\"index\":1,\"label\":\"Mood 2\",\"status\":\"in_progress\",\"place\":\"here\",\"machine\":\"PC-BUREAU\",\"files\":[],\"seconds\":null,\"stage\":\"running\"}],\"files\":[{\"id\":\"file_juJXvOesHQXzSYVLCmYBXw\",\"unit\":0,\"node\":\"9\",\"type\":\"image/png\",\"bytes\":1014522,\"sha256\":\"9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7\",\"width\":768,\"height\":768,\"machine\":\"PC-BUREAU\",\"place\":\"here\",\"engine\":\"comfyui 0.35.1\",\"verified\":\"none\",\"fetched\":false,\"expires_at\":null,\"created_at\":1760950013}],\"error\":null,\"cancelled_by\":null,\"created_at\":1760950000,\"started_at\":1760950001,\"completed_at\":null}",
+     "event: file",
+     "data: {\"id\":\"file_juJXvOesHQXzSYVLCmYBXw\",\"unit\":0,\"node\":\"9\",\"type\":\"image/png\",\"bytes\":1014522,\"sha256\":\"9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7\",\"width\":768,\"height\":768,\"machine\":\"PC-BUREAU\",\"place\":\"here\",\"engine\":\"comfyui 0.35.1\",\"verified\":\"none\",\"fetched\":false,\"expires_at\":null,\"created_at\":1760950013}",
+     ": ping",
+     "event: file",
+     "data: {\"id\":\"file_bvuRVoags4c-28D6pPV-yw\",\"unit\":1,\"node\":\"9\",\"type\":\"image/png\",\"bytes\":1004275,\"sha256\":\"5d41402abc4b2a76b9719d911017c592e3a1fcb4cd3b4dbb6c0bb68e3e4a1b5c\",\"width\":768,\"height\":768,\"machine\":\"PC-BUREAU\",\"place\":\"here\",\"engine\":\"comfyui 0.35.1\",\"verified\":\"none\",\"fetched\":false,\"expires_at\":null,\"created_at\":1760950017}",
+     "event: job",
+     "data: {\"id\":\"job_EUi5rlF-uTASX7Pm\",\"object\":\"aiodos.job\",\"engine\":\"comfyui\",\"label\":\"Moods · Séq. 3\",\"client_ref\":\"pandora:mood:5f2c9a\",\"status\":\"completed\",\"pause\":null,\"priority\":\"normal\",\"where\":[\"here\"],\"where_effective\":[\"here\"],\"where_reason\":null,\"progress\":{\"total\":2,\"done\":2,\"running\":0,\"queued\":0,\"failed\":0,\"percent\":100,\"estimated\":true,\"elapsed_s\":11,\"eta_s\":null,\"stage\":\"done\",\"machines\":[{\"name\":\"PC-BUREAU\",\"place\":\"here\",\"running\":0,\"done\":2}],\"message\":\"2 sur 2 : fini\"},\"waiting\":null,\"units\":[{\"index\":0,\"label\":\"Mood 1\",\"status\":\"completed\",\"place\":\"here\",\"machine\":\"PC-BUREAU\",\"files\":[\"file_juJXvOesHQXzSYVLCmYBXw\"],\"seconds\":10.6},{\"index\":1,\"label\":\"Mood 2\",\"status\":\"completed\",\"place\":\"here\",\"machine\":\"PC-BUREAU\",\"files\":[\"file_bvuRVoags4c-28D6pPV-yw\"],\"seconds\":4.4}],\"files\":[{\"id\":\"file_juJXvOesHQXzSYVLCmYBXw\",\"unit\":0,\"node\":\"9\",\"type\":\"image/png\",\"bytes\":1014522,\"sha256\":\"9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7\",\"width\":768,\"height\":768,\"machine\":\"PC-BUREAU\",\"place\":\"here\",\"engine\":\"comfyui 0.35.1\",\"verified\":\"none\",\"fetched\":false,\"expires_at\":null,\"created_at\":1760950013},{\"id\":\"file_bvuRVoags4c-28D6pPV-yw\",\"unit\":1,\"node\":\"9\",\"type\":\"image/png\",\"bytes\":1004275,\"sha256\":\"5d41402abc4b2a76b9719d911017c592e3a1fcb4cd3b4dbb6c0bb68e3e4a1b5c\",\"width\":768,\"height\":768,\"machine\":\"PC-BUREAU\",\"place\":\"here\",\"engine\":\"comfyui 0.35.1\",\"verified\":\"none\",\"fetched\":false,\"expires_at\":null,\"created_at\":1760950017}],\"error\":null,\"cancelled_by\":null,\"created_at\":1760950000,\"started_at\":1760950001,\"completed_at\":1760950017}",
+     "event: end",
+     "data: {\"id\":\"job_EUi5rlF-uTASX7Pm\",\"status\":\"completed\"}"
+    ]
+   },
+   "server": "client"
+  },
+  {
+   "name": "fichiers pas encore récupérés",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs/{job_id}/files?unfetched=1",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "object": "list",
+     "files": [
+      {
+       "id": "file_juJXvOesHQXzSYVLCmYBXw",
+       "unit": 0,
+       "node": "9",
+       "type": "image/png",
+       "bytes": 1014522,
+       "sha256": "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7",
+       "width": 768,
+       "height": 768,
+       "machine": "PC-BUREAU",
+       "place": "here",
+       "engine": "comfyui 0.35.1",
+       "verified": "none",
+       "fetched": false,
+       "expires_at": null,
+       "created_at": 1760950013
+      },
+      {
+       "id": "file_bvuRVoags4c-28D6pPV-yw",
+       "unit": 1,
+       "node": "9",
+       "type": "image/png",
+       "bytes": 1004275,
+       "sha256": "5d41402abc4b2a76b9719d911017c592e3a1fcb4cd3b4dbb6c0bb68e3e4a1b5c",
+       "width": 768,
+       "height": 768,
+       "machine": "PC-BUREAU",
+       "place": "here",
+       "engine": "comfyui 0.35.1",
+       "verified": "none",
+       "fetched": false,
+       "expires_at": null,
+       "created_at": 1760950017
+      }
+     ]
+    }
+   },
+   "exact": [
+    "object"
+   ]
+  },
+  {
+   "name": "un fichier",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/files/{file_id}",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 200,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "file_juJXvOesHQXzSYVLCmYBXw",
+     "unit": 0,
+     "node": "9",
+     "type": "image/png",
+     "bytes": 1014522,
+     "sha256": "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca7",
+     "width": 768,
+     "height": 768,
+     "machine": "PC-BUREAU",
+     "place": "here",
+     "engine": "comfyui 0.35.1",
+     "verified": "none",
+     "fetched": false,
+     "expires_at": null,
+     "created_at": 1760950013
+    }
+   },
+   "exact": [
+    "type",
+    "verified"
+   ]
+  },
+  {
+   "name": "le contenu d'un fichier, par plage",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/files/{file_id}/content",
+    "headers": {
+     "Authorization": "Bearer {key}",
+     "Range": "bytes=0-9"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 206,
+    "headers": {
+     "X-Aiodos-Api": "1",
+     "Accept-Ranges": "bytes",
+     "X-Aiodos-Keep-Until": "pending",
+     "Content-Type": "image/png"
+    },
+    "body": "{png:0-9}"
+   }
+  },
+  {
+   "name": "pause après l'unité en cours",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs/{job_id}/pause",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "when": "after_current"
+    }
+   },
+   "response": {
+    "status": 202,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "pausing",
+     "pause": {
+      "when": "after_current",
+      "pending": 1
+     },
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 0,
+      "running": 1,
+      "queued": 1,
+      "failed": 0,
+      "percent": 0,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "running",
+      "machines": [
+       {
+        "name": "PC-BUREAU",
+        "place": "here",
+        "running": 1,
+        "done": 0
+       }
+      ],
+      "message": "0 sur 2 · en pause"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "in_progress",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [],
+       "seconds": null,
+       "stage": "running"
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "queued",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null,
+       "stage": "waiting_machine"
+      }
+     ],
+     "files": [],
+     "error": null,
+     "cancelled_by": null,
+     "created_at": 1760950000,
+     "started_at": 1760950001,
+     "completed_at": null
+    }
+   },
+   "exact": [
+    "object"
+   ],
+   "server": "client"
+  },
+  {
+   "name": "annulation",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs/{job_id}/cancel",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 202,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "id": "job_EUi5rlF-uTASX7Pm",
+     "object": "aiodos.job",
+     "engine": "comfyui",
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "status": "cancelling",
+     "pause": null,
+     "priority": "normal",
+     "where": [
+      "here"
+     ],
+     "where_effective": [
+      "here"
+     ],
+     "where_reason": null,
+     "progress": {
+      "total": 2,
+      "done": 0,
+      "running": 1,
+      "queued": 0,
+      "failed": 0,
+      "percent": 0,
+      "estimated": true,
+      "elapsed_s": 11,
+      "eta_s": null,
+      "stage": "running",
+      "machines": [
+       {
+        "name": "PC-BUREAU",
+        "place": "here",
+        "running": 1,
+        "done": 0
+       }
+      ],
+      "message": "0 sur 2 · annulé"
+     },
+     "waiting": null,
+     "units": [
+      {
+       "index": 0,
+       "label": "Mood 1",
+       "status": "in_progress",
+       "place": "here",
+       "machine": "PC-BUREAU",
+       "files": [],
+       "seconds": null,
+       "stage": "running"
+      },
+      {
+       "index": 1,
+       "label": "Mood 2",
+       "status": "cancelled",
+       "place": null,
+       "machine": null,
+       "files": [],
+       "seconds": null
+      }
+     ],
+     "files": [],
+     "error": null,
+     "cancelled_by": "app",
+     "created_at": 1760950000,
+     "started_at": 1760950001,
+     "completed_at": null
+    }
+   },
+   "exact": [
+    "object"
+   ],
+   "server": "client"
+  },
+  {
+   "name": "annulation d'un travail fini",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs/{job_id}/cancel",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 409,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "Ce travail est déjà fini.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "job_not_cancellable",
+      "aiodos": {
+       "hint": "",
+       "retryable": false,
+       "detail": {}
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code"
+   ]
+  },
+  {
+   "name": "travail d'une autre appli",
+   "request": {
+    "method": "GET",
+    "path": "/aiodos/v1/jobs/job_autre",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": null
+   },
+   "response": {
+    "status": 404,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "Travail introuvable.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "job_not_found",
+      "aiodos": {
+       "hint": "",
+       "retryable": false,
+       "detail": {}
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code"
+   ]
+  },
+  {
+   "name": "graphe au format de l'éditeur",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "graph": {
+      "nodes": [],
+      "links": []
+     }
+    }
+   },
+   "response": {
+    "status": 400,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "Graphe au format de l'éditeur : exporte-le au format API (« Exporter (API) » dans ComfyUI).",
+      "type": "invalid_request_error",
+      "param": "graphs",
+      "code": "graph_not_api",
+      "aiodos": {
+       "hint": "Exporte le graphe au format API dans ComfyUI.",
+       "retryable": false,
+       "detail": {
+        "graph": 0
+       }
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code"
+   ]
+  },
+  {
+   "name": "modèle absent",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "engine": "comfyui",
+     "graph": {
+      "4": {
+       "class_type": "CheckpointLoaderSimple",
+       "inputs": {
+        "ckpt_name": "absent.safetensors"
+       }
+      },
+      "6": {
+       "class_type": "CLIPTextEncode",
+       "inputs": {
+        "text": "Une cabane",
+        "clip": [
+         "4",
+         1
+        ]
+       }
+      },
+      "10": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "@in:ref0"
+       }
+      },
+      "3": {
+       "class_type": "KSampler",
+       "inputs": {
+        "model": [
+         "4",
+         0
+        ],
+        "seed": "@seed",
+        "steps": 20,
+        "cfg": 7.0,
+        "positive": [
+         "6",
+         0
+        ],
+        "negative": [
+         "6",
+         0
+        ],
+        "latent_image": [
+         "10",
+         0
+        ]
+       }
+      },
+      "8": {
+       "class_type": "VAEDecode",
+       "inputs": {
+        "samples": [
+         "3",
+         0
+        ],
+        "vae": [
+         "4",
+         2
+        ]
+       }
+      },
+      "9": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": [
+         "8",
+         0
+        ],
+        "filename_prefix": "mood"
+       }
+      }
+     },
+     "label": "Moods · Séq. 3",
+     "client_ref": null,
+     "inputs": {
+      "ref0": {
+       "sha256": "{sha256}"
+      }
+     },
+     "items": [
+      {
+       "label": "Mood 1",
+       "seed": 1201,
+       "set": [
+        [
+         "6",
+         "text",
+         "Salon baigné de lumière dorée"
+        ]
+       ]
+      },
+      {
+       "label": "Mood 2",
+       "seed": 1202,
+       "set": [
+        [
+         "6",
+         "text",
+         "Cuisine de nuit, néons"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 409,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "Il manque des modèles au ComfyUI de ce PC : absent.safetensors.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "model_unavailable",
+      "aiodos": {
+       "hint": "Installe les modèles qui manquent (detail.models), ou élargis le lieu de calcul.",
+       "retryable": true,
+       "detail": {
+        "models": [
+         {
+          "folder": null,
+          "name": "absent.safetensors"
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code",
+    "error.aiodos.detail.models.0.name"
+   ]
+  },
+  {
+   "name": "sans le droit engines:comfyui",
+   "request": {
+    "method": "POST",
+    "path": "/aiodos/v1/jobs",
+    "headers": {
+     "Authorization": "Bearer {key}"
+    },
+    "json": {
+     "engine": "comfyui",
+     "graph": {
+      "4": {
+       "class_type": "CheckpointLoaderSimple",
+       "inputs": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+       }
+      },
+      "6": {
+       "class_type": "CLIPTextEncode",
+       "inputs": {
+        "text": "Une cabane",
+        "clip": [
+         "4",
+         1
+        ]
+       }
+      },
+      "10": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "@in:ref0"
+       }
+      },
+      "3": {
+       "class_type": "KSampler",
+       "inputs": {
+        "model": [
+         "4",
+         0
+        ],
+        "seed": "@seed",
+        "steps": 20,
+        "cfg": 7.0,
+        "positive": [
+         "6",
+         0
+        ],
+        "negative": [
+         "6",
+         0
+        ],
+        "latent_image": [
+         "10",
+         0
+        ]
+       }
+      },
+      "8": {
+       "class_type": "VAEDecode",
+       "inputs": {
+        "samples": [
+         "3",
+         0
+        ],
+        "vae": [
+         "4",
+         2
+        ]
+       }
+      },
+      "9": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": [
+         "8",
+         0
+        ],
+        "filename_prefix": "mood"
+       }
+      }
+     },
+     "label": "Moods · Séq. 3",
+     "client_ref": "pandora:mood:5f2c9a",
+     "inputs": {
+      "ref0": {
+       "sha256": "{sha256}"
+      }
+     },
+     "items": [
+      {
+       "label": "Mood 1",
+       "seed": 1201,
+       "set": [
+        [
+         "6",
+         "text",
+         "Salon baigné de lumière dorée"
+        ]
+       ]
+      },
+      {
+       "label": "Mood 2",
+       "seed": 1202,
+       "set": [
+        [
+         "6",
+         "text",
+         "Cuisine de nuit, néons"
+        ]
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 403,
+    "headers": {
+     "X-Aiodos-Api": "1"
+    },
+    "json": {
+     "error": {
+      "message": "Cette application n'a pas le droit « engines:comfyui » : demande-le dans AIODOS.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "scope_denied",
+      "aiodos": {
+       "hint": "Demande ce droit en plus (connect avec ce droit).",
+       "retryable": false,
+       "detail": {
+        "scope": "engines:comfyui"
+       }
+      }
+     }
+    }
+   },
+   "exact": [
+    "error.code",
+    "error.aiodos.detail.scope"
+   ]
+  }
+ ]
+}

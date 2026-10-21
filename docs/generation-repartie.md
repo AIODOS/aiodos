@@ -297,8 +297,8 @@ et les créations en cours.
   (le réglage `images_from_friends`), et la création repart aussitôt.
 - **Le modèle** : celui choisi la dernière fois pour ce genre s'il peut calculer, sinon
   le premier prêt, ici ou chez mes machines en ligne ; ceux à licence restrictive en
-  dernier. Si aucun ne peut, la conversation le dit, avec un lien vers la vue Images et
-  vidéos, et rien n'est gardé.
+  dernier. Si aucun ne peut, la conversation le dit, avec un lien vers Réglages → Modèles,
+  où il se télécharge, et rien n'est gardé.
 - **Ce qui est gardé** : le message, puis une réponse de l'assistant dont la colonne
   `media` (migration 11) garde la demande : genre, modèle, description, nombre, taille,
   graine, lot et travail. La réponse montre les images à mesure qu'elles arrivent (lot de
@@ -311,6 +311,21 @@ et les créations en cours.
 - **Rien ne change pour la répartition** : le travail est le même que celui de la vue
   Images (unités indépendantes, mes machines d'abord, un ami seulement avec l'accord des
   deux côtés), et la description ne part chez une autre machine que le temps du calcul.
+- **La description est enrichie** (21/10/2026, `chat/enrich.py`, réglage `images_enrich`,
+  activé par défaut) : avant une nouvelle création, le modèle de conversation de ce PC change
+  la demande courte en une description détaillée en anglais (sujet précisé, décor, lumière,
+  cadrage, style si la demande n'en donne pas), comme le font les services en ligne. C'est ce
+  qui change le plus le résultat d'un petit modèle : « un samouraï assis sur la carapace d'un
+  escargot » donnait à Z-Image Turbo un pratiquant de kendo assis sur une coquille ; la même
+  demande détaillée en anglais, un samouraï en armure sur un escargot géant, en estampe, à la
+  hauteur de Seedream (même modèle, même carte, 21 s par image en 1344 × 768). Une retouche,
+  une variante ou une description déjà détaillée (60 mots et plus) partent telles quelles.
+- **Une image jointe est une référence** (21/10/2026, `chat/attachments.py`) : la création
+  part d'elle, recadrée au centre au format du modèle le plus proche du sien, avec une force
+  de 0,65 (`retouches.REFERENCE`) : sa composition et ses couleurs restent, la demande change
+  le reste (à 0,875, la force d'un changement d'ambiance, la référence ne se voyait presque
+  plus). L'image de départ part avec l'unité chez la machine qui calcule (`file_key`). Une
+  vidéo ne part pas encore d'une image.
 
 ## Sources
 

@@ -115,6 +115,9 @@ def detect(text: str) -> str | None:
 # lumière (ajouter, retirer, changer un détail) ; 7/8 change l'ambiance (nuit, saison,
 # style), au prix d'une scène en partie recomposée.
 KEEP, AMBIANCE = 0.75, 0.875
+# Une image jointe (une référence) : sa composition et ses couleurs restent, la demande change
+# le reste (à 7/8, essayé le 21/10/2026, la référence ne se voyait presque plus)
+REFERENCE = 0.65
 _AMBIANCE = re.compile(           # i18n: tel quel (motif de détection)
     r"\b(nuit|jour|soir|matin|aube|crépuscule|coucher|lever|hiver|été|automne|printemps|"
     r"neige|pluie|orage|brouillard|style|façon|manière|noir et blanc|couleurs?|aquarelle|"

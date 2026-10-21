@@ -175,8 +175,8 @@ def test_the_old_exchange_goes_only_once_the_new_question_is_accepted(talk, monk
     replace = {"conversation_id": conv, "replace_from": ids[2],
                "replace_text": "Et sa population ?"}
     with TestClient(create_app("jeton", {"testserver"}, slots={"embed": 0})) as http:
-        # Refusée avant l'envoi (cloud sans clé) : rien n'est retiré
-        assert _stream(http, text="Et sa population ?", model="cloud:mistral", **replace)[0] == 400
+        # Refusée avant l'envoi (aucune machine n'a ce modèle) : rien n'est retiré
+        assert _stream(http, text="Et sa population ?", model="auto:absent:7b", **replace)[0] == 400
         # Pas le message attendu (autre fenêtre, numéro repris) : rien n'est retiré
         assert _stream(http, text="Et sa population ?", model="local-test",
                        **dict(replace, replace_text="Autre chose"))[0] == 412

@@ -1,13 +1,11 @@
 {
   "disconnected": "Outil déconnecté avant la réponse.",
-  "not_in_circle": "« {model} » n'est pas un modèle du cercle AIODOS.",
   "where_refused_model": "Lieu de calcul refusé pour « {model} » : cette application n'y a pas accès.",
   "no_allowed_machine": "Aucune machine permise à cette application ne peut répondre avec « {model} » en ce moment.",
   "local_only": "Cette demande (images, format imposé, complétion de code…) ne peut être calculée que par cette machine, qui n'a pas « {model} ».",
   "tools_elsewhere": "« {model} » n'est que sur une autre machine, qui ne reçoit pas encore les outils.",
   "ollama_down": "Ollama ne répond pas sur cette machine ({error}).",
   "model_missing": "Modèle manquant.",
-  "cloud_refused": "Les modèles du cloud ne passent pas par la passerelle : « {model} ».",
   "model_missing_local": "Modèle manquant après « local: ».",
   "not_local_model": "« {model} » n'est pas un modèle de cette machine.",
   "embed_here_only": "Les embeddings ne se calculent que sur cette machine : « {model} » n'est pas un de ses modèles.",
