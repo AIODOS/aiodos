@@ -3,9 +3,11 @@ calcul (bloquant, dans un thread) et la réponse HTTP (asynchrone).
 
 Sur cette machine, la demande d'un outil est relayée telle quelle à l'Ollama local
 (local_raw) : outils (tool calling), images, format imposé, tout y passe, et la réponse
-revient octet pour octet. Une machine appairée, elle, ne reçoit qu'une conversation en
-texte, par le protocole de prêt (network/lending.py) : l'API qui a reçu la demande remet
-la réponse au format de l'outil. D'où, selon la demande :
+revient octet pour octet. Quand le moteur intégré tient lieu d'Ollama (llama.cpp,
+services/ollama.use_integrated), engine.py la sert de même : par son routeur, dont l'API est
+celle d'OpenAI, ou par la façade pour une conversation en texte. Une machine appairée, elle,
+ne reçoit qu'une conversation en texte, par le protocole de prêt (network/lending.py) : l'API
+qui a reçu la demande remet la réponse au format de l'outil. D'où, selon la demande :
   - local_only : elle n'a de sens qu'ici (images, format imposé, complétion de code) ;
   - prefer_local : cette machine d'abord (outils), une autre machine répondant sans eux.
 """

@@ -18,8 +18,9 @@ openai-openapi 2.3.0) et dans le code des outils :
 - erreurs : {"error": {"message", "type", "param", "code"}}.
 
 Sur cette machine, une conversation est relayée telle quelle à l'API compatible OpenAI
-d'Ollama (outils, images, format imposé compris) ; une machine appairée reçoit la
-conversation en texte, et la réponse est remise ici au format d'OpenAI.
+d'Ollama, ou à celle du routeur du moteur intégré quand il tient lieu d'Ollama (engine.py) :
+outils, images, format imposé compris. Une machine appairée reçoit la conversation en texte,
+et la réponse est remise ici au format d'OpenAI (Chunks), comme la complétion de texte brut.
 """
 import asyncio
 import base64
@@ -32,8 +33,9 @@ import numpy as np
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from aiodos.gateway import answer, catalog
+from aiodos.gateway import answer, catalog, engine
 from aiodos.gateway.answer import GatewayError
+from aiodos.services import ollama
 
 router = APIRouter(prefix="/v1")
 TEXT_PARTS = {"text", "input_text", "refusal"}
@@ -106,10 +108,11 @@ def _text(content) -> str:
     raise GatewayError(400, "Contenu de message illisible.")
 
 
-def _has_media(messages) -> bool:
-    return any(isinstance(m, dict) and isinstance(m.get("content"), list) and any(
-        isinstance(p, dict) and p.get("type") not in TEXT_PARTS for p in m["content"])
-        for m in messages)
+def _parts(messages) -> set:
+    """Genres des morceaux de contenu des messages (text, image_url, input_audio…)."""
+    return {p.get("type") for m in messages
+            if isinstance(m, dict) and isinstance(m.get("content"), list)
+            for p in m["content"] if isinstance(p, dict)}
 
 
 def plain_messages(messages) -> list:
@@ -157,7 +160,8 @@ def _thinks(body: dict) -> bool:
 
 
 class Chunks:
-    """Réponse d'une machine appairée remise au format d'OpenAI."""
+    """Réponse remise au format d'OpenAI : celle d'une machine appairée, ou une complétion de
+    texte brut par cette machine."""
 
     def __init__(self, model_id: str, kind: str, include_usage=False):
         self.id = ("chatcmpl-" if kind == "chat" else "cmpl-") + secrets.token_hex(12)
@@ -305,7 +309,8 @@ async def chat_completions(request: Request):
     response_format = (body.get("response_format") or {}).get("type") \
         if isinstance(body.get("response_format"), dict) else None
     several = isinstance(body.get("n"), int) and body["n"] > 1
-    local_only = (_has_media(messages) or response_format in ("json_object", "json_schema")
+    media = bool(_parts(messages) - TEXT_PARTS)
+    local_only = (media or response_format in ("json_object", "json_schema")
                   or bool(body.get("logprobs")) or several)
     tools = bool(body.get("tools") or body.get("functions")) or any(
         isinstance(m, dict) and (m.get("tool_calls") or m.get("role") in ("tool", "function"))
@@ -319,10 +324,14 @@ async def chat_completions(request: Request):
     think, options = _thinks(body), sampling(body)
 
     def attempt(model, stop):
-        if answer.is_local(model):
-            yield from answer.local_raw("/v1/chat/completions", {**body, "model": model}, stop)
-        else:                             # en texte, seulement pour une autre machine
+        if not answer.is_local(model):    # en texte, seulement pour une autre machine
             yield from answer.remote(model, plain_messages(messages), think, options, stop)
+        elif ollama.use_integrated():     # le routeur, la conversation en texte mise en forme
+            plain = None if tools or media else plain_messages(messages)
+            yield from engine.openai_chat(model, model_id, body, stop, plain=plain,
+                                          images="image_url" in _parts(messages), think=think)
+        else:
+            yield from answer.local_raw("/v1/chat/completions", {**body, "model": model}, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
@@ -369,7 +378,11 @@ async def completions(request: Request):
         generate["raw"] = True
 
     def attempt(model, stop):
-        yield from answer.local_generate({**generate, "model": model}, stop)
+        if ollama.use_integrated():
+            yield from engine.complete(model, prompt, generate.get("suffix"),
+                                       generate["options"], stop)
+        else:
+            yield from answer.local_generate({**generate, "model": model}, stop)
 
     stream = answer.Stream(answer.run(models, attempt, executor))
     try:
@@ -390,7 +403,7 @@ def _vector(values, as_base64: bool):
 
 @router.post("/embeddings")
 async def embeddings(request: Request):
-    """Sur cette machine seulement (le modèle d'embedding d'Ollama, /api/embed)."""
+    """Sur cette machine seulement (son modèle d'embedding : Ollama ou le moteur intégré)."""
     try:
         body = await _body(request)
         name = catalog.local_name(body.get("model"))
@@ -420,6 +433,11 @@ async def embeddings(request: Request):
 
 
 def _embed(payload: dict) -> dict:
+    """{"embeddings", "prompt_eval_count"} comme /api/embed d'Ollama ; le moteur intégré ne
+    dit pas le nombre de jetons lus (0)."""
+    if ollama.use_integrated():
+        return {"embeddings": engine.embed(payload["model"], payload["input"],
+                                           payload.get("dimensions")), "prompt_eval_count": 0}
     status, content, _ = answer.local_post("/api/embed", payload)
     if status >= 400:
         raise GatewayError(status, answer.error_text(content, status))
