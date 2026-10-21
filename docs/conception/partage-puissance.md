@@ -166,6 +166,22 @@ J'ai travaillé en lecture seule le 20/10/2026 : rien n'a été modifié ni lanc
 | L4 | Les inconnus | Le réseau public calcule les recettes d'images, vérifiées |
 | L5 | Ensuite | sd-server (le H3 local de PANDORA) ; copie des modèles entre mes machines |
 
+**Réalisé (21/10/2026)** : L1, L2a et L2b, côté AIODOS (le client 0.2.0 suit). Écarts
+assumés de L2b, à reprendre en L2c :
+- Le résultat d'une unité calculée par une de mes machines revient en une fois avec ses
+  fichiers (`work/result`, comme les images d'AIODOS, 1 Gio au plus entre mes machines), sans
+  boîte d'envoi ni `work/put` par morceaux : un propriétaire éteint quand l'autre finit fait
+  refaire l'unité.
+- La machine qui calcule annonce son ComfyUI à chaque demande de travail (noms des classes et
+  des modèles), sans `digest` ni `engine_inventory` ; pas de refus noté par machine
+  (`unit_declines`) : une machine qui refuse un ordre le rend sans essai.
+- Les modèles se désignent par dossier et nom (mes machines) : pas encore d'empreintes
+  (`model_hashes`), donc rien pour les amis ni les inconnus.
+- Les liens vers un fichier sont gardés en mémoire (jeton de 256 bits), pas signés par HMAC :
+  ils meurent avec AIODOS, ce qui convient à leur durée (une heure au plus).
+- `GET /aiodos/v1/queue`, `PATCH /aiodos/v1/jobs/{id}` et l'estimation de durée
+  (`jobs/estimates.py`) ne sont pas encore servis.
+
 ### 0.6 Vérifié dans le code
 
 **La file et les baux (AIODOS)**
