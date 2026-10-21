@@ -59,6 +59,9 @@ pub async fn start(config: Config) -> Result<Running> {
         endpoint.clone(),
         allowlist,
         config.forward,
+        config.max_body,
+        config.response_stall,
+        config.slot_wait,
         config.dial_timeout,
         shutdown.clone(),
     );

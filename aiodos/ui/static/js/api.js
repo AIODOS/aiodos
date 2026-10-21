@@ -85,6 +85,9 @@ export async function streamChat(body, onEvent, signal) {
   }
 }
 
+// La fenêtre native d'AIODOS (pywebview), pas un navigateur ni l'appli Android
+export const inNativeWindow = () => !!window.pywebview;
+
 // Fenêtre native : boîtes de dialogue de fichiers (chemins complets)
 function bridge() {
   if (window.pywebview?.api) return Promise.resolve(window.pywebview.api);

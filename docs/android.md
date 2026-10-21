@@ -176,7 +176,11 @@ python tools/build_android.py --install  # et l'installer sur le téléphone bra
 
 Il faut : le SDK Android (`ANDROID_HOME`) avec le NDK, un JDK 17 ou plus récent, Rust avec
 la cible `aarch64-linux-android`, et **Python 3.13** (`uv python install 3.13`) : Chaquopy
-installe les paquets de l'appli avec la même version qu'elle.
+installe les paquets de l'appli avec la même version qu'elle. Depuis le 21/10/2026
+([securite.md](securite.md), § 3.7), l'outil refuse aussi de construire tant que
+`aiodos/` ou `compagnon/` ont des modifications non commitées ou des fichiers non suivis,
+ou que le dépôt, ses dossiers de travail, le SDK, le JDK ou ce Python sont modifiables par
+d'autres comptes de la machine ; chaque refus dit quoi corriger.
 
 - `android/` : le projet Gradle (assistant `gradlew` pour Gradle 8.11.1, empreinte
   vérifiée ; greffon Android 8.9.1 ; Chaquopy 17.1.0), le manifeste, le code Java et
@@ -200,7 +204,10 @@ installe les paquets de l'appli avec la même version qu'elle.
      son modèle, par exemple « Google Pixel 7 » ;
    - sinon, saisir son adresse (`192.168.1.42`) puis « Ajouter ».
 3. **Sur le PC**, « Appairer » : un code à 6 chiffres s'affiche sur les deux écrans.
-   **Confirmer sur chacun**, seulement si les codes sont identiques.
+   **Confirmer sur chacun**, seulement si les codes sont identiques. Le PC et l'appli
+   doivent être de la même génération : depuis le 21/10/2026, l'appairage par code passe
+   au protocole 2, et une version d'avant reçoit un refus qui dit de la mettre à jour
+   ([securite.md](securite.md), § 5).
    - Si la fenêtre n'apparaît pas sur le téléphone : vue « Réseau local », puis
      « Vérifier le code ».
    - Une demande expire au bout de 3 minutes.

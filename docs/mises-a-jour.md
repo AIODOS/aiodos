@@ -50,7 +50,11 @@ ce dossier, pour une installation à la main (voir plus bas). L'outil refuse :
 - un numéro « -dev », sauf avec `--dev`, pour des essais ;
 - un numéro déjà publié ;
 - un commit dont `keys.py` ne contient pas la clé : la version publiée ne pourrait
-  pas recevoir les suivantes.
+  pas recevoir les suivantes ;
+- depuis le 21/10/2026, avant même d'importer son code : un dépôt que d'autres comptes de
+  la machine peuvent modifier, un fichier non suivi dans `aiodos/` ou `tools/`, une
+  configuration git piégée, ou une clé de publication lisible par d'autres comptes
+  ([securite.md](securite.md), § 3.7). Il faut donc tout commiter avant de publier.
 
 Les modifications qui ne sont pas dans un commit ne partent pas, et l'outil le signale.
 
@@ -101,7 +105,7 @@ publication compte quelques minutes de plus.
 | Étape | Quand | Détail |
 |---|---|---|
 | Annonce | profil échangé toutes les 60 s | chaque machine annonce la version qu'elle peut transmettre (`updates.offer`) et les fichiers qu'elle a de chaque paquet, compagnons compris (`updates.files`) |
-| Réception | toutes les 30 s, ou à l'activation du réglage | si une machine appairée en ligne a une version plus récente : manifeste signé, puis l'archive du code, en morceaux de 1 Mo par le canal chiffré. Un transfert coupé reprend où il en était. Signature et empreinte SHA-256 sont vérifiées. Une machine qui échoue est laissée de côté 10 minutes |
+| Réception | toutes les 30 s, ou à l'activation du réglage | si une machine appairée en ligne a une version plus récente : manifeste signé, puis l'archive du code, en morceaux de 1 Mo par le canal chiffré. Un transfert coupé reprend où il en était quand la même machine revient : chaque machine a son propre début de fichier, qui ne se mêle jamais à celui d'une autre. Signature et empreinte SHA-256 sont vérifiées. Une machine qui échoue est laissée de côté 10 minutes |
 | Compagnon | aussitôt après | le compagnon de sa plateforme, demandé à une machine qui l'annonce, vérifié de même (voir plus bas) |
 | Installation | aussitôt reçue | extraction dans `data/updates/versions/<version>/`, numéro vérifié, essai à blanc avec le Python de la machine. S'il manque un paquet Python, un message le dit, rien ne change, et un nouvel essai a lieu le lendemain |
 | Redémarrage | quand la machine est libre | aucun calcul ici ou pour une autre machine, aucune unité confiée dehors, aucune conversation. Fenêtre ouverte sous Windows : personne au clavier depuis le délai d'inactivité du partage de puissance (10 min par défaut). Ailleurs, avec une fenêtre : au prochain démarrage, ou par le bouton « Redémarrer maintenant ». Au plus 3 redémarrages par heure |
@@ -334,7 +338,7 @@ Ne pas copier le dossier du dépôt : avec son `.git`, il ne se mettrait jamais 
 data/updates/
 ├── packages/<version>/     manifeste signé, archive, compagnon de cette plateforme :
 │                           ce que la machine transmet
-├── downloads/<version>/    téléchargements en cours (.part)
+├── downloads/<version>/    téléchargements en cours (<fichier>.part.<machine>)
 ├── versions/<version>/     versions installées (.installed.json : installation complète)
 ├── bin/                    compagnon en service (aiodos-net.exe) et sa description (.json)
 └── state.json              version courante, version à essayer, versions écartées, message

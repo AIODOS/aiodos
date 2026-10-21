@@ -172,9 +172,10 @@ def _sleep(seconds: float, stop):
 
 def wait_turn(stop=None, gpu: bool = True):
     """Avant un lot : attendre la fin d'une conversation servie ici (lot qui occupe la
-    carte graphique), et le retour du secteur en mode « pause ». Une unité calculée pour
-    une autre machine (`stop` donné) n'attend pas le secteur : elle est rendue
-    (Interrupted), son propriétaire la confiera ailleurs."""
+    carte graphique), et le retour du secteur en mode « pause ». Une unité qui a un arrêt
+    (`stop` : calculée pour une autre machine, ou ici par l'exécuteur, jobs/executor.py)
+    n'attend pas le secteur : elle est rendue (Interrupted), refaite au retour du secteur,
+    par une de mes machines qui la demande, ou ailleurs par son propriétaire."""
     began = time.monotonic()
     try:
         while True:
@@ -239,8 +240,8 @@ def start():
 
 
 def stopping() -> threading.Event:
-    """Levé quand AIODOS s'arrête : un calcul long d'une unité d'ici (qui n'a pas d'autre
-    signal d'arrêt) s'interrompt dessus."""
+    """Levé quand AIODOS s'arrête : un calcul long lancé sans arrêt à lui (hors de
+    l'exécuteur, qui donne le sien à chaque unité) s'interrompt dessus."""
     return _stopping
 
 

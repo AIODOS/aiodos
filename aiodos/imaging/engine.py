@@ -11,12 +11,33 @@ Ollama. Avant de le lancer, les modèles de conversation d'Ollama sont décharg�
 carte (essai du 17/10/2026 : Ollama en gardait 4 Go, et la première image échouait faute
 de mémoire). Il calcule sur la carte graphique choisie
 (réglage « images_device », sinon la meilleure : jamais celle intégrée au processeur quand
-il y en a une autre). Il n'écoute que sur 127.0.0.1, sur un port tiré au hasard : sd-server
-n'a pas de clé d'accès.
+il y en a une autre).
+
+sd-server n'a pas de clé d'accès, et il répond à toute page web qui le demande : il
+renvoie l'origine de la page dans Access-Control-Allow-Origin, avec Allow-Credentials
+(version f0aac52 ; aucune option ne l'en empêche, cf. sd-server --help). Il n'écoute donc
+que sur 127.0.0.1, et sur un port que les navigateurs refusent de joindre (listen_port) :
+aucune page web, même ouverte sur cette machine, ne peut lui parler (sauf si une stratégie
+d'entreprise ou une préférence du navigateur rouvre ce port : Firefox le permet pour
+n'importe lequel). Si tous ces ports sont pris, il n'est pas lancé (pas de repli sur un
+port quelconque). À chaque demande (acquire), même quand il tourne déjà, AIODOS vérifie
+que c'est bien lui, et lui seul, qui écoute sur ce port (_owned) : un autre programme qui
+l'aurait pris pendant le chargement du modèle, ou qui s'y serait ajouté, recevrait les
+demandes, image de départ d'une retouche comprise ; sinon sd-server est arrêté, et relancé
+sur un autre port. serving(base) refait cette vérification pour qui suit un calcul en
+cours. Ce qui reste : pendant qu'il tourne, un autre programme de la machine (un autre
+compte Windows, une autre appli du téléphone) peut encore s'adresser à lui, lire les
+tâches et leurs images (/sdcpp/v1/jobs/…), ou le faire tomber ; il faudrait pour cela une
+clé dans sd-server lui-même.
 """
 import logging
+import os
+import random
 import re
+import socket
+import struct
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -24,8 +45,8 @@ from pathlib import Path
 import requests
 
 from aiodos import settings
-from aiodos.cluster.engine import NO_WINDOW, EngineError, Process, free_port
-from aiodos.imaging import catalog
+from aiodos.cluster.engine import NO_WINDOW, EngineError, Process
+from aiodos.imaging import catalog, local_copies
 from aiodos.jobs import pacing
 from aiodos.jobs.registry import Interrupted
 from aiodos.services import ollama
@@ -164,6 +185,182 @@ def capabilities() -> dict | None:
             "img2img": True}         # retouche à partir d'une image (jobs/kinds/images.py)
 
 
+# --------------------------------------------------------------- port d'écoute
+# Ports que les navigateurs refusent de joindre (« bad ports » de la norme Fetch, appliqués
+# par Chrome, Edge et la fenêtre d'AIODOS, Firefox et Safari), au-dessus de 1024 : un
+# programme peut s'y installer sans droits particuliers. 4190 et 6679, ajoutés à la liste
+# plus tard, n'y sont pas : un navigateur pas tout à fait à jour les laisserait passer.
+# 6566 et 10080 non plus : une stratégie d'entreprise de Chrome et d'Edge
+# (ExplicitlyAllowedNetworkPorts) peut les rouvrir.
+BROWSER_BLOCKED_PORTS = (1719, 1720, 1723, 2049, 3659, 4045, 5060, 5061, 6000,
+                         6665, 6666, 6667, 6668, 6669, 6697)
+_TCP_TABLE_OWNER_PID_LISTENER = 3
+_ERROR_INSUFFICIENT_BUFFER = 122
+
+
+def listen_port() -> int:
+    """Port de sd-server : un port libre parmi BROWSER_BLOCKED_PORTS, tiré au hasard.
+    EngineError s'ils sont tous pris : se replier sur un port quelconque rendrait sd-server
+    joignable par une page web (un programme de la machine peut les occuper exprès)."""
+    for port in random.sample(BROWSER_BLOCKED_PORTS, len(BROWSER_BLOCKED_PORTS)):
+        if _free(port):
+            return port
+    ports = ", ".join(map(str, BROWSER_BLOCKED_PORTS))
+    log.warning("Aucun des ports fermés aux navigateurs n'est libre ici (%s) : sd-server "
+                "n'est pas lancé", ports)
+    raise EngineError("Aucun port sûr n'est libre pour sd-server sur cette machine : "
+                      f"d'autres programmes occupent les ports {ports}, que les navigateurs "
+                      "ne peuvent pas joindre. Ferme-les, puis réessaie.")
+
+
+def _free(port: int) -> bool:
+    """Personne n'écoute sur ce port (toutes adresses), et sd-server pourra s'y installer
+    sur 127.0.0.1. Sous Windows, un programme installé sur 0.0.0.0 sans exclusivité
+    n'empêche pas de s'installer sur 127.0.0.1 : d'où la table des ports."""
+    listening = _listeners(port)
+    if listening:
+        return False
+    try:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", port))
+    except OSError:
+        return False
+    if listening is None:            # ce système ne dit pas qui écoute : on essaie
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.3).close()
+            return False
+        except OSError:
+            pass
+    return True
+
+
+def _listeners(port: int):
+    """Qui écoute sur ce port TCP, en IPv4 et IPv6 : numéros des programmes sous Windows,
+    numéros de sockets (inodes) sous Linux et Android ; None si ce système ne le dit pas
+    (Android 10 et après ferment /proc/net aux applis, macOS)."""
+    if sys.platform == "win32":
+        return _windows_listeners(port)
+    if sys.platform.startswith("linux"):
+        return _proc_listeners(port)
+    return None
+
+
+def _windows_listeners(port: int):
+    import ctypes
+    from ctypes import wintypes
+    try:
+        get = ctypes.WinDLL("iphlpapi").GetExtendedTcpTable
+    except OSError:
+        return None
+    get.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+                    wintypes.ULONG, ctypes.c_int, wintypes.ULONG]
+    get.restype = wintypes.DWORD
+    found = set()
+    # MIB_TCPROW_OWNER_PID (24 octets : port à 8, programme à 20) et
+    # MIB_TCP6ROW_OWNER_PID (56 octets : port à 20, programme à 52)
+    for family, row, port_at, pid_at in ((socket.AF_INET, 24, 8, 20),
+                                         (socket.AF_INET6, 56, 20, 52)):
+        size = wintypes.DWORD(0)
+        for _ in range(4):           # la table peut grandir entre deux appels
+            table = ctypes.create_string_buffer(max(size.value, 4))
+            error = get(table, ctypes.byref(size), False, family,
+                        _TCP_TABLE_OWNER_PID_LISTENER, 0)
+            if error != _ERROR_INSUFFICIENT_BUFFER:
+                break
+        if error != 0:
+            if family == socket.AF_INET:
+                return None
+            continue                 # IPv6 absent de cette machine
+        for i in range(struct.unpack_from("<I", table, 0)[0]):
+            at = 4 + i * row
+            if socket.ntohs(struct.unpack_from("<I", table, at + port_at)[0] & 0xFFFF) == port:
+                found.add(struct.unpack_from("<I", table, at + pid_at)[0])
+    return found
+
+
+def _proc_listeners(port: int, net: Path = Path("/proc/net")):
+    found = set()
+    for name in ("tcp", "tcp6"):
+        try:
+            lines = (net / name).read_text(encoding="ascii", errors="replace").splitlines()
+        except FileNotFoundError:
+            if name == "tcp":
+                return None
+            continue                 # IPv6 absent
+        except OSError:
+            return None
+        for line in lines[1:]:
+            # sl, adresse:port locale, distante, état (0A : à l'écoute), …, inode
+            fields = line.split()
+            if len(fields) > 9 and fields[3] == "0A" \
+                    and int(fields[1].rpartition(":")[2], 16) == port:
+                found.add(fields[9])
+    return found
+
+
+def _sockets_of(pid: int):
+    """Ce qui désigne, dans _listeners, ce qu'écoute le programme `pid` ; None si on ne
+    peut pas le savoir."""
+    if sys.platform == "win32":
+        return {pid}
+    if sys.platform.startswith("linux"):
+        found = set()
+        try:
+            for fd in os.listdir(f"/proc/{pid}/fd"):
+                target = os.readlink(f"/proc/{pid}/fd/{fd}")
+                if target.startswith("socket:["):
+                    found.add(target[len("socket:["):-1])
+        except OSError:
+            return None
+        return found
+    return None
+
+
+def _owned(process, port: int) -> bool:
+    """sd-server, et lui seul, écoute sur son port : faux tant qu'il charge le modèle ;
+    EngineError si un autre programme y écoute (il recevrait les demandes et rendrait ses
+    propres images). Vrai sans vérifier quand ce système ne dit pas qui écoute."""
+    child = getattr(process, "process", None)
+    pid = getattr(child, "pid", None)
+    listening = _listeners(port)
+    mine = _sockets_of(pid) if pid else None
+    if listening is None or mine is None:
+        return True
+    if listening - mine:
+        raise EngineError(f"Un autre programme écoute sur le port de sd-server ({port}) : "
+                          "lancement annulé.")
+    return bool(listening & mine)
+
+
+def serving(base: str) -> bool:
+    """Le sd-server lancé par AIODOS est-il toujours celui qui répond à `base` ? Pour qui
+    suit un calcul (avant la demande, puis à chaque relecture de son état) : s'il s'est
+    arrêté en route (un programme de la machine peut le faire tomber, puisqu'il peut lui
+    parler), son port est libre, et qui s'y installe répondrait « terminé » avec sa propre
+    image. Faux aussi si un autre programme écoute sur ce port."""
+    process = _state["process"]
+    if process is None or not process.alive or base != f"http://127.0.0.1:{process.port}":
+        return False
+    try:
+        return _owned(process, process.port)
+    except EngineError:
+        return False
+
+
+def _still_alone(process) -> bool:
+    """sd-server, déjà chargé, écoute-t-il encore seul sur son port ? Revu avant de lui
+    confier une nouvelle image : un programme qui s'y serait ajouté (ou qui l'aurait
+    remplacé) recevrait sa demande. Faux : il est arrêté puis relancé, sur un autre port."""
+    try:
+        if _owned(process, process.port):
+            return True
+        problem = "il n'écoute plus sur son port"
+    except EngineError:
+        problem = "un autre programme écoute aussi sur son port"
+    log.warning("sd-server relancé (port %s) : %s", process.port, problem)
+    return False
+
+
 # --------------------------------------------------------------- sd-server
 def _answers(port: int) -> bool:
     """sd-server a chargé le modèle et répond."""
@@ -191,20 +388,30 @@ def acquire(model_id: str, stop=None, waiting=None) -> str:
     with _lock:
         process = _state["process"]
         if process is not None and process.alive and _state["model"] == model_id:
-            _state["busy"] += 1
-            _state["used"] = time.monotonic()
-            return f"http://127.0.0.1:{process.port}"
+            if _still_alone(process):
+                _state["busy"] += 1
+                _state["used"] = time.monotonic()
+                return f"http://127.0.0.1:{process.port}"
         _stop_locked()
         found = info()
         if found is None:
             raise EngineError("stable-diffusion.cpp n'est pas installé sur cette machine "
                               "(réglage « Dossier de stable-diffusion.cpp »).")
+        # Un fichier que d'autres comptes peuvent modifier (ancien lien physique, modèle
+        # déplacé depuis un dossier commun) : copié d'abord (une fois), sinon sd-server
+        # chargerait ce qu'ils y auraient mis ; ModelError, et rien de lancé, si c'est
+        # impossible
+        specs = catalog.model(model_id)["files"]
+        for part, path in catalog.files(model_id).items():
+            local_copies.detach(specs[part], path, stop)
+        if stop is not None and stop.is_set():
+            raise Interrupted()
         device = best_device(devices())
         freed = ollama.unload_chat_models()       # la carte aux images, le temps du lot
         if freed:
             log.info("Carte graphique libérée pour les images : %s déchargé(s) d'Ollama",
                      ", ".join(freed))
-        port = free_port()
+        port = listen_port()
         # Un seul journal, réécrit à chaque lancement : sd-server est relancé souvent
         process = Process("sd-server", Path(found["folder"]) / platforms.executable(SERVER),
                           arguments(model_id, port, device["name"] if device else None), port)
@@ -212,9 +419,10 @@ def acquire(model_id: str, stop=None, waiting=None) -> str:
                  device["label"] if device else "processeur")
         began = time.monotonic()
         try:
-            process.start(LOAD_TIMEOUT, ready=lambda: _answers(port), stop=stop,
-                          waiting=waiting)
+            process.start(LOAD_TIMEOUT, ready=lambda: _owned(process, port) and _answers(port),
+                          stop=stop, waiting=waiting)
         except EngineError:
+            process.stop()                        # port pris par un autre : sd-server aussi
             if stop is not None and stop.is_set():
                 # Arrêté en route (conversation, utilisateur revenu, AIODOS qui s'arrête) :
                 # l'unité est rendue, elle n'a pas échoué

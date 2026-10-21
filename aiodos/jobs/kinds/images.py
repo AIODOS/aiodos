@@ -12,6 +12,7 @@ conversation servie par cette machine.
 """
 import base64
 import logging
+import math
 import secrets
 from pathlib import Path
 
@@ -157,8 +158,9 @@ def checked(payload) -> dict:
 
 def compute_image(payload, file, options, stop=None):
     payload = checked(payload)
-    # Une unité d'ici n'a pas de signal d'arrêt : AIODOS qui s'arrête interrompt le
-    # chargement ou l'image (l'unité est rendue à la file, sans compter d'essai)
+    # Son arrêt (travail annulé ou supprimé, AIODOS qui s'arrête : jobs/executor.py ; ou la
+    # machine qui l'a confiée) interrompt le chargement ou l'image, et l'unité est rendue à
+    # la file sans compter d'essai. Appelée sans arrêt (directement), celui d'AIODOS
     halt = stop if stop is not None else pacing.stopping()
     machine = str(settings.get("node_name") or settings.machine_name())[:80]
     if catalog.is_video(payload["model"]):
@@ -224,14 +226,25 @@ def check_image(payload, output):
 
 
 def assimilate_image(payload, output):
-    try:
-        seconds = float(output.get("seconds"))
-    except (TypeError, ValueError):
-        seconds = None
     row = gallery.add(payload, _decoded(payload, output),
-                      machine=str(output.get("machine") or "")[:80], seconds=seconds,
+                      machine=str(output.get("machine") or "")[:80],
+                      seconds=_duration(output.get("seconds")),
                       frames=_small_int(output.get("frames")), fps=_small_int(output.get("fps")))
     return {"image_id": row["id"], "seed": row["seed"], "machine": row["machine"]}
+
+
+def _duration(value) -> float | None:
+    """Durée du calcul, dite par la machine qui l'a fait (une de mes machines, ou un ami
+    autorisé à calculer mes images) : gardée seulement si c'est un nombre fini entre 0 et
+    gallery.MAX_SECONDS. Relecture du 21/10/2026 : la chaîne « inf » (ou « 1e999 »), que le
+    refus des nombres non finis de l'enveloppe ne voit pas puisque c'est du texte, était
+    gardée telle quelle ; la galerie (GET /api/images) et la conversation qui avait demandé
+    l'image ne se chargeaient plus (JSON sans infini)."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return seconds if math.isfinite(seconds) and 0 <= seconds <= gallery.MAX_SECONDS else None
 
 
 def _small_int(value) -> int | None:

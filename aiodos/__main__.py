@@ -8,9 +8,13 @@ installée par mise à jour : elle tourne alors dans son propre processus, que
 celui-ci se contente d'accompagner. D'où les imports lourds (FastAPI…) faits ensuite.
 """
 import argparse
+import io
 import logging
+import logging.handlers
 import os
+import re
 import secrets
+import shutil
 import signal
 import socket
 import sys
@@ -18,10 +22,16 @@ import threading
 import time
 from pathlib import Path
 
-from aiodos import __version__, instance, paths
+from aiodos import __version__, instance, logfiles, paths
 from aiodos.updates import launcher, restart
 
 log = logging.getLogger("aiodos")
+
+# Journaux bornés : une requête malformée envoyée en boucle par un appareil du réseau écrit
+# une trace d'erreur à chaque fois, et ne doit pas remplir le disque (ni le téléphone)
+LOG_BYTES = 10 * 1024 * 1024           # aiodos.log, puis aiodos.log.1 à .3 : 40 Mio au plus
+LOG_BACKUPS = 3
+ERRORS_BYTES = 2 * 1024 * 1024         # erreurs.log, puis erreurs.log.1 : 4 Mio au plus
 
 
 def _free_port() -> int:
@@ -30,22 +40,259 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _keep_tail(source: Path, backup: Path, limit: int, before=None):
+    """Rotation d'un journal sans le renommer : sa fin (limit octets au plus, à partir d'une
+    ligne entière) est copiée dans backup, puis il est vidé. Il reste le même fichier pour
+    un autre processus qui l'a ouvert : sous Windows, le lanceur d'une version d'origine
+    (updates/launcher.py) garde aiodos.log ouvert et empêcherait de le renommer. Un journal
+    énorme laissé par une version d'avant n'est pas recopié en entier. before est appelé
+    une fois le journal ouvert (décaler les sauvegardes) : s'il ne peut pas l'être (lecture
+    seule, ouvert ailleurs sans partage), OSError, et rien n'a bougé."""
+    try:
+        journal = open(source, "r+b")
+    except FileNotFoundError:             # effacé entre-temps : il repart de zéro
+        return
+    with journal:
+        if before is not None:
+            before()
+        size = journal.seek(0, os.SEEK_END)
+        try:
+            journal.seek(max(0, size - limit))
+            if size > limit:
+                journal.readline()               # la ligne coupée
+            with open(backup, "wb") as out:
+                shutil.copyfileobj(journal, out)
+        except OSError:      # disque plein, sauvegarde ouverte ailleurs : la place d'abord
+            pass
+        journal.truncate(0)
+
+
+class _BoundedLog(logging.handlers.RotatingFileHandler):
+    """aiodos.log : limit octets au plus, puis aiodos.log.1 à .<backups>. Rotation par
+    copie (_keep_tail), qui réussit même quand un autre processus a le fichier ouvert. Si
+    elle échoue quand même (fichier en lecture seule, ouvert ailleurs sans partage, projeté
+    en mémoire), le journal continue, la retente au plus une fois par minute (RETRY) et se
+    tait entre-temps au double de la limite : ni ligne perdue avec une trace « Logging
+    error » à chaque enregistrement, ni disque rempli."""
+    RETRY = 60.0
+    clock = staticmethod(time.monotonic)
+
+    def __init__(self, path: Path, limit: int, backups: int):
+        super().__init__(path, maxBytes=limit, backupCount=max(1, backups),
+                         encoding="utf-8", errors="replace")
+        self.stuck = None                        # moment du dernier échec de la rotation
+
+    def emit(self, record):
+        try:
+            if self.shouldRollover(record):
+                self.doRollover()
+            if self._waiting() and self._full():
+                return                           # rotation impossible : le disque d'abord
+            logging.FileHandler.emit(self, record)
+        except Exception:
+            self.handleError(record)
+
+    def shouldRollover(self, record):
+        return not self._waiting() and super().shouldRollover(record)
+
+    def _waiting(self) -> bool:
+        return self.stuck is not None and self.clock() - self.stuck < self.RETRY
+
+    def _full(self) -> bool:
+        if self.stream is None:                  # pas pu être rouvert : rien à écrire
+            return True
+        try:
+            return self.stream.tell() >= 2 * self.maxBytes
+        except (OSError, ValueError):
+            return True
+
+    def doRollover(self):
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        base = self.baseFilename
+        try:
+            _keep_tail(Path(base), Path(f"{base}.1"), self.maxBytes, before=self._shift)
+            self.stream = self._open()
+            self.stuck = None
+        except OSError as exc:
+            first = self.stuck is None
+            self.stuck = self.clock()
+            if self.stream is None:
+                try:
+                    self.stream = self._open()
+                except OSError:
+                    return                       # emit se tait jusqu'au prochain essai
+            if first:
+                self._note(f"Rotation du journal impossible ({exc}) : nouvel essai chaque "
+                           f"minute, et jusque-là les lignes au-delà du double de sa taille "
+                           f"normale sont perdues.")
+
+    def _shift(self):
+        """aiodos.log.1 → .2 → … ; la plus ancienne est écrasée."""
+        base = self.baseFilename
+        for i in range(self.backupCount - 1, 0, -1):
+            if os.path.exists(f"{base}.{i}"):
+                try:
+                    os.replace(f"{base}.{i}", f"{base}.{i + 1}")
+                except OSError:      # ouverte ailleurs (visionneuse) : écrasée plus tard
+                    pass
+
+    def _note(self, text: str):
+        """Une ligne du journal écrite par le journal lui-même (sans repasser par emit)."""
+        record = logging.makeLogRecord({"name": "aiodos", "levelno": logging.WARNING,
+                                        "levelname": "WARNING", "msg": text})
+        try:
+            self.stream.write(self.format(record) + self.terminator)
+            self.stream.flush()
+        except (OSError, ValueError):
+            pass
+
+
+_BoundedFile = logfiles.BoundedFile      # erreurs.log (cf. logfiles.py)
+
+
+def _error_stream(path: Path, limit: int) -> io.TextIOWrapper:
+    """La sortie d'erreur sans console (pythonw), ou héritée d'une version relancée :
+    erreurs.log borné (_BoundedFile). Une bibliothèque qui y écrit en boucle ne remplit pas
+    le disque."""
+    return io.TextIOWrapper(io.BufferedWriter(_BoundedFile(path, limit)), encoding="utf-8",
+                            errors="replace", line_buffering=True)
+
+
+def _descriptor(stream) -> int | None:
+    try:
+        return stream.fileno()
+    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+        return None
+
+
+def _follow_on_descriptor_2(stream):
+    """Une version relancée sous Windows reçoit erreurs.log comme descripteur 2
+    (updates/restart.py), sans le mode ajout et à son ancienne position : ce qui y écrit
+    directement (code C, faulthandler, erreur fatale) laisserait, après chaque réduction du
+    fichier, un trou d'octets nuls jusqu'à cette position. Le descripteur 2 devient une
+    copie du nôtre, en mode ajout : il écrit à la fin, et la réduction suivante le compte."""
+    try:
+        os.dup2(stream.fileno(), 2)
+    except (OSError, ValueError, io.UnsupportedOperation):
+        pass
+
+
+def _is_file(stream, path: Path) -> bool:
+    """La sortie est-elle ce fichier-là ? (sous Windows, une version relancée par
+    updates/restart.py reçoit en sortie d'erreur le erreurs.log de la précédente)"""
+    try:
+        return path.exists() and os.path.samestat(os.fstat(stream.fileno()), os.stat(path))
+    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+        return False
+
+
+class _Repeats(logging.Filter):
+    """Une même alerte ou erreur répétée en boucle (requête malformée envoyée sans arrêt,
+    trace d'erreur de plusieurs Kio à chaque fois) n'est écrite que KEPT fois par minute ;
+    la suivante le dit, sans sa trace, et le nombre des autres est donné à la reprise. Le
+    journal garde ainsi la place des autres événements. Les informations passent toutes."""
+    KEPT = 10
+    WINDOW = 60.0
+
+    def __init__(self, clock=time.monotonic):
+        super().__init__()
+        self.clock = clock
+        self.lock = threading.Lock()
+        self.seen = {}                           # signature → [début, écrites, tues]
+
+    def filter(self, record):
+        if record.levelno < logging.WARNING:
+            return True
+        kept = getattr(record, "aiodos_kept", None)      # déjà décidé (autre destination)
+        if kept is None:
+            kept = record.aiodos_kept = self._decide(record)
+        return kept
+
+    def _decide(self, record) -> bool:
+        key = _signature(record)
+        now = self.clock()
+        with self.lock:
+            entry = self.seen.get(key)
+            if entry is None or now - entry[0] >= self.WINDOW:
+                if len(self.seen) > 1000:
+                    self.seen.clear()
+                self.seen[key] = [now, 1, 0]
+                if entry is not None and entry[2] > 1:
+                    record.msg = (f"{str(record.msg).rstrip()} "
+                                  f"(et {entry[2] - 1} fois de plus, non écrites)")
+                return True
+            if entry[1] < self.KEPT:
+                entry[1] += 1
+                return True
+            entry[2] += 1
+            if entry[2] > 1:
+                return False
+        record.msg = f"{str(record.msg).rstrip()} (répétée : plus écrite pendant une minute)"
+        record.exc_info, record.exc_text, record.stack_info = None, None, None
+        return True
+
+
+_PLACEHOLDER = re.compile(r"%[-#0 +\d.]*[a-zA-Z]")
+
+
+def _signature(record) -> tuple:
+    """Ce qui fait qu'un message est « le même » : d'où il vient, son modèle (pas ses
+    valeurs), et pour une erreur, son type et la ligne qui l'a levée. Un modèle sans texte
+    (« %s » : le journal du compagnon, network/companion.py) compte par son contenu."""
+    text = str(record.msg)
+    if record.args and not _PLACEHOLDER.sub("", text).strip():
+        try:
+            text = record.getMessage()
+        except (TypeError, ValueError):
+            pass
+    where = None
+    if record.exc_info and record.exc_info[0] is not None:
+        trace = record.exc_info[2]
+        while trace is not None and trace.tb_next is not None:
+            trace = trace.tb_next
+        where = (record.exc_info[0].__name__,
+                 trace.tb_frame.f_code.co_filename if trace else "",
+                 trace.tb_lineno if trace else 0)
+    return (record.name, record.levelno, record.pathname, record.lineno, text[:200], where)
+
+
 def _setup_logging():
+    # Premier geste de tout démarrage (main, et l'appli Android, node/android_app.py) :
+    # hors Windows, les fichiers écrits ensuite ne sont lisibles que par l'utilisateur
+    left_open = paths.keep_private()
+    errors = paths.log_path().with_name("erreurs.log")
     # Lancé par pythonw (double-clic, sans console) : sys.stdout/stderr valent None,
     # et des bibliothèques y écrivent quand même (uvicorn, barres de progression…).
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w", encoding="utf-8")
-    if sys.stderr is None:
-        sys.stderr = open(paths.log_path().with_name("erreurs.log"), "a", encoding="utf-8")
+    if sys.stderr is None or _is_file(sys.stderr, errors):
+        inherited = None if sys.stderr is None else _descriptor(sys.stderr)
+        sys.stderr = _error_stream(errors, ERRORS_BYTES)
+        if inherited == 2:
+            _follow_on_descriptor_2(sys.stderr)
     # Console Windows en cp1252 par défaut : « nœud » y devient « n�ud »
     for stream in (sys.stdout, sys.stderr):
         if stream and hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
-    handlers = [logging.FileHandler(paths.log_path(), encoding="utf-8")]
+    repeats = _Repeats()
+    handlers = [_BoundedLog(paths.log_path(), LOG_BYTES, LOG_BACKUPS)]
     if sys.stdout:
         handlers.append(logging.StreamHandler(sys.stdout))
+    for handler in handlers:
+        handler.addFilter(repeats)
     logging.basicConfig(level=logging.INFO, handlers=handlers,
                         format="%(asctime)s %(levelname)s %(name)s : %(message)s")
+    rights = paths.rights()              # hors Windows : ce qui a vraiment pris ici
+    if rights:
+        log.info("Droits des données (attendus : dossier 0700, base 0600) : %s", rights)
+    if left_open:                        # dit maintenant, pour qu'il soit dans aiodos.log
+        shown = ", ".join(left_open[:10]) + (" …" if len(left_open) > 10 else "")
+        log.warning("%d élément(s) des données (%s) restent lisibles par d'autres comptes "
+                    "de la machine : %s. Leurs droits n'ont pas pu être fermés (disque sans "
+                    "droits Unix, fichier d'un autre compte), sauf mention contraire.",
+                    len(left_open), paths.data_dir(), shown)
 
 
 def _parse_slots(text: str) -> dict:

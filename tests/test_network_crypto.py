@@ -65,6 +65,72 @@ def test_envelope_round_trip_and_replay():
     assert envelope.unwrap_reply(key, "ping", "noeud-b", "noeud-a", env["ts"], reply) == {"ok": True}
 
 
+def _sealed_text(key, kind, action, sender, recipient, ts, text: bytes) -> str:
+    """Un message scellé qui contient ce texte-là, tel qu'une autre machine peut l'envoyer
+    (envelope.wrap, lui, n'écrit jamais de nombre non fini)."""
+    return envelope.b64e(crypto.seal(key, text, envelope._aad(kind, action, sender, recipient,
+                                                              ts)))
+
+
+@pytest.mark.parametrize("number", [b"NaN", b"Infinity", b"-Infinity", b"1e999", b"-1E400"])
+def test_non_finite_numbers_are_refused_in_every_message(number):
+    """Faille 16 : json.loads acceptait NaN et Infinity, et « 1e999 » devient l'infini. Une
+    seule de ces valeurs, gardée puis servie à l'interface, faisait tomber toute la réponse
+    (Starlette sérialise avec allow_nan=False). Requête, réponse ou morceau de flux : refusés."""
+    (key, _), _ = _pair()
+    text = b'{"name": "PC", "load": ' + number + b"}"
+    ts = time.time()
+    env = {"from": "noeud-a", "to": "noeud-b", "ts": ts,
+           "box": _sealed_text(key, "req", "ping", "noeud-a", "noeud-b", ts, text)}
+    with pytest.raises(SealError, match="non fini"):
+        envelope.unwrap(key, "ping", "noeud-b", env, envelope.ReplayGuard())
+    reply = {"box": _sealed_text(key, "rep", "ping", "noeud-b", "noeud-a", ts, text)}
+    with pytest.raises(SealError, match="non fini"):
+        envelope.unwrap_reply(key, "ping", "noeud-b", "noeud-a", ts, reply)
+    line = envelope.b64e(crypto.seal(key, text,
+                                     envelope._frame_aad("chat", "noeud-b", "noeud-a", ts, 0)))
+    with pytest.raises(SealError, match="non fini"):
+        envelope.unwrap_frame(key, "chat", "noeud-b", "noeud-a", ts, 0, line)
+    with pytest.raises(ValueError):
+        envelope.parse_json(text)
+    assert envelope.parse_json(b'{"x": 1.5, "y": 1e-400, "z": 10}') == {"x": 1.5, "y": 0.0, "z": 10}
+
+
+def test_a_machine_never_sends_a_non_finite_number():
+    """Pour que ce refus n'arrive jamais entre machines honnêtes, un nombre non fini (un
+    capteur illisible…) part en null : le reste du message passe."""
+    (key, _), _ = _pair()
+    payload = {"power": {"temperature": float("nan"), "level": 50.0},
+               "loads": [float("inf"), 1, (float("-inf"),)], "name": "PC"}
+    expected = {"power": {"temperature": None, "level": 50.0}, "loads": [None, 1, [None]],
+                "name": "PC"}
+    env = envelope.wrap(key, "ping", "noeud-a", "noeud-b", payload)
+    assert envelope.unwrap(key, "ping", "noeud-b", env, envelope.ReplayGuard()) == expected
+    reply = envelope.wrap_reply(key, "ping", "noeud-b", "noeud-a", env["ts"], payload)
+    assert envelope.unwrap_reply(key, "ping", "noeud-b", "noeud-a", env["ts"], reply) == expected
+    line = envelope.wrap_frame(key, "chat", "noeud-b", "noeud-a", env["ts"], 0, payload)
+    assert envelope.unwrap_frame(key, "chat", "noeud-b", "noeud-a", env["ts"], 0, line) == expected
+
+
+def test_malformed_envelopes_and_replies_are_seal_errors():
+    """Une enveloppe ou une réponse mal formée est refusée comme un message altéré (SealError :
+    un refus lisible chez p2p_app et client.py), et non par une erreur imprévue (500, ou
+    exception que l'appelant n'attend pas)."""
+    (key, _), _ = _pair()
+    for reply in ({}, {"box": 5}, {"box": "é"}, ["box"], None):
+        with pytest.raises(SealError):
+            envelope.unwrap_reply(key, "ping", "noeud-b", "noeud-a", 1.0, reply)
+    good = envelope.wrap(key, "ping", "noeud-a", "noeud-b", {})
+    # Un horodatage NaN passait le contrôle d'écart : toute comparaison avec NaN est fausse
+    for bad in (dict(good, ts="nan"), dict(good, ts=float("inf")), dict(good, box=7), "texte"):
+        with pytest.raises(SealError):
+            envelope.unwrap(key, "ping", "noeud-b", bad, envelope.ReplayGuard())
+    ts = time.time()
+    reply = {"box": _sealed_text(key, "rep", "ping", "noeud-b", "noeud-a", ts, b"{pas du json")}
+    with pytest.raises(SealError, match="illisible"):
+        envelope.unwrap_reply(key, "ping", "noeud-b", "noeud-a", ts, reply)
+
+
 def test_v1_database_is_migrated(tmp_path):
     conn = sqlite3.connect(paths.db_path())
     conn.executescript(db.SCHEMA)

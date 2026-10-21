@@ -141,7 +141,10 @@ Réglage « Sur batterie » (vue « Cette machine », carte « Travail de fond �
   sur le processeur (§ 5).
 - **Attendre le secteur** (`pause`) : rien ne démarre ; une unité en cours s'arrête au lot
   suivant, ou entre deux pages d'un document, deux segments d'une transcription
-  (`pacing.step`) ; une unité calculée pour une autre machine lui est rendue.
+  (`pacing.step`). Depuis le 21/10/2026, une unité d'ici retourne alors dans la file : elle
+  est refaite au retour du secteur, ou par une de mes machines qui la demande, et ce
+  qu'elle avait calculé est perdu ; une unité calculée pour une autre machine lui est
+  rendue.
 - **Pleine vitesse** (`normal`) : comme sur secteur.
 
 Les conversations sont servies dans tous les cas. Sur batterie veut dire « sur batterie

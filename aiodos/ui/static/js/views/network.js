@@ -1,10 +1,17 @@
 // Réseau : réseau local, Internet et invitations, machines appairées et détectées, appairage par code.
 import { get, post, del } from '../api.js';
-import { $, h, esc, ago, bytes, duration, powerText } from '../dom.js';
+import { $, h, esc, ago, bytes, duration, powerText, finite, count } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
 import { renderConnected } from './connected.js';
+
+// Ce que disent les autres machines (profil d'une machine appairée, nœud du réseau public)
+// vient d'ailleurs : typé avant d'entrer dans le HTML. Un objet à la place d'un nombre
+// (« length » piégé) ou du HTML à la place d'un niveau de batterie ne passe pas. Les gardes
+// des nombres et des listes sont celles de dom.js (finite, count), partagées avec les autres
+// vues : une seule copie, qui ne peut pas diverger d'une vue à l'autre.
+const flag = v => (typeof v === 'boolean' ? v : null);
 
 /** Le pare-feu de Windows demande son accord au premier réseau : pas sur un téléphone. */
 const onWindows = () => (state.node?.os ? state.node.os.startsWith('Windows')
@@ -169,10 +176,12 @@ async function pasteReply(invitationId) {
 const shortKey = key => (key ? `${key.slice(0, 6)}…${key.slice(-4)}` : '');
 
 function publicNode(n) {
+  const models = Array.isArray(n.models) ? n.models.map(String) : [];
+  const key = typeof n.key === 'string' ? n.key : '';
   return `<div class="peer"><div class="peer-head"><span class="dot on"></span>
-      <code title="${esc(n.key)}">${esc(shortKey(n.key))}</code>
-      <span class="faint">AIODOS ${esc(n.version || '?')} · vu ${ago(Date.now() / 1000 - n.seen_s)}</span></div>
-    <div class="peer-facts">${n.models?.length ? esc(n.models.join(', ')) : 'aucun modèle annoncé'}</div></div>`;
+      <code title="${esc(key)}">${esc(shortKey(key))}</code>
+      <span class="faint">AIODOS ${esc(n.version || '?')} · vu ${ago(Date.now() / 1000 - (finite(n.seen_s) ?? 0))}</span></div>
+    <div class="peer-facts">${models.length ? esc(models.join(', ')) : 'aucun modèle annoncé'}</div></div>`;
 }
 
 function renderPublic(net) {
@@ -180,15 +189,15 @@ function renderPublic(net) {
   const pub = net.public;
   box.hidden = !pub || !net.enabled;
   if (box.hidden) return;
-  const nodes = pub.nodes || [];
+  const nodes = Array.isArray(pub.nodes) ? pub.nodes : [];
   const detail = !pub.wanted ? ''
     : !pub.internet ? `<div class="hint" style="margin:8px 0 0">Active d'abord « Internet », plus haut : le réseau
         public passe par lui.</div>`
       : pub.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(pub.error)}</div></div>`
         : !pub.joined ? '<div class="faint" style="margin-top:8px">Connexion au réseau public…</div>'
           : `<div class="peer-facts" style="margin:8px 0">Clé publique de cette machine :
-              <code title="${esc(pub.key)}">${esc(shortKey(pub.key))}</code> · ${pub.count} autre(s) nœud(s) public(s)
-              en ligne · ${pub.neighbors} voisin(s) direct(s)${pub.rendezvous?.error
+              <code title="${esc(pub.key)}">${esc(shortKey(String(pub.key || '')))}</code> · ${finite(pub.count) ?? 0} autre(s)
+              nœud(s) public(s) en ligne · ${finite(pub.neighbors) ?? 0} voisin(s) direct(s)${pub.rendezvous?.error
                 ? ` · annuaire : ${esc(pub.rendezvous.error)}` : ''}</div>
             <div class="peer-list">${nodes.length ? nodes.map(publicNode).join('')
               : '<div class="empty" style="padding:12px">Aucun autre nœud public en ligne pour l\'instant.</div>'}</div>`;
@@ -251,27 +260,38 @@ function renderState(net) {
 }
 
 // ---------------------------------------------------------- machines appairées
-function peerFacts(peer) {
+/** powerText (dom.js) ne reçoit que des booléens et des nombres : rien d'autre du profil
+ *  n'entre dans le HTML. */
+function safePower(p) {
+  const power = p.power && typeof p.power === 'object' ? p.power : {};
+  return { on_ac_power: flag(p.on_ac_power),
+    power: { mobile: power.mobile === true, plugged: flag(power.plugged),
+      level: finite(power.level), temperature: finite(power.temperature) } };
+}
+
+// Profil envoyé par l'autre machine : chaque champ est typé (finite, count, flag) ou échappé
+export function peerFacts(peer) {
   const p = peer.profile;
-  if (!p) return '<span class="faint">Profil pas encore reçu.</span>';
+  if (!p || typeof p !== 'object') return '<span class="faint">Profil pas encore reçu.</span>';
   if (!p.memory) {                    // profil allégé : cette machine nous voit comme un ami
     const facts = ['profil réduit (cette machine te compte parmi ses amis)'];
-    if (p.lends_models) facts.push(`prête ${(p.ollama?.models || []).length} modèle(s)`);
+    if (p.lends_models) facts.push(`prête ${count(p.ollama?.models)} modèle(s)`);
     if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
     return facts.join(' · ');
   }
-  const gpu = p.gpus?.[0];
+  const gpu = Array.isArray(p.gpus) && p.gpus[0] && typeof p.gpus[0] === 'object' ? p.gpus[0] : null;
   const facts = [
-    gpu ? `${esc(gpu.name)} · ${bytes(gpu.vram_total)} de VRAM` : 'Pas de GPU NVIDIA',
-    `${bytes(p.memory?.total || 0)} de RAM`,
-    `${(p.ollama?.models || []).length} modèle(s)`,
+    gpu ? `${esc(gpu.name)} · ${bytes(finite(gpu.vram_total) || 0)} de VRAM` : 'Pas de GPU NVIDIA',
+    `${bytes(finite(p.memory?.total) || 0)} de RAM`,
+    `${count(p.ollama?.models)} modèle(s)`,
   ];
   if (p.lends_models) facts.push('prête ses modèles');
-  if (p.power?.mobile) {                       // téléphone : charge, niveau, température
-    const text = powerText(p);
-    facts.push(text.charAt(0).toLowerCase() + text.slice(1));
+  if (p.power?.mobile === true) {              // téléphone : charge, niveau, température
+    const text = powerText(safePower(p));
+    facts.push(esc(text.charAt(0).toLowerCase() + text.slice(1)));
   } else if (p.on_ac_power === false) facts.push('sur batterie');
-  if (p.idle_seconds != null) facts.push(p.idle_seconds < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(p.idle_seconds)}`);
+  const idle = finite(p.idle_seconds);
+  if (idle != null) facts.push(idle < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(idle)}`);
   if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
   return facts.join(' · ');
 }
@@ -321,7 +341,7 @@ function renderPeers(net) {
           ${peer.set_aside_at ? '<span class="pill err">mise de côté</span>' : ''}
           ${presenter ? `<span class="faint" title="Appairée par une présentation : pas de code à comparer, la
             confiance vient de la machine qui l'a présentée">présentée par ${esc(presenter)}</span>` : ''}
-          <span class="faint">${peer.address ? `${esc(peer.address)}:${peer.port || '?'}`
+          <span class="faint">${peer.address ? `${esc(peer.address)}:${esc(peer.port || '?')}`
             : peer.net_id ? 'par Internet' : 'adresse inconnue'}</span>
           <span class="faint">${peer.online ? 'en ligne' : peer.last_seen ? `vue ${ago(peer.last_seen)}` : 'jamais vue'}</span>
           <span style="flex:1"></span>
@@ -502,11 +522,12 @@ function renderVisible(net) {
   const list = $('#visible-list', box);
   for (const p of net.pairing) {
     const waiting = p.local_ok ? "en attente de la confirmation sur l'autre machine" : 'à confirmer ici';
+    const where = p.internet ? ' · par Internet' : p.address ? ` · ${esc(p.address)}` : '';
     const row = h(`<div class="peer"><div class="peer-head">${icon('shield')}<b>${esc(p.name)}</b>
-      <span class="faint">appairage en cours · code ${esc(p.code)} · ${waiting}</span></div></div>`);
+      <span class="faint">appairage en cours · code ${esc(p.code)}${where} · ${waiting}</span></div></div>`);
     if (!p.local_ok) {
       const btn = h(`<button class="btn sm">Vérifier le code</button>`);
-      btn.onclick = () => answerPairRequest({ node_id: p.node_id, name: p.name, code: p.code });
+      btn.onclick = () => answerPairRequest(p);       // avec sa « ref » : la réponse vise cette demande
       row.querySelector('.peer-head').append(btn);
     }
     list.append(row);
@@ -516,7 +537,7 @@ function renderVisible(net) {
     const row = h(`
       <div class="peer"><div class="peer-head">
         <span class="dot on"></span><b>${esc(v.name)}</b>
-        <span class="faint">${esc(v.address)}:${v.port}</span><span style="flex:1"></span>
+        <span class="faint">${esc(v.address)}:${esc(v.port)}</span><span style="flex:1"></span>
         <button class="btn sm primary">${icon('shield')}Appairer</button>
       </div></div>`);
     row.querySelector('button').onclick = () => startPairing(v);
@@ -556,15 +577,44 @@ async function startPairing(v) {
     + 'pour toi, puis confirme ici ET là-bas.');
 }
 
+let pairOpen = 0;                     // fenêtres d'appairage ouvertes en ce moment
+
+/** Ce qu'une fenêtre d'appairage dit en plus de l'autre machine : par où elle est jointe,
+ *  si elle est déjà appairée (accepter remplace sa clé), et si une autre demande est ouverte
+ *  en même temps (quelqu'un d'autre tente peut-être de s'appairer). Texte brut : modal l'échappe. */
+function pairDetails(p) {
+  const where = p.internet ? ' Elle est jointe par Internet, sur invitation.'
+    : p.address ? ` Adresse de l'autre machine : ${p.address}.` : '';
+  const known = p.known ? ` Attention : « ${p.known} » est déjà appairée avec cette machine ; `
+    + "accepter remplacera sa clé. Si rien n'a changé sur elle (réinstallation, appairage retiré "
+    + 'de son côté), refuse.' : '';
+  const others = pairOpen + (state.network?.pairing || [])
+    .filter(o => o.node_id !== p.node_id && !o.local_ok).length;
+  const crowd = others ? " Attention : une autre demande d'appairage est ouverte en même temps. Si tu "
+    + "n'attendais qu'une seule machine, refuse tout et recommence : quelqu'un d'autre tente peut-être "
+    + "de s'appairer." : '';
+  return where + known + crowd;
+}
+
+/** La réponse vise la demande montrée (ref) ; replace : remplacer la clé d'une machine déjà appairée. */
+const pairAnswer = (p, r) => post('/network/pair/answer', { node_id: p.node_id, accept: r.ok,
+  trust: r.choice || 'mine', ref: p.ref, replace: !!p.known && r.ok });
+
 /** Appairage commencé ici (réseau local ou invitation) : code vérifié, confiance choisie. */
 async function confirmPairing(pending, text) {
-  const r = await modal({
-    title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code, text,
-    choices: TRUST_CHOICES, confirm: 'Les codes sont identiques', cancel: 'Annuler',
-  });
+  const details = pairDetails(pending);
+  pairOpen += 1;
+  let r;
   try {
-    const snap = await post('/network/pair/answer',
-      { node_id: pending.node_id, accept: r.ok, trust: r.choice || 'mine' });
+    r = await modal({
+      title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code,
+      text: text + details, choices: TRUST_CHOICES, danger: !!pending.known,
+      confirm: pending.known ? 'Codes identiques : remplacer sa clé' : 'Les codes sont identiques',
+      cancel: 'Annuler',
+    });
+  } finally { pairOpen -= 1; }
+  try {
+    const snap = await pairAnswer(pending, r);
     const done = snap.peers.some(p => p.node_id === pending.node_id);
     if (r.ok && !done) toast('Confirmé ici. Confirme maintenant sur l\'autre machine.', 'info', 8000);
   } catch (e) { errorToast(e); }
@@ -604,14 +654,20 @@ export async function answerIntroduction(ev) {
 
 /** Demande reçue d'une autre machine (affichée quelle que soit la vue ouverte). */
 export async function answerPairRequest(ev) {
-  const r = await modal({
-    title: 'Demande d\'appairage', iconName: 'shield', code: ev.code,
-    text: `« ${ev.name} » veut s'appairer avec cette machine. Accepte seulement si ce même code `
-      + 's\'affiche sur son écran, et dis ce qu\'elle est pour toi.',
-    choices: TRUST_CHOICES, confirm: 'Accepter', cancel: 'Refuser', cautious: true,
-  });
+  const details = pairDetails(ev);
+  pairOpen += 1;
+  let r;
   try {
-    await post('/network/pair/answer', { node_id: ev.node_id, accept: r.ok, trust: r.choice || 'mine' });
+    r = await modal({
+      title: 'Demande d\'appairage', iconName: 'shield', code: ev.code,
+      text: `« ${ev.name} » veut s'appairer avec cette machine. Accepte seulement si ce même code `
+        + `s'affiche sur son écran, et dis ce qu'elle est pour toi.${details}`,
+      choices: TRUST_CHOICES, danger: !!ev.known, cautious: true,
+      confirm: ev.known ? 'Accepter et remplacer sa clé' : 'Accepter', cancel: 'Refuser',
+    });
+  } finally { pairOpen -= 1; }
+  try {
+    await pairAnswer(ev, r);
   } catch (e) { errorToast(e); }
   lastJson = '';
   loadNetwork();

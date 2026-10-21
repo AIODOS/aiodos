@@ -139,6 +139,22 @@ def test_chunking_prefers_natural_breaks():
     assert chunking.chunk_text("   ") == []
 
 
+def test_the_cut_is_part_of_the_work_contract():
+    """Un ami doit rendre exactement le découpage refait ici (jobs/kinds/index.py) : changé
+    sans incrémenter network/work.WORK_API, il ferait mettre de côté des amis honnêtes
+    restés sur l'autre version (relecture finale du 21/10/2026). Si cet essai échoue après
+    un changement voulu du découpage : incrémenter WORK_API, puis relever l'empreinte."""
+    import hashlib
+    import json
+
+    from aiodos.network import work
+    text = " ".join(f"Phrase {n} du compte rendu, avec des mots ordinaires."
+                    + ("\n\n" if n % 7 == 0 else "\n" if n % 5 == 0 else "") for n in range(400))
+    cut = chunking.chunk_text(text)
+    digest = hashlib.sha256(json.dumps(cut, ensure_ascii=False).encode()).hexdigest()[:16]
+    assert (work.WORK_API, len(cut), digest) == (1, 50, "9634d84a26c85f67")
+
+
 def test_the_search_cache_is_invalidated_once_the_write_is_committed():
     """Vidé avant le COMMIT, le cache se remplirait, entre-temps, de l'état d'avant (un
     passage tout juste écrit resterait introuvable)."""

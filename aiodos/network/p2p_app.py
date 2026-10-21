@@ -8,9 +8,22 @@ reste exige un message scellé par une machine appairée ; les réponses longues
 Une requête venue d'Internet passe par le compagnon aiodos-net, qui la relaie depuis
 127.0.0.1 avec la clé Internet authentifiée de l'appelant (en-tête X-Aiodos-Peer) :
 cette clé doit être celle de la machine qui a scellé l'enveloppe, et l'adresse vue
-(127.0.0.1) n'est pas retenue comme adresse de la machine.
+(127.0.0.1) n'est pas retenue comme adresse de la machine. Cet en-tête n'est cru que d'une
+connexion venue de cette machine même (connections.internet_key) : un appareil du réseau
+local qui l'enverrait est traité comme ce qu'il est.
+
+La taille des requêtes est bornée avant toute lecture (body_limit.py), et le corps est
+analysé ici plutôt que par FastAPI : son erreur 422 recopiait tout ce qui avait été reçu.
+Un gros corps n'est analysé que s'il a la forme d'une enveloppe (quelques valeurs simples) :
+quelques Mio de [{}, {}, …] deviendraient sinon des centaines de Mio d'objets.
+
+Un « ping » qui le demande (« where », beacons.py) reçoit, dans sa réponse scellée, l'adresse
+et le port où il est arrivé ici : une balise ne suffit plus pour qu'une autre machine suive
+celle-ci à une nouvelle adresse, il faut que la requête y soit arrivée.
 """
 import asyncio
+import json
+import re
 import threading
 import time
 
@@ -20,14 +33,19 @@ from fastapi.responses import StreamingResponse
 from aiodos import __version__
 from aiodos.cluster import helper as cluster
 from aiodos.imaging import share as images_share
-from aiodos.network import (activity, consult, envelope, group, lending, netinfo, peers,
-                            placement, sharing, work)
+from aiodos.network import (activity, body_limit, connections, consult, envelope, group,
+                            lending, netinfo, peers, placement, sharing, work)
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
 from aiodos.updates import p2p as updates
 
-PEER_HEADER = "x-aiodos-peer"        # clé Internet de l'appelant, ajoutée par le compagnon
+# Une enveloppe (envelope.wrap) : un objet de quelques valeurs simples, chaînes ou nombres.
+# Expression linéaire, vérifiée avant d'analyser un gros corps
+_STRING = r'"[^"\\]*(?:\\.[^"\\]*)*"'
+_SIMPLE = rf'(?:{_STRING}|-?[0-9][0-9.eE+-]{{0,40}}|true|false|null)'
+_PAIR = rf'\s*{_STRING}\s*:\s*{_SIMPLE}\s*'
+_ENVELOPE = re.compile(rf'\s*\{{{_PAIR}(?:,{_PAIR}){{0,7}}\}}\s*'.encode())
 
 
 def _ping(manager, sender, payload):
@@ -82,22 +100,64 @@ STREAM_HANDLERS = {
 }
 
 
+def _parse(raw: bytes):
+    """Un gros corps n'est analysé que s'il a la forme d'une enveloppe : sinon None."""
+    if len(raw) > body_limit.OPEN_BODY and _ENVELOPE.fullmatch(raw) is None:
+        return None
+    return json.loads(raw)
+
+
+async def _envelope(request: Request) -> dict:
+    """Le corps de la requête (déjà borné par body_limit.py), un objet JSON ; un gros corps
+    est vérifié puis analysé hors de la boucle du nœud, qui sert aussi l'interface.
+    Illisible : une réponse courte, sans rien recopier de ce qui a été reçu."""
+    raw = await request.body()
+    try:
+        if len(raw) > body_limit.OPEN_BODY:
+            body = await asyncio.to_thread(_parse, raw)
+        else:
+            body = _parse(raw)
+    except (ValueError, RecursionError):
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Requête illisible : une enveloppe JSON est attendue.")
+    return body
+
+
+def _net_key(request: Request) -> str:
+    """Clé Internet de l'appelant, ajoutée par le compagnon ; "" pour une requête venue du
+    réseau local, même si elle porte l'en-tête (connections.internet_key)."""
+    return connections.internet_key(request.scope)
+
+
 def _caller_address(request: Request) -> str | None:
     """Adresse de l'appelant à retenir ; aucune si la requête vient du compagnon
     (l'adresse vue est alors 127.0.0.1, pas celle de la machine)."""
-    return None if request.headers.get(PEER_HEADER) else request.client.host
+    return None if _net_key(request) else request.client.host
 
 
 def _check_transport(peer: dict, request: Request):
     """Par Internet, la clé authentifiée par le compagnon doit être celle de la machine
     qui a scellé l'enveloppe : une machine appairée ne se fait pas passer pour une autre."""
-    key = (request.headers.get(PEER_HEADER) or "").lower()
-    if key and peer.get("net_id") and key != peer["net_id"]:
+    key = _net_key(request)
+    if key and peer.get("net_id") and key != str(peer["net_id"]).lower():
         raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cette machine.")
+
+
+def _arrived_at(request: Request) -> list | None:
+    """[adresse, port] où cette requête est arrivée ici (réponse à un « ping » qui le
+    demande, beacons.py) ; None par le compagnon, qui la relaie depuis cette machine."""
+    server = request.scope.get("server")
+    if _net_key(request) or not server or server[1] is None:
+        return None
+    return [connections.normal_host(server[0]), int(server[1])]
 
 
 def create_p2p_app(manager) -> FastAPI:
     app = FastAPI(title="AIODOS — réseau", docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(body_limit.BodyLimit,
+                       actions={"hello", "pair/start", *HANDLERS,
+                                *(f"stream/{action}" for action in STREAM_HANDLERS)})
 
     @app.post("/p2p/v1/hello")
     def hello():
@@ -105,22 +165,24 @@ def create_p2p_app(manager) -> FastAPI:
                 "name": manager.name(), "version": __version__, "port": manager.p2p_port}
 
     @app.post("/p2p/v1/pair/start")
-    def pair_start(body: dict, request: Request):
-        net_key = (request.headers.get(PEER_HEADER) or "").lower()
+    async def pair_start(request: Request):
+        body = await _envelope(request)
+        net_key = _net_key(request)
         try:
             if net_key:               # par le compagnon : seulement sur invitation
-                return manager.pairing.incoming_remote(body, net_key)
-            return manager.pairing.incoming(body, request.client.host)
+                return await asyncio.to_thread(manager.pairing.incoming_remote, body, net_key)
+            return await asyncio.to_thread(manager.pairing.incoming, body, request.client.host)
         except PeerError as exc:
             raise HTTPException(403 if net_key else 400, str(exc))
 
     # Déclarée avant la route générique ci-dessous, qui capterait sinon
     # « stream/… » comme une action inconnue (FastAPI suit l'ordre des routes)
     @app.post("/p2p/v1/stream/{action:path}")
-    async def sealed_stream(action: str, body: dict, request: Request):
+    async def sealed_stream(action: str, request: Request):
         handler = STREAM_HANDLERS.get(action)
         if handler is None:
             raise HTTPException(404, "Action inconnue.")
+        body = await _envelope(request)
         sender = str(body.get("from") or "")
         peer = await asyncio.to_thread(peers.get, sender)
         if not peer or not peer["key"]:
@@ -181,15 +243,16 @@ def create_p2p_app(manager) -> FastAPI:
         return StreamingResponse(frames(), media_type="text/plain")
 
     @app.post("/p2p/v1/{action:path}")
-    async def sealed(action: str, body: dict, request: Request):
+    async def sealed(action: str, request: Request):
         handler = HANDLERS.get(action)
         if handler is None:
             raise HTTPException(404, "Action inconnue.")
+        body = await _envelope(request)
         sender = str(body.get("from") or "")
         if action == "pair/confirm":
             key = manager.pairing.key_for(sender)
             pending = manager.pairing.get(sender)
-            net_key = (request.headers.get(PEER_HEADER) or "").lower()
+            net_key = _net_key(request)
             if net_key and (pending is None or pending.net_id != net_key):
                 raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cet appairage.")
         else:
@@ -209,6 +272,8 @@ def create_p2p_app(manager) -> FastAPI:
             result = await asyncio.to_thread(handler, manager, sender, payload)
         except PeerError as exc:
             raise HTTPException(400, str(exc))
+        if action == "ping" and isinstance(payload, dict) and payload.get("where") is True:
+            result = dict(result, where=_arrived_at(request))
         return envelope.wrap_reply(key, action, manager.node_id, sender, body["ts"], result)
 
     return app

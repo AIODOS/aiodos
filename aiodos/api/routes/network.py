@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from aiodos import settings
 from aiodos.network import consult, group, invitations, peers, sharing
 from aiodos.network.client import PeerError
+from aiodos.network.pairing import PairingRefused
 
 router = APIRouter(prefix="/api/network")
 
@@ -27,6 +28,10 @@ class AnswerIn(BaseModel):
     node_id: str
     accept: bool
     trust: str = sharing.MINE           # l'autre machine : une des miennes, ou un ami
+    # La demande que l'utilisateur a vue (« ref » de /pair, de l'événement ou de l'état) :
+    # l'interface la donne toujours ; une autre demande arrivée entre-temps est refusée
+    ref: str | None = None
+    replace: bool = False               # remplacer la clé d'une machine déjà appairée
 
 
 class TrustIn(BaseModel):
@@ -45,6 +50,13 @@ class IntroAnswerIn(BaseModel):
 
 def _manager(request: Request):
     return request.app.state.network
+
+
+def _started(pending) -> dict:
+    """Un appairage commencé ici, tel que l'interface le montre (code, adresse jointe…)."""
+    return {"node_id": pending.node_id, "name": pending.name, "code": pending.code,
+            "ref": pending.ref, "address": pending.address, "internet": bool(pending.net_id),
+            "known": pending.known}
 
 
 @router.get("")
@@ -104,17 +116,19 @@ async def pair(body: NodeIn, request: Request):
     if target is None:
         raise HTTPException(404, "Machine introuvable sur le réseau.")
     try:
-        pending = await asyncio.to_thread(manager.pairing.start, target["address"], target["port"])
+        # La machine choisie dans la liste : une autre qui répondrait à son adresse est refusée
+        pending = await asyncio.to_thread(manager.pairing.start, target["address"],
+                                          target["port"], body.node_id)
     except PeerError as exc:
         raise HTTPException(400, str(exc))
-    return {"node_id": pending.node_id, "name": pending.name, "code": pending.code}
+    return _started(pending)
 
 
 @router.post("/pair/answer")
 async def answer(body: AnswerIn, request: Request):
     try:
         await asyncio.to_thread(_manager(request).pairing.answer, body.node_id, body.accept,
-                                body.trust)
+                                body.trust, body.ref, body.replace)
     except PeerError as exc:
         raise HTTPException(400, str(exc))
     return _manager(request).snapshot()
@@ -158,9 +172,11 @@ async def invitation_reply(invitation_id: int, body: CodeIn, request: Request):
     await manager.internet.sync()             # avant de composer sa clé
     try:
         pending = await asyncio.to_thread(manager.pairing.start_remote, target)
+    except PairingRefused as exc:             # refus lisible tel quel (version trop ancienne…)
+        raise HTTPException(400, str(exc))
     except PeerError as exc:
         raise HTTPException(400, f"« {target['name']} » injoignable par Internet : {exc}")
-    return {"node_id": pending.node_id, "name": pending.name, "code": pending.code}
+    return _started(pending)
 
 
 @router.delete("/invitations/{invitation_id}")

@@ -7,7 +7,18 @@ signées (delivery.py). Toutes les machines d'un groupe doivent avoir la même v
 
 Les deux programmes n'écoutent que sur 127.0.0.1 : le serveur RPC n'a ni mot de passe
 ni chiffrement, il n'est joint que par un tunnel du compagnon ; llama-server exige une
-clé tirée au hasard à chaque lancement.
+clé tirée au hasard à chaque lancement. Chez la machine qui emprunte, le tunnel ne relaie
+que ce llama-server-là (son numéro de programme est donné au compagnon dès son lancement,
+cf. Process.start et cluster/group.py). Chez la machine qui prête, le compagnon tient le
+serveur RPC : il y garde ses propres connexions, et aucun autre programme de la machine
+n'y est servi (cf. cluster/helper.py).
+
+La clé de llama-server passe par son environnement (LLAMA_API_KEY), jamais par sa ligne de
+commande, que tout compte de la machine lit (/proc/<pid>/cmdline, ps ; faille 20 de l'audit
+du 20/10/2026) ; une fois le programme prêt, Process.start vérifie qu'il l'exige bien (401
+sans elle), sinon il est arrêté : un llama.cpp qui ne la lirait pas tournerait ouvert. Leur
+sortie va dans un journal borné (logfiles.capture : ENGINE_LOG_BYTES, puis <nom>.log.1) ;
+seuls les KEEP_LOGS plus récents journaux des programmes d'avant sont gardés (faille 11).
 """
 import logging
 import os
@@ -20,7 +31,7 @@ from pathlib import Path
 
 import requests
 
-from aiodos import paths, settings
+from aiodos import logfiles, paths, settings
 from aiodos.cluster import delivery
 from aiodos.updates import engines
 from aiodos.node import children
@@ -33,6 +44,15 @@ RPC = "ggml-rpc-server"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 INFO_TTL = 300                    # versions et appareils relus au plus toutes les 5 min
 WAIT_NOTE = 5                     # s entre deux nouvelles d'un chargement en cours
+KEY_VARIABLE = "LLAMA_API_KEY"    # la clé exigée par llama-server, lue dans son environnement
+ENGINE_LOG_BYTES = 4 * 1024 ** 2  # journal d'un programme, puis <nom>.log.1 : 8 Mio au plus
+# Journaux d'anciens programmes gardés, par rôle : un nom par port (llama-rpc-50123…), car
+# plusieurs tournent parfois ensemble, et un prêt ou un groupe nouveau en lance un autre
+KEEP_LOGS = 4
+_ROLE = re.compile(r"^(.+)-\d+$")       # « llama-rpc-50123 » : le rôle « llama-rpc »
+NO_PROXY = {"http": None, "https": None}
+_live = set()                           # journaux des programmes en marche : jamais effacés
+_live_lock = threading.Lock()
 _VERSION = re.compile(r"version:\s*(\S+)\s*\(build (\d+), commit (\w+)\)")
 _DEVICE = re.compile(r"^\s*([A-Za-z]+\d+):\s*(.+?)\s*\((\d+) MiB, (\d+) MiB free\)\s*$")
 
@@ -148,44 +168,111 @@ def _listening(port: int) -> bool:
         return False
 
 
+def requires_key(port: int) -> bool:
+    """llama-server exige-t-il sa clé (401 sans elle, sur /props) ? Vérifié avec le
+    llama.cpp livré (routeur et serveur réparti) : 401 dès qu'il est prêt, 200 avec la clé,
+    et 200 sans clé s'il n'en a reçu aucune."""
+    try:
+        return requests.get(f"http://127.0.0.1:{port}/props", timeout=5,
+                            proxies=NO_PROXY).status_code == 401
+    except requests.RequestException:
+        return False
+
+
+def _tidy_logs(name: str):
+    """Journaux des programmes d'avant de ce rôle (un nom par port) : les KEEP_LOGS plus
+    récents restent, ceux des programmes en marche aussi, les autres sont effacés."""
+    role = _ROLE.match(name)
+    if role is None:
+        return                            # un nom fixe (llama-routeur, sd-server) : réécrit
+    folder = paths.log_path().parent
+    with _live_lock:
+        live = set(_live)
+    stems = {}
+    try:
+        for path in folder.glob(f"{role.group(1)}-*.log*"):
+            stem = path.name.split(".log", 1)[0]
+            if _ROLE.match(stem) and _ROLE.match(stem).group(1) == role.group(1):
+                stems.setdefault(stem, []).append(path)
+    except OSError:
+        return
+
+    def newest(stem):
+        try:
+            return max(p.stat().st_mtime for p in stems[stem])
+        except OSError:
+            return 0.0
+    old = [stem for stem in sorted(stems, key=newest, reverse=True)
+           if folder / f"{stem}.log" not in live]
+    for stem in old[KEEP_LOGS:]:
+        for path in stems[stem]:
+            try:
+                path.unlink()
+            except OSError:
+                pass                      # ouvert ailleurs : effacé une autre fois
+
+
 class Process:
-    """Un programme de llama.cpp lancé par AIODOS, journal dans data/logs/."""
+    """Un programme de llama.cpp lancé par AIODOS, journal borné dans data/logs/. Une clé
+    dans `env` (KEY_VARIABLE) est exigée de lui : vérifiée une fois prêt (requires_key)."""
 
     def __init__(self, name: str, program: Path, args: list, port: int, env: dict | None = None):
         self.name, self.program, self.args, self.port = name, program, args, port
         self.env = env
         self.log_path = paths.log_path().parent / f"{name}.log"
         self.process = None
+        self._journal = None              # fil qui recopie sa sortie (logfiles.capture)
 
-    def start(self, timeout: float, ready=None, stop=None, waiting=None) -> "Process":
+    def start(self, timeout: float, ready=None, stop=None, waiting=None,
+              spawned=None) -> "Process":
         """Lance le programme et attend qu'il écoute sur son port, puis que `ready()` soit
         vrai s'il est donné (llama-server écoute avant d'avoir chargé le modèle). `stop`
         (threading.Event, bouton Stop d'une conversation) interrompt l'attente : le
         programme est arrêté. `waiting(secondes)` est appelé toutes les WAIT_NOTE secondes
-        d'attente (avancement montré dans la conversation)."""
-        log_file = self.log_path.open("w", encoding="utf-8", errors="replace")
+        d'attente (avancement montré dans la conversation). `spawned(pid)` est appelé dès
+        le lancement, avant toute attente (tunnels réservés à ce programme) : s'il échoue,
+        le programme est arrêté et l'erreur remonte. Une clé donnée (KEY_VARIABLE dans
+        `env`) doit être exigée une fois le programme prêt : sinon il est arrêté."""
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        _tidy_logs(self.name)
         try:
             self.process = subprocess.Popen(
-                [str(self.program), *self.args], stdout=log_file, stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL, env={**os.environ, **(self.env or {})},
-                creationflags=NO_WINDOW)
+                [str(self.program), *self.args], stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                env={**os.environ, **(self.env or {})}, creationflags=NO_WINDOW)
         except OSError as exc:
-            log_file.close()
             raise EngineError(f"{self.program.name} ne démarre pas : {exc}") from exc
-        log_file.close()                  # le programme garde sa propre copie
+        with _live_lock:
+            _live.add(self.log_path)
+        self._journal = logfiles.capture(self.process.stdout, self.log_path, ENGINE_LOG_BYTES)
         children.bind(self.process.pid)   # arrêté avec AIODOS, même si AIODOS est tué
+        if spawned is not None:
+            try:
+                spawned(self.process.pid)
+            except BaseException:
+                self.stop()
+                raise
         began = time.monotonic()
         end, noted = began + timeout, began
         while time.monotonic() < end:
             if waiting is not None and time.monotonic() - noted >= WAIT_NOTE:
                 noted = time.monotonic()
                 waiting(int(noted - began))
-            if self.process.poll() is not None:
+            process = self.process            # None : arrêté entre-temps (groupe défait)
+            if process is None:
+                raise EngineError("Chargement interrompu.")
+            if process.poll() is not None:
                 raise EngineError(f"{self.program.name} s'est arrêté : {self.tail()}")
             if stop is not None and stop.is_set():
                 self.stop()
                 raise EngineError("Chargement interrompu.")
             if _listening(self.port) and (ready is None or ready()):
+                if (self.env or {}).get(KEY_VARIABLE) and not requires_key(self.port):
+                    self.stop()
+                    raise EngineError(
+                        f"{self.program.name} n'exige pas sa clé ({KEY_VARIABLE}) : cette "
+                        "version de llama.cpp ne la lit pas, il serait ouvert à tout programme "
+                        "de cette machine. Il est arrêté : mets le moteur à jour.")
                 return self
             time.sleep(0.25)
         self.stop()
@@ -196,6 +283,9 @@ class Process:
         return self.process is not None and self.process.poll() is None
 
     def tail(self, lines=4) -> str:
+        journal = self._journal
+        if journal is not None and (self.process is None or self.process.poll() is not None):
+            journal.join(2)               # ses dernières lignes, écrites par le fil du journal
         try:
             text = self.log_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -204,6 +294,8 @@ class Process:
 
     def stop(self):
         process, self.process = self.process, None
+        with _live_lock:
+            _live.discard(self.log_path)
         if process is None or process.poll() is not None:
             return
         process.terminate()
@@ -232,10 +324,12 @@ def llama_server(where: Path, model: Path, rpc_ports: list, devices: str, split:
     # --rpc avant --device : les appareils RPC0, RPC1… n'existent qu'une fois déclarés
     args = ["--rpc", ",".join(f"127.0.0.1:{p}" for p in rpc_ports)] if rpc_ports else []
     args += ["--model", str(model), "--host", "127.0.0.1", "--port", str(port),
-             "--api-key", api_key, "--ctx-size", str(context), "--parallel", "1",
+             "--ctx-size", str(context), "--parallel", "1",
              "--n-gpu-layers", str(layers), "--device", devices.replace("/", ","),
              "--tensor-split", split.replace("/", ","), "--no-webui"]
-    return Process(f"llama-server-{port}", where / f"{SERVER}{EXE}", args, port)
+    # La clé par l'environnement, pas la ligne de commande (lisible par tout compte)
+    return Process(f"llama-server-{port}", where / f"{SERVER}{EXE}", args, port,
+                   env={KEY_VARIABLE: api_key})
 
 
 def loaded(port: int) -> bool:

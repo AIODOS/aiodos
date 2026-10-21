@@ -21,6 +21,17 @@ tourne, il le remplace dès qu'aucun travail ne passe par le compagnon.
 Une copie de développement (dépôt git) reçoit et transmet les versions, mais ne les
 installe jamais. L'appli Android, elle, ne reçoit rien : son code et ses programmes sont
 ceux de l'appli, qu'une nouvelle appli remplace (node/android_app.py).
+
+Aucune machine appairée ne peut geler ce service : la réception tourne dans un fil à part
+(une machine lente ne retient ni l'installation d'une version déjà reçue, ni le
+redémarrage), chaque transfert a son échéance (p2p.py), une machine qui n'a pas fourni ce
+qu'elle annonçait est laissée de côté PEER_RETRY secondes, quel que soit le numéro
+qu'elle annonce ensuite, et la suivante est essayée aussitôt : mes machines avant les
+amis, pour une version comme pour le compagnon et les moteurs (_sources), et un fichier
+commencé chez une machine ne s'achève pas chez une autre, mais reprend chez elle quand
+elle revient (store.partial_from : un début par machine). Son profil
+est lu sans rien supposer de sa forme, et chaque étape du tour est isolée : l'erreur de
+l'une s'affiche (status) sans empêcher les autres.
 """
 import logging
 import threading
@@ -28,8 +39,7 @@ import time
 
 from aiodos import __version__, settings
 from aiodos.jobs import queue
-from aiodos.network import peers
-from aiodos.network.client import PeerError
+from aiodos.network import peers, sharing
 from aiodos.node import android_app, identity
 from aiodos.updates import binaries, install, launcher, p2p, platforms, restart, state
 from aiodos.updates import manifest as manifests
@@ -40,7 +50,9 @@ from aiodos.updates.store import Store
 log = logging.getLogger("aiodos.updates")
 
 CHECK_EVERY = 30
-PEER_RETRY = 600                 # machine qui n'a pas fourni une version : pas avant 10 min
+PEER_RETRY = 600                 # machine qui n'a pas fourni ce qu'elle annonce : pas avant 10 min
+RECEIVE_WAIT = 20                # le tour attend la réception au plus ce temps, puis continue
+MAX_SOURCES = 3                  # machines essayées au plus, par tour, pour une version
 TRIAL_RETRY = 3600               # version qui n'a pas démarré : second essai une heure après
 INSTALL_RETRY = 86400            # refusée à l'installation (paquet Python absent…) : le lendemain
 MAX_RESTARTS_PER_HOUR = 3
@@ -66,7 +78,8 @@ class UpdateService:
         self.download = None             # {"version", "from", "received", "size"}
         self.installing = None
         self.error = None
-        self._failures = {}              # (machine, version) -> prochain essai (monotonic)
+        self._failures = {}              # machine -> prochain essai (monotonic)
+        self._receiving = None           # fil de la réception en cours
         self._published = 0.0
         self._wake = threading.Event()
         self._stopping = False
@@ -86,7 +99,7 @@ class UpdateService:
         self._wake.set()
 
     def _run(self):
-        self._tidy()
+        self._step("ménage", self._tidy)
         while not self._stopping:
             try:
                 self.tick()
@@ -98,43 +111,108 @@ class UpdateService:
     def tick(self):
         if not settings.get("auto_update") or android_app.in_app():
             return
-        found = self._best_offer()
-        if found:
-            self._obtain(*found)
-        self._obtain_companion()
-        self._obtain_engine()
-        self._switch_companion()
+        self._receive()                   # relance aussi le compagnon, une fois tout reçu
         if launcher.developer_checkout():
             return
-        self._install_newest()
-        if self._should_restart():
+        self._step("installation", self._install_newest)
+        if self._step("redémarrage", self._should_restart):
             restart.request()
 
+    def _step(self, what: str, step):
+        """Une étape du tour, qui ne peut empêcher ni les suivantes ni les tours suivants :
+        son erreur se journalise et s'affiche (status)."""
+        try:
+            return step()
+        except Exception as exc:
+            log.exception("Service de mise à jour, %s", what)
+            self._set(error=f"Erreur du service de mise à jour ({what}) : {exc}")
+            return None
+
     # ------------------------------------------------------------- réception
-    def _best_offer(self):
-        """(machine, version, nom) : la version la plus récente annoncée par une machine
-        appairée en ligne, si elle l'est plus que tout ce qu'on a."""
+    def _receive(self):
+        """Réception dans un fil à part, attendue au plus RECEIVE_WAIT secondes ; encore en
+        cours au tour suivant, elle continue sans qu'on en lance une autre."""
+        running = self._receiving
+        if running is None or not running.is_alive():
+            running = threading.Thread(target=self._receive_all, daemon=True,
+                                       name="aiodos-updates-reception")
+            self._receiving = running
+            running.start()
+        running.join(RECEIVE_WAIT)
+
+    def _receive_all(self):
+        self._step("réception", self._obtain_newest)
+        self._obtain_companion()
+        self._obtain_engine()
+        # Seul endroit où le compagnon est relancé : pas pendant la réception, qui peut
+        # passer par lui, et une seule fois par tour (sa relance est asynchrone, et il reste
+        # « dépassé » d'ici là)
+        self._step("relance du compagnon", self._switch_companion)
+
+    def _receiving_elsewhere(self) -> bool:
+        """La réception tourne, dans un autre fil que celui-ci."""
+        running = self._receiving
+        return (running is not None and running.is_alive()
+                and running is not threading.current_thread())
+
+    @staticmethod
+    def _rank(peer: dict) -> int:
+        """Ordre où demander à une machine : 0 pour mes machines, 1 pour un ami ou une
+        machine au niveau de confiance inconnu (comme sharing.level), 2 pour une machine que
+        l'utilisateur a mise de côté."""
+        if peer.get("set_aside_at"):
+            return 2
+        return 0 if peer.get("trust") == sharing.MINE else 1
+
+    def _sources(self) -> list:
+        """Machines appairées en ligne qu'on n'a pas laissées de côté (_failures), dans
+        l'ordre où leur demander une version ou un fichier (_rank) ; à rang égal, celui de
+        peers.list_peers (le nom). Un ami nommé « AAA » ne passe donc pas devant mes
+        machines, ni pour une version ni pour le compagnon ou un moteur."""
+        found, now = [], time.monotonic()
+        for peer in peers.list_peers():
+            try:
+                if peer.get("online") and now >= self._failures.get(peer["node_id"], 0):
+                    found.append((self._rank(peer), peer))
+            except Exception:                 # une machine ne peut pas empêcher les autres
+                log.exception("Machine appairée illisible")
+        return [peer for _, peer in sorted(found, key=lambda f: f[0])]
+
+    def _offers(self) -> list:
+        """[(machine, version, nom)] : les versions plus récentes que tout ce qu'on a,
+        annoncées par des machines appairées en ligne qu'on n'a pas laissées de côté ; dans
+        l'ordre de _sources (mes machines d'abord), puis la plus récente."""
         data = state.load(self.store.root)
         have = versions.newest(__version__, self.store.offer(),
                                (data.get("pending") or {}).get("version"))
-        best, now = None, time.monotonic()
-        for peer in peers.list_peers():
-            offered = ((peer.get("profile") or {}).get("updates") or {}).get("offer")
-            if not peer["online"] or not versions.newer(offered, have) or refused(data, offered):
-                continue
-            if now < self._failures.get((peer["node_id"], offered), 0):
-                continue
-            if best is None or versions.newer(offered, best[1]):
-                best = (peer["node_id"], offered, peer["name"])
-        available = {"version": best[1], "from": best[2]} if best else None
+        found = []
+        for peer in self._sources():
+            try:
+                offered = p2p.offered_by(peer)
+                if not versions.newer(offered, have) or refused(data, offered):
+                    continue
+                found.append(((self._rank(peer), tuple(-n for n in versions.key(offered))),
+                              (peer["node_id"], offered, str(peer.get("name") or ""))))
+            except Exception:                 # une machine ne peut pas empêcher les autres
+                log.exception("Profil illisible d'une machine appairée")
+        offers = [offer for _, offer in sorted(found, key=lambda f: f[0])]
+        available = {"version": offers[0][1], "from": offers[0][2]} if offers else None
         if available != self.available:
             self._set(available=available)
-        return best
+        return offers
 
-    def _obtain(self, node_id: str, wanted: str, name: str):
+    def _obtain_newest(self):
+        """Une version plus récente, chez la première machine qui la donne (dans l'ordre de
+        _offers) : une qui échoue est laissée de côté, la suivante essayée aussitôt
+        (MAX_SOURCES au plus par tour)."""
+        for node_id, wanted, name in self._offers()[:MAX_SOURCES]:
+            if self._obtain(node_id, wanted, name):
+                return
+
+    def _obtain(self, node_id: str, wanted: str, name: str) -> bool:
         peer = peers.get(node_id)
         if not peer:
-            return
+            return False
         self._set(download={"version": wanted, "from": name, "received": 0, "size": 0})
 
         def progress(received, size):
@@ -142,25 +220,27 @@ class UpdateService:
             self._publish(throttle=True)
         try:
             p2p.fetch(self.network.node_id, peer, wanted, self.store, progress)
-        except (PeerError, UpdateError, OSError, ValueError) as exc:
-            self._failures[(node_id, wanted)] = time.monotonic() + PEER_RETRY
+        except Exception as exc:              # quelle qu'en soit la cause : machine de côté
+            self._failures[node_id] = time.monotonic() + PEER_RETRY
             log.warning("Version %s non reçue de « %s » : %s", wanted, name, exc)
             self._set(download=None, error=f"Version {wanted} non reçue de « {name} » : {exc}")
-            return
+            return False
         log.info("Version %s reçue de « %s »", wanted, name)
         self._set(download=None, available=None, error=None)
+        return True
 
     # ------------------------------------ programmes livrés pour la plateforme
     def _obtain_companion(self):
         """Compagnon Internet de cette plateforme, s'il manque."""
-        self._obtain_program(manifests.COMPANION, "compagnon")
+        self._step("compagnon", lambda: self._obtain_program(manifests.COMPANION, "compagnon"))
 
     def _obtain_engine(self):
         """Moteurs de cette plateforme (llama.cpp pour les gros modèles répartis,
         stable-diffusion.cpp pour les images), s'ils manquent. Ils restent les mêmes d'une
         version à l'autre : déjà reçus, ils sont copiés (store.reuse)."""
         for engine in manifests.ENGINES:
-            self._obtain_program(engine, f"moteur {engine}")
+            self._step(f"moteur {engine}",
+                       lambda engine=engine: self._obtain_program(engine, f"moteur {engine}"))
 
     def _obtain_program(self, program: str, what: str):
         """Programme `program` de cette plateforme, s'il manque, pour la version reçue la
@@ -178,12 +258,10 @@ class UpdateService:
                 continue                  # pas livré pour cette plateforme, ou déjà là
             if item is not None and self.store.reuse(wanted, item):
                 continue                  # le même, reçu avec une autre version
-            now = time.monotonic()
-            for peer in peers.list_peers():
-                if (peer["online"] and kind in p2p.held_by(peer, wanted)
-                        and now >= self._failures.get((peer["node_id"], wanted, kind), 0)
-                        and self._obtain_file(peer["node_id"], peer["name"], wanted, kind,
-                                              what)):
+            holders = [p for p in self._sources() if kind in p2p.held_by(p, wanted)]
+            for peer in holders[:MAX_SOURCES]:
+                if self._obtain_file(peer["node_id"], str(peer.get("name") or ""), wanted,
+                                     kind, what):
                     break
 
     def _obtain_file(self, node_id: str, name: str, wanted: str, kind: str,
@@ -201,8 +279,8 @@ class UpdateService:
             self._publish(throttle=True)
         try:
             p2p.fetch_file(self.network.node_id, peer, wanted, kind, self.store, progress)
-        except (PeerError, UpdateError, OSError, ValueError) as exc:
-            self._failures[(node_id, wanted, kind)] = time.monotonic() + PEER_RETRY
+        except Exception as exc:              # quelle qu'en soit la cause : machine de côté
+            self._failures[node_id] = time.monotonic() + PEER_RETRY
             log.warning("%s de la version %s non reçu de « %s » : %s", label, wanted, name, exc)
             self._set(download=None,
                       error=f"{label} de la version {wanted} non reçu de « {name} » : {exc}")
@@ -215,10 +293,15 @@ class UpdateService:
 
     def _switch_companion(self):
         """Compagnon livré arrivé alors qu'un autre programme tourne (celui du PATH, d'une
-        version plus ancienne…) : relancé dessus, quand aucun travail ne passe par lui."""
+        version plus ancienne…) : relancé dessus, quand aucun travail ne passe par lui. Pas
+        pendant la réception, qui peut passer par lui (un moteur reçu par Internet juste
+        après le compagnon) : la couper mettrait de côté une machine honnête. Elle le
+        relance elle-même en fin de course (_receive_all), une fois par tour : appelé aussi
+        par tick, il l'était deux fois de suite, sa relance étant asynchrone."""
         internet = getattr(self.network, "internet", None)
         companion = getattr(internet, "companion", None)
-        if companion is None or not self._quiet() or not companion.outdated():
+        if companion is None or self._receiving_elsewhere() or not self._quiet() \
+                or not companion.outdated():
             return
         log.info("Relance du compagnon Internet sur un programme plus approprié")
         internet.relaunch_from_thread()
@@ -267,6 +350,11 @@ class UpdateService:
                 if v}
 
     def _tidy(self):
+        """Au démarrage : manifestes gardés gonflés par une version plus ancienne remis sous
+        leur forme canonique (ils sont relus à chaque store.manifest()), puis ménage."""
+        rewritten = self.store.tidy_manifests()
+        if rewritten:
+            log.info("%d manifeste(s) remis sous leur forme canonique", rewritten)
         self.store.prune(self._keep(state.load(self.store.root)))
 
     # ------------------------------------------------------------- redémarrage
@@ -297,9 +385,17 @@ class UpdateService:
             return idle is not None and idle >= 60 * int(settings.get("idle_minutes") or 10)
         return True
 
+    def _fetching(self, version: str) -> bool:
+        """Un fichier de `version` (son compagnon, un moteur) arrive en ce moment : le
+        redémarrage sur elle l'attend. C'est borné : chaque transfert a son échéance."""
+        running, download = self._receiving, self.download
+        return bool(running is not None and running.is_alive() and download
+                    and download.get("version") == version)
+
     def _should_restart(self) -> bool:
         data = state.load(self.store.root)
-        if not self.ready(data):
+        target = self.ready(data)
+        if not target or self._fetching(target):
             return False
         if time.time() - float((data.get("pending") or {}).get("failed_at") or 0) < TRIAL_RETRY:
             return False
@@ -343,6 +439,9 @@ class UpdateService:
             "restart_when": "idle" if measurable else "next_start",
             "error": self.error,
             "notice": data.get("notice"),
+            # Version d'origine qui ignore les amis (launcher.friends_refused) : à dire,
+            # pour les amis déjà appairés, tant que ce nœud n'est pas réinstallé
+            "friends_refused": launcher.friends_refused(),
         }
 
     def _set(self, **changes):

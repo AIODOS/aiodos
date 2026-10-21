@@ -154,7 +154,7 @@ chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.
 avec [llama.cpp] : chacune en garde une tranche de couches sur sa carte graphique le temps
 de la conversation, la machine qui pose la question gardant la fin du modèle. Il apparaît
 alors en « réparti » dans le choix du modèle. Il faut, sur les machines qui prêtent,
-« Prêter ma carte graphique pour les gros modèles » (vue « Cette machine », coupé par
+« Prêter ma carte graphique pour les gros modèles » (vue « Cette machine », activé par
 défaut), et partout le compagnon : les tranches passent par ses tunnels chiffrés, entre
 mes machines seulement, jamais chez un ami. llama.cpp est livré avec les mises à jour
 signées, la même version partout. Dès qu'on le choisit, il se prépare pendant qu'on écrit
@@ -331,11 +331,22 @@ docs/                  notes de mesures et de choix techniques, téléphone Andr
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```
 
-**Sécurité de l'API locale** : elle n'écoute que sur `127.0.0.1`, vérifie l'en-tête
-`Host` (contre le *DNS rebinding*) et exige un jeton tiré au hasard à chaque lancement.
-La passerelle des autres outils, fermée par défaut, n'écoute elle aussi que sur `127.0.0.1`,
-vérifie `Host` et `Origin` (une page web ne s'en sert pas) et exige sa clé d'accès, stable
-et renouvelable.
+## Sécurité
+
+**API locale** : elle n'écoute que sur `127.0.0.1`, vérifie l'en-tête `Host` (contre le
+*DNS rebinding*) et exige un jeton tiré au hasard à chaque lancement. L'interface est
+servie avec une politique de contenu stricte : seuls les scripts du nœud s'exécutent, et
+rien ne part vers un autre hôte. Une réponse de modèle ne charge jamais d'image toute
+seule, et ses liens ne s'ouvrent que vers le web ou un courriel. La passerelle des autres
+outils, fermée par défaut, n'écoute elle aussi que sur `127.0.0.1`, vérifie `Host` et
+`Origin` (une page web ne s'en sert pas) et exige sa clé d'accès, stable et renouvelable.
+
+**Audit du 20/10/2026** : 37 failles confirmées, corrigées le 21/10 pour la version 2.0.2,
+sauf une (le pont MCP de la passerelle, réécrite à part). Modèle de menace, failles,
+bornes, compatibilité et ce qui reste ouvert : [docs/securite.md](docs/securite.md).
+**L'appairage par code passe au protocole 2** : mettre à jour toutes les machines,
+téléphone compris, avant d'en appairer de nouvelles ; les paires existantes continuent de
+se parler.
 
 ## Données
 

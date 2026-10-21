@@ -15,7 +15,8 @@ import pytest
 from aiodos import db
 from aiodos.jobs import pacing
 from aiodos.knowledge import search
-from aiodos.services import ollama
+from aiodos.network import client, work
+from aiodos.services import extract, ollama
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +27,13 @@ def data_dir(tmp_path, monkeypatch):
     search.invalidate()
     pacing.start()                     # ni conversation en cours, ni arrêt d'un test précédent
     ollama.set_thread_limit(None)
+    # Ce qu'un essai précédent a retenu en mémoire : paquets de lecture « installés » (il a
+    # pu en cacher un), échecs et demandes des amis (work.py), places des conversations et
+    # appels abandonnés (client.py), tous par identifiant de machine
+    extract._installed.cache_clear()
+    work.forget_friends()
+    client._turns.clear()
+    client._lingering.clear()
     yield tmp_path
     db.close()
 

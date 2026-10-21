@@ -4,8 +4,14 @@ du cloud.
 
 Sous Windows, ils sont chiffrés par DPAPI pour le compte de l'utilisateur
 (CryptProtectData) : la base copiée sur une autre machine, ou lue depuis un autre compte,
-ne les livre pas. Ailleurs (Linux, Android), ils restent tels quels, dans les fichiers de
-l'utilisateur seul.
+ne les livre pas. Ailleurs (Linux, macOS, Android), il n'y a pas de coffre : ils restent
+en clair dans la base, et seuls les droits des fichiers les gardent (dossier de données en
+0700, base et journaux en 0600, cf. paths.keep_private ; sous Android, en plus, le dossier
+privé de l'appli). Cela les ferme aux autres comptes de la machine, pas à un programme
+lancé sous le même compte, ni à qui emporte une copie de la base. Fermer les droits après
+coup ne reprend pas un secret déjà lu : la base des versions d'avant le 20/10/2026 était
+lisible par tous (0644), et un descripteur ouvert avant le chmod le reste. Sur une machine
+partagée, refaire les appairages et changer les clés du cloud et de la passerelle.
 
 Un secret protégé commence par MARK (octets) ou TEXT_MARK (texte). Un secret enregistré par
 cette version est protégé tout de suite. Une valeur sans marque (enregistrée avant) est
@@ -16,6 +22,16 @@ enregistrées (pas celles des appairages faits entre-temps). DPAPI indisponible 
 secret est gardé tel quel, et protégé au prochain démarrage. Un secret illisible (base
 venue d'un autre compte ou d'une autre machine) lève Unreadable : la machine appairée est à
 appairer de nouveau, la clé d'API à saisir de nouveau.
+
+Une version d'origine 2.0.x peut reprendre la main sur ces données (updates/launcher.py :
+version courante qui ne démarre pas). Elle ne connaît ni les amis ni les machines mises de
+côté : elle se servirait de leur clé comme de celle d'une de mes machines. Leur clé est donc
+gardée sous une forme qu'elle ne sait pas employer (hold) : scellée par DPAPI, sinon
+précédée de HELD. Une 2.0.x lit alors une clé de 35 octets, que ChaCha20-Poly1305 refuse :
+elle échoue au lieu de servir l'ami (sous Windows, DPAPI avait déjà cet effet). HELD n'est
+pas un chiffrement : il ne protège que de ce retour en arrière, pas d'un programme lancé
+sous le même compte. Une de mes machines garde sa clé comme avant (release) : hors DPAPI,
+une 2.0.x relancée la lit encore.
 """
 import base64
 import binascii
@@ -27,6 +43,11 @@ log = logging.getLogger("aiodos")
 
 MARK = b"dpapi1:"
 TEXT_MARK = "dpapi1:"
+# Clé d'un ami ou d'une machine mise de côté, là où DPAPI manque (hold). HELD n'est suivi
+# que d'une clé de paire en clair, de PAIR_KEY octets (network/crypto.py) : une valeur de
+# PAIR_KEY octets n'est donc jamais prise pour une clé marquée, même si elle commence par HELD.
+HELD = b"k2:"
+PAIR_KEY = 32
 _ENTROPY = b"aiodos/coffre/1"           # propre à AIODOS : un autre programme ne lit pas ces secrets
 _UI_FORBIDDEN = 0x01
 _lock = threading.Lock()
@@ -72,7 +93,9 @@ def _call(function, data: bytes) -> bytes:
 
 
 def protect(data: bytes) -> bytes:
-    """Le secret, protégé s'il peut l'être ici (déjà protégé : inchangé)."""
+    """Le secret, protégé s'il peut l'être ici (déjà protégé : inchangé). Il sert à tous les
+    secrets (clés d'API comprises) et ne connaît pas HELD : une clé de paire marquée se
+    passe en clair (unprotect, release), sinon la marque serait scellée avec elle."""
     data = bytes(data)
     if not available() or data.startswith(MARK):
         return data
@@ -86,9 +109,36 @@ def protect(data: bytes) -> bytes:
     return sealed
 
 
-def unprotect(data) -> bytes:
-    """Le secret en clair ; une valeur sans marque est rendue telle quelle."""
+def held(data) -> bool:
+    """Clé de paire marquée HELD (hold, sans DPAPI) ?"""
     data = bytes(data or b"")
+    return len(data) == len(HELD) + PAIR_KEY and data.startswith(HELD)
+
+
+def hold(data) -> bytes:
+    """La clé d'une paire hors de portée d'une version d'origine 2.0.x (un ami, une machine
+    mise de côté) : scellée par DPAPI si elle peut l'être ici, sinon précédée de HELD. Déjà
+    scellée ou marquée, ou qui n'est pas une clé de paire en clair : inchangée."""
+    data = bytes(data or b"")
+    if len(data) != PAIR_KEY:
+        return data
+    sealed = protect(data)
+    return sealed if sealed.startswith(MARK) else HELD + data
+
+
+def release(data) -> bytes:
+    """La clé d'une paire redevenue une de mes machines (plus un ami, ou rétablie) : sans
+    la marque HELD, comme toute clé d'une de mes machines (scellée par DPAPI : inchangée)."""
+    data = bytes(data or b"")
+    return data[len(HELD):] if held(data) else data
+
+
+def unprotect(data) -> bytes:
+    """Le secret en clair ; une valeur sans marque est rendue telle quelle, une clé marquée
+    HELD sans sa marque."""
+    data = bytes(data or b"")
+    if held(data):
+        return data[len(HELD):]
     if not data.startswith(MARK):
         return data
     with _lock:
@@ -126,6 +176,8 @@ def verify_text(sealed: str, clear: str) -> bool:
 
 
 def is_protected(data) -> bool:
+    """Scellé par DPAPI ? Une clé marquée HELD ne l'est pas : peers.protect_keys la scelle
+    dès que DPAPI le permet."""
     if isinstance(data, str):
         return data.startswith(TEXT_MARK)
     return bytes(data or b"").startswith(MARK)

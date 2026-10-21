@@ -4,8 +4,11 @@ pour AIODOS installé sous Windows (là où on cherche ses images), data/images/
 Un fichier créé avant un changement de dossier reste trouvé là où il a été écrit.
 
 Une demande de plusieurs images forme un lot (« batch ») : même consigne, graines qui se
-suivent. Chaque ligne dit aussi quelle machine l'a calculée, et en combien de temps.
+suivent. Chaque ligne dit aussi quelle machine l'a calculée, et en combien de temps : une
+durée finie, entre 0 et MAX_SECONDS, ou rien (elle peut venir d'une autre machine, et un
+infini gardé en base ferait tomber toute réponse JSON qui le contient).
 """
+import math
 import os
 import re
 import sys
@@ -16,6 +19,7 @@ from aiodos.imaging import catalog
 from aiodos.imaging.generate import png_size
 
 _SAFE = re.compile(r"[^0-9a-z]")
+MAX_SECONDS = 7 * 86400           # durée de calcul d'une image ou d'une vidéo, au plus
 
 
 def _pictures() -> Path | None:
@@ -57,11 +61,17 @@ def default_dir() -> Path:
 
 
 def out_dir(create: bool = True) -> Path:
-    """Le dossier où vont les nouvelles images et vidéos (créé au besoin : create)."""
+    """Le dossier où vont les nouvelles images et vidéos (créé au besoin : create). Hors des
+    données d'AIODOS (Images/AIODOS, le dossier choisi), ce qu'il crée reprend les droits que
+    l'utilisateur aurait eus sans AIODOS (paths.for_user) : l'umask 077 de ses données ne
+    vaut pas pour une galerie qu'il partage."""
     chosen = str(settings.get("images_out_dir") or "").strip()
     folder = Path(os.path.expandvars(os.path.expanduser(chosen))) if chosen else default_dir()
-    if create:
+    if create and not folder.is_dir():
+        missing = [folder, *[p for p in folder.parents if not p.exists()]]
         folder.mkdir(parents=True, exist_ok=True)
+        for made in reversed(missing):
+            paths.for_user(made)
     return folder
 
 
@@ -76,11 +86,14 @@ def add(payload: dict, data: bytes, machine: str = "", seconds: float | None = N
         (width, height), ext = png_size(data), "png"
     batch = _SAFE.sub("", str(payload.get("batch") or "lot").lower())[:32] or "lot"
     name = f"{batch}-{int(payload.get('index') or 0):02d}-{int(payload['seed'])}.{ext}"
+    if seconds is not None and not (math.isfinite(seconds) and 0 <= seconds <= MAX_SECONDS):
+        seconds = None
     folder = out_dir()
     target = folder / name
     part = target.with_name(target.name + ".part")
     part.write_bytes(data)
     os.replace(part, target)
+    paths.for_user(target)
     with db.transaction() as c:
         image_id = c.execute(
             "INSERT INTO images(batch, model, prompt, negative, seed, width, height, steps, "
@@ -122,9 +135,10 @@ def typical_seconds(model: str, width: int, height: int, frames: int | None = No
     cette durée) : la médiane des dix dernières, quelle que soit la machine. None : jamais
     faite."""
     rows = db.query("SELECT seconds FROM images WHERE model=? AND width=? AND height=? "
-                    "AND COALESCE(frames, 0)=? AND seconds > 0 ORDER BY id DESC LIMIT 10",
-                    (model, int(width or 0), int(height or 0), int(frames or 0)))
-    values = sorted(r["seconds"] for r in rows)
+                    "AND COALESCE(frames, 0)=? AND seconds > 0 AND seconds <= ? "
+                    "ORDER BY id DESC LIMIT 10",
+                    (model, int(width or 0), int(height or 0), int(frames or 0), MAX_SECONDS))
+    values = sorted(r["seconds"] for r in rows if math.isfinite(r["seconds"]))
     return round(values[len(values) // 2], 1) if values else None
 
 

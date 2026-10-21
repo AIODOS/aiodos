@@ -188,21 +188,42 @@ class FakeProcess:
 
 
 class FakeCompanion:
+    """Compagnon qui garde ses tunnels, tient ses services et dit leurs flux (comme
+    l'actuel)."""
     running = True
 
-    def __init__(self):
+    def __init__(self, features=("tunnel-owner", "service-usage", "service-hold")):
+        self.features = frozenset(features)
         self.exposed = []
         self.tunnels = []
+        self.usage = {}
+
+    def supports(self, feature):
+        return feature in self.features
+
+    def tunnel_guard_problem(self):
+        return None if "tunnel-owner" in self.features else "compagnon trop ancien"
 
     def expose(self, services):
+        """Comme le vrai : un service tenu l'est dès qu'il est exposé (l'état le dit)."""
         self.exposed.append(services)
+        self.usage = {s["name"]: self.usage.get(s["name"]) or {
+            "active": 0, "total": 0, "idle_s": None, "held": bool(s.get("hold")),
+            "holding": 2 if s.get("hold") else None, "foreign": 0, "blocked": None}
+            for s in services}
 
-    def open_tunnel(self, net_id, name):
+    def open_tunnel(self, net_id, name, guarded=True, max_connections=None):
         self.tunnels.append((net_id, name))
         return 51000 + len(self.tunnels)
 
+    def set_tunnel_owner(self, port, pid):
+        self.tunnels.append(("réservé", port, pid))
+
     def close_tunnel(self, port):
         self.tunnels.append(("fermé", port))
+
+    def service_usage(self):
+        return self.usage if "service-usage" in self.features else None
 
 
 class FakeExecutor:
@@ -244,13 +265,13 @@ def lending(monkeypatch, tmp_path):
 
 def test_lending_is_refused_politely(lending):
     manager = FakeManager()
-    ask = {"version": "11707-abc"}
+    ask = {"version": "11707-abc", "tunnel": "guarded"}
     settings.set_value("lend_gpu", False)
     with pytest.raises(PeerError, match="ne prête pas sa carte"):
         helper.lend(manager, OTHER, ask)
     settings.set_value("lend_gpu", True)
     with pytest.raises(PeerError, match="Versions de llama.cpp différentes"):
-        helper.lend(manager, OTHER, {"version": "9999-zzz"})
+        helper.lend(manager, OTHER, dict(ask, version="9999-zzz"))
     peers.set_trust(OTHER, "friend")
     with pytest.raises(PeerError, match="Seules mes machines"):
         helper.lend(manager, OTHER, ask)
@@ -263,10 +284,11 @@ def test_lending_is_refused_politely(lending):
 def test_lending_opens_the_card_to_that_machine_only(lending):
     companion, process = lending
     manager = FakeManager()
-    reply = helper.lend(manager, OTHER, {"version": "11707-abc"})
+    ask = {"version": "11707-abc", "tunnel": "guarded"}
+    reply = helper.lend(manager, OTHER, ask)
     assert reply["device"] == "Vulkan1" and process.alive
     assert companion.exposed[-1] == [{"name": reply["service"], "port": process.port,
-                                      "peers": ["c" * 64]}]
+                                      "peers": ["c" * 64], "hold": True}]
     assert manager.executor.interactive == 1                 # la carte va à la conversation
     assert helper.keep(manager, OTHER, {"service": reply["service"]}) == {"ok": True}
     assert helper.keep(manager, ME, {"service": reply["service"]}) == {"ok": False}
@@ -276,7 +298,7 @@ def test_lending_opens_the_card_to_that_machine_only(lending):
     assert manager.executor.interactive == 0
     assert helper.keep(manager, OTHER, {"service": reply["service"]}) == {"ok": False}
     # Réglage coupé pendant un prêt : la carte est reprise au prochain signe de vie
-    reply = helper.lend(manager, OTHER, {"version": "11707-abc"})
+    reply = helper.lend(manager, OTHER, ask)
     settings.set_value("lend_gpu", False)
     assert helper.keep(manager, OTHER, {"service": reply["service"]}) == {"ok": False}
     assert not process.alive and companion.exposed[-1] == []
@@ -296,6 +318,7 @@ def test_distributed_models_are_offered_with_my_lending_machines(monkeypatch, tm
     sizes = {"gros:70b": 40 * 2 ** 30, "petit:1b": 2 ** 30, "plongement": 40 * 2 ** 30}
     monkeypatch.setattr(group.weights, "gguf_path", lambda name: tmp_path / name)
     monkeypatch.setattr(group, "_header", lambda path: {"size": sizes[path.name], "layers": 80})
+    monkeypatch.setattr(group.route, "companion", lambda: FakeCompanion())  # tunnels gardés
     assert group.available() == []                           # aucune machine ne prête
     peers.save(OTHER, "PC fixe", KEY, "127.0.0.1", 1)
     peers.set_net(OTHER, "c" * 64, {})

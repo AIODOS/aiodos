@@ -4,6 +4,8 @@ Flux de morceaux scellés (ordre, troncature, altération), machine qui prête s
 modèles (refus lisibles, priorité à l'interactif), modèles proposés dans le
 choix, routage de la génération, sur le réseau local ou par le compagnon (machine
 appairée sur invitation). Sans réseau ni Ollama."""
+import io
+import json
 import threading
 
 import pytest
@@ -179,6 +181,34 @@ def test_remote_models_listed_only_when_lent_and_online():
     assert remote_models.available() == []
 
 
+def test_a_malformed_profile_never_breaks_the_model_list(monkeypatch):
+    """Faille 16, défense en profondeur : le profil est typé à l'enregistrement et à la
+    relecture (network/profile.py). S'il arrivait quand même mal formé jusqu'ici, les modèles
+    mal formés sont ignorés, une valeur douteuse est neutralisée, et la liste se sérialise
+    sans NaN : GET /api/models et la passerelle ne tombent plus pour toutes les machines."""
+    base = {"node_id": B, "name": "PC fixe", "online": True, "trust": "mine",
+            "address": "127.0.0.1", "port": 1, "net_id": None, "set_aside_at": None}
+    models = [{"name": "qwen3.6:latest", "size": float("nan"), "caps": ["completion", 3],
+               "fits_vram": "oui", "loaded": float("inf"), "digest": {"x": 1}, "family": None},
+              "pas un modèle", ["liste"], {"name": {"<img>": 1}}, {"size": 3}, {"name": ""},
+              {"name": "embeddinggemma:latest", "caps": ["embedding"]},
+              {"name": "mistral:7b", "caps": "completion", "size": -5, "loaded": True}]
+    monkeypatch.setattr(peers, "list_peers", lambda: [
+        dict(base, profile={"lends_models": True, "ollama": {"models": models}}),
+        dict(base, node_id="liste", profile=["pas", "un", "profil"]),
+        dict(base, node_id="texte", profile={"lends_models": True, "ollama": "modèles"}),
+        dict(base, node_id="oui", profile={"lends_models": "oui",
+                                           "ollama": {"models": [{"name": "x"}]}})])
+    found = remote_models.available()
+    json.dumps(found, allow_nan=False)                     # ce que sert GET /api/models
+    assert [(m["id"], m["size"], m["caps"], m["fits_vram"], m["loaded"], m["digest"],
+             m["family"]) for m in found] == [
+        ("peer:machine-b:qwen3.6:latest", 0, ["completion"], None, None, "", ""),
+        ("peer:machine-b:mistral:7b", 0, [], None, True, "", "")]
+    assert remote_models.chat_models(None) == []
+    assert remote_models.chat_models({"ollama": {"models": {"length": "<img>"}}}) == []
+
+
 def test_model_ids_keep_colons_in_model_names():
     assert remote_models.parse("peer:abc:qwen3.5:9b") == ("abc", "qwen3.5:9b")
     assert remote_models.parse("qwen3.5:9b") is None
@@ -213,21 +243,26 @@ class FakeCompanion:
         return f"http://127.0.0.1:47800/peer/{net_id}"
 
 
+class RawBody(io.BytesIO):
+    """Corps brut d'une réponse, tel que client.py le lit (urllib3 : read1, sans décompresser)."""
+
+    def read1(self, size=-1, decode_content=False):
+        return super().read1(size)
+
+
 class StreamReply:
     """Réponse en flux telle que requests la rend : un morceau scellé par ligne."""
     status_code = 200
+    headers = {}
 
     def __init__(self, lines):
-        self.lines = lines
+        self.raw = RawBody(b"".join(line + b"\n" for line in lines))
 
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
         return False
-
-    def iter_lines(self):
-        return iter(self.lines)
 
 
 @pytest.fixture

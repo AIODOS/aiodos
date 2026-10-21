@@ -9,6 +9,17 @@ moins d'unités à la fois, ou aucune, selon le réglage (jobs/pacing.py).
 Les ressources sont partagées avec le calcul fait ici pour d'autres machines
 (begin_remote / end_remote, cf. network.worker) ; l'exécuteur surveille aussi
 les baux des unités que ce nœud a confiées ailleurs (cf. jobs.leases).
+
+Chaque unité calculée ici reçoit son arrêt (stop), comme celles calculées pour une autre
+machine : il est levé quand son travail est annulé ou supprimé (vue Tâches, création
+retirée, réindexation remplacée ; vu à chaque tour de la boucle), et quand AIODOS
+s'arrête. La lecture d'une page, une transcription, une image s'interrompent alors au lieu
+d'aller au bout (une page lente jusqu'à son délai total, une longue vidéo jusqu'à sa fin),
+et ce qu'elles calculaient n'entre pas dans les bibliothèques d'un travail annulé : l'unité
+retourne en file sans compter d'essai. Une pause du travail n'arrête pas l'unité en cours.
+Sur batterie en « attendre le secteur », une unité en cours est rendue de même au lot
+suivant (pacing.wait_turn rend toute unité qui a un arrêt) : refaite plus tard, au retour
+du secteur, ou par une de mes machines qui la demande.
 """
 import asyncio
 import logging
@@ -17,8 +28,9 @@ import time
 
 import requests
 
+from aiodos import db
 from aiodos.jobs import leases, pacing, queue, registry
-from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from aiodos.jobs.models import CANCELLED, DEFAULT_SLOTS, GPU_BOUND
 from aiodos.node import priority
 from aiodos.services import ollama
 
@@ -38,12 +50,31 @@ def engine_down(exc) -> bool:
     return url.startswith(ollama.base())
 
 
-def _run_unit(task, payload) -> tuple:
+def _run_unit(task, payload, stop=None) -> tuple:
     """Une unité de la file (thread de fond), et le temps passé à attendre ou à se reposer
-    (jobs/pacing.py) : il ne compte pas dans le temps de calcul."""
+    (jobs/pacing.py) : il ne compte pas dans le temps de calcul. stop : son arrêt (travail
+    annulé ou supprimé, AIODOS qui s'arrête), transmis au calcul ; déjà levé, l'unité ne
+    commence pas (Interrupted). Appelée sans arrêt (hors de l'exécuteur), run_local l'est
+    aussi."""
+    if stop is not None and stop.is_set():
+        raise registry.Interrupted()
     before = pacing.waited()
-    result = registry.run_local(task, payload)
+    if stop is None:
+        result = registry.run_local(task, payload)
+    else:
+        result = registry.run_local(task, payload, stop)
     return result, pacing.waited() - before
+
+
+def _withdrawn(job_ids) -> set:
+    """Parmi ces travaux, ceux annulés ou supprimés depuis : leurs unités en cours ici
+    n'ont plus à aller au bout."""
+    ids = sorted(job_ids)
+    if not ids:
+        return set()
+    rows = db.query(f"SELECT id, status FROM jobs WHERE id IN ({','.join('?' * len(ids))})",
+                    tuple(ids))
+    return set(ids) - {r["id"] for r in rows if r["status"] != CANCELLED}
 
 
 class Executor:
@@ -62,6 +93,7 @@ class Executor:
         self._wake = None
         self._task = None
         self._running = set()
+        self._halts = {}                  # unité calculée ici -> (son travail, son arrêt)
         self._last_publish = {}
         self.cooldown = {}                # ressource -> instant de reprise (monotonic)
 
@@ -76,6 +108,8 @@ class Executor:
 
     async def stop(self):
         pacing.shutdown()              # les lots en attente s'arrêtent : rien ne retient l'arrêt
+        for _job, halt in self._halts.values():
+            halt.set()                 # page en lecture, transcription, image : interrompues
         if self._task:
             self._task.cancel()
 
@@ -118,6 +152,7 @@ class Executor:
             try:
                 await self._pace()
                 await self._fill()
+                await self._halt_withdrawn()
                 if time.monotonic() - last_lease_check > LEASE_CHECK_EVERY:
                     last_lease_check = time.monotonic()
                     for job_id, finished in await asyncio.to_thread(leases.expire):
@@ -145,18 +180,42 @@ class Executor:
             self._running.add(task)
             task.add_done_callback(self._running.discard)
 
+    async def _halt_withdrawn(self):
+        """Lève l'arrêt des unités en cours ici dont le travail a été annulé ou supprimé
+        depuis : sans lui, elles iraient au bout, et leur résultat entrerait dans les
+        bibliothèques (ou la galerie) d'un travail annulé."""
+        watched = {job_id for job_id, halt in self._halts.values() if not halt.is_set()}
+        if not watched:
+            return
+        withdrawn = await asyncio.to_thread(_withdrawn, watched)
+        for unit_id, (job_id, halt) in list(self._halts.items()):
+            if job_id in withdrawn and not halt.is_set():
+                log.info("Unité %s arrêtée : son travail %s a été annulé ou supprimé",
+                         unit_id, job_id)
+                halt.set()
+
     async def _execute(self, unit):
         started = time.perf_counter()
+        halt = threading.Event()
+        if pacing.stopping().is_set():       # AIODOS s'arrête déjà : elle ne commencera pas
+            halt.set()
+        self._halts[unit["id"]] = (unit["job_id"], halt)
         try:
-            result, waited = await priority.run(_run_unit, unit["task"], unit["payload"])
+            result, waited = await priority.run(_run_unit, unit["task"], unit["payload"], halt)
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {},
                 max(0.0, time.perf_counter() - started - waited))
-        except registry.Interrupted:         # arrêt d'AIODOS pendant une attente : rien n'a échoué
+        except registry.Interrupted:
+            # Arrêt d'AIODOS, travail annulé, attente du secteur : rien n'a échoué
             await asyncio.to_thread(queue.release_unit, unit["id"])
             job_id, finished = unit["job_id"], False
         except Exception as exc:
-            if engine_down(exc):
+            if halt.is_set():
+                # Après l'arrêt, l'erreur en vient (connexion coupée, programme arrêté) :
+                # l'unité n'a pas échoué, et un travail annulé ne compte pas d'échec
+                await asyncio.to_thread(queue.release_unit, unit["id"])
+                job_id, finished = unit["job_id"], False
+            elif engine_down(exc):
                 log.info("Ollama injoignable : unité %s remise en file, nouvel essai dans %s s",
                          unit["id"], ENGINE_RETRY_DELAY)
                 await asyncio.to_thread(queue.release_unit, unit["id"])
@@ -168,6 +227,7 @@ class Executor:
                     queue.fail_unit, unit["id"], str(exc)[:500], time.perf_counter() - started)
         finally:
             self.busy[unit["resource"]] -= 1
+            self._halts.pop(unit["id"], None)
         if finished:
             try:
                 await asyncio.to_thread(queue.finalize_job, job_id)

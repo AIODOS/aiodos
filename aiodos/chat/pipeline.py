@@ -173,27 +173,45 @@ def available_models() -> list:
     return models
 
 
-def _web_context(question, max_results, sources):
+def _stopped(stop) -> bool:
+    return stop is not None and stop.is_set()
+
+
+def _web_context(question, max_results, sources, stop=None):
+    """Les pages des premiers résultats, lues l'une après l'autre. stop (Stop pendant la
+    préparation) va à la recherche comme à chaque lecture : elle s'interrompt aussitôt, au
+    lieu d'aller jusqu'à son délai total (services/web.py : 20 s pour la recherche, 30 s par
+    page, qu'une page qui distille ses octets atteint), et les pages suivantes ne sont pas
+    lues."""
     blocks = []
+    if _stopped(stop):
+        return blocks
     try:
-        for res in web.web_search(question, max_results):
+        for res in web.web_search(question, max_results, stop=stop):
+            if _stopped(stop):
+                break
             try:
-                title, text = web.fetch_url_text(res["url"])
+                title, text = web.fetch_url_text(res["url"], stop=stop)
+            except web.FetchStopped:
+                break
             except Exception:
                 continue
             blocks.append(f"[Web : {title} — {res['url']}]\n{text[:3000]}")
             sources.append({"type": "web", "label": web.host_of(res["url"]),
                             "url": res["url"], "title": title})
+    except web.FetchStopped:
+        pass                          # arrêtée pendant la recherche : rien à lire
     except Exception as exc:
         log.warning("Recherche web impossible : %s", exc)
     return blocks
 
 
-def web_context(question) -> tuple:
+def web_context(question, stop=None) -> tuple:
     """Recherche web pour la question : (blocs pour le modèle, sources citées). Faite une
-    fois par message, même si la réponse change de machine en route (placement.run)."""
+    fois par message, même si la réponse change de machine en route (placement.run).
+    stop : l'arrêt de la réponse (bouton Stop, client parti) ; levé, plus rien n'est lu."""
     sources = []
-    return _web_context(question, settings.get("web_results") or 3, sources), sources
+    return _web_context(question, settings.get("web_results") or 3, sources, stop), sources
 
 
 def visible_libraries(destination) -> set | None:
@@ -397,7 +415,7 @@ def _can_create() -> str | None:
 
 def build_messages(history, question, *, libraries, conversations, web_search,
                    conversation_id=None, destination=None, web=None, peers=None,
-                   summary=None):
+                   summary=None, stop=None):
     """Construit les messages pour le modèle. → (messages, sources citées)
 
     summary : un dict à remplir avec les noms montrés au modèle dans le sommaire des
@@ -405,7 +423,8 @@ def build_messages(history, question, *, libraries, conversations, web_search,
     qui les cite s'en est servie (summary_mentioned).
 
     destination : machine qui répondra (cf. visible_libraries) ; web : résultats déjà
-    obtenus par web_context, sinon la recherche est faite ici si web_search.
+    obtenus par web_context, sinon la recherche est faite ici si web_search, et stop
+    (l'arrêt de la réponse) interrompt la lecture de ses pages.
     peers : identifiants des machines où chercher aussi, parmi celles qui m'ouvrent des
     bibliothèques (la question part chez elles) : celles que l'utilisateur a acceptées.
     Aucune par défaut."""
@@ -429,7 +448,7 @@ def build_messages(history, question, *, libraries, conversations, web_search,
 
     web_ok = False
     if web_search:
-        blocks, found = web if web is not None else web_context(question)
+        blocks, found = web if web is not None else web_context(question, stop)
         sources.extend(found)
         web_ok = bool(blocks)
         messages.append({"role": "system", "content": _WEB_RESULTS.format(

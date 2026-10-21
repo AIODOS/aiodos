@@ -125,6 +125,62 @@ def test_indexing_is_shared_through_the_companions(owner_and_lender, tmp_path):
     assert _seen_by_companion(a, b)["requests_in"] >= 9
 
 
+def test_a_burst_of_conversations_through_the_companions_all_arrive(tmp_path):
+    """Relecture finale du 21/10/2026 : 40 conversations envoyées ensemble (un outil branché
+    sur la passerelle de A) vers un modèle que seule B prête. B les sert une à une (sa file
+    de prêt), les autres attendent leur tour : 19 aboutissaient, 21 échouaient aussitôt
+    (« Trop de requêtes en même temps depuis cette machine ») et, pendant ce temps, plus
+    rien d'autre ne passait de A vers B. Toutes aboutissent désormais (A n'en envoie que
+    client.STREAMS_PER_PEER à la fois, le compagnon de B fait attendre plutôt que de
+    refuser), et les nouvelles de B passent pendant la rafale."""
+    import threading
+    import time
+
+    from tests.nodes import free_port
+    from tests.ollama_stub import OllamaStub, answer_of
+    big, count, port = "grand:7b", 40, free_port()
+    with OllamaStub(["petit:1b"], name="A") as stub_a, \
+            OllamaStub(["petit:1b", big], delay=0.02) as stub_b:
+        a = Node(tmp_path / "a", "PC portable", ["--internet-local"]).preset(
+            gateway_enabled=True, gateway_port=port, ollama_url=stub_a.url)
+        b = Node(tmp_path / "b", "PC fixe", ["--internet-local"]).preset(
+            lend_models=True, ollama_url=stub_b.url)
+        try:
+            a.start()
+            b.start()
+            _, b_id = _connect_by_internet(a, b)
+            a.api("POST", f"/network/peers/{b_id}/refresh")
+            key = a.api("GET", "/gateway")["key"]
+            body = {"model": f"peer:{b_id}:{big}",
+                    "messages": [{"role": "user", "content": "Salut"}]}
+            results = []
+
+            def one():
+                try:
+                    reply = requests.post(f"http://127.0.0.1:{port}/v1/chat/completions",
+                                          json=body, timeout=300,
+                                          headers={"Authorization": f"Bearer {key}"})
+                    results.append((reply.status_code, reply.text))
+                except requests.RequestException as exc:
+                    results.append(("exception", exc.__class__.__name__))
+            threads = [threading.Thread(target=one) for _ in range(count)]
+            for thread in threads:
+                thread.start()
+                time.sleep(0.02)
+            time.sleep(2)
+            news = [a.api("POST", f"/network/peers/{b_id}/refresh")["peers"][0]["online"]
+                    for _ in range(3)]
+            for thread in threads:
+                thread.join(320)
+            failed = [r for r in results if r[0] != 200]
+            assert len(results) == count and not failed, failed[:3]
+            assert all(answer_of(big) in text for _, text in results)
+            assert news == [True] * 3                       # pendant la rafale
+        finally:
+            a.stop()
+            b.stop()
+
+
 def test_with_the_local_network_off_my_machines_stay_reachable_by_internet(tmp_path):
     """Réseau local coupé : mes machines restent jointes par Internet, comme les pairs d'un
     client BitTorrent (demande de l'auteur, 20/10) ; plus de découverte ni de chemin direct."""

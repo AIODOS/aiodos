@@ -23,6 +23,12 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * AIODOS sur le téléphone : l'interface du nœud AIODOS de ce téléphone, en plein écran.
@@ -36,6 +42,9 @@ public class MainActivity extends Activity {
     private static final int FILES = 2;
     private static final long SLOW = 15_000;          // première ouverture : mise en place
     private static final long TOO_LONG = 180_000;     // au-delà : on le dit, et on attend encore
+    /** Ce qu'un courriel garde (plainMail), comme dans l'interface (aiodos/render.py). */
+    static final Set<String> MAIL_FIELDS =
+        new HashSet<>(Arrays.asList("to", "cc", "subject", "body"));
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WebView web;
@@ -70,10 +79,19 @@ public class MainActivity extends Activity {
                 if (sameOrigin(uri, shown)) {
                     return false;                     // l'interface du nœud, ici
                 }
+                if (!opensOutside(uri)) {                // ni le web ni un courriel : rien
+                    tell("Lien non ouvert : ce n'est ni une page web ni un courriel.");
+                    return true;
+                }
+                if ("mailto".equalsIgnoreCase(uri.getScheme())) {
+                    uri = Uri.parse(plainMail(uri.toString()));
+                }
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);   // le navigateur
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
                 try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri));   // le reste : navigateur
-                } catch (ActivityNotFoundException ignored) {
-                    // aucune appli pour ce lien
+                    startActivity(intent);
+                } catch (ActivityNotFoundException e) {
+                    tell("Aucune appli de ce téléphone n'ouvre ce lien.");
                 }
                 return true;
             }
@@ -145,6 +163,50 @@ public class MainActivity extends Activity {
         Uri node = Uri.parse(address);
         return "http".equals(uri.getScheme()) && node.getHost() != null
             && node.getHost().equals(uri.getHost()) && node.getPort() == uri.getPort();
+    }
+
+    /** Ce qu'un lien peut ouvrir hors de l'appli : une page web (le navigateur) ou un
+     *  courriel, comme dans l'interface (aiodos/render.py). Un lien d'une réponse vient
+     *  parfois d'un ami ou d'une page piégée : intent:, market:, tel:, le schéma d'une autre
+     *  appli… lanceraient celle-ci sans rien demander. CATEGORY_BROWSABLE : seules les
+     *  applis qui acceptent d'être ouvertes depuis un navigateur sont candidates. */
+    static boolean opensOutside(Uri uri) {
+        String scheme = uri == null ? null : uri.getScheme();
+        if (scheme == null) {
+            return false;
+        }
+        scheme = scheme.toLowerCase(Locale.ROOT);
+        return scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto");
+    }
+
+    /** Un courriel réduit à ses destinataires, son sujet et son texte, comme dans l'interface
+     *  (aiodos/render.py, plain_mail) : certaines messageries ont joint d'office le fichier
+     *  nommé par attach=… ou attachment=…, un lien piégé ferait partir un fichier du
+     *  téléphone. Un nom de champ encodé (%61ttach) n'est pas reconnu, donc écarté. Le
+     *  fragment (#…) tombe aussi : rien de ce qui suit l'adresse n'échappe au tri. */
+    static String plainMail(String address) {
+        int hash = address.indexOf('#');
+        if (hash >= 0) {
+            address = address.substring(0, hash);
+        }
+        int ask = address.indexOf('?');
+        if (ask < 0) {
+            return address;
+        }
+        StringBuilder kept = new StringBuilder(address.substring(0, ask));
+        char glue = '?';
+        for (String field : address.substring(ask + 1).split("&")) {
+            String name = field.split("=", 2)[0].trim().toLowerCase(Locale.ROOT);
+            if (MAIL_FIELDS.contains(name)) {
+                kept.append(glue).append(field);
+                glue = '&';
+            }
+        }
+        return kept.toString();
+    }
+
+    private void tell(String text) {
+        Toast.makeText(this, text, Toast.LENGTH_LONG).show();
     }
 
     private void show(String address) {

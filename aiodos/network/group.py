@@ -37,6 +37,14 @@ seul un nouvel appairage par code l'efface) ; « toujours accepter » s'arrête 
 machines par jour d'une même machine (au-delà, on demande) ; un retrait ou une mise de
 côté qu'une de mes machines n'a pas reçus lui sont redits quand elle revient
 (group_outbox).
+
+Un nœud dont la version d'origine ignore les amis (updates/launcher.friends_refused :
+Termux ou Linux installé depuis une 2.0.x) n'en accueille aucun, ni présenté par mes
+machines, ni présenté par un ami : si cette version reprenait la main, elle traiterait
+l'ami comme une de mes machines. Il le refuse dès la présentation (F : « declined »,
+A : « accept » faux), avec le message qui dit quoi faire, sans rien garder ni refuser pour
+de bon : réinstallé, il accueillera la prochaine présentation. _store refuse aussi, en
+dernier recours.
 """
 import ipaddress
 import json
@@ -50,6 +58,7 @@ from dataclasses import dataclass, field
 from aiodos import db
 from aiodos.network import client, crypto, envelope, netinfo, peers, route, sharing
 from aiodos.network.client import PeerError
+from aiodos.updates import launcher
 
 log = logging.getLogger("aiodos.network")
 
@@ -144,6 +153,20 @@ def _pair_secrets(private, pub: bytes, me: str, other: str):
         raise PeerError("Présentation illisible.") from exc
 
 
+def friends_refused(trust) -> str | None:
+    """Pourquoi ce nœud ne garde pas une nouvelle machine au niveau `trust`, ou None : un
+    ami ne s'ajoute pas là où la version d'origine ignore les amis (launcher.friends_refused).
+    Une de mes machines, si : une 2.0.x la traiterait comme ce qu'elle est."""
+    if trust == sharing.MINE:
+        return None
+    return launcher.friends_refused()
+
+
+def _refusal(reply: dict) -> str:
+    """Le refus d'une autre machine, tel qu'on le note dans le journal (texte venu d'elle)."""
+    return " ".join(str(reply.get("refused") or "").split())[:300]
+
+
 class Group:
     def __init__(self, manager):
         self.m = manager
@@ -228,6 +251,8 @@ class Group:
         except PeerError:
             return "unreachable"
         if ready.get("declined"):
+            if ready.get("refused"):       # sa version d'origine ignore les amis
+                log.info("« %s » n'accueille pas d'ami : %s", mine["name"], _refusal(ready))
             return "refused"               # retirée ou refusée sur cette machine-là
         if ready.get("known") or ready.get("busy") or not ready.get("pub"):
             return "known"                 # déjà appairées, ou une autre présentation en cours
@@ -254,6 +279,9 @@ class Group:
             # Gardée d'office peut-être, mais la réponse s'est perdue : l'ami l'oublie aussi
             self._cancel(friend, intro)
             return "unreachable"
+        if reply.get("refused"):              # sa version d'origine ignore les amis
+            log.info("« %s » n'accueille pas « %s » : %s", friend["name"], mine["name"],
+                     _refusal(reply))
         return "known" if reply.get("known") or reply.get("busy") else "refused"
 
     def _finish(self, intro: str, pub: str) -> bool:
@@ -295,6 +323,8 @@ class Group:
         if payload.get("accept") and payload.get("pub"):
             done = self._finish(intro, payload["pub"])
         else:
+            if payload.get("refused"):        # sa version d'origine ignore les amis
+                log.info("« %s » n'accueille pas d'ami : %s", _name(sender), _refusal(payload))
             with self._lock:
                 self._sent.pop(intro, None)
             self._cancel(peers.get(sent["machine"]), intro)
@@ -314,6 +344,10 @@ class Group:
             return {"known": True}
         if declined(found["node_id"]):
             return {"declined": True}         # retirée ou refusée ici : elle ne revient pas
+        refused = friends_refused(sharing.FRIEND)   # gardée ici en amie (keyed)
+        if refused:                           # rien de gardé, rien de refusé pour de bon
+            log.warning("Présentation de « %s » refusée : %s", found["name"], refused)
+            return {"declined": True, "refused": refused}
         private, public = crypto.new_exchange()
         with self._lock:
             self._purge()
@@ -371,6 +405,11 @@ class Group:
             return {"known": True}
         if declined(machine):
             return {"accept": False}          # refusée ou retirée ici : pas de nouvelle question
+        # Gardée au niveau donné à la machine qui présente (_take) : une amie, le plus souvent
+        refused = friends_refused(presenter.get("trust") or sharing.FRIEND)
+        if refused:                           # pas de question qu'on ne pourrait pas accepter
+            log.warning("Présentation de « %s » refusée : %s", found["name"], refused)
+            return {"accept": False, "refused": refused}
         offer = Offer(intro, sender, found, _pub(payload.get("pub")))
         auto = group_ok(sender) and auto_accepted_today(sender) < AUTO_LIMIT
         with self._lock:
@@ -427,7 +466,13 @@ class Group:
         if presenter is None:
             self.m.changed()
             raise PeerError("La machine qui présentait n'est plus appairée.")
-        if not accept:
+        # Version d'origine qui ignore les amis (proposed l'a déjà dit, sauf changement
+        # entre-temps) : l'acceptation est refusée et dite, sans rien garder ni refuser pour
+        # de bon (décliner empêcherait la présentation de revenir une fois ce nœud réinstallé)
+        refused = friends_refused(presenter.get("trust") or sharing.FRIEND) if accept else None
+        if refused:
+            accept = always = False
+        elif not accept:
             decline(machine, f"présentation de « {presenter['name']} » refusée")
         elif always:
             set_group_ok(offer.presenter, True)
@@ -440,6 +485,8 @@ class Group:
         reply = {"intro": offer.intro, "accept": taken is not None}
         if taken:
             reply["pub"] = taken[0]
+        if refused:
+            reply["refused"] = refused
         try:
             done = bool(client.call(self.m.node_id, presenter, "group/answer", reply,
                                     timeout=ANSWER_TIMEOUT).get("ok"))
@@ -451,6 +498,8 @@ class Group:
             raise PeerError(f"La présentation de « {offer.card['name']} » n'a pas abouti : "
                             "une des machines ne répond plus. Elle pourra être refaite.")
         self.m.changed()
+        if refused:
+            raise PeerError(refused)
         if not taken:
             return
         if always:
@@ -508,7 +557,12 @@ class Group:
     # ------------------------------------------------------------ des deux côtés
     def _store(self, found: dict, key: bytes, trust: str, presenter: str):
         """Garde la nouvelle paire (la machine est réservée dans self._storing) ; une paire
-        déjà connue n'est jamais remplacée : ce serait une clé différente de l'autre côté."""
+        déjà connue n'est jamais remplacée : ce serait une clé différente de l'autre côté.
+        Jamais un ami là où la version d'origine ignore les amis (friends_refused) : les
+        présentations le refusent avant, ceci en dernier recours."""
+        refused = friends_refused(trust)
+        if refused:
+            raise PeerError(refused)
         if peers.trust_of(found["node_id"]):
             raise PeerError("Machine déjà appairée.")
         peers.save(found["node_id"], found["name"], key, found.get("address"),

@@ -137,20 +137,26 @@ relais de n0, pas en direct.
   `cluster/lend`, `cluster/keep` et `cluster/release`. Il faut :
   - que la demande vienne de **mes machines**, jamais d'un ami ;
   - que le réglage « Prêter ma carte graphique pour les gros modèles » soit activé (vue
-    Nœud, coupé par défaut) ;
-  - la même version de llama.cpp des deux côtés.
+    Nœud, activé par défaut) ;
+  - la même version de llama.cpp des deux côtés ;
+  - depuis le 21/10/2026 ([securite.md](securite.md), § 3.6) : un compagnon qui tient le
+    serveur RPC (capacités `service-usage` et `service-hold`, donc Windows ou Linux), une
+    machine qui emprunte par un tunnel gardé, et pas l'appli Android.
 
   Elle lance alors `ggml-rpc-server` avec sa meilleure carte, ou celle du réglage « Carte
-  prêtée », et garde les poids reçus en cache (`data/cluster/cache`). Elle reprend sa
-  carte quand la machine qui l'emprunte la rend, se tait depuis 90 s, ou quand le réglage
-  est coupé. Pendant le prêt, ses unités de fond laissent la place.
+  prêtée », et garde les poids reçus en cache (`data/cluster/cache`, ramené sous 48 Gio).
+  Elle reprend sa carte quand la machine qui l'emprunte la rend, se tait depuis 90 s, ou
+  quand le réglage est coupé ; et aussi quand la connexion du tunnel tombe, ou quand le
+  compagnon ne tient plus le serveur ou y voit un autre programme. Pendant le prêt, ses
+  unités de fond laissent la place.
 - **La machine qui pose la question** (`aiodos/cluster/group.py`) propose « réparti » dans le
   choix du modèle, pour les modèles d'Ollama trop gros pour sa carte quand mes machines en
   ligne prêtent la leur. `plan.py` choisit le moins de machines possible, les plus grandes
   cartes d'abord ; elles gardent les premières couches, et la carte d'ici garde les
   dernières et le dernier étage. Au premier message, AIODOS demande les cartes, ouvre les
-  tunnels et lance `llama-server` sur le fichier d'Ollama. Le groupe reste prêt 10 minutes
-  après la dernière réponse.
+  tunnels et lance `llama-server` sur le fichier d'Ollama. Depuis le 21/10/2026, les
+  tunnels sont gardés : ils ne relaient que ce llama-server, et se ferment dès qu'il
+  s'arrête. Le groupe reste prêt 10 minutes après la dernière réponse.
 - **Préparé pendant qu'on écrit** (`group.prepare`, `POST /api/cluster/prepare`) : dès
   qu'un modèle réparti est choisi dans la conversation, le groupe se forme en arrière-plan,
   et un bandeau dit où il en est. Une question envoyée avant la fin attend cette mise en

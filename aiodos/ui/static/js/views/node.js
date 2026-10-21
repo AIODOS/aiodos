@@ -48,6 +48,19 @@ export async function loadNode() {
   } catch (e) { /* nœud indisponible : on réessaiera */ }
 }
 
+// Ce qu'AIODOS n'a pas pu fermer aux autres comptes de la machine (paths.left_open) :
+// l'avertissement du journal ne se voit ni depuis la fenêtre ni depuis l'appli
+function leftOpen(list) {
+  const items = Array.isArray(list) ? list.filter(x => typeof x === 'string') : [];
+  if (!items.length) return '';
+  const shown = items.slice(0, 5).map(x => `<span class="mono">${esc(x)}</span>`).join(', ');
+  return `<div class="banner warn" style="margin-top:10px">${icon('warn')}
+    ${items.length} élément(s) des données d'AIODOS restent lisibles par d'autres comptes de
+    cette machine (disque sans droits Unix, ou fichier d'un autre compte) : ${shown}${
+    items.length > 5 ? ' …' : ''}. Déplace le dossier de données sur un disque qui garde les
+    droits, ou corrige-les à la main.</div>`;
+}
+
 function gauge(used, total, label) {
   const pct = total ? Math.round(100 * used / total) : 0;
   return `<div class="gauge">${label}<div class="bar"><i class="fill" style="width:${pct}%"></i></div>
@@ -79,7 +92,7 @@ function render() {
       <dt>${integrated() ? 'Moteur' : 'Ollama'}</dt><dd>${n.ollama.version
         ? (integrated() ? `${esc(n.ollama.version)} (intégré)` : `version ${esc(n.ollama.version)}`)
         : '<span style="color:var(--err)">ne répond pas</span>'}</dd>
-    </dl>`;
+    </dl>${leftOpen(n.left_open)}`;
   $('#rename-node', root).onclick = renameNode;
 
   const vram = Math.max(0, ...n.gpus.map(g => g.vram_total));

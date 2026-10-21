@@ -47,14 +47,36 @@ def test_text_like_and_binary(tmp_path):
 
 def test_readable_documents_follow_the_installed_packages(monkeypatch):
     """Un nœud minimal ou un téléphone peut manquer d'un paquet de lecture : il ne
-    lit alors pas ce format. HTML et OpenDocument se lisent toujours."""
+    lit alors pas ce format. HTML et OpenDocument se lisent toujours. Ce qui est installé
+    est retenu pour la vie du processus (extract._installed) : l'essai l'oublie à chaque
+    fois qu'il le change."""
     assert extract.readable_documents() == sorted(extract.DOC_EXT)    # requirements.txt
     find_spec = importlib.util.find_spec
     monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None:
                         None if name == "pptx" else find_spec(name, package))
+    extract._installed.cache_clear()
     assert extract.readable_documents() == sorted(extract.DOC_EXT - {".pptx"})
     monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None: None)
+    extract._installed.cache_clear()
     assert extract.readable_documents() == [".epub", ".htm", ".html", ".odt"]
+    monkeypatch.undo()
+    extract._installed.cache_clear()
+    assert extract.readable_documents() == sorted(extract.DOC_EXT)
+
+
+def test_what_is_installed_is_asked_once(monkeypatch):
+    """La question revient pour chaque document qu'un ami pourrait calculer (work.lease,
+    jusqu'à 2 000 unités par demande) : importlib n'est interrogé qu'une fois par paquet."""
+    asked = []
+    find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, package=None:
+                        asked.append(name) or find_spec(name, package))
+    extract._installed.cache_clear()
+    for _ in range(50):
+        extract.readable_documents()
+    assert sorted(asked) == sorted(set(extract.READER_MODULES.values()))
+    monkeypatch.undo()
+    extract._installed.cache_clear()
 
 
 def test_media_needs_explicit_handlers(tmp_path):

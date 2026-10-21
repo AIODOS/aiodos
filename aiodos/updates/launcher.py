@@ -17,6 +17,16 @@ le code qu'on écrit. AIODOS_NO_UPDATE=1 le désactive aussi.
 Ce code tourne dans la version d'origine, qui ne change jamais : il doit rester
 simple, et ce qu'il attend des versions lancées, stable (variables CHILD_ENV,
 READY_ENV, TRIAL_ENV, BASE_ENV ; codes de sortie RESTART et ALREADY_RUNNING).
+
+Revenir à la version d'origine n'est pas anodin : elle tourne sur les données d'une
+version plus récente. Une 2.0.x ne connaît pas les niveaux de confiance (amis, machines
+mises de côté) et traiterait tout pair comme une de mes machines ; là où les clés des
+paires sont en clair (Termux, Linux), elle s'en servirait. friends_refused() le dit à la
+version lancée (UpdateService.status : « friends_refused ») ; l'appairage d'un ami, et
+l'accueil d'un ami présenté par mes machines, doivent le consulter et refuser tant que ce
+nœud n'est pas réinstallé depuis une version récente (network/pairing.py,
+network/group.py). Et quand le lanceur reprend la main parce que la version courante ne
+démarre pas, il le note (avis « rollback ») au lieu de se taire.
 """
 import logging
 import os
@@ -43,6 +53,9 @@ MAX_ATTEMPTS = 2
 HEALTHY_AFTER = 10
 START_TIMEOUT = 240                    # pas en bonne santé au-delà : arrêtée, écartée
 MAX_RESTARTS = 5                       # par lancement : garde-fou contre une boucle
+TRUST_SINCE = "2.0.2-dev"              # première version qui connaît les amis (2.0.0, 2.0.1 : non)
+# Ce qui le prouve dans son code : des copies « 2.0.2-dev » ont précédé les amis (804bd7c)
+TRUST_MARK = ("aiodos/network/sharing.py", 'FRIEND = "friend"')
 
 
 def developer_checkout() -> bool:
@@ -57,6 +70,47 @@ def supervised() -> bool:
 
 def base_dir() -> Path:
     return Path(os.environ.get(BASE_ENV) or paths.APP_ROOT)
+
+
+def base_version() -> str | None:
+    """Numéro de la version d'origine, celle qui reprendrait la main (lancée par un
+    lanceur), ou None."""
+    if not supervised():
+        return None
+    from aiodos.updates import install           # pas au chargement : le lanceur reste léger
+    return install.declared_version(base_dir())
+
+
+def knows_friends(folder: Path) -> bool:
+    """Le code de `folder` connaît-il les niveaux de confiance ? Lu dans le code même
+    (TRUST_MARK) : le numéro seul ne suffit pas, des copies « 2.0.2-dev » les ignoraient."""
+    name, mark = TRUST_MARK
+    try:
+        return mark in (Path(folder) / name).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def friends_refused() -> str | None:
+    """Pourquoi ce nœud ne doit pas appairer d'ami (ni en accueillir un présenté par mes
+    machines), ou None. Sa version d'origine ne connaît pas les niveaux de confiance : si
+    elle reprenait la main (version courante qui ne démarre pas, trop de redémarrages),
+    elle traiterait l'ami comme une de mes machines. Version d'origine illisible : refusé
+    aussi, par prudence. Sous Windows, rien à craindre : la clé de la paire est scellée
+    (node/vault.py, DPAPI), et une 2.0.x ne peut rien en faire."""
+    if not supervised():
+        return None
+    from aiodos.node import vault
+    if vault.available():
+        return None
+    base = base_version()
+    if base is not None and not versions.newer(TRUST_SINCE, base) and knows_friends(base_dir()):
+        return None
+    shown = f"AIODOS {base}" if base else "une version d'AIODOS illisible ici"
+    return (f"Ce nœud a été installé avec {shown}, qui ne connaît pas les amis : si elle "
+            "reprenait la main, elle traiterait un ami comme une de tes machines. Mets AIODOS "
+            "à jour sur ce nœud en le réinstallant depuis une version récente (installeur, "
+            "ou archive), puis appaire ton ami.")
 
 
 def child_argv(argv: list) -> list:
@@ -100,7 +154,7 @@ def dispatch(argv: list, store: Store | None = None, base_version: str = __versi
     while True:
         if instance.running():
             return None                   # « déjà ouvert » : dit par la suite du démarrage
-        outcome = None
+        outcome, wanted = None, None
         for wanted, trial in choose(state.load(store.root), store.installed(), base_version):
             outcome = run(store, wanted, trial, argv)
             if outcome is not None:
@@ -110,6 +164,7 @@ def dispatch(argv: list, store: Store | None = None, base_version: str = __versi
         restarts += 1
         if restarts > MAX_RESTARTS:
             log.warning("Trop de redémarrages d'affilée : la version d'origine reprend la main")
+            _note_fallback(store, wanted, "trop de redémarrages d'affilée")
             return None
 
 
@@ -212,7 +267,19 @@ def _failed(store: Store, wanted: str, trial: bool, reason: str):
             else:
                 pending["failed_at"] = time.time()
         state.update(store.root, change)
+    else:
+        _note_fallback(store, wanted, reason)  # la version d'origine va reprendre la main
     return None
+
+
+def _note_fallback(store: Store, wanted: str | None, reason: str):
+    """La version courante n'a pas tenu : dit à l'utilisateur (avis « rollback ») que la
+    version d'origine reprend la main, au lieu de le taire. Elle sera réessayée au
+    prochain lancement."""
+    if not wanted:
+        return
+    state.update(store.root, lambda data: data.update(notice={
+        "kind": "rollback", "version": wanted, "reason": reason, "at": time.time()}))
 
 
 def confirm_when_healthy(alive):

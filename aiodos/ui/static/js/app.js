@@ -1,6 +1,6 @@
 // Démarrage de l'interface : vues, navigation, événements du nœud.
 import { get, listen } from './api.js';
-import { $, $$, esc, debounce } from './dom.js';
+import { $, $$, esc, debounce, count, acceptsText, dropRefused } from './dom.js';
 import { hydrateIcons } from './icons.js';
 import { state, emit, on, prefs } from './state.js';
 import { toast } from './ui.js';
@@ -37,7 +37,7 @@ async function loadSettings() {
 let lastRemote = '';
 function remoteSignature(net) {
   return (net?.peers || []).filter(p => p.online && p.profile?.lends_models)
-    .map(p => `${p.node_id}:${(p.profile.ollama?.models || []).length}`).sort().join(',');
+    .map(p => `${p.node_id}:${count(p.profile.ollama?.models)}`).sort().join(',');
 }
 
 async function loadModels() {
@@ -109,8 +109,23 @@ function onEvent(ev) {
   }
 }
 
+// Un fichier ou un lien lâché sur la fenêtre ne remplace pas l'interface : la fenêtre native
+// donnerait à la page ainsi ouverte son pont vers Python (ui/window.py le refuse aussi). Le
+// texte se glisse toujours dans les zones de saisie, les conversations dans leur liste
+// (sidebar.js, qui garde ses propres glisser-déposer).
+function keepDrops() {
+  const refused = e => dropRefused(e.dataTransfer?.types, acceptsText(e.target));
+  document.addEventListener('dragover', e => {
+    if (e.defaultPrevented || !refused(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'none';
+  });
+  document.addEventListener('drop', e => { if (refused(e)) e.preventDefault(); });
+}
+
 async function boot() {
   frenchSpacing();                          // avant les vues : tout ce qui s'ajoute est suivi
+  keepDrops();
   hydrateIcons();
   mountChat($('#view-chat'));
   mountLibrary($('#view-library'));

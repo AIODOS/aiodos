@@ -190,6 +190,41 @@ def test_pings_and_profiles_carry_the_load(monkeypatch):
     assert "load" not in p2p_app._profile(Manager(), "ami", {})
 
 
+def test_a_malformed_profile_is_ignored_when_choosing(monkeypatch):
+    """Faille 16, défense en profondeur : le profil d'une machine est typé à l'enregistrement
+    et à la relecture (network/profile.py). S'il arrivait quand même mal formé jusqu'ici
+    (modèles qui ne sont pas des objets, nombres non finis, carte graphique illisible), ses
+    entrées mal formées sont ignorées, au lieu de faire échouer le choix pour toutes les
+    machines ; les autres machines, et ce qui reste lisible, servent comme avant."""
+    local_models(monkeypatch, MODEL)
+    fixe = lender("fixe", "PC fixe", MODEL)
+    odd = {"node_id": "bizarre", "name": "PC bizarre", "online": True, "trust": "mine",
+           "address": "127.0.0.1", "port": 1, "net_id": None, "set_aside_at": None,
+           "profile": {"lends_models": True,
+                       "gpus": [{"utilization": float("nan")}, "carte", {"utilization": 1e999},
+                                {"utilization": True}],
+                       "ollama": {"models": ["pas un modèle", {"name": None}, {"size": 3},
+                                            {"name": MODEL, "caps": 7, "fits_vram": float("nan"),
+                                             "loaded": "oui"}]}}}
+    broken = [dict(odd, node_id="liste", profile=["pas", "un", "profil"]),
+              dict(odd, node_id="texte", profile={"lends_models": True, "ollama": "qwen"}),
+              dict(odd, node_id="oui", profile={"lends_models": "oui", "ollama": {
+                  "models": [{"name": MODEL}]}})]
+    listed = peers.list_peers
+    monkeypatch.setattr(peers, "list_peers", lambda: listed() + [odd] + broken)
+    assert placement.plan(AUTO, Executor(interactive=1)) == [
+        fixe, remote_models.model_id("bizarre", MODEL), HERE]
+    chosen = next(c for c in placement.candidates(MODEL) if c.node_id == "bizarre")
+    assert (chosen.machine, chosen.fits, chosen.loaded, chosen.gpu) == ("PC bizarre", None,
+                                                                         False, 0)
+    # Le profil de cette machine-ci est relu de même
+    monkeypatch.setattr(placement, "_local_profile", lambda: {
+        "name": "Portable", "gpus": "aucune",
+        "ollama": {"models": [3, {"name": MODEL, "caps": ["completion"], "loaded": True}]}})
+    here = placement._local(MODEL, None)
+    assert (here.model, here.gpu, here.loaded) == (MODEL, 0, True)
+
+
 def test_untagged_names_and_reserved_prefixes(monkeypatch):
     """« llama3 » trouve « llama3:latest », comme pour Ollama ; un modèle d'Ollama nommé
     comme un identifiant d'AIODOS (« cloud:x ») n'est jamais choisi d'office."""

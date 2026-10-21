@@ -15,9 +15,11 @@ import uvicorn
 
 from aiodos import settings
 from aiodos.jobs import queue
-from aiodos.network import (activity, client, consult, invitations, peers, placement, route,
-                            sharing)
+from aiodos.network import (activity, client, consult, invitations, peers, placement, profile,
+                            route, sharing)
+from aiodos.network.beacons import BeaconChecks
 from aiodos.network.client import PeerError
+from aiodos.network.connections import GuardedH11
 from aiodos.network.discovery import Discovery, lan_address
 from aiodos.network.envelope import PROTOCOL, ReplayGuard
 from aiodos.network.group import Group
@@ -37,6 +39,7 @@ PORT_RETRY_DELAY = 2
 
 LISTEN_TIMEOUT = 30         # s : un serveur qui démarre lentement n'est pas un port pris
 SPARE_PORTS = 9             # ports de secours essayés à la suite du port réglé
+MAX_VISIBLE = 64            # machines non appairées montrées à la fois (balises)
 
 
 def _spare_ports(host: str, wanted: int) -> list:
@@ -84,6 +87,7 @@ class NetworkManager:
         self.internet = Internet(self, options)            # --internet, --internet-local
         self.public = Public(self)                         # réseau public (phase 3.0)
         self.visible = {}
+        self.beacons = BeaconChecks(self)                  # adresses annoncées, vérifiées
         self.error = None
         self._server = None
         self._server_task = None
@@ -197,7 +201,10 @@ class NetworkManager:
         lentement est attendu (LISTEN_TIMEOUT), puis laissé démarrer : seul un serveur
         arrêté compte comme un port pris."""
         for attempt in range(attempts):
-            config = uvicorn.Config(app, host=host, port=self.p2p_port,
+            # Délais d'en-têtes et plafonds par adresse (connections.py) plutôt qu'un
+            # plafond global de connexions : 64 connexions muettes d'un appareil inconnu
+            # suffisaient à refuser le serveur à tout le monde (relecture du 21/10/2026)
+            config = uvicorn.Config(app, host=host, port=self.p2p_port, http=GuardedH11,
                                     log_config=None, log_level="warning", access_log=False)
             self._server = uvicorn.Server(config)
             self._server_task = asyncio.create_task(_serve(self._server), name="aiodos-p2p")
@@ -276,21 +283,41 @@ class NetworkManager:
         return targets
 
     def _on_beacon(self, message: dict, address: str):
-        node_id = str(message.get("id") or "")
-        if not node_id or node_id == self.node_id:
+        """Balise reçue : un indice, que n'importe quel appareil du réseau local peut
+        envoyer. Une machine appairée n'est suivie à une autre adresse qu'après une réponse
+        scellée avec la clé de la paire, qui dit où la requête lui est arrivée
+        (network/beacons.py) ; son nom n'en vient jamais. Le plafond de MAX_VISIBLE ne vise
+        que les machines inconnues : un flot d'identifiants inventés ne cache ni mes
+        machines, ni leurs balises."""
+        node_id, port = message.get("id"), message.get("port")
+        if not peers.valid_id(node_id) or node_id == self.node_id:
             return
-        try:
-            port = int(message.get("port"))
-        except (TypeError, ValueError):
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
             return
-        name = str(message.get("name") or "?")[:60]
+        now = time.time()
+        known = peers.transport(node_id)
         is_new = node_id not in self.visible
+        if known is None and is_new and self._strangers() >= MAX_VISIBLE:
+            self._forget_unseen(now)
+            if self._strangers() >= MAX_VISIBLE:
+                return                    # un flot d'identifiants inventés
+        name = profile.name(message.get("name")) or "?"
         self.visible[node_id] = {"node_id": node_id, "name": name, "address": address,
-                                 "port": port, "last_seen": time.time()}
-        if peers.get(node_id):
-            peers.touch(node_id, address, port, name)
+                                 "port": port, "last_seen": now, "paired": known is not None}
+        if known is not None:
+            self.beacons.hint(node_id, address, port, known)
         if is_new:
             self.changed()
+
+    def _strangers(self) -> int:
+        """Machines non appairées dans la liste des machines visibles."""
+        return sum(1 for item in self.visible.values() if not item.get("paired"))
+
+    def _forget_unseen(self, now: float):
+        """Les machines non annoncées depuis VISIBLE_TTL disparaissent de la liste."""
+        for node_id, item in list(self.visible.items()):
+            if not item.get("manual") and now - item["last_seen"] > VISIBLE_TTL:
+                del self.visible[node_id]
 
     async def add_manual(self, address: str) -> dict:
         """Ajout d'une machine par son adresse (si la diffusion ne passe pas)."""
@@ -310,19 +337,34 @@ class NetworkManager:
 
     # ----------------------------------------------- machines appairées
     async def _refresh_loop(self):
-        while True:
-            known = await asyncio.to_thread(peers.list_peers)
-            # En parallèle : une machine injoignable (jusqu'à 30 s par Internet) ne retarde
-            # pas les nouvelles des autres, qui passeraient sinon pour hors ligne
-            results = await asyncio.gather(*(self._refresh_peer(p) for p in known),
-                                           return_exceptions=True)
-            for peer, result in zip(known, results):
-                if isinstance(result, Exception):
-                    log.warning("Nouvelles de « %s » : %s", peer["name"], result)
-            await self.internet.sync()
-            await self.internet.refresh_status()
-            await self.public.sync()
-            await asyncio.sleep(REFRESH_EVERY)
+        # Chaque machine à part : une machine injoignable (jusqu'à 30 s par Internet) ne
+        # retarde pas les nouvelles des autres, qui passeraient sinon pour hors ligne. Une
+        # balise ne les marque plus « en ligne » (network/beacons.py) : sans cela, un tour
+        # qui attendrait la plus lente dépasserait peers.ONLINE_WINDOW
+        running = {}                      # machine -> ses nouvelles, en cours
+        try:
+            while True:
+                known = await asyncio.to_thread(peers.list_peers)
+                for peer in known:
+                    task = running.get(peer["node_id"])
+                    if task is None or task.done():
+                        running[peer["node_id"]] = asyncio.create_task(
+                            self._refresh_logged(peer), name=f"aiodos-nouvelles-{peer['name']}")
+                for node_id in [n for n, t in running.items() if t.done()]:
+                    del running[node_id]
+                await self.internet.sync()
+                await self.internet.refresh_status()
+                await self.public.sync()
+                await asyncio.sleep(REFRESH_EVERY)
+        finally:
+            for task in running.values():
+                task.cancel()
+
+    async def _refresh_logged(self, peer: dict):
+        try:
+            await self._refresh_peer(peer)
+        except Exception as exc:  # noqa: BLE001 — une machine ne fait pas tomber la boucle
+            log.warning("Nouvelles de « %s » : %s", peer["name"], exc)
 
     async def _refresh_peer(self, peer: dict):
         full = await asyncio.to_thread(peers.get, peer["node_id"])
@@ -337,6 +379,10 @@ class NetworkManager:
             return              # hors ligne : « vue il y a … » le dira
         # Temps de réponse : celui d'un ping (un profil se calcule, nvidia-smi compris)
         elapsed_ms = None if want_profile else 1000 * (time.monotonic() - started)
+        # Typé et borné avant d'être gardé, affiché ou utilisé (network/profile.py) : un
+        # ami peut sceller n'importe quel JSON (audit du 20/10/2026 : HTML injecté dans la
+        # vue Réseau, NaN qui faisait tomber GET /api/network)
+        reply = profile.clean(reply) or {}
         await asyncio.to_thread(peers.touch, peer["node_id"], None, None, reply.get("name"))
         placement.note_load(peer["node_id"], reply.get("load"))   # si elle prête ses modèles
         activity.note(peer["node_id"], reply, elapsed_ms)         # son partage, en direct
@@ -417,10 +463,7 @@ class NetworkManager:
 
     # ----------------------------------------------------------- interface
     def snapshot(self) -> dict:
-        now = time.time()
-        for node_id, item in list(self.visible.items()):
-            if not item.get("manual") and now - item["last_seen"] > VISIBLE_TTL:
-                del self.visible[node_id]
+        self._forget_unseen(time.time())
         paired = peers.list_peers()
         paired_ids = {p["node_id"] for p in paired}
         helping = {}                      # machine -> unités qu'elle calcule pour moi

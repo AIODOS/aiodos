@@ -20,15 +20,67 @@ le téléphone. Étapes :
 Ce qu'il faut sur la machine : le SDK Android (ANDROID_HOME) avec son NDK, un JDK 17 ou plus
 récent, Rust avec la cible aarch64-linux-android, et Python 3.13 (Chaquopy installe les
 paquets avec la même version que l'appli : « uv python install 3.13 »).
+
+L'appli embarque le dossier aiodos/ tel quel et le compagnon compilé ici, signés avec sa clé,
+et l'outil fait tourner Gradle et cargo sous le compte de l'auteur. Comme tools/publish.py et
+tools/build_installer.py, il refuse donc, avant d'importer quoi que ce soit du dépôt
+(_amorce), un dépôt que d'autres comptes de la machine peuvent modifier ou qui porte des
+fichiers non suivis là où il cherche son code (private.require_private_repository : un
+module planté s'exécuterait, et partirait sur le téléphone). Avant de rien construire, il
+refuse aussi des dossiers de travail ouverts à d'autres comptes, dont ce qu'il réutilise
+d'une fois sur l'autre, compagnon compilé compris (work_paths), et des outils de
+construction dans un dossier ouvert à d'autres : SDK Android, JDK, Python de Chaquopy
+(require_private_tools ; cargo et le NDK : companion_build.require_private_tools).
 """
-import argparse
+# os et sys sont gelés dans Python : jamais pris dans le dépôt, même avant le contrôle
 import os
-import re
-import shutil
-import subprocess
 import sys
-import tarfile
-from pathlib import Path
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _amorce(root: str):
+    """Lancé comme outil : le dépôt est contrôlé (private.require_private_repository) avant
+    que rien n'en soit importé. Ni un module ni un bytecode plantés ne passent : le dossier
+    du dépôt et celui des outils sont retirés de sys.path le temps du contrôle, private.py
+    est chargé par son chemin, et aucun __pycache__ n'est lu ni écrit (pycache_prefix vers
+    un dossier qui n'existe pas). Même amorce que tools/publish.py et tools/build_installer.py."""
+    sys.dont_write_bytecode = True
+    sys.pycache_prefix = os.path.join(os.path.expanduser("~"), ".aiodos",
+                                      f"pycache-{os.urandom(16).hex()}")
+    mine = {os.path.normcase(os.path.realpath(p)) for p in (root, os.path.join(root, "tools"))}
+    saved = list(sys.path)
+    sys.path[:] = [p for p in sys.path if p and os.path.normcase(os.path.realpath(p)) not in mine]
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "aiodos_amorce_private", os.path.join(root, "aiodos", "updates", "private.py"))
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        try:
+            guard.require_private_repository(root, extra=[os.path.join(root, "build")])
+        except guard.NotPrivate as exc:
+            for stream in (sys.stdout, sys.stderr):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            sys.exit(f"Application non construite : {exc}")
+    finally:
+        sys.path[:] = saved
+    # Le dossier courant n'est pas forcément le dépôt contrôlé ici : Windows y cherche un
+    # programme (git.exe…) avant le PATH, et « python -m » y prend ses modules (pip.py).
+    # Jamais un programme du dossier courant, et les « python -m » des outils partent du
+    # dépôt (cwd=ROOT ; relecture finale du 21/10/2026)
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
+
+
+if __name__ == "__main__":
+    _amorce(os.path.dirname(_HERE))
+
+import argparse  # noqa: E402
+import re  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import tarfile  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -38,6 +90,7 @@ import android_deps  # noqa: E402
 import android_wheels  # noqa: E402
 import companion_build  # noqa: E402
 from aiodos.node import android_app  # noqa: E402
+from aiodos.updates import private  # noqa: E402
 
 PROJECT = ROOT / "android"
 STAGE = ROOT / "build" / "android"
@@ -155,8 +208,10 @@ def llama_programs(libs: Path) -> str:
 
 
 def companion(libs: Path) -> str:
-    """Le compagnon Internet pour Android, compilé une fois par état de compagnon/."""
-    commit = run("git", "log", "-1", "--format=%H", "--", "compagnon", cwd=ROOT).strip()
+    """Le compagnon Internet pour Android, compilé une fois par état de compagnon/. git est
+    lancé sans ce que .git/config pourrait lui faire exécuter (companion_build.git_command)."""
+    commit = run(*companion_build.git_command(ROOT, "log", "-1", "--format=%H", "--",
+                                              "compagnon")).strip()
     if not commit:
         raise BuildError("compagnon/ introuvable dans le dépôt")
     out = CACHE / "compagnon" / commit[:12]
@@ -173,6 +228,19 @@ def companion(libs: Path) -> str:
             raise BuildError(str(exc)) from exc
     shutil.copyfile(built, libs / android_app.COMPANION)
     return commit[:10]
+
+
+def uncommitted() -> list:
+    """Fichiers d'aiodos/ ou de compagnon/ modifiés depuis le dernier commit, ou non suivis
+    (git status, sans les fichiers ignorés). L'appli embarque aiodos/ tel qu'il est dans le
+    dossier, mais compile le compagnon depuis le dernier commit de compagnon/ (companion,
+    gardé d'une fois sur l'autre) : construite avant le commit, elle associerait le nouvel
+    AIODOS au compagnon d'avant, sans ses bornes ni ce qu'il sait faire, et rien ne le
+    dirait (relecture finale du 21/10/2026)."""
+    out = run(*companion_build.git_command(ROOT, "status", "--porcelain",
+                                           "--untracked-files=all", "--", "aiodos",
+                                           "compagnon"))
+    return [line[3:].strip() for line in out.splitlines() if line.strip()]
 
 
 def icons(res: Path):
@@ -212,6 +280,41 @@ def keystore(create: bool = False) -> Path:
     return store
 
 
+def work_paths() -> list:
+    """Les dossiers de travail, et tout ce que la construction garde d'une fois sur l'autre
+    pour le livrer tel quel : build/android-cache (le compagnon compilé pour chaque état de
+    compagnon/, la roue de pydantic-core, ses sources, son libpython, ses dépendances
+    compilées), et les sorties de Gradle qu'il reprend sans les refaire (android/build,
+    android/.gradle). Un fichier qu'un autre compte de la machine y aurait posé ou remplacé
+    partirait sur le téléphone dans l'appli signée : chacun est contrôlé avec le dépôt
+    (main), pas seulement le dossier qui le contient (un fichier créé par un autre compte
+    lui appartient, quels que soient les droits du dossier aujourd'hui)."""
+    reused = (CACHE, PROJECT / "build", PROJECT / ".gradle")
+    found = [ROOT / "build", STAGE, *reused]
+    for top in reused:
+        for folder, dirs, files in os.walk(top):
+            here = Path(folder)
+            found += [here / name for name in (*dirs, *files)]
+    return found
+
+
+def require_private_tools(sdk_root: Path, jdk_home: Path, python: Path):
+    """BuildError si d'autres comptes de cette machine peuvent modifier ce qui construit
+    l'appli : le SDK Android (ses outils, d8, aapt2, apksigner, et la plateforme, passent
+    dans l'appli ; le NDK du compagnon y est rangé), le JDK de Gradle et de la signature, ou
+    le Python 3.13 avec lequel Chaquopy installe les paquets de l'appli (son dossier).
+    Comme cargo et le NDK pour le compagnon (companion_build.require_private_tools) : un
+    outil remplacé piégerait l'appli signée. Leurs droits ne sont jamais changés ici."""
+    for what, folder in (("le SDK Android", sdk_root), ("le JDK", jdk_home),
+                         ("le Python 3.13 de Chaquopy", python)):
+        try:
+            private.require_private(folder, what)
+        except private.NotPrivate as exc:
+            raise BuildError(f"{exc}. Installe-le dans ton dossier personnel, ou rends ce "
+                             "dossier privé (toi, Système et Administrateurs seulement).") \
+                from exc
+
+
 def stage_all() -> Path:
     shutil.rmtree(STAGE, ignore_errors=True)
     libs = STAGE / "jniLibs" / ABI
@@ -227,16 +330,18 @@ def stage_all() -> Path:
 
 def build(out: Path, new_key: bool = False) -> Path:
     root = sdk()
-    stage = stage_all()
-    name, code = version()
-    gradle = PROJECT / f"gradlew{BAT}"
     env = dict(os.environ, ANDROID_HOME=str(root))
     if not env.get("JAVA_HOME"):
         env["JAVA_HOME"] = str(Path(jdk_tool("javac")).parent.parent)
+    python = python313()
+    require_private_tools(root, Path(env["JAVA_HOME"]), Path(python).parent)   # avant tout
+    stage = stage_all()
+    name, code = version()
+    gradle = PROJECT / f"gradlew{BAT}"
     ndk = companion_build.ndk()
     run(gradle, "--console=plain", "assembleRelease", f"-PaiodosStage={stage}",
         f"-PaiodosVersionName={name}", f"-PaiodosVersionCode={code}",
-        f"-PaiodosBuildPython={python313()}", f"-PaiodosKeystore={keystore(new_key)}",
+        f"-PaiodosBuildPython={python}", f"-PaiodosKeystore={keystore(new_key)}",
         *([f"-PaiodosNdk={ndk.name}"] if ndk else []), cwd=PROJECT, quiet=False, env=env)
     built = PROJECT / "build" / "outputs" / "apk" / "release" / "aiodos-release.apk"
     if not built.is_file():
@@ -266,6 +371,19 @@ def main(argv=None) -> int:
     parser.add_argument("--install", action="store_true",
                         help="installer sur le téléphone branché (adb)")
     args = parser.parse_args(argv)
+    # Le dépôt : déjà contrôlé par l'amorce quand l'outil est lancé, de nouveau ici (main
+    # appelé d'ailleurs), avec les dossiers de travail et ce qu'ils gardent d'une fois sur
+    # l'autre ; avant le compagnon et tout le reste
+    try:
+        companion_build.require_private_repository(ROOT, extra=work_paths())
+        changed = uncommitted()
+    except (companion_build.BuildError, BuildError) as exc:
+        sys.exit(f"Application non construite : {exc}")
+    if changed:
+        shown = ", ".join(changed[:6]) + ("…" if len(changed) > 6 else "")
+        sys.exit("Application non construite : des fichiers d'aiodos/ ou de compagnon/ ne sont "
+                 f"pas commités ({shown}). L'appli embarquerait aiodos/ tel quel, mais le "
+                 "compagnon de leur dernier commit : commite-les d'abord.")
     try:
         apk = build(Path(args.out), new_key=args.nouvelle_cle)
         print(f"Application : {apk} ({apk.stat().st_size / 1e6:.1f} Mo)")

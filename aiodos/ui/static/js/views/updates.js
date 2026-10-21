@@ -1,5 +1,8 @@
 // Mises à jour : version de cette machine, nouvelle version en cours de réception ou
-// prête à démarrer, et message « AIODOS a été mis à jour » montré une fois.
+// prête à démarrer, et message « AIODOS a été mis à jour » montré une fois. Sur un nœud
+// dont la version d'origine ignore les amis (updates/launcher.friends_refused), pourquoi
+// il n'en accueille pas et quoi faire (le réinstaller) : rien d'autre ne le dit à qui
+// n'essaie pas d'appairer un ami.
 import { get, post } from '../api.js';
 import { esc, bytes } from '../dom.js';
 import { icon } from '../icons.js';
@@ -58,6 +61,7 @@ export function updatesStatus() {
     <div class="setting-row updates-status"><div class="txt"><b>AIODOS ${esc(u.version)}</b>
       <small>${stateLine(u)}</small>
       ${u.error ? `<small class="warn">${esc(u.error)}</small>` : ''}
+      ${u.friends_refused ? `<small class="warn">${esc(u.friends_refused)}</small>` : ''}
       ${u.offer ? `<small>Transmet la version ${esc(u.offer)} à tes machines appairées.</small>` : ''}</div>
       ${u.ready ? `<button class="btn sm" id="updates-restart" type="button">${icon('retry')}Redémarrer maintenant</button>` : ''}
     </div>`;

@@ -200,6 +200,28 @@ def test_a_phone_lends_no_rpc_server(monkeypatch):
         helper.lend(Manager(), "pc", {"version": "11707-1268edac5"})
 
 
+def test_a_phone_never_announces_that_it_lends(monkeypatch):
+    """Le téléphone refuse tout prêt aux gros modèles répartis (ci-dessus) : son profil ne
+    l'annonce donc jamais (« cluster.lends » faux), même avec un compagnon qui tiendrait le
+    serveur, et sans interroger llama.cpp. Sinon mes machines le choisissaient, et l'échec
+    n'arrivait qu'au premier message."""
+    from aiodos.cluster import engine as llama_engine
+    from aiodos.network import route
+    from aiodos.node import identity
+
+    class Companion:
+        running = True
+
+        def supports(self, feature):
+            return True
+    settings.set_value("lend_gpu", True)
+    monkeypatch.setattr(route, "companion", lambda: Companion())
+    monkeypatch.setattr(llama_engine, "info",
+                        lambda *a, **k: pytest.fail("llama.cpp interrogé dans l'appli"))
+    monkeypatch.setenv(android_app.APP_ENV, "1")
+    assert identity._cluster() == {"lends": False}
+
+
 def test_the_service_can_ask_whether_the_node_still_runs(monkeypatch):
     class Node:
         running = True

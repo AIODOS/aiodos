@@ -11,16 +11,36 @@ du code), fetch_file() un fichier de plus, le compagnon de sa plateforme ; morce
 morceau, en reprenant un transfert interrompu, et en vérifiant tout (signature, numéro,
 empreinte) avant de garder un fichier. La machine qui transmet n'a pas à être de
 confiance : seule compte la signature de la clé de publication.
+
+Elle ne peut pas non plus retenir le transfert : chaque appel a une échéance (CALL_LIMIT,
+en plus du délai de lecture de client.call, qui repart à chaque octet reçu), chaque
+morceau doit faire exactement la taille demandée, et chaque fichier doit arriver à un
+débit minimal (MIN_RATE). Un transfert abandonné garde ce qui est reçu : il reprendra là,
+chez cette même machine ; une autre le reprend de zéro, sans quoi un morceau faux laissé
+par la première ferait accuser la seconde quand l'empreinte échoue. Son profil, enfin, est
+lu sans rien supposer de sa forme (offered_by, held_by).
 """
+import threading
+import time
+
 from aiodos.network import client, envelope
 from aiodos.network.client import PeerError
 from aiodos.updates import approval
 from aiodos.updates import manifest as manifests
+from aiodos.updates import version as versions
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import Store
 
 CHUNK = 1024 * 1024
-TIMEOUT = 60
+TIMEOUT = 60                     # délai de lecture d'un appel (client.call)
+CALL_LIMIT = 150                 # durée totale d'un appel, réponse comprise
+MIN_RATE = 32 * 1024             # octets par seconde, en moyenne sur un fichier
+FILE_MARGIN = 120                # secondes accordées en plus à chaque fichier
+TOO_SLOW = ("L'autre machine transmet trop lentement : transfert abandonné, il reprendra "
+            "plus tard.")
+
+_lock = threading.Lock()
+_stuck = {}                      # machine -> fil d'un appel resté sans réponse
 
 
 def _store() -> Store:
@@ -36,7 +56,9 @@ def serve_manifest(manager, sender, payload):
         held = []
     if not held:
         raise PeerError("Version indisponible sur cette machine.")
-    return {"signed": store.signed(wanted)}
+    # Réduite à sa forme canonique : elle a pu être gardée telle quelle par une version
+    # plus ancienne, avec ce que la machine qui l'a transmise y avait ajouté
+    return {"signed": manifests.canonical(store.signed(wanted))}
 
 
 def serve_chunk(manager, sender, payload):
@@ -60,16 +82,67 @@ HANDLERS = {
 }
 
 
+# ------------------------------------------------------------ profil d'une machine
+def _updates(peer: dict) -> dict:
+    """La partie « updates » du profil de `peer`, ou {} : le profil vient de l'autre
+    machine, tel qu'elle l'a envoyé (un ami peut y mettre n'importe quoi)."""
+    profile = peer.get("profile") if isinstance(peer, dict) else None
+    updates = profile.get("updates") if isinstance(profile, dict) else None
+    return updates if isinstance(updates, dict) else {}
+
+
+def offered_by(peer: dict) -> str | None:
+    """La version que `peer` annonce pouvoir transmettre, si son numéro est lisible."""
+    offer = _updates(peer).get("offer")
+    return offer if versions.valid(offer) else None
+
+
 def held_by(peer: dict, version: str) -> list:
     """Types de fichiers que `peer` annonce avoir pour cette version (profil lu par
     peers.list_peers). Une machine 2.0.x n'annonce rien : elle n'a que l'archive."""
-    files = (((peer.get("profile") or {}).get("updates") or {}).get("files") or {})
+    files = _updates(peer).get("files")
     kinds = files.get(version) if isinstance(files, dict) else None
     return [k for k in kinds if isinstance(k, str)] if isinstance(kinds, list) else []
 
 
+# --------------------------------------------------------------------- appels
+def _call(my_id: str, peer: dict, action: str, payload: dict,
+          limit: float = CALL_LIMIT) -> dict:
+    """client.call, dans une échéance de `limit` secondes au total (le délai de client.call
+    repart à chaque octet reçu : un filet d'octets le tiendrait indéfiniment). Un appel
+    qui la dépasse est abandonné (UpdateError) ; tant qu'il n'a pas fini, on ne demande plus
+    rien à cette machine : un seul fil, au plus, reste en attente d'elle."""
+    node = peer.get("node_id")
+    with _lock:
+        waiting = _stuck.get(node)
+        if waiting is not None and waiting.is_alive():
+            raise UpdateError("L'autre machine n'a toujours pas répondu à la demande "
+                              "précédente.")
+        _stuck.pop(node, None)
+    box = {}
+
+    def run():
+        try:
+            box["reply"] = client.call(my_id, peer, action, payload, timeout=TIMEOUT)
+        except BaseException as exc:          # rendue à l'appelant telle quelle
+            box["error"] = exc
+    worker = threading.Thread(target=run, daemon=True, name="aiodos-updates-appel")
+    worker.start()
+    worker.join(max(0.0, limit))
+    if worker.is_alive():
+        with _lock:
+            _stuck[node] = worker
+        raise UpdateError(TOO_SLOW)
+    if "error" in box:
+        raise box["error"]
+    reply = box.get("reply")
+    if not isinstance(reply, dict):
+        raise UpdateError("Réponse illisible de l'autre machine.")
+    return reply
+
+
 def _manifest(my_id: str, peer: dict, wanted: str, store: Store) -> dict:
-    reply = client.call(my_id, peer, "update/manifest", {"version": wanted}, timeout=TIMEOUT)
+    reply = _call(my_id, peer, "update/manifest", {"version": wanted})
     found = manifests.verify(reply.get("signed"))
     if found["version"] != wanted:
         raise UpdateError("La machine a envoyé une autre version que celle annoncée.")
@@ -77,29 +150,51 @@ def _manifest(my_id: str, peer: dict, wanted: str, store: Store) -> dict:
     return found
 
 
+def _chunk_bytes(reply: dict) -> bytes:
+    data = reply.get("data")
+    if not isinstance(data, str):
+        return b""
+    try:
+        return envelope.b64d(data)
+    except ValueError:
+        return b""
+
+
 def _download(my_id: str, peer: dict, wanted: str, item: dict, store: Store, progress=None):
     """Un fichier du paquet, gardé seulement une fois son empreinte vérifiée. Déjà reçu
-    avec une autre version (même empreinte) : copié sans rien demander au réseau."""
+    avec une autre version (même empreinte) : copié sans rien demander au réseau. Chaque
+    morceau doit faire exactement la taille demandée, et le fichier arriver avant son
+    échéance (MIN_RATE, FILE_MARGIN) ; sinon UpdateError, et la suite reprendra là, chez
+    cette même machine : chacune a son propre début de fichier (store.partial_from), pour
+    qu'une empreinte fausse accuse toujours la machine qui a tout envoyé."""
     if store.has(wanted, item) or store.reuse(wanted, item):
         return
-    part = store.partial(wanted, item["name"])
+    source = str(peer.get("node_id") or "")
+    part = store.partial_from(wanted, item["name"], source)
     received = part.stat().st_size if part.exists() else 0
     if received > item["size"]:
         part.unlink()
         received = 0
+    deadline = time.monotonic() + (item["size"] - received) / MIN_RATE + FILE_MARGIN
     with open(part, "ab") as out:
         while received < item["size"]:
-            reply = client.call(my_id, peer, "update/chunk",
-                                {"version": wanted, "name": item["name"],
-                                 "offset": received, "size": CHUNK}, timeout=TIMEOUT)
-            data = envelope.b64d(reply.get("data") or "")[:item["size"] - received]
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise UpdateError(TOO_SLOW)
+            expected = min(CHUNK, item["size"] - received)
+            data = _chunk_bytes(_call(my_id, peer, "update/chunk",
+                                      {"version": wanted, "name": item["name"],
+                                       "offset": received, "size": CHUNK},
+                                      limit=min(CALL_LIMIT, left)))
             if not data:
                 raise UpdateError("Transfert interrompu par l'autre machine.")
+            if len(data) != expected:
+                raise UpdateError("Morceau de taille inattendue : transfert interrompu.")
             out.write(data)
             received += len(data)
             if progress:
                 progress(received, item["size"])
-    store.finish_download(wanted, item)
+    store.finish_download(wanted, item, source)
 
 
 def fetch(my_id: str, peer: dict, wanted: str, store: Store, progress=None) -> dict:

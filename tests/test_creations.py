@@ -273,6 +273,54 @@ def test_a_creation_says_how_long_it_usually_takes(tiny_model):  # noqa: F811
                            "count": 1})["expected_s"] == 22.0
 
 
+@pytest.mark.parametrize("seconds", ["inf", "1e999", "nan", "-3", "-inf", 10 ** 400])
+def test_a_duration_that_is_not_a_sensible_number_is_not_kept(client, can_draw, seconds):
+    """La durée du calcul vient de la machine qui l'a fait (un ami autorisé à calculer mes
+    images, peut-être) : « inf » gardé tel quel faisait tomber la galerie et la conversation
+    qui avait demandé l'image (JSON sans infini, relecture du 21/10/2026). Elle est oubliée,
+    l'image est gardée, et la durée habituelle n'en tient pas compte."""
+    import base64
+
+    from aiodos.imaging import gallery
+    from aiodos.jobs.kinds import images as kind
+    made = client.post("/api/chat/create", headers=AUTH,
+                       json={"text": "Crée une image d'un chat roux"}).json()
+    wait_for(lambda: queue.job_summary(made["job_id"])["status"] == "done")
+    media = made["media"]
+    payload = {"model": media["model"], "prompt": media["prompt"], "negative": "",
+               "width": media["width"], "height": media["height"], "steps": 4, "cfg": 1.0,
+               "index": 1, "batch": media["batch"], "seed": 99}
+    output = {"png": base64.b64encode(png(media["width"], media["height"])).decode(),
+              "seconds": seconds, "machine": "PC de Léa"}
+    image_id = kind.assimilate_image(payload, output)["image_id"]
+    assert gallery.get(image_id)["seconds"] is None
+    images = client.get("/api/images", headers=AUTH)
+    assert images.status_code == 200 and image_id in {r["id"] for r in images.json()}
+    conv = client.get(f"/api/conversations/{made['conversation_id']}", headers=AUTH)
+    assert conv.status_code == 200
+    assert conv.json()["messages"][-1]["media"]["expected_s"] == 0.5    # celle d'ici
+
+
+def test_a_duration_kept_out_of_bounds_before_is_forgotten():
+    """Base d'une version d'avant, qui gardait « inf » tel quel : la migration l'oublie."""
+    from aiodos import db
+    from aiodos.imaging import gallery
+    conn = db.connect()
+    path = conn.execute("PRAGMA database_list").fetchone()[2]
+    values = (float("inf"), 1e12, -3.0, 12.5)
+    for n, seconds in enumerate(values):
+        db.execute("INSERT INTO images(batch, model, prompt, negative, seed, width, height, "
+                   "steps, cfg, file, seconds, created) VALUES('ancien', 'essai', 'p', '', ?, "
+                   "256, 384, 4, 1, ?, ?, ?)", (n, f"ancien-{n}.png", seconds, db.now()))
+    db.execute("PRAGMA user_version=18")
+    db.close()
+    db._initialized.discard(path)
+    kept = [r["seconds"] for r in db.query("SELECT seconds FROM images ORDER BY seed")]
+    assert kept == [None, None, None, 12.5]
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION
+    assert gallery.typical_seconds("essai", 256, 384) == 12.5
+
+
 # ------------------------------------------------------- relecture du 18/10 : faux positifs
 @pytest.mark.parametrize("text", [
     "Encore merci pour ton aide", "Encore une fois, merci !",

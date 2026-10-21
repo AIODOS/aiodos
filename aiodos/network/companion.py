@@ -41,6 +41,10 @@ INFO_TTL = 60              # infos Internet (relais, adresses) relues au plus to
 RESTART_DELAYS = (2, 5, 15, 30, 60)      # relances successives après un arrêt inattendu
 STABLE_AFTER = 60          # un compagnon qui a tenu une minute repart de la première attente
 TOKEN_HEADER = "X-Aiodos-Net-Token"
+# Ce que le compagnon sait faire, annoncé dans sa ligne « ready » (compagnon/src/lib.rs)
+GUARDED_TUNNELS = "tunnel-owner"     # tunnel qui ne relaie que le programme nommé (owner.rs)
+SERVICE_USAGE = "service-usage"      # l'état dit les flux en cours de chaque service exposé
+SERVICE_HOLD = "service-hold"        # service tenu : seul le compagnon y est servi (hold.rs)
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0     # pas de console qui clignote
 _LEVELS = {"ERROR": logging.ERROR, "WARN": logging.WARNING, "INFO": logging.INFO,
            "DEBUG": logging.DEBUG, "TRACE": logging.DEBUG}
@@ -145,6 +149,15 @@ def find_binary() -> Path | None:
     return found[0] if found else None
 
 
+def _features(ready: dict) -> frozenset | None:
+    """Ce que le compagnon annonce savoir faire (ligne « ready ») ; None s'il n'en dit
+    rien : un compagnon plus ancien, qui ne garde pas ses tunnels."""
+    features = ready.get("features")
+    if not isinstance(features, list):
+        return None
+    return frozenset(str(f) for f in features if isinstance(f, str))
+
+
 def _terminate(process):
     """Arrête un compagnon dont on ne veut plus : entrée standard fermée (il s'arrête
     proprement), puis tué s'il traîne."""
@@ -183,6 +196,7 @@ class Companion:
         self.listen = None
         self.error = None
         self.binary = None             # programme lancé, et d'où il vient (cf. locate)
+        self.features = None           # ce qu'il sait faire ; None : compagnon trop ancien
         self.origin = None
         self._broken = set()           # origines des programmes qui n'ont pas démarré
         self.generation = 0            # +1 à chaque lancement : liste blanche à renvoyer
@@ -292,6 +306,7 @@ class Companion:
                 self.process, self.token = process, token
                 self.id, self.listen = found.get("id"), found.get("listen")
                 self.binary, self.origin = binary, origin
+                self.features = _features(found)
                 self._broken.discard(origin)
                 self.generation += 1
                 self._info = None
@@ -417,15 +432,72 @@ class Companion:
     # Tunnels (gros modèles répartis) : un service TCP local de cette machine ouvert à des
     # machines nommées, ou le service d'une autre machine joint par un port local.
     def expose(self, services: list) -> dict:
-        """Remplace les services ouverts : [{"name", "port", "peers": [clé…]}…]."""
+        """Remplace les services ouverts : [{"name", "port", "peers": [clé…], "hold"}…].
+        Avec « hold » (compagnon qui annonce SERVICE_HOLD), le compagnon tient le service :
+        il y garde ses propres connexions, et aucun autre programme de la machine n'y est
+        servi ; s'il en voit un, l'état du service dit « blocked »."""
         return self.api("PUT", "/net/v1/exposed", {"services": services})
 
-    def open_tunnel(self, net_id: str, name: str) -> int:
-        """Port local (127.0.0.1) relié au service `name` de la machine `net_id`."""
-        return int(self.api("POST", "/net/v1/tunnels", {"peer": net_id, "name": name})["port"])
+    def supports(self, feature: str) -> bool:
+        return feature in (self.features or ())
+
+    def tunnel_guard_problem(self) -> str | None:
+        """Pourquoi ce compagnon ne peut pas ouvrir de tunnel gardé, ou None s'il le peut.
+        Sans garde, n'importe quel programme de la machine (un autre compte du PC)
+        joindrait par le tunnel le serveur RPC de la machine qui prête, sans mot de passe."""
+        if self.features is None:
+            return ("Le compagnon aiodos-net de cette machine est trop ancien : il ouvrirait le "
+                    "tunnel vers la carte graphique prêtée à tous les programmes de la machine. "
+                    "Mets AIODOS à jour sur cette machine.")
+        if GUARDED_TUNNELS not in self.features:
+            return ("Sur ce système, le compagnon aiodos-net ne peut pas vérifier quel programme "
+                    "se connecte au tunnel vers la carte graphique prêtée : pas de modèle "
+                    "réparti depuis cette machine.")
+        return None
+
+    def open_tunnel(self, net_id: str, name: str, guarded: bool = True,
+                    max_connections: int | None = None) -> int:
+        """Port local (127.0.0.1) relié au service `name` de la machine `net_id`.
+
+        Gardé (par défaut), il ne relaie que le programme nommé ensuite par
+        set_tunnel_owner (le llama-server lancé par AIODOS) ; d'ici là, ses connexions
+        attendent. Un compagnon qui ne sait pas le faire est refusé (CompanionError) :
+        jamais de tunnel ouvert à toute la machine en silence."""
+        body = {"peer": net_id, "name": name}
+        if guarded:
+            problem = self.tunnel_guard_problem()
+            if problem:
+                raise CompanionError(problem)
+            body["await_owner"] = True
+        if max_connections is not None:
+            body["max_connections"] = int(max_connections)
+        reply = self.api("POST", "/net/v1/tunnels", body)
+        port = int(reply["port"])
+        if guarded and reply.get("guarded") is not True:     # compagnon remplacé entre-temps
+            try:
+                self.close_tunnel(port)
+            except CompanionError:
+                pass
+            raise CompanionError("Le compagnon aiodos-net de cette machine n'a pas gardé le "
+                                 "tunnel : mets AIODOS à jour sur cette machine.")
+        return port
+
+    def set_tunnel_owner(self, port: int, pid: int) -> None:
+        """Le seul programme (`pid`) dont le tunnel gardé `port` relaie les connexions."""
+        self.api("PUT", f"/net/v1/tunnels/{int(port)}", {"owner_pid": int(pid)})
 
     def close_tunnel(self, port: int) -> None:
         self.api("DELETE", f"/net/v1/tunnels/{int(port)}")
+
+    def service_usage(self) -> dict | None:
+        """Flux en cours vers chaque service exposé, par nom : {"active", "total",
+        "idle_s"} (secondes depuis la fin du dernier flux, None s'il en reste un), et pour
+        un service tenu {"held", "holding", "foreign", "blocked"} (cf. expose) ; None si le
+        compagnon ne le dit pas (plus ancien)."""
+        if not self.supports(SERVICE_USAGE):
+            return None
+        exposed = (self.status().get("tunnels") or {}).get("exposed") or []
+        return {str(s["name"]): s for s in exposed if isinstance(s, dict) and s.get("name")}
 
     def info(self) -> dict | None:
         """Clé et indices de cette machine, à donner aux machines appairées."""

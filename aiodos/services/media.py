@@ -1,6 +1,8 @@
 """Médias → texte : images (OCR + description via un modèle de vision Ollama)
 et audio/vidéo (transcription locale via faster-whisper)."""
 import base64
+import contextlib
+import contextvars
 import json
 import queue
 import subprocess
@@ -9,6 +11,7 @@ import threading
 import time
 from pathlib import Path
 
+from aiodos import settings
 from aiodos.node import children, priority
 from aiodos.services import ollama
 
@@ -36,9 +39,71 @@ REPLY_S = 3600                    # au-delà sans réponse (modèle à télécha
 CHILD = Path(__file__).with_name("whisper_child.py")
 _whisper_lock = threading.Lock()  # une transcription à la fois
 
+# Les modèles de faster-whisper (faster_whisper.available_models(), version 1.2), seuls
+# noms acceptés : le nom vient aussi de la machine qui confie la transcription (un ami,
+# jobs/kinds/index.py). Tout autre nom serait pris par faster-whisper pour un dossier de
+# ce PC ou pour un dépôt Hugging Face quelconque, téléchargé puis chargé.
+WHISPER_MODELS = ("tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium",
+                  "medium.en", "large-v1", "large-v2", "large-v3", "large", "distil-large-v2",
+                  "distil-medium.en", "distil-small.en", "distil-large-v3",
+                  "distil-large-v3.5", "large-v3-turbo", "turbo")
+
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+class WhisperMissing(TranscriptionError):
+    """Le modèle Whisper demandé n'est pas sur cette machine, et elle ne le télécharge pas
+    pour cette demande. Ce n'est pas un échec du fichier : dit à part pour que la machine
+    qui calcule pour une autre rende l'unité plutôt que de la faire compter en échec (mes
+    fichiers marqués en échec, un ami qui met cette machine de côté) : network/worker.py la
+    rend (work/release), et ne propose plus cette ressource à cette machine pendant un
+    moment (WHISPER_RETRY)."""
+
+
+def whisper_model(name) -> str:
+    """Le nom s'il désigne un modèle de faster-whisper ; TranscriptionError sinon (chemin,
+    dépôt « compte/modèle », nom inconnu)."""
+    text = name if isinstance(name, str) else ""
+    if text not in WHISPER_MODELS:
+        shown = str(name)[:60] if name is not None else ""
+        raise TranscriptionError(f"Modèle Whisper inconnu : « {shown} » (attendu : tiny, "
+                                 "base, small, medium, large-v3…).")
+    return text
+
+
+# Téléchargement permis pour les transcriptions en cours dans ce contexte (downloads) ;
+# None : la règle de _may_download
+_download = contextvars.ContextVar("aiodos_whisper_download", default=None)
+
+
+@contextlib.contextmanager
+def downloads(allowed):
+    """Le temps d'un calcul : True, tout modèle de WHISPER_MODELS demandé se télécharge
+    s'il manque ; False, aucun ; None, la règle de _may_download. À décider par qui calcule
+    pour une autre machine d'après le niveau de confiance de celle-ci (True pour une de mes
+    machines), jamais d'après l'ordre reçu. Sans ce contexte, la règle de _may_download
+    s'applique à toute demande, y compris celles de mes machines."""
+    token = _download.set(allowed)
+    try:
+        yield
+    finally:
+        _download.reset(token)
+
+
+def _may_download(model_name: str) -> bool:
+    """Seul le modèle du réglage de cette machine se télécharge de lui-même, et seulement
+    si elle transcrit (réglage media_transcribe) : un autre, demandé par la machine qui
+    confie la transcription (un ami peut-être), doit déjà être là. Sans quoi chaque ami
+    ferait télécharger ici les quelques Go de chaque modèle. Les unités calculées ici pour
+    mes propres fichiers prennent les réglages du moment (registry.run_local) : leur modèle
+    est toujours celui-là."""
+    try:
+        return bool(settings.get("media_transcribe")) \
+            and model_name == settings.get("whisper_model")
+    except Exception:                 # base illisible : rien de téléchargé
+        return False
 
 
 class _Stopped(Exception):
@@ -157,18 +222,28 @@ def command() -> list:
     return [str(exe), "-P", str(CHILD)]
 
 
-def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=None) -> str:
+def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=None,
+               download=None) -> str:
     """Transcrit la parole d'un fichier audio ou vidéo, dans un programme à part en
     priorité basse (services/whisper_child.py), une à la fois : Whisper occupe déjà
     plusieurs cœurs du processeur.
 
+    model_name : un des WHISPER_MODELS (TranscriptionError sinon, avant tout calcul) ;
     stop    : threading.Event ; s'il est levé, la transcription s'arrête aussitôt (le
               programme est arrêté s'il calcule ; le texte partiel renvoyé doit alors être
               ignoré par l'appelant) ;
     threads : fils de calcul (None : WHISPER_THREADS) ; un autre nombre recharge le modèle ;
     pace    : pace(secondes) après chaque segment, avec le temps qu'il a pris : la cadence
               du travail de fond (jobs/pacing.py : pause sur batterie, attente du secteur)
-              passe avant le calcul du segment suivant."""
+              passe avant le calcul du segment suivant ;
+    download : le modèle peut-il être téléchargé s'il manque ? None : selon le contexte
+              (downloads), sinon seulement s'il est celui du réglage de cette machine
+              (_may_download). WhisperMissing s'il manque et ne se télécharge pas."""
+    model_name = whisper_model(model_name)
+    if download is None:
+        download = _download.get()
+    if download is None:
+        download = _may_download(model_name)
     lines, language = [], "?"
     with _whisper_lock:
         try:
@@ -179,7 +254,8 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
                     if not _child.alive():
                         _child.start()
                     _child.send(json.dumps({"id": rid, "path": str(path), "model": model_name,
-                                            "threads": threads or 0}, ensure_ascii=False))
+                                            "threads": threads or 0,
+                                            "download": bool(download)}, ensure_ascii=False))
                     reply = _child.read(rid, stop)
                     break
                 except (OSError, TranscriptionError):
@@ -210,6 +286,12 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
             _child.stop()                  # état incertain : on repart d'un programme neuf
             raise
         _child.last = time.monotonic()
+        if reply.get("missing"):           # modèle absent, téléchargement non permis
+            raise WhisperMissing(
+                f"Modèle Whisper « {model_name} » absent de cette machine : elle ne "
+                "télécharge d'elle-même que celui de son réglage. Pour qu'elle le "
+                f"télécharge, choisis « {model_name} » dans ses réglages (Images, audio et "
+                "vidéo : Transcrire l'audio et la vidéo, Modèle Whisper).")
         if "error" in reply:               # il attend la demande suivante : on le garde
             raise TranscriptionError(f"Transcription impossible : {reply['error']}")
         text = "\n".join(lines)

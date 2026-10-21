@@ -56,6 +56,7 @@ async fn run(args: Args) -> Result<()> {
         "version": env!("CARGO_PKG_VERSION"),
         "commit": COMMIT,
         "created": running.created,
+        "features": aiodos_net::features(),
     });
     println!("{ready}");
     let stop = running.shutdown_token();

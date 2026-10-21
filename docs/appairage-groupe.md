@@ -12,11 +12,14 @@ essayée avec trois et quatre vrais nœuds (`tests/test_group_pairing.py`).
 ## 1. Aujourd'hui
 
 - On appaire **deux machines à la fois** : elles échangent des clés éphémères X25519,
-  affichent le même code à 6 chiffres, et l'utilisateur confirme sur **chacune** que le code
-  est le même. Chacune dit alors ce qu'est l'autre pour elle : une de ses machines (MINE)
-  ou celle d'un ami (FRIEND).
-- La clé de la paire (HKDF du secret commun) scelle ensuite tous leurs messages
-  (ChaCha20-Poly1305, horodatés, liés à l'action, à l'émetteur et au destinataire).
+  avec engagement depuis le 21/10/2026 (protocole 2 : celle qui lance l'appairage
+  s'engage d'abord sur sa clé, cf. [securite.md](securite.md)), affichent le même code à
+  6 chiffres, et l'utilisateur confirme sur **chacune** que le code est le même. Chacune
+  dit alors ce qu'est l'autre pour elle : une de ses machines (MINE) ou celle d'un ami
+  (FRIEND).
+- La clé de la paire (HKDF du secret commun et de toute la transcription de l'échange)
+  scelle ensuite tous leurs messages (ChaCha20-Poly1305, horodatés, liés à l'action, à
+  l'émetteur et au destinataire).
 - Par Internet, il faut d'abord une invitation acceptée des deux côtés : chaque compagnon
   n'admet que les clés de sa liste blanche.
 
@@ -50,7 +53,9 @@ P est un ami pour A). Mon PC fixe F est une de mes machines pour P. P présente 
 3. **F et A font leur échange de clés, à travers P.** Chacun crée une clé éphémère X25519 ;
    la clé publique de A va à F en passant par P (A→P scellé avec la paire A–P, puis P→F
    scellé avec la paire P–F), et celle de F va à A par le même chemin. F et A en tirent la
-   clé de leur nouvelle paire avec la fonction de l'appairage actuel (`pair_secrets`).
+   clé de leur nouvelle paire avec `pair_secrets`, la fonction de l'appairage par code
+   d'avant le protocole 2, gardée pour les présentations (une version d'avant en tire la
+   même clé).
    **P ne voit que des clés publiques : il ne connaît pas la clé de F–A.** Il n'y a pas
    de code à 6 chiffres à comparer : ce qui garantit qu'il n'y a personne au milieu, c'est
    que les deux trajets passent par des paires déjà vérifiées par un humain.

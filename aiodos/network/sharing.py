@@ -11,13 +11,19 @@ deux machines (chacune juge l'autre), modifiable ensuite dans la vue Réseau :
   reste : elle choisit le lecteur), sans chemin ni nom de bibliothèque. Ils voient de
   cette machine un profil allégé : ni matériel, ni alimentation, ni inactivité.
 
-Ce qu'un ami calcule est contrôlé par échantillon (spec.sample, cf. jobs/kinds/index.py) :
-un passage recalculé ici. En cas d'écart, sa machine est mise de côté : plus rien ne lui
-est confié jusqu'à ce que l'utilisateur la rétablisse. Chaque fichier ou page confié à un
-ami est noté dans un journal (table shared_log), visible dans la vue Réseau.
+Ce qu'un ami calcule est contrôlé ici (spec.sample, cf. jobs/kinds/index.py) : le document
+relu et découpé ici, quelques vecteurs recalculés. Ce qui ne se relit pas ici (image, son,
+vidéo, page web, format sans lecteur) ne part pas chez lui (registry.friend_checkable). En
+cas d'écart, sa machine est mise de côté : plus rien ne lui est confié jusqu'à ce que
+l'utilisateur la rétablisse. Chaque fichier confié à un ami est noté dans un journal (table
+shared_log), visible dans la vue Réseau.
 
-Calculer pour un ami, en revanche, n'a pas de règle à part : tous les types de travaux,
-aux conditions déjà en place (inactivité, secteur, température, part du GPU).
+Calculer pour un ami a aussi ses règles (network/worker.py, relecture du 21/10/2026) :
+jamais lire le Web pour lui (la ressource « net » ne lui est pas proposée, index_url est
+réservée à mes machines), ni décoder ses images, sons ou vidéos à indexer ; ses images
+seulement si je prête ma carte à mes amis (lend_images_friends) ; aucun modèle Whisper
+téléchargé pour lui ; un téléphone seulement en charge et en Wi-Fi ; et les conditions de
+toujours (inactivité, secteur, température, part du GPU).
 """
 import re
 from pathlib import Path

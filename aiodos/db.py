@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 19
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -212,6 +212,25 @@ MIGRATIONS = {
         payload TEXT NOT NULL,
         at      REAL NOT NULL
     );
+    """,
+    # Retour à une version d'origine 2.0.x (updates/launcher.py) : elle ignore les niveaux de
+    # confiance et se servirait de la clé d'un ami comme de celle d'une de mes machines. La
+    # clé en clair (32 octets) d'un ami ou d'une machine mise de côté prend la marque « k2: »
+    # (node/vault.py, HELD), comme celles enregistrées désormais (network/peers.py, _kept).
+    # Une clé scellée par DPAPI, déjà marquée ou d'une autre taille n'a pas 32 octets : elle
+    # reste telle quelle, et la migration rejouée ne marque rien deux fois.
+    18: """
+    UPDATE peers SET key = CAST(X'6B323A' || CAST(key AS BLOB) AS BLOB)
+     WHERE (trust IS NOT 'mine' OR set_aside_at IS NOT NULL)
+       AND length(CAST(key AS BLOB)) = 32;
+    """,
+    # Durée de calcul d'une image dite par la machine qui l'a faite, gardée sans contrôle
+    # jusque-là : un infini (« inf » envoyé par un ami) faisait tomber la galerie et la
+    # conversation qui l'avait demandée (imaging/gallery.py, MAX_SECONDS). Hors bornes :
+    # oubliée.
+    19: """
+    UPDATE images SET seconds = NULL
+     WHERE seconds IS NOT NULL AND NOT (seconds >= 0 AND seconds <= 604800);
     """,
 }
 

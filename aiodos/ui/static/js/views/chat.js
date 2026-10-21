@@ -1,6 +1,6 @@
 // Conversation : choix du modèle, options, messages en streaming, validations.
-import { get, post, put, patch, streamChat, openExternal } from '../api.js';
-import { $, h, esc, bytes, duration } from '../dom.js';
+import { get, post, put, patch, streamChat, openExternal, inNativeWindow } from '../api.js';
+import { $, h, esc, bytes, duration, linkAction, linkKind } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
@@ -110,6 +110,7 @@ export function mountChat(container) {
   el.send.onclick = () => (busy ? stop() : send());
   el.title.onclick = renameCurrent;
   el.list.addEventListener('click', onMessageClick);
+  el.list.addEventListener('auxclick', onReplyLink);   // clic du milieu : sans passer par click
   mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
 
   on('chat:new', newConversation);
@@ -530,8 +531,16 @@ function appendAssistant(model, here = false) {
       box.innerHTML = '';
       for (const s of list || []) {
         if (['summary', 'inherited', 'error'].includes(s.type)) continue;   // marques internes
-        if (s.type === 'web') {
-          box.append(h(`<a class="source" href="${esc(s.url)}" title="${esc(s.title || s.url)}">${icon('globe')}${esc(s.label)}</a>`));
+        if (s.type === 'web' && linkKind(s.url) === 'web') {
+          // Un nouvel onglet hors de la fenêtre native : l'interface reste où elle est
+          box.append(h(`<a class="source" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"
+            title="${esc(s.title || s.url)}">${icon('globe')}${esc(s.label)}</a>`));
+        } else if (s.type === 'web') {
+          // Ni http ni https (javascript:, search-ms:…) : du texte, jamais un lien, comme
+          // render.py le fait dans les réponses ; un changement futur de linkAction ne
+          // rouvrirait pas la brèche
+          box.append(h(`<span class="source link-off" title="Lien désactivé : ${esc(s.url)}">`
+            + `${icon('globe')}${esc(s.label || s.url)}</span>`));
         } else if (s.type === 'remote') {         // trouvé dans la bibliothèque d'une autre machine
           box.append(h(`<span class="source remote" title="Bibliothèque « ${esc(s.collection)} », chez « ${esc(s.peer)} »">`
             + `${icon('network')}${esc(s.label)} · chez ${esc(s.peer)}</span>`));
@@ -579,11 +588,19 @@ function onMessageClick(e) {
   if (again) { regenerate(again.closest('.msg')); return; }
   const change = e.target.closest('[data-act="edit"]');
   if (change) { startEditing(change.closest('.msg')); return; }
+  onReplyLink(e);
+}
+
+// Un lien d'une réponse : une page web s'ouvre dans un navigateur, un courriel dans la
+// messagerie ; tout autre lien (search-ms:, ms-word:…) ne s'ouvre pas (dom.js, linkAction)
+function onReplyLink(e) {
   const link = e.target.closest('a[href]');
-  if (link && /^https?:/i.test(link.getAttribute('href'))) {
-    e.preventDefault();
-    openExternal(link.href).catch(errorToast);
-  }
+  if (!link) return;
+  const action = linkAction(link.getAttribute('href'),
+    { button: e.button, nativeWindow: inNativeWindow() });
+  if (action === 'follow') return;
+  e.preventDefault();
+  if (action === 'external') openExternal(link.href).catch(errorToast);
 }
 
 function scrollBottom(force = false) {

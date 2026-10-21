@@ -2,7 +2,13 @@
 vid_gen), suivie, arrêtée au besoin.
 
 sd-server range la demande dans sa file et la calcule ; on relit son état toutes les
-POLL_S secondes. Un arrêt (unité rendue, AIODOS qui s'arrête) annule le calcul là-bas.
+POLL_S secondes. Rien de ce qui répond sur son port n'est cru sans vérifier que c'est bien
+le sd-server lancé par AIODOS, seul sur ce port (engine.serving) : avant la demande (une
+retouche y joint son image de départ), puis à chaque réponse, avant d'en croire un
+« terminé ». S'il est tombé en route, qui s'installe sur son port rendrait sa propre image.
+Restent l'instant entre la vérification et l'envoi, et ce qu'un programme de la machine
+peut dire à sd-server pendant qu'il tourne (il n'a pas de clé : imaging/engine.py).
+Un arrêt (unité rendue, AIODOS qui s'arrête) annule le calcul là-bas.
 Un calcul à la fois sur cette machine (sd-server les fait l'un après l'autre) : une image
 d'ici et une image pour une autre machine ne se gênent pas. Si sd-server manque de
 mémoire (Ollama a repris la carte entre-temps), il est relancé et le calcul refait, une
@@ -106,6 +112,22 @@ def _detail(reply) -> str:
         return reply.text[:200]
 
 
+def _served(base: str, stop, then: str):
+    """Le sd-server d'AIODOS répond-il toujours, seul, à `base` (engine.serving) ? Revu
+    avant d'envoyer la demande et après chaque réponse, avant de s'en servir : tombé en
+    route (un programme de la machine peut le faire tomber, puisqu'il peut lui parler), son
+    port est libre, et qui s'y installe répondrait « terminé » avec sa propre image ; un
+    programme qui s'ajoute sur son port recevrait les demandes. Sinon ImageError, rien de ce
+    qui a répondu n'étant cru ; Interrupted si l'arrêt était demandé (AIODOS qui s'arrête
+    arrête aussi sd-server : l'unité est rendue, elle n'a pas échoué)."""
+    if engine.serving(base):
+        return
+    if stop is not None and stop.is_set():
+        raise Interrupted()
+    raise ImageError(f"sd-server s'est arrêté, ou un autre programme écoute sur son port : "
+                     f"{then}.")
+
+
 def _cancel(base: str, job: str):
     try:
         requests.post(f"{base}/sdcpp/v1/jobs/{job}/cancel", timeout=5, proxies=engine.NO_PROXY)
@@ -162,9 +184,12 @@ def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None
           waiting=None) -> dict:
     base = engine.acquire(params["model"], stop=stop, waiting=waiting)
     began = time.monotonic()
+    dropped = f"{what.lower()} abandonnée, ce qui y répond n'est pas cru"
     try:
+        _served(base, stop, f"{what.lower()} non demandée")
         reply = requests.post(f"{base}/sdcpp/v1/{endpoint}", json=body, timeout=30,
                               proxies=engine.NO_PROXY)
+        _served(base, stop, dropped)
         if reply.status_code != 202:
             raise ImageError(f"sd-server refuse la demande ({reply.status_code}) : "
                              f"{_detail(reply)}")
@@ -173,8 +198,10 @@ def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None
             if stop is not None and stop.is_set():
                 _cancel(base, job)
                 raise Interrupted()
-            status = requests.get(f"{base}/sdcpp/v1/jobs/{job}", timeout=10,
-                                  proxies=engine.NO_PROXY).json()
+            answer = requests.get(f"{base}/sdcpp/v1/jobs/{job}", timeout=10,
+                                  proxies=engine.NO_PROXY)
+            _served(base, stop, dropped)          # avant d'en croire un « terminé »
+            status = answer.json()
             if status.get("status") == "completed":
                 made = extract(status.get("result") or {})
                 made["seconds"] = time.monotonic() - began
@@ -194,6 +221,8 @@ def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None
             else:
                 time.sleep(POLL_S)
     except requests.RequestException as exc:
+        if stop is not None and stop.is_set():
+            raise Interrupted() from exc     # arrêté avec AIODOS : l'unité est rendue
         raise ImageError(f"sd-server ne répond plus ({exc.__class__.__name__}).") from exc
     finally:
         engine.release()

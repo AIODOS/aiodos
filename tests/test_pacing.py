@@ -183,8 +183,9 @@ def test_every_embedding_request_carries_it(loaded, monkeypatch):
 # ------------------------------------- calcul sur le processeur : pages, segments
 def test_waiting_for_mains_stops_a_long_transcription_between_segments(battery, monkeypatch,
                                                                        tmp_path):
-    """En « attendre le secteur », une longue vidéo s'arrête au segment suivant (une unité
-    pour une autre machine lui est rendue ; une unité d'ici attendrait)."""
+    """En « attendre le secteur », une longue vidéo s'arrête au segment suivant : l'unité est
+    rendue (Interrupted), qu'elle soit calculée pour une autre machine ou ici (l'exécuteur
+    donne un arrêt à chacune, jobs/executor.py) ; refaite au retour du secteur."""
     from aiodos.jobs.kinds import index
     _mode("pause")
     done = []

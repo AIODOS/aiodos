@@ -3,6 +3,7 @@ fastapi
 uvicorn
 pywebview          # fenêtre native (WebView2 sous Windows, via pythonnet)
 requests
+urllib3>=2.3       # lecture en flux bornée et coupure à l'échéance (network/client.py)
 numpy
 markdown-it-py     # rendu des réponses (HTML sûr)
 pygments           # coloration du code

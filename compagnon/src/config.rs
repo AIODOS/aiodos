@@ -130,6 +130,12 @@ pub struct Config {
     pub token: String,
     /// Délai pour établir une connexion avec une machine.
     pub dial_timeout: Duration,
+    /// Taille maximale d'un corps de requête reçu d'une autre machine (cf. relay_body.rs).
+    pub max_body: usize,
+    /// Réponse que l'autre machine ne lit plus depuis ce temps : flux coupé (cf. inbound.rs).
+    pub response_stall: Duration,
+    /// Attente d'une place pour relayer une requête d'une machine, au plus (cf. pool.rs).
+    pub slot_wait: Duration,
     /// Silence toléré sur une connexion avant de la tenir pour morte : large, pour les
     /// liens mobiles qui décrochent quelques secondes (Iroh envoie un battement toutes
     /// les 5 s, la connexion ne s'éteint pas d'elle-même).
@@ -154,6 +160,9 @@ impl Config {
             relay_only: false,
             token: token.to_string(),
             dial_timeout: Duration::from_secs(10),
+            max_body: crate::relay_body::MAX_BODY,
+            response_stall: crate::relay_body::RESPONSE_STALL,
+            slot_wait: crate::pool::SLOT_WAIT,
             idle_timeout: Duration::from_secs(60),
             public_dht_bootstrap: None,
             public_lookup: None,
@@ -244,6 +253,9 @@ impl Args {
             relay_only: self.relay_only,
             token,
             dial_timeout: Duration::from_secs(self.dial_timeout),
+            max_body: crate::relay_body::MAX_BODY,
+            response_stall: crate::relay_body::RESPONSE_STALL,
+            slot_wait: crate::pool::SLOT_WAIT,
             idle_timeout: Duration::from_secs(60),
             public_dht_bootstrap: None,
             public_lookup: None,

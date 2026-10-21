@@ -61,6 +61,7 @@ def circle(tmp_path, monkeypatch):
     les actions scellées, rejouées ici sur le même dossier de données."""
     author, trusted = new_key()
     monkeypatch.setattr(keys, "TRUSTED_KEYS", trusted)
+    approval.forget()                           # rien de montré par un essai précédent
     peers.save(PHONE, "Téléphone", KEY, "127.0.0.1", 1)
     peers.save(ME, "PC portable", KEY, "127.0.0.1", 1)
     peers.save(FRIEND, "PC de Léa", KEY, "127.0.0.1", 1, trust="friend")
@@ -92,6 +93,32 @@ def test_a_release_waits_for_its_approval_then_leaves(circle):
     assert store.pending() == [] and store.offer() == "2.0.1"
     with pytest.raises(UpdateError, match="n'attend plus"):
         approval.approve(PHONE, ME, "2.0.1")
+
+
+def test_the_approval_route_signs_the_text_of_the_line_clicked(circle, monkeypatch):
+    """Relecture : le modèle Approve n'avait pas d'empreinte ; le clic n'en portait pas, et
+    le nœud se repliait sur sa mémoire bornée de ce qu'il avait montré. Le clic désigne
+    maintenant le texte de sa ligne : un autre texte n'est jamais signé à sa place."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from aiodos.api.routes import updates as routes
+    store, _ = circle
+    monkeypatch.setattr(routes.identity, "node_id", lambda: PHONE)    # le téléphone
+    app = FastAPI()
+    app.include_router(routes.router)
+    with TestClient(app) as client:
+        lines = client.get("/api/updates/approval/pending").json()["pending"]
+        line = next(p for p in lines if p["node_id"] == ME)
+        assert len(line["digest"]) == 64 and not line["conflict"]
+        approve = {"node_id": ME, "version": "2.0.1"}
+        other = client.post("/api/updates/approval/approve", json={**approve, "digest": "0" * 64})
+        assert other.status_code == 400 and "n'est plus celle" in other.json()["detail"]
+        assert store.offer() is None                              # rien de signé
+        done = client.post("/api/updates/approval/approve",
+                           json={**approve, "digest": line["digest"]})
+        assert done.status_code == 200 and done.json()["ok"]
+    assert store.pending() == [] and store.offer() == "2.0.1"
 
 
 def test_friends_see_nothing_and_forged_approvals_are_refused(circle):

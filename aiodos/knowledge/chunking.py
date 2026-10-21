@@ -2,6 +2,13 @@
 
 On coupe de préférence à une frontière naturelle (paragraphe, ligne, phrase,
 mot) plutôt qu'au milieu d'un mot comme le faisait la v1.
+
+Ce découpage fait partie du contrat de calcul entre machines : le résultat qu'un ami rend
+pour un fichier texte doit être exactement le découpage refait ici (jobs/kinds/index.py,
+sample_embedded), et un écart sur un fichier inchangé le fait mettre de côté. Tout
+changement de CHUNK_SIZE, CHUNK_OVERLAP, _BREAKS ou de chunk_text impose donc d'incrémenter
+network/work.WORK_API (les versions qui découpent autrement ne se confient alors plus rien) :
+tests/test_knowledge.py le rappelle (relecture finale du 21/10/2026).
 """
 CHUNK_SIZE = 900
 CHUNK_OVERLAP = 150

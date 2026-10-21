@@ -98,7 +98,14 @@ DEFAULTS = {
     "battery_mode": "eco",            # sur batterie : eco (ménagé) | pause | normal
     "close_to_tray": True,            # Windows : fermer la fenêtre la cache (ui/tray.py)
     # --- Gros modèles répartis entre mes machines (docs/gros-modeles.md) ---
-    "lend_gpu": True,                 # prêter ma carte graphique à mes machines (llama.cpp RPC)
+    # Prêter ma carte graphique (llama.cpp RPC) : à mes machines seulement, jamais à un ami ni
+    # au réseau public, ni depuis l'appli Android (cluster/helper.lend ; node/identity ne
+    # l'annonce pas quand le prêt serait refusé). Reste activé après l'audit du 20/10/2026 : le
+    # compagnon tient le serveur RPC prêté et n'y laisse servir aucun autre programme de la
+    # machine (compagnon/src/hold.rs), sauf dans l'instant qui suit son démarrage ; et ce
+    # serveur, sans défense contre un client malveillant, ne sert que mes machines (§ 4 de
+    # docs/gros-modeles.md).
+    "lend_gpu": True,
     "lend_gpu_device": "",            # carte prêtée (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "llamacpp_dir": "",               # dossier de llama.cpp ; vide : celui livré avec les versions
     # --- Images réparties entre mes machines (imaging/, docs/generation-repartie.md) ---

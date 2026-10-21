@@ -280,6 +280,9 @@ def fake_sd(monkeypatch):
         servers.append(fake)
         monkeypatch.setattr(engine, "acquire", lambda model_id, stop=None, waiting=None: fake.url)
         monkeypatch.setattr(engine, "release", lambda: None)
+        # Tenu pour le sd-server lancé par AIODOS, seul sur son port (generate le revoit avant
+        # la demande et à chaque réponse : tests/test_securite_arrets.py)
+        monkeypatch.setattr(engine, "serving", lambda base: base == fake.url)
         monkeypatch.setattr(generate, "POLL_S", 0.02)
         return fake
     yield make
@@ -653,6 +656,9 @@ def test_stopping_while_the_engine_loads_hands_the_unit_back(tiny_model, monkeyp
 
         def start(self, timeout, ready=None, stop=None, waiting=None):
             raise EngineError("Chargement interrompu.")
+
+        def stop(self):
+            pass
     monkeypatch.setattr(engine, "Process", Loading)
     stop = threading.Event()
     stop.set()
@@ -700,9 +706,7 @@ def test_an_image_order_from_a_friend_is_refused(tiny_model, monkeypatch):
     class Manager:
         executor = None
 
-    w = worker_module.Worker.__new__(worker_module.Worker)
-    w.m = Manager()
-    w._gpu_rest_until = 0.0
+    w = worker_module.Worker(Manager())      # son état tel que le pose __init__, quel qu'il soit
     monkeypatch.setattr(w, "_quiet", lambda a, action, **extra: sent.append((action, extra)),
                         raising=False)
     order = {"id": 1, "task": "generate_image", "resource": "gpu", "payload": _payload(),

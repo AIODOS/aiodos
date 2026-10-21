@@ -9,11 +9,21 @@ rendue quand AIODOS le ferme, quelques minutes après la dernière demande (medi
 une panne de la bibliothèque n'arrête que lui.
 
 Protocole, une ligne JSON par message (UTF-8) :
-  AIODOS → programme : {"id", "path", "model", "threads"} (une demande), puis « next »
-                       après chaque segment reçu (le suivant est calculé) ou « stop » ;
+  AIODOS → programme : {"id", "path", "model", "threads", "download"} (une demande), puis
+                       « next » après chaque segment reçu (le suivant est calculé) ou
+                       « stop » ;
   programme → AIODOS : {"id", "language"}, puis {"id", "segment": texte} un à un, et
                        {"id", "end": true} ; {"id", "error": message} si la transcription
-                       échoue. Chaque réponse rappelle le numéro de sa demande.
+                       échoue, avec "missing": true si le modèle n'est pas sur cette
+                       machine et que "download" ne permet pas de le télécharger. Chaque
+                       réponse rappelle le numéro de sa demande.
+
+Dernière défense (services/media.py vérifie déjà) : "model" doit être un des modèles de
+faster-whisper (available_models). Le nom vient aussi d'une autre machine ; faster-whisper
+prendrait sinon un chemin pour un dossier de modèle à charger, et « compte/dépôt » pour un
+dépôt Hugging Face à télécharger. Le modèle est cherché dans le cache, et téléchargé
+seulement si "download" est vrai ; il est ensuite chargé par son dossier dans ce cache,
+jamais par son nom (un dossier « small » du dossier courant n'est pas pris).
 Entre deux segments, le programme attend la réponse d'AIODOS : la cadence du travail de
 fond (jobs/pacing.py : pause sur batterie, attente du secteur) s'applique avant le calcul
 du segment suivant, comme quand la transcription se faisait dans AIODOS même. La fin de
@@ -31,6 +41,31 @@ import os
 import sys
 
 
+class _Missing(Exception):
+    """Le modèle n'est pas sur cette machine, et la demande ne permet pas de le
+    télécharger."""
+
+
+def _locate(name, download: bool) -> str:
+    """Le dossier du modèle `name` de faster-whisper dans le cache (téléchargé d'abord si
+    `download` le permet)."""
+    import faster_whisper
+    if not isinstance(name, str) or name not in faster_whisper.available_models():
+        raise ValueError(f"modèle Whisper inconnu : « {str(name)[:60]} »")
+    try:
+        return faster_whisper.download_model(name, local_files_only=not download)
+    except Exception as exc:
+        if not download:
+            raise _Missing(name) from exc
+        raise
+
+
+def _load(where: str, threads: int):
+    import faster_whisper
+    return faster_whisper.WhisperModel(where, device="cpu", compute_type="int8",
+                                       cpu_threads=threads)
+
+
 def serve(read, send):
     """Répond aux demandes lues par read() (une ligne, "" à la fin de l'entrée)."""
     models = {}
@@ -45,14 +80,15 @@ def serve(read, send):
         try:
             request = json.loads(line)
             rid = request.get("id")
-            key = (str(request["model"]), int(request.get("threads") or 0))
+            key = (request["model"], int(request.get("threads") or 0))
             model = models.get(key)
             if model is None:
-                from faster_whisper import WhisperModel
+                # Le modèle en mémoire n'est rendu qu'une fois le nouveau trouvé : un nom
+                # inconnu ou un modèle absent (qu'un ami peut demander) ne le fait pas
+                # recharger à la demande suivante
+                where = _locate(key[0], request.get("download") is True)
                 models.clear()          # un seul modèle en mémoire
-                model = WhisperModel(key[0], device="cpu", compute_type="int8",
-                                     cpu_threads=key[1])
-                models[key] = model
+                model = models[key] = _load(where, key[1])
             segments, info = model.transcribe(str(request["path"]), vad_filter=True)
             send({"id": rid, "language": getattr(info, "language", None) or "?"})
             for segment in segments:    # générateur : un segment calculé à la fois
@@ -63,6 +99,8 @@ def serve(read, send):
                 if answer.strip() != "next":
                     break
             send({"id": rid, "end": True})
+        except _Missing:
+            send({"id": rid, "error": "modèle absent de cette machine", "missing": True})
         except Exception as exc:
             send({"id": rid, "error": f"{exc.__class__.__name__} : {exc}"[:500]})
 

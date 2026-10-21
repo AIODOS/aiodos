@@ -151,8 +151,10 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
             # Arrêtée pendant la préparation (recherche web, bibliothèques des autres) : rien
-            # ne part ensuite, ni au cloud, ni à une autre machine
-            web = pipeline.web_context(text) if body.web and not stop.is_set() else None
+            # ne part ensuite, ni au cloud, ni à une autre machine. Et l'arrêt va à la
+            # recherche web elle-même : Stop (ou le client parti) interrompt la page en cours
+            # de lecture, et les suivantes ne sont pas lues
+            web = pipeline.web_context(text, stop) if body.web and not stop.is_set() else None
             built = {}                    # messages selon la machine qui répond
 
             def attempt(model):

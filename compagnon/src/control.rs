@@ -4,14 +4,20 @@
 //! (en-tête `X-Aiodos-Net-Token`) : une page web ouverte dans le navigateur ne peut ni
 //! lire l'état, ni changer la liste blanche, ni se servir du tunnel.
 //!
+//! Un autre programme de la machine peut toutefois s'y connecter sans rien envoyer : les
+//! en-têtes sont attendus au plus `HEADER_TIMEOUT`, un refus ferme la connexion, et les
+//! connexions sans jeton sont bornées (cf. admission.rs). Le compagnon garde ainsi des
+//! descripteurs pour AIODOS et pour Iroh.
+//!
 //! - `GET  /net/v1/status`   : clé publique, relais, connexions (directes ou relayées, latence)
 //! - `PUT  /net/v1/peers`    : liste blanche complète `{"peers": [{"id", "addrs", "relays"} | {"ticket"}]}`
 //! - `GET  /net/v1/ticket`   : ticket à donner à une autre machine (clé, relais, adresses)
 //! - `POST /net/v1/shutdown` : arrêt propre
 //! - `*    /peer/<clé>/…`    : requête relayée vers cette machine (cf. outbound.rs)
 //! - `PUT  /net/v1/exposed`  : services locaux ouverts à des machines nommées (cf. tunnel.rs)
-//! - `POST /net/v1/tunnels`  : port local relié au service d'une machine ; `DELETE
-//!   /net/v1/tunnels/<port>` le ferme
+//! - `POST /net/v1/tunnels`  : port local relié au service d'une machine ; `PUT
+//!   /net/v1/tunnels/<port>` `{"owner_pid"}` nomme le seul programme qu'il relaie (tunnel
+//!   gardé) ; `DELETE /net/v1/tunnels/<port>` le ferme
 //! - `GET  /net/v1/public`   : réseau public (clé du nœud, voisins, nœuds vus) ; `PUT` le
 //!   rejoint ou le quitte, avec le profil à diffuser (cf. public.rs)
 
@@ -23,10 +29,13 @@ use std::{
 
 use http_body_util::{BodyExt, Limited};
 use hyper::{
-    HeaderMap, Method, Request, Response, StatusCode, body::Incoming, server::conn::http1,
+    HeaderMap, Method, Request, Response, StatusCode,
+    body::Incoming,
+    header::{CONNECTION, HeaderValue},
+    server::conn::http1,
     service::service_fn,
 };
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::net::TcpListener;
@@ -34,6 +43,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     TOKEN_HEADER,
+    admission::{self, Admission, Ticket},
     allowlist::{self, Entry},
     config::{Config, Relays},
     outbound,
@@ -45,6 +55,8 @@ use crate::{
 
 /// Taille maximale de la liste blanche reçue.
 const MAX_PEERS_BODY: usize = 1 << 20;
+/// En-têtes d'une requête attendus au plus pendant ce temps (AIODOS les envoie aussitôt).
+pub const HEADER_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Ce que l'API locale partage avec le reste du compagnon.
 pub struct Ctx {
@@ -57,6 +69,7 @@ pub struct Ctx {
 
 /// Sert l'API locale jusqu'à l'arrêt du compagnon.
 pub async fn serve(listener: TcpListener, ctx: Arc<Ctx>) {
+    let admission = Admission::new(admission::MAX_WAITING);
     loop {
         let accepted = tokio::select! {
             _ = ctx.pool.shutdown.cancelled() => break,
@@ -75,25 +88,36 @@ pub async fn serve(listener: TcpListener, ctx: Arc<Ctx>) {
         }
         let _ = tcp.set_nodelay(true);
         let ctx = ctx.clone();
+        let ticket = admission.enter();
+        let evicted = ticket.evicted();
         tokio::spawn(async move {
             let service = service_fn(move |req| {
-                let ctx = ctx.clone();
-                async move { Ok::<_, Infallible>(route(&ctx, req).await) }
+                let (ctx, ticket) = (ctx.clone(), ticket.clone());
+                async move { Ok::<_, Infallible>(route(&ctx, &ticket, req).await) }
             });
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(TokioIo::new(tcp), service)
-                .await
-            {
-                debug!("API locale : échange interrompu ({err})");
+            let mut builder = http1::Builder::new();
+            builder.timer(TokioTimer::new()).header_read_timeout(HEADER_TIMEOUT);
+            tokio::select! {
+                served = builder.serve_connection(TokioIo::new(tcp), service) => {
+                    if let Err(err) = served {
+                        debug!("API locale : échange interrompu ({err})");
+                    }
+                }
+                _ = evicted.cancelled() => debug!("API locale : connexion sans jeton écartée"),
             }
         });
     }
 }
 
-async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
+async fn route(ctx: &Ctx, ticket: &Ticket, req: Request<Incoming>) -> Response<Body> {
     if !authorized(&ctx.config.token, req.headers()) {
-        return reply::detail(StatusCode::UNAUTHORIZED, "Jeton du compagnon manquant ou incorrect.");
+        // Refus : la connexion se ferme (pas de nouvel essai sur la même)
+        let mut refused =
+            reply::detail(StatusCode::UNAUTHORIZED, "Jeton du compagnon manquant ou incorrect.");
+        refused.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+        return refused;
     }
+    ticket.admit();
     let path = req.uri().path().to_string();
     if let Some(rest) = path.strip_prefix("/peer/") {
         let (target, tail) = rest.split_once('/').unwrap_or((rest, ""));
@@ -130,6 +154,18 @@ async fn route(ctx: &Ctx, req: Request<Incoming>) -> Response<Body> {
             Ok(wanted) => tunnel::open(&ctx.pool, wanted).await,
             Err(response) => response,
         },
+        (&Method::PUT, path) if path.starts_with("/net/v1/tunnels/") => {
+            let Ok(port) = path["/net/v1/tunnels/".len()..].parse::<u16>() else {
+                return reply::detail(StatusCode::NOT_FOUND, "Aucun tunnel sur ce port.");
+            };
+            match read_json::<tunnel::OwnerIn>(req).await {
+                Ok(owner) => match tunnel::set_owner(&ctx.pool, port, owner.owner_pid) {
+                    Ok(()) => reply::json(StatusCode::OK, json!({ "ok": true })),
+                    Err((status, message)) => reply::detail(status, message),
+                },
+                Err(response) => response,
+            }
+        }
         (&Method::DELETE, path) if path.starts_with("/net/v1/tunnels/") => {
             match path["/net/v1/tunnels/".len()..].parse::<u16>() {
                 Ok(port) if tunnel::close(&ctx.pool, port) => {

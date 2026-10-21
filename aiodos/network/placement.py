@@ -27,8 +27,13 @@ Une machine qui prête ses modèles indique dans ses nouvelles (ping, profil) co
 conversations et d'unités elle traite en ce moment (load_field) ; on y ajoute les
 conversations qu'on vient de lui envoyer, que ses dernières nouvelles ne comptent pas
 encore. Une machine qui ne prête pas ne dit rien de son activité.
+
+Les modèles et la carte graphique d'une machine se lisent dans son profil, revérifié ici
+(remote_models.chat_models, _gpu_load) : une entrée mal formée est ignorée au lieu de faire
+échouer le choix pour toutes les machines (audit du 20/10/2026, faille 16).
 """
 import logging
+import math
 import threading
 import time
 from contextlib import contextmanager
@@ -150,10 +155,6 @@ class Candidate:
                 self.units, not self.loaded, self.gpu)
 
 
-def _chat_capable(caps) -> bool:
-    return not caps or "completion" in caps          # pas un modèle d'embedding seul
-
-
 def _local_profile() -> dict:
     """Profil de cette machine (modèles, mémoire vidéo), gardé quelques secondes."""
     try:
@@ -163,22 +164,33 @@ def _local_profile() -> dict:
         return {}
 
 
-def _gpu_load(profile: dict) -> int:
-    return max((int(g.get("utilization") or 0) for g in profile.get("gpus") or []), default=0)
+def _gpu_load(profile) -> int:
+    """Occupation (%) de la carte graphique la plus chargée ; une valeur qui n'est pas un
+    nombre fini entre 0 et 100 n'est pas comptée."""
+    gpus = profile.get("gpus") if isinstance(profile, dict) else None
+    loads = [g.get("utilization") for g in (gpus if isinstance(gpus, list) else [])
+             if isinstance(g, dict)]
+    return max((int(v) for v in loads if isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v) and 0 <= v <= 100), default=0)
+
+
+def _model(profile, name: str) -> dict | None:
+    """Le modèle de conversation `name` dans ce profil (remote_models.chat_models)."""
+    return next((m for m in remote_models.chat_models(profile)
+                 if same_model(m["name"], name) and not reserved(m["name"])), None)
 
 
 def _local(name: str, executor) -> Candidate | None:
     profile = _local_profile()
-    for m in (profile.get("ollama") or {}).get("models") or []:
-        if (same_model(m.get("name") or "", name) and not reserved(m.get("name"))
-                and _chat_capable(m.get("caps"))):
-            return Candidate(
-                model=m["name"], node_id=None, machine=profile.get("name") or "cette machine",
-                trust="local",
-                chats=int(executor.interactive) if executor else 0,
-                units=int(sum(executor.busy.values())) if executor else 0,
-                fits=m.get("fits_vram"), loaded=bool(m.get("loaded")), gpu=_gpu_load(profile))
-    return None
+    model = _model(profile, name)
+    if model is None:
+        return None
+    return Candidate(
+        model=model["name"], node_id=None, machine=profile.get("name") or "cette machine",
+        trust="local",
+        chats=int(executor.interactive) if executor else 0,
+        units=int(sum(executor.busy.values())) if executor else 0,
+        fits=model["fits_vram"], loaded=bool(model["loaded"]), gpu=_gpu_load(profile))
 
 
 def eligible(peer: dict) -> bool:
@@ -187,8 +199,7 @@ def eligible(peer: dict) -> bool:
         return False
     if not (peer.get("address") or peer.get("net_id")):
         return False
-    profile = peer.get("profile") or {}
-    if not profile.get("lends_models"):
+    if not remote_models.lends(peer.get("profile")):
         return False
     return peer.get("trust") != "friend" or bool(settings.get("auto_route_friends"))
 
@@ -202,10 +213,8 @@ def _remote(name: str) -> list:
     for peer in peers.list_peers():
         if not eligible(peer):
             continue
-        profile = peer.get("profile") or {}
-        model = next((m for m in (profile.get("ollama") or {}).get("models") or []
-                      if same_model(m.get("name") or "", name) and not reserved(m.get("name"))
-                      and _chat_capable(m.get("caps"))), None)
+        profile = peer.get("profile")
+        model = _model(profile, name)
         if model is None:
             continue
         node_id = peer["node_id"]
@@ -217,8 +226,7 @@ def _remote(name: str) -> list:
             machine=peer["name"], trust=peer.get("trust") or "mine",
             chats=max(sent, reported["chats"] if reported else 0),
             units=reported["units"] if reported else working.get(node_id, 0),
-            fits=model.get("fits_vram"), loaded=bool(model.get("loaded")),
-            gpu=_gpu_load(profile)))
+            fits=model["fits_vram"], loaded=bool(model["loaded"]), gpu=_gpu_load(profile)))
     return out
 
 

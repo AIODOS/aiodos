@@ -102,6 +102,20 @@ def test_pause_resume_cancel():
     assert queue.job_summary(paused)["status"] == "cancelled"
 
 
+def test_the_executor_sees_a_cancelled_or_deleted_job():
+    """Les unités de ces travaux en cours ici s'arrêtent (jobs/executor.py) ; pas celles
+    d'un travail en pause, qui vont au bout."""
+    from aiodos.jobs.executor import _withdrawn
+    running, cancelled, paused, deleted = (_job(name) for name in (
+        "en cours", "annulé", "en pause", "supprimé"))
+    queue.cancel_job(cancelled)
+    queue.pause_job(paused)
+    queue.pause_job(deleted)
+    queue.delete_job(deleted)
+    assert _withdrawn({running, cancelled, paused, deleted}) == {cancelled, deleted}
+    assert _withdrawn(set()) == set()
+
+
 def test_interrupted_units_are_recovered():
     job_id = _job("nuit")
     queue.claim_next({"cpu"}, "local")          # puis « coupure de courant »

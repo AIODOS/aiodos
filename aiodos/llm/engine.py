@@ -7,7 +7,12 @@ plus ancien au-delà de MODELS_MAX, comme Ollama.
   modèle d'embedding. Le routeur repart quand la liste change (modèle téléchargé, écarté).
 - --fit on : llama.cpp place lui-même les couches dans la mémoire de la carte graphique.
 - Sur 127.0.0.1 seulement, avec une clé tirée à chaque lancement : le routeur accepte
-  qu'une page web l'appelle (CORS ouvert), sans la clé il répond 401.
+  qu'une page web l'appelle (CORS ouvert), sans la clé il répond 401. Elle passe par
+  l'environnement (LLAMA_API_KEY), jamais par la ligne de commande, que tout compte de la
+  machine lit (/proc/<pid>/cmdline, ps : faille 20 de l'audit du 20/10/2026) ; le routeur la
+  donne aussi, par son environnement, aux llama-server qu'il lance pour chaque modèle (il
+  retire « api-key » de leurs arguments). Une fois prêt, il doit l'exiger (cluster/engine.
+  Process.start : 401 sans elle), sinon il est arrêté.
 - Le programme est celui de llama.cpp livré avec AIODOS (cluster/engine.folder()).
 """
 import hashlib
@@ -80,9 +85,10 @@ class Router:
             port = programs.free_port()
             args = ["--models-preset", str(ini), "--models-max", str(MODELS_MAX),
                     "--models-autoload", "--host", "127.0.0.1", "--port", str(port),
-                    "--no-webui", "--fit", "on", "--api-key", self.key]
+                    "--no-webui", "--fit", "on"]
+            # La clé par l'environnement : les llama-server de chaque modèle en héritent
             process = programs.Process("llama-routeur", folder / f"{programs.SERVER}{programs.EXE}",
-                                       args, port)
+                                       args, port, env={programs.KEY_VARIABLE: self.key})
             try:
                 process.start(START_TIMEOUT, ready=lambda: programs.loaded(port))
             except programs.EngineError as exc:

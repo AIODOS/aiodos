@@ -51,11 +51,32 @@ impl hyper::body::Body for ChannelBody {
     }
 }
 
+/// Réponse de `left` octets nuls, morceau par morceau, faite à mesure qu'elle est lue.
+struct Zeros(usize);
+
+impl hyper::body::Body for Zeros {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Bytes>, Infallible>>> {
+        if self.0 == 0 {
+            return Poll::Ready(None);
+        }
+        let size = self.0.min(64 * 1024);
+        self.0 -= size;
+        Poll::Ready(Some(Ok(Frame::data(Bytes::from(vec![0u8; size])))))
+    }
+}
+
 type AppBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Infallible>;
 
 /// Faux serveur réseau d'AIODOS :
 /// - `/p2p/v1/echo` renvoie le chemin, le corps et les en-têtes vus ;
-/// - `/p2p/v1/stream/slow` répond « un », puis « deux » quand le test le permet.
+/// - `/p2p/v1/stream/slow` répond « un », puis « deux » quand le test le permet ;
+/// - `/p2p/v1/stream/big` répond 256 Mio, faits à mesure qu'ils sont lus.
 pub async fn fake_app(release: Arc<Notify>) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -89,6 +110,9 @@ async fn answer(req: Request<Incoming>, release: Arc<Notify>) -> Response<AppBod
             let _ = tx.send(Bytes::from_static(b"deux\n")).await;
         });
         return Response::new(ChannelBody(rx).boxed_unsync());
+    }
+    if path == "/p2p/v1/stream/big" {
+        return Response::new(Zeros(256 << 20).boxed_unsync());
     }
     let body = req.into_body().collect().await.unwrap().to_bytes();
     let reply = json!({

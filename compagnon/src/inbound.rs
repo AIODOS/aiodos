@@ -6,13 +6,23 @@
 //! et sait que la requête vient du compagnon (l'adresse qu'il voit, 127.0.0.1, n'est
 //! alors pas celle de la machine). Seule l'API `/p2p/…` passe, et les tunnels vers les
 //! services qu'AIODOS a ouverts à cette machine (`/p2p/v1/tunnel/…`, cf. tunnel.rs).
+//!
+//! Même une machine autorisée (un ami appairé) est bornée : en-têtes attendus au plus
+//! `HEADER_TIMEOUT`, corps relayé coupé au-delà de `Config::max_body` octets (un résultat
+//! de calcul, au-delà de `relay_body::MAX_RESULT_BODY`), d'une minute de silence ou sous
+//! le débit minimal `relay_body::PACE` (408, cf. relay_body.rs) ; réponse coupée quand la
+//! machine ne la lit plus depuis `Config::response_stall` ; requêtes relayées en même temps
+//! bornées par machine, conversations à part (`pool::MAX_STREAMS_PER_PEER` et
+//! `pool::MAX_REQUESTS_PER_PEER` : au-delà, la requête attend sa place
+//! `Config::slot_wait`, puis 503) ; flux et connexions par machine limités aussi (cf.
+//! endpoint.rs et pool.rs).
 
 use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
 
 use hyper::{
     Method, Request, Response, StatusCode,
     body::Incoming,
-    header::{HOST, HeaderValue},
+    header::{CONNECTION, HOST, HeaderValue},
     server::conn::http1,
     service::service_fn,
 };
@@ -27,6 +37,7 @@ use tracing::{debug, info};
 use crate::{
     PEER_HEADER, TOKEN_HEADER, close,
     pool::{Pool, Tracked},
+    relay_body::{self, Progress},
     reply::{self, Body, BoxError},
     stream_io::QuicIo,
     tunnel,
@@ -97,24 +108,43 @@ pub(crate) async fn serve_connection(pool: Arc<Pool>, tracked: Tracked) {
     }
 }
 
-/// Un flux = un échange HTTP/1.1, relayé vers AIODOS.
+/// Un flux = un échange HTTP/1.1, relayé vers AIODOS. Si la machine ne lit plus la
+/// réponse (rien depuis `response_stall`), le flux est coupé : sa place et la connexion au
+/// serveur local sont rendues.
 async fn serve_stream(pool: Arc<Pool>, peer: EndpointId, io: QuicIo) {
-    let service = service_fn(move |req| {
-        let pool = pool.clone();
-        async move { Ok::<_, Infallible>(forward(&pool, peer, req).await) }
-    });
+    let progress = Arc::new(Progress::default());
+    let stall = pool.response_stall;
+    let service = {
+        let progress = progress.clone();
+        service_fn(move |req| {
+            let (pool, progress) = (pool.clone(), progress.clone());
+            async move { Ok::<_, Infallible>(forward(&pool, peer, req, progress).await) }
+        })
+    };
     let mut builder = http1::Builder::new();
     builder
         .keep_alive(false)
         .timer(TokioTimer::new())
         .header_read_timeout(HEADER_TIMEOUT);
-    if let Err(err) = builder.serve_connection(TokioIo::new(io), service).with_upgrades().await {
-        debug!("échange avec {} interrompu : {err}", peer.fmt_short());
+    tokio::select! {
+        served = builder.serve_connection(TokioIo::new(io), service).with_upgrades() => {
+            if let Err(err) = served {
+                debug!("échange avec {} interrompu : {err}", peer.fmt_short());
+            }
+        }
+        _ = progress.stalled(stall) => {
+            info!("Réponse non lue par {} depuis {} s : flux coupé", peer.fmt_short(), stall.as_secs());
+        }
     }
 }
 
 /// Relaie une requête reçue vers le serveur réseau local d'AIODOS.
-async fn forward(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> Response<Body> {
+async fn forward(
+    pool: &Pool,
+    peer: EndpointId,
+    mut req: Request<Incoming>,
+    progress: Arc<Progress>,
+) -> Response<Body> {
     pool.count_in(peer);
     if req.uri().path().starts_with(tunnel::PATH_PREFIX) {
         return tunnel::accept(pool, peer, req).await;
@@ -125,6 +155,14 @@ async fn forward(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> R
     if !matches!(*req.method(), Method::POST | Method::GET) {
         return reply::detail(StatusCode::METHOD_NOT_ALLOWED, "Méthode refusée.");
     }
+    // Une place pour cette machine, tenue jusqu'à la fin de la réponse : une seule machine
+    // ne prend pas toutes celles du serveur local (ni au goutte-à-goutte, ni en ne lisant
+    // jamais la réponse). Les autres machines restent servies, et ses requêtes courtes ont
+    // leur propre part (une rafale de conversations ne les arrête pas). Faute de place, la
+    // requête attend son tour un moment avant d'être refusée.
+    let Some(slot) = pool.relay_slot(peer, req.uri().path()).await else {
+        return too_busy();
+    };
     let headers = req.headers_mut();
     reply::strip_hop_by_hop(headers);
     headers.remove(TOKEN_HEADER);
@@ -136,12 +174,25 @@ async fn forward(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> R
         HOST,
         HeaderValue::from_str(&pool.forward.to_string()).expect("adresse locale"),
     );
-    match send_local(pool.forward, req.map(reply::boxed)).await {
+    let path = req.uri().path().to_owned();
+    let max = relay_body::limit_for(&path, pool.max_body);
+    if relay_body::announced_too_large(req.headers(), max) {
+        return too_large(max);
+    }
+    // Débit minimal en moyenne, pour toutes, résultats de calcul compris : un
+    // goutte-à-goutte ne tient pas une place sans fin (BODY_IDLE se remet à zéro à chaque
+    // octet), et une grosse requête sur un lien lent a le temps qu'il lui faut.
+    let req = req.map(|body| relay_body::bounded(body, max, relay_body::BODY_IDLE, Some(relay_body::PACE)));
+    match send_local(pool.forward, req).await {
         Ok(response) => {
             let mut response = response.map(reply::boxed);
             reply::strip_hop_by_hop(response.headers_mut());
-            response
+            // La place n'est rendue qu'une fois la réponse entièrement renvoyée (ou le flux
+            // coupé, cf. serve_stream).
+            response.map(|body| relay_body::guarded(slot, progress, body))
         }
+        Err(err) if relay_body::is_too_large(err.as_ref()) => too_large(max),
+        Err(err) if relay_body::is_too_slow(err.as_ref()) => too_slow(),
         Err(err) => {
             debug!("serveur réseau local injoignable ({}) : {err}", pool.forward);
             reply::detail(
@@ -150,6 +201,42 @@ async fn forward(pool: &Pool, peer: EndpointId, mut req: Request<Incoming>) -> R
             )
         }
     }
+}
+
+/// Trop de requêtes en cours pour cette machine, depuis `Config::slot_wait` : refusée, flux
+/// fermé. Les autres machines gardent leurs places.
+fn too_busy() -> Response<Body> {
+    let mut response = reply::detail(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Trop de requêtes en même temps depuis cette machine : réessaie dans un instant.",
+    );
+    response.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+    response
+}
+
+/// Corps arrivé trop lentement (muet, ou sous le débit minimal) : refusé, flux fermé.
+fn too_slow() -> Response<Body> {
+    let mut response = reply::detail(
+        StatusCode::REQUEST_TIMEOUT,
+        format!(
+            "Envoi trop lent : la requête n'est pas arrivée à temps (plus rien pendant {} s, ou \
+             moins de {} Kio/s en moyenne). Réessaie avec une meilleure connexion.",
+            relay_body::BODY_IDLE.as_secs(),
+            relay_body::PACE.min_rate / 1024
+        ),
+    );
+    response.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+    response
+}
+
+/// Corps trop long : refusé, et le flux fermé (le reste du corps n'est pas lu).
+fn too_large(max: usize) -> Response<Body> {
+    let mut response = reply::detail(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        format!("Requête trop grosse pour être relayée (au plus {} Mio).", max >> 20),
+    );
+    response.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+    response
 }
 
 async fn send_local(addr: SocketAddr, req: Request<Body>) -> Result<Response<Incoming>, BoxError> {

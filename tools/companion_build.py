@@ -7,9 +7,27 @@ commit donné au programme (AIODOS_NET_COMMIT). Le binaire est ensuite vérifié
 format de la plateforme, commit retrouvé dans ses octets, et, s'il peut tourner sur
 cette machine, « aiodos-net --version » au numéro du Cargo.toml de ce commit.
 
-Les dépendances compilées se gardent d'une fois sur l'autre dans compagnon/target :
-une nouvelle publication ne recompile que le compagnon (quelques minutes tout de même,
-à cause de l'optimisation de tout le programme).
+Les dépendances compilées se gardent d'une fois sur l'autre dans un dossier de
+construction privé, hors du dépôt (build_dir : %LOCALAPPDATA%\\aiodos-build sous Windows,
+~/.cache/aiodos-build ailleurs, ou AIODOS_BUILD_DIR) : une nouvelle publication ne
+recompile que le compagnon (quelques minutes tout de même, à cause de l'optimisation de tout
+le programme). Privé, car une dépendance compilée qu'un autre compte remplacerait serait
+liée telle quelle dans le compagnon signé ; l'export des sources l'est aussi, et le
+programme construit est copié avant d'être vérifié et pesé. Un .cargo/config posé dans un
+dossier parent (C:\\.cargo, que tout compte peut créer) est refusé : cargo le lirait.
+
+git est lancé sans ce que .git/config pourrait faire exécuter ni ses objets de
+remplacement (GIT_SAFE : fsmonitor, crochets, signature, refs/replace). Cela ne suffit pas
+(un filtre déclaré dans .git/config tourne aussi pendant git archive) : les outils de
+publication refusent en plus un dépôt que d'autres comptes de la machine peuvent modifier,
+qui porte des fichiers non suivis là où Python cherche leur code, ou dont la configuration
+git est piégée (require_private_repository, cf. aiodos/updates/private.py, qu'ils
+appellent avant d'importer quoi que ce soit du dépôt), et des outils de construction
+(cargo, NDK) dans un dossier ouvert à d'autres (require_private_tools). Les fichiers
+temporaires de cargo, rustc et de l'éditeur de liens vont dans un dossier privé
+(private_temp) : %TEMP% peut être ouvert à d'autres comptes. Une configuration de cargo
+apparue pendant la construction dans un dossier parent rejette le programme construit, et
+un dossier parent où d'autres comptes pourraient créer .cargo est signalé (cargo_exposed).
 
 Ce qu'il faut sur la machine qui publie :
 - pour sa propre plateforme (windows-x86_64 sur le PC de l'auteur) : Rust, et sous
@@ -24,7 +42,6 @@ import shutil
 import struct
 import subprocess
 import sys
-import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -33,7 +50,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from aiodos.updates import platforms  # noqa: E402
+from aiodos.updates import platforms, private  # noqa: E402
 
 PROGRAM = "aiodos-net"
 PROFILE = "distribution"
@@ -43,10 +60,122 @@ BUILD_TIMEOUT = 3600
 _PE_MACHINES = {"x86_64": 0x8664, "aarch64": 0xAA64}
 _ELF_MACHINES = {"x86_64": 62, "aarch64": 183}
 _MACHO_CPUS = {"x86_64": 0x01000007, "aarch64": 0x0100000C}
+# Ce que .git/config ou le dépôt pourraient faire exécuter ou substituer aux commandes des
+# outils (cf. aiodos/updates/private.py)
+GIT_SAFE = private.GIT_SAFE
 
 
 class BuildError(Exception):
     """Compagnon impossible à construire, ou qui ne correspond pas (message lisible)."""
+
+
+def git_command(repo: Path, *args) -> list:
+    """La commande git sur le dépôt `repo`, sans ses crochets, son fsmonitor ni ses objets
+    de remplacement (GIT_SAFE)."""
+    return private.git_command(repo, *args)
+
+
+def require_private_repository(repo: Path = ROOT, extra=()):
+    """BuildError si les outils ne doivent rien signer ni livrer depuis le dépôt : d'autres
+    comptes de cette machine peuvent le modifier (ou l'un des dossiers `extra`, de travail),
+    des fichiers non suivis s'y trouvent là où Python cherche le code des outils, ou sa
+    configuration git ferait exécuter ou publier autre chose (private.repository_problems).
+    Ses droits ne sont jamais changés ici : c'est à l'auteur de les corriger."""
+    try:
+        private.require_private_repository(repo, extra)
+    except private.NotPrivate as exc:
+        raise BuildError(str(exc)) from exc
+
+
+def build_dir() -> Path:
+    """Dossier de construction privé, hors du dépôt (AIODOS_BUILD_DIR : un autre, essais)."""
+    chosen = os.environ.get("AIODOS_BUILD_DIR")
+    if chosen:
+        return Path(chosen)
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(local) / "aiodos-build"
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "aiodos-build"
+
+
+def target_dir() -> Path:
+    """CARGO_TARGET_DIR du compagnon : privé, créé tel s'il manque. BuildError s'il est
+    ouvert à d'autres comptes (ses droits ne sont jamais changés ici)."""
+    try:
+        return private.private_dir(private.private_dir(build_dir()) / "compagnon")
+    except (private.NotPrivate, OSError) as exc:
+        raise BuildError(f"{exc}. Choisis un dossier à toi seul (AIODOS_BUILD_DIR), ou "
+                         "rends celui-ci privé.") from exc
+
+
+def private_temp(env: dict, folder: Path) -> dict:
+    """`env`, où les fichiers temporaires de l'outil lancé (TMP, TEMP, TMPDIR) vont dans
+    `folder`, créé privé : %TEMP% peut être ouvert à d'autres comptes (bacs à sable), et un
+    dossier que cargo, rustc, l'éditeur de liens, pip ou Inno Setup y créent en hérite les
+    droits. BuildError si `folder` existait déjà ouvert à d'autres."""
+    try:
+        folder = private.private_dir(folder)
+    except (private.NotPrivate, OSError) as exc:
+        raise BuildError(f"Dossier temporaire de la construction : {exc}") from exc
+    return dict(env, TMP=str(folder), TEMP=str(folder), TMPDIR=str(folder))
+
+
+def cargo_configs(work: Path) -> list:
+    """Fichiers de configuration de cargo dans `work` et ses dossiers parents, hors de
+    CARGO_HOME : cargo les lirait (rustc-wrapper, éditeur de liens…)."""
+    home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo").resolve()
+    found = []
+    work = Path(work).resolve()
+    for parent in (work, *work.parents):
+        folder = parent / ".cargo"
+        if folder.resolve() == home:
+            continue
+        found += [str(folder / n) for n in ("config", "config.toml") if (folder / n).is_file()]
+    return found
+
+
+def cargo_exposed(work: Path) -> list:
+    """Dossiers parents de `work` sans .cargo où d'autres comptes peuvent en créer un (C:\\
+    le permet par défaut) : cargo lirait une configuration qu'ils y poseraient pendant la
+    construction. Un .cargo vide et privé, créé une fois, ferme la porte."""
+    home = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo").resolve()
+    found = []
+    work = Path(work).resolve()
+    for parent in (work, *work.parents):
+        folder = parent / ".cargo"
+        if folder.resolve() == home:
+            continue
+        try:
+            if folder.exists():
+                private.require_private(folder, "le dossier .cargo")
+            elif private.foreign_writers(parent):
+                found.append(folder)
+        except private.NotPrivate as exc:
+            raise BuildError(f"{exc} : cargo y lirait une configuration posée par un autre "
+                             "compte. Rends-le privé, puis recommence.") from exc
+        except OSError:
+            found.append(folder)
+    return found
+
+
+def tool_folders(target: str) -> list:
+    """[(ce que c'est, dossier)] des outils qui construisent le compagnon de `target` :
+    cargo et, pour Android, le NDK (son éditeur de liens)."""
+    found = [("le dossier de cargo", Path(cargo()).resolve().parent)] if cargo() else []
+    if target == ANDROID and ndk() is not None:
+        found.append(("le NDK Android", ndk()))
+    return found
+
+
+def require_private_tools(target: str):
+    """BuildError si d'autres comptes peuvent modifier les outils de construction : un
+    cargo ou un éditeur de liens remplacé piégerait le compagnon signé."""
+    for what, folder in tool_folders(target):
+        try:
+            private.require_private(folder, what)
+        except private.NotPrivate as exc:
+            raise BuildError(f"{exc}. Installe ces outils dans ton dossier personnel, ou "
+                             "rends ce dossier privé.") from exc
 
 
 def default_targets() -> list:
@@ -121,7 +250,7 @@ def missing(target: str) -> str | None:
 
 
 def has_sources(repo: Path, commit: str) -> bool:
-    done = subprocess.run(["git", "-C", str(repo), "ls-tree", "--name-only", commit, "compagnon/"],
+    done = subprocess.run(git_command(repo, "ls-tree", "--name-only", commit, "compagnon/"),
                           capture_output=True, text=True, encoding="utf-8")
     return done.returncode == 0 and bool(done.stdout.strip())
 
@@ -129,8 +258,8 @@ def has_sources(repo: Path, commit: str) -> bool:
 def _export(repo: Path, commit: str, work: Path) -> Path:
     """Le dossier compagnon/ du commit, tel qu'il est dans le dépôt."""
     archive = work / "compagnon.zip"
-    done = subprocess.run(["git", "-C", str(repo), "archive", "--format=zip",
-                           f"--output={archive}", commit, "--", "compagnon"],
+    done = subprocess.run(git_command(repo, "archive", "--format=zip", f"--output={archive}",
+                                      commit, "--", "compagnon"),
                           capture_output=True, text=True, encoding="utf-8")
     if done.returncode != 0:
         raise BuildError(f"Export du compagnon impossible : {done.stderr.strip()}")
@@ -152,9 +281,11 @@ def file_name(number: str, target: str) -> str:
 
 def build(target: str, commit: str, number: str, out: Path, repo: Path = ROOT) -> Path:
     """Construit le compagnon de `target` à partir du commit, le vérifie, et le copie
-    dans `out` (nom : file_name). BuildError sinon. Les messages de cargo s'affichent."""
+    dans `out` (nom : file_name ; un dossier privé, celui de la publication). BuildError
+    sinon. Les messages de cargo s'affichent."""
     triple = platforms.RUST_TARGETS[target]
-    shared = repo / "compagnon" / "target"
+    require_private_tools(target)
+    shared = target_dir()
     env = dict(os.environ, AIODOS_NET_COMMIT=commit, CARGO_TARGET_DIR=str(shared))
     if target == ANDROID:
         linker, archiver = android_tools(ndk())
@@ -162,23 +293,41 @@ def build(target: str, commit: str, number: str, out: Path, repo: Path = ROOT) -
                     "CC_aarch64_linux_android": str(linker),
                     "AR_aarch64_linux_android": str(archiver)})
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="aiodos-compagnon-") as work:
-        source = _export(repo, commit, Path(work))
+    out.mkdir(parents=True, exist_ok=True)
+    result = out / file_name(number, target)
+    with private.private_tempdir("aiodos-compagnon-", build_dir()) as work:
+        foreign = cargo_configs(work)
+        if foreign:
+            raise BuildError("Configuration de cargo hors de CARGO_HOME, qu'il lirait : "
+                             f"{', '.join(foreign)}. Vérifie-la et retire-la avant de publier.")
+        for folder in cargo_exposed(work):
+            print(f"  ATTENTION : d'autres comptes de cette machine peuvent créer {folder}, que "
+                  "cargo lirait. Crée-le une fois, vide et privé (toi, Système et "
+                  "Administrateurs seulement).", flush=True)
+        source = _export(repo, commit, work)
         command = [cargo(), "build", "--profile", PROFILE, "--target", triple, "--locked"]
         try:
-            done = subprocess.run(command, cwd=source, env=env, timeout=BUILD_TIMEOUT)
+            done = subprocess.run(command, cwd=source, env=private_temp(env, work / "temp"),
+                                  timeout=BUILD_TIMEOUT)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise BuildError(f"cargo ne s'est pas terminé ({exc}).") from exc
+        appeared = cargo_configs(work)
+        if appeared:                              # posée pendant la construction : lue
+            raise BuildError("Configuration de cargo apparue pendant la construction : "
+                             f"{', '.join(appeared)}. Le programme construit est écarté ; "
+                             "vérifie qui l'a posée avant de recommencer.")
         if done.returncode != 0:
             raise BuildError(f"cargo a échoué (code {done.returncode}) : voir ses messages "
                              "ci-dessus.")
         built = shared / triple / PROFILE / platforms.executable(PROGRAM, target)
         if not built.is_file():
             raise BuildError(f"Programme introuvable après la construction : {built}")
-        check(built, target, commit, crate_version(source))
-    out.mkdir(parents=True, exist_ok=True)
-    result = out / file_name(number, target)
-    shutil.copyfile(built, result)
+        shutil.copyfile(built, result)          # vérifié, puis pesé, sur cette copie seule
+        try:
+            check(result, target, commit, crate_version(source))
+        except BuildError:
+            result.unlink(missing_ok=True)
+            raise
     print(f"  {target} : {result.stat().st_size / 1e6:.1f} Mo, construit et vérifié en "
           f"{time.monotonic() - started:.0f} s", flush=True)
     return result

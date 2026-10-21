@@ -13,6 +13,7 @@ import zipfile
 import pytest
 
 from aiodos.updates import manifest as manifests
+from aiodos.updates import private
 from aiodos.updates.store import Store, sha256_of
 from tests.nodes import APP_ROOT
 
@@ -20,6 +21,13 @@ from tests.nodes import APP_ROOT
 KEYS_FILE = "TRUSTED_KEYS = {\n}\n\nAPPROVER_KEYS = {\n}\n"
 IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.org",
             "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.org"}
+
+
+@pytest.fixture
+def tmp_path(tmp_path):
+    """Dossier des essais, privé : l'outil refuse un dépôt modifiable par d'autres comptes
+    et une clé qu'ils peuvent lire (le dossier temporaire l'est parfois : bacs à sable)."""
+    return private.private_dir(tmp_path / "prive")
 
 
 def git(repo, *args):
@@ -113,10 +121,12 @@ def prepared(tmp_path):
         shutil.copyfile(APP_ROOT / name, repo / name)
     (repo / "aiodos" / "updates" / "keys.py").write_text(KEYS_FILE, encoding="utf-8")
     git(repo, "init", "-q")
+    git(repo, "add", "-A")                    # l'outil refuse un fichier non suivi
+    git(repo, "commit", "-qm", "départ")      # là où il cherche son code
     key = tmp_path / "cle.pem"
-    assert tool(repo, key, "key").returncode == 0
-    git(repo, "add", "-A")
-    git(repo, "commit", "-qm", "départ")
+    made = tool(repo, key, "key")
+    assert made.returncode == 0, made.stderr
+    git(repo, "commit", "-qam", "clé de publication")
     trusted = {}
     exec((repo / "aiodos" / "updates" / "keys.py").read_text(encoding="utf-8"), trusted)
     return repo, key, trusted["TRUSTED_KEYS"]
@@ -196,11 +206,21 @@ def test_with_an_approval_device_the_release_waits(tmp_path):
     assert done.returncode == 0, done.stderr
     assert "EN ATTENTE D'APPROBATION" in done.stdout
     store = Store(data / "updates")
+    # L'empreinte que montrera l'appareil d'approbation, à comparer avant d'approuver
+    from aiodos.updates import approval
+    shown = approval.digest(store.signed("3.0.0"))
+    assert f"Empreinte du texte : {shown[:16]}" in done.stdout
     assert [v for v, _ in store.pending(trusted, approvers)] == ["3.0.0"]
     with pytest.raises(manifests.UpdateError, match="pas encore approuvée"):
         manifests.verify(store.signed("3.0.0"), trusted, approvers)
     approved = manifests.approve(store.signed("3.0.0"), phone)
     assert manifests.verify(approved, trusted, approvers)["version"] == "3.0.0"
+    # Le texte signé nomme l'appareil : une machine qui n'en déclare aucun relaie quand même
+    # la bonne approbation, et seulement elle
+    assert json.loads(store.signed("3.0.0")["manifest"])["approvers"] == approvers
+    relayed = manifests.canonical(dict(approved, approvals=[
+        dict(approved["approvals"][0], signature="A" * 86 + "==")] + approved["approvals"]), {})
+    assert relayed["approvals"] == approved["approvals"]
 
 
 # --------------------------------------------------------------------- compagnon
@@ -268,13 +288,16 @@ def test_companion_built_from_the_published_commit_is_joined(tmp_path):
                     ignore=shutil.ignore_patterns("target"))
     (repo / "aiodos" / "updates" / "keys.py").write_text(KEYS_FILE, encoding="utf-8")
     git(repo, "init", "-q")
+    git(repo, "add", "-A")                    # l'outil refuse un fichier non suivi
+    git(repo, "commit", "-qm", "départ")      # là où il cherche son code
     key = tmp_path / "cle.pem"
-    assert tool(repo, key, "key").returncode == 0
-    git(repo, "add", "-A")
-    git(repo, "commit", "-qm", "départ")
+    made = tool(repo, key, "key")
+    assert made.returncode == 0, made.stderr
+    git(repo, "commit", "-qam", "clé de publication")
     data, out = tmp_path / "data", tmp_path / "out"
     cargo = {"AIODOS_CARGO": str(fake_cargo(tmp_path / "outils")),
-             "FAUX_CARGO_PROGRAMME": str(REAL)}
+             "FAUX_CARGO_PROGRAMME": str(REAL),
+             "AIODOS_BUILD_DIR": str(tmp_path / "construction")}     # pas celui de l'auteur
 
     failed = release(repo, key, data, "3.0.0", "--targets", HERE, **cargo, FAUX_CARGO="echec")
     assert failed.returncode != 0 and "Rien n'a été publié" in failed.stderr

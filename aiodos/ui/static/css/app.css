@@ -281,6 +281,7 @@ main { grid-row: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .source.remote { color: #c4f1fa; border-color: rgba(79, 216, 235, .3); }
 a.source { text-decoration: none; }
 a.source:hover { color: var(--text); border-color: var(--line-2); }
+.source.link-off { border-style: dotted; cursor: help; }
 
 .thinking { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); }
 .thinking summary { list-style: none; cursor: pointer; padding: 7px 12px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
@@ -374,6 +375,12 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .md li { margin: .2em 0; }
 .md a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid rgba(79, 216, 235, .35); }
 .md a:hover { border-bottom-color: var(--cyan); }
+/* Image d'une réponse : un lien à cliquer, jamais chargée d'office ; lien ni web ni courriel
+   (search-ms:, intent:…) : son texte seul, l'adresse au survol ; image écrite dans la réponse
+   même (data:image/…) : affichée, rien n'est allé la chercher (render.py) */
+.md .image-link { font-style: italic; }
+.md .inline-image { max-width: 100%; height: auto; border-radius: 8px; }
+.md .link-off { color: var(--muted); border-bottom: 1px dotted var(--line-2); cursor: help; }
 .md blockquote { margin: 0 0 .8em; padding: 2px 14px; border-left: 3px solid var(--line-2); color: var(--muted); }
 .md code { font-family: var(--mono); font-size: .88em; background: var(--panel-3); padding: 1px 6px; border-radius: 5px; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }

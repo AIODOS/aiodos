@@ -2,17 +2,30 @@
 sous des noms neutres, avec un profil allégé de cette machine ; ce qu'il rend est
 contrôlé par échantillon, et une machine prise en défaut est mise de côté. Côté
 propriétaire du travail, sans réseau ni Ollama."""
+import json
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
 from aiodos import db
 from aiodos.api.server import create_app
+from aiodos.jobs import registry
 from aiodos.knowledge import store
 from aiodos.network import p2p_app, pairing, peers, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 from tests.test_work_leases import B, C, _lease, _unit, owner  # noqa: F401  (owner : fixture)
+
+
+@pytest.fixture(autouse=True)
+def friends_forgotten():
+    """Ce que le propriétaire retient des amis en mémoire (demandes comptées, unités rendues
+    en échec, network/work.py) vit le temps du processus : un essai d'un autre fichier, sur
+    la même machine B et les mêmes numéros d'unités, ne change pas ce qui est confié ici."""
+    work.forget_friends()
+    yield
+    work.forget_friends()
 
 
 @pytest.fixture
@@ -23,8 +36,9 @@ def friend(owner):
 
 
 def _result(owner, order, vectors, node=B):
-    """B rend son calcul : un texte qui reprend le nom de fichier qu'il a reçu."""
-    pieces = [f"Contenu de {order['blob']['name']}"]
+    """B rend son calcul : le vrai texte du premier fichier confié (a.txt). Le contrôle
+    refait le découpage ici : un autre texte serait refusé avant même les vecteurs."""
+    pieces = ["Les chats dorment."]
     return work.result(owner["manager"], node, {
         "unit": order["id"], "compute_s": 1.0,
         "output": wire.pack({"pieces": pieces, "vectors": np.asarray(vectors, dtype=np.float32)})})
@@ -61,7 +75,7 @@ def test_a_library_kept_on_this_pc_never_leaves(friend):
         store.set_scope(friend["collection"], "partout")
 
 
-def test_a_friend_result_is_checked_by_sample_and_the_real_name_restored(friend, monkeypatch):
+def test_a_friend_result_is_checked_by_sample(friend, monkeypatch):
     store.set_scope(friend["collection"], "friends")
     order = _lease(friend)["unit"]
     vector = np.ones((1, 8), dtype=np.float32)
@@ -69,11 +83,25 @@ def test_a_friend_result_is_checked_by_sample_and_the_real_name_restored(friend,
     monkeypatch.setattr(ollama, "embed",
                         lambda texts, model=None: asked.append(texts) or [vector[0].tolist()])
     assert _result(friend, order, vector) == {"accepted": True}
-    assert asked == [[f"Contenu de {order['blob']['name']}"]]          # le passage recalculé ici
+    assert asked == [["Les chats dorment."]]                          # le passage recalculé ici
     text = db.query_one("SELECT text FROM chunks ORDER BY id DESC LIMIT 1")["text"]
-    assert text == "Contenu de a.txt"
+    assert text == "Les chats dorment."
     assert peers.list_peers()[0]["received_units"] == 1
     assert peers.list_peers()[0]["checked_units"] == 1                # fiabilité : contrôlé, conforme
+
+
+def test_the_real_name_is_restored_in_the_text(friend):
+    """Le nom neutre qu'un ami a pu écrire dans le texte (« [Image : fichier-12.png] »)
+    redevient le vrai nom du fichier. Testé sur la sortie même : un résultat d'ami pour une
+    image n'est plus jamais pris (ni même confié), il ne passe donc plus par work.result."""
+    store.set_scope(friend["collection"], "friends")
+    order = _lease(friend)["unit"]
+    unit = _unit(order["id"])
+    output = {"pieces": [f"[Image : {order['blob']['name']}] un chat"]}
+    restored = sharing.restore_names(output, {"id": unit["id"],
+                                              "payload": json.loads(unit["payload"])},
+                                     registry.TASKS["index_file"])
+    assert restored["pieces"] == ["[Image : a.txt] un chat"]
 
 
 def test_a_friend_whose_result_does_not_match_is_set_aside(friend, monkeypatch):
@@ -92,6 +120,8 @@ def test_a_friend_whose_result_does_not_match_is_set_aside(friend, monkeypatch):
 
 
 def test_a_result_that_cannot_be_checked_here_goes_back_to_the_queue(friend, monkeypatch):
+    """Ollama arrêté ici : le texte rendu est bien le découpage refait ici, mais ses
+    vecteurs ne peuvent pas être recalculés. Ce n'est pas la faute de l'ami."""
     store.set_scope(friend["collection"], "friends")
     order = _lease(friend)["unit"]
 
@@ -172,10 +202,37 @@ def test_trust_is_chosen_when_confirming_the_pairing(data_dir, monkeypatch):
     peers.set_aside("lea", "essai")
     pairs._pending["lea"] = pairing.Pending("lea", "lea", "127.0.0.1", 1, "responder",
                                             b"k" * 32, "123456")
-    pairs.answer("lea", True, sharing.FRIEND)                          # nouvel appairage :
+    with pytest.raises(PeerError, match="déjà appairée"):               # sa clé : seulement
+        pairs.answer("lea", True, sharing.FRIEND)                      # si je le choisis
+    pairs.answer("lea", True, sharing.FRIEND, replace=True)            # nouvel appairage :
     assert sharing.set_aside_reason("lea") is None                    # nouvelle chance
     # Appairage par groupe : l'amie rencontre mes autres machines, le portable mes amis
     assert pairs.m.presented == [("ami", "lea"), ("machine", "portable"), ("ami", "lea")]
+
+
+def test_a_machine_paired_meanwhile_keeps_its_key_unless_i_choose(data_dir, monkeypatch):
+    """La demande montrée ne la disait pas connue ; entre-temps, elle a été appairée (une
+    présentation de groupe). Accepter sans « remplacer » est refusé, et sa clé reste ; de
+    même si elle l'est devenue entre mon acceptation et celle de l'autre machine (relecture
+    finale du 21/10/2026)."""
+    db.connect()
+    monkeypatch.setattr(pairing.client, "call", lambda *a, **k: {"accept": True})
+    pairs = pairing.Pairing(Manager())
+    pairs._pending["lea"] = pairing.Pending("lea", "lea", "127.0.0.1", 1, "responder",
+                                            b"k" * 32, "123456")
+    peers.save("lea", "PC de Léa", b"g" * 32, "127.0.0.1", 2, sharing.FRIEND)  # entre-temps
+    with pytest.raises(PeerError, match="déjà appairée"):
+        pairs.answer("lea", True, sharing.FRIEND)
+    assert peers.get("lea")["key"] == b"g" * 32
+    pairs.answer("lea", True, sharing.FRIEND, replace=True)            # choisi : remplacée
+    assert peers.get("lea")["key"] == b"k" * 32
+    monkeypatch.setattr(pairing.client, "call", lambda *a, **k: {})   # l'autre, pas encore
+    pairs._pending["max"] = pairing.Pending("max", "max", "127.0.0.1", 3, "responder",
+                                            b"m" * 32, "654321")
+    pairs.answer("max", True, sharing.MINE)
+    peers.save("max", "PC de Max", b"g" * 32, "127.0.0.1", 4, sharing.MINE)    # entre-temps
+    pairs.remote_answer("max", True)
+    assert peers.get("max")["key"] == b"g" * 32 and pairs.get("max") is None
 
 
 def test_api_changes_trust_restores_and_shows_what_was_sent(owner):

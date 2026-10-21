@@ -15,13 +15,38 @@ règle : dès que l'utilisateur revient, les unités en cours s'arrêtent et son
 rendues, comme l'économiseur d'écran de SETI@home.
 
 Les fichiers reçus ne servent qu'au calcul : ils sont effacés aussitôt après,
-et rien n'est enregistré dans les bibliothèques de cette machine. Le calcul se fait
+et rien n'est enregistré dans les bibliothèques de cette machine. Leur taille vient de
+l'autre machine : elle est bornée ici (work.MAX_BLOB, et de la place laissée libre sur le
+disque), chaque morceau aussi (audit du 20/10/2026). Les réponses du propriétaire, qui peut
+être un ami, passent par client.call : lues en flux et bornées avant d'être analysées (ni une
+réponse énorme ni une bombe gzip n'épuisent la mémoire de cette machine), reconnues à leur
+forme stricte, et rendues avant l'échéance de l'appel, même distillées octet par octet ; un
+contenu illisible ou non fini y devient un refus (PeerError), qui ne fige pas la boucle du
+prêt (relecture finale du 21/10/2026 : reply_limit.py, son prédécesseur, ne tenait pas
+l'échéance et laissait passer SealError). Le calcul se fait
 dans un thread de fond, à priorité abaissée, et suit la cadence du travail de fond
 (node/priority.py, jobs/pacing.py : sur batterie, si le partage y est permis).
+
+Ce qui est demandé, et ce qui est accepté (relecture du 21/10/2026). À une machine qui n'est
+pas à moi, jamais la ressource « net » : je ne lis pas le Web pour un ami, et une version
+d'avant me confierait encore ses pages, que je lui rendrais aussitôt, en boucle. D'un ami,
+pas non plus d'image, de son ni de vidéo à indexer (_media_to_index) : un propriétaire à
+jour ne les confie plus à un ami, et mes décodeurs ne tournent pas sur ses fichiers. Une unité
+pour une ressource que je n'ai pas proposée est rendue sans être calculée. Une unité que je
+dois rendre et qu'on me redonnerait aussitôt (pas de place pour son fichier, tâche que je
+ne calcule pas pour cette machine, modèle Whisper absent) met cette machine, ou cette
+ressource, au repos un moment (_rest). Un modèle Whisper absent se télécharge pour une de
+mes machines, jamais pour un ami (services/media.py : décidé ici, d'après le niveau de
+confiance, jamais d'après l'ordre reçu) ; sinon l'unité est rendue, sans compter d'échec.
+Un résultat plus gros que ce que le propriétaire acceptera (« result_max » de l'ordre) n'est
+pas envoyé : l'unité est rendue en échec, sans reproche (« too_big »). Enfin, un ami
+n'apprend rien de cette machine par un échec : ni ses chemins, ni le nom de son compte, ni
+son disque plein (_reason).
 """
 import asyncio
 import hashlib
 import importlib.util
+import json
 import logging
 import re
 import shutil
@@ -34,12 +59,12 @@ from aiodos import __version__, paths, settings
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
-from aiodos.jobs.models import GPU_BOUND
-from aiodos.network import client, peers, route, sharing, wire, work
+from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
 from aiodos.node import android, identity, power, priority
-from aiodos.services import extract
+from aiodos.services import extract, media
 
 log = logging.getLogger("aiodos.worker")
 
@@ -52,6 +77,21 @@ class _NotNow(Exception):
     """Un téléphone débranché ou sorti du Wi-Fi ne calcule plus pour un ami."""
 
 
+class _NoRoom(Exception):
+    """Pas assez de place sur cette machine pour le fichier de l'unité : elle est rendue."""
+
+
+class _BadOrder(RuntimeError):
+    """L'ordre reçu, ou son fichier, ne tient pas (tâche inconnue, taille annoncée, morceau
+    trop long, empreinte) : refusé avant tout calcul. Son message ne dit rien de cette
+    machine : il part tel quel chez le propriétaire, ami compris (_reason)."""
+
+
+class _TooBig(Exception):
+    """Le résultat dépasse ce que son propriétaire acceptera (« result_max » de l'ordre,
+    network/body_limit.py chez lui) : l'envoyer ne servirait à rien."""
+
+
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
 ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus tard
 # Délai d'une demande de travail. Sur le réseau local, une réponse vient en moins d'une
@@ -59,10 +99,26 @@ ASK_AGAIN = 10           # machine injoignable ou muette : on lui redemande plus
 # le 16/10/2026 : avec 8 s, un téléphone en 4G n'obtenait jamais rien.
 LEASE_TIMEOUT = 30
 CHUNK_RETRY_DELAYS = (2, 5, 10, 20, 30, 30)   # coupure en plein transfert : ~1 min 40 de patience
+RESULT_RETRY_DELAYS = (3, 10, 20)              # résultat non remis : nouveaux essais après…
 CAPS_TTL = 30
 HEAT_MARGIN = 3          # °C : un téléphone trop chaud reprend 3 °C sous sa limite
 BATTERY_MARGIN = 5       # % : un téléphone qui calcule s'arrête 5 % sous la charge minimale
 IN_USE_GPU_SHARE = 50    # % : carte graphique prêtée au plus, pendant que l'utilisateur se sert du PC
+DISK_MARGIN = 1024 ** 3  # place laissée libre sur le disque une fois un fichier reçu
+LEASE_REPLY = 4 * 1024 ** 2      # un ordre de calcul (réponse à work/lease), au plus
+SMALL_REPLY = 256 * 1024         # réponse à work/renew, work/result, work/fail, work/release
+NO_ROOM_RETRY = 600      # s : faute de place, cette machine ne redemande pas de travail avant
+SLOW_RETRY = 300         # s : propriétaire qui a laissé une demande aller jusqu'à son échéance
+# s : après une unité que je ne calcule pas pour elle (réservée à mes machines, ressource
+# que je n'ai pas proposée), cette machine n'est plus redemandée avant
+REFUSED_RETRY = 600
+# s : modèle Whisper absent ici, non téléchargé pour elle : plus de son ni de vidéo de cette
+# machine avant (chaque essai recommencerait par la copie du fichier)
+WHISPER_RETRY = 3600
+# Jamais proposées à une machine qui n'est pas à moi : « net », lire le Web depuis cette
+# machine (index_url, réservée à mes machines dans les deux sens : jobs/kinds/index.py)
+MINE_ONLY_RESOURCES = frozenset({"net"})
+ENVELOPE_MARGIN = 4096   # octets : « from », « to », « ts » autour du résultat scellé
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
              *(f"LPT{i}" for i in range(1, 10))}
 
@@ -161,6 +217,54 @@ def safe_name(name) -> str:
     return base[:150] or "fichier"
 
 
+def _reply_size(action: str, payload: dict) -> int:
+    """Réponse attendue du propriétaire, au plus : un morceau de fichier (base64 dans la
+    réponse, puis encore base64 dans l'enveloppe scellée) pour work/blob, peu sinon."""
+    if action == "work/blob":
+        try:
+            size = max(1, min(int(payload.get("size") or work.BLOB_CHUNK), work.BLOB_CHUNK))
+        except (TypeError, ValueError):
+            size = work.BLOB_CHUNK
+        return size * 16 // 9 + 64 * 1024
+    return LEASE_REPLY if action == "work/lease" else SMALL_REPLY
+
+
+def _sealed_size(payload: dict) -> int:
+    """Taille, au plus, de la requête qui porte `payload` : JSON, scellé, puis en base64
+    dans l'enveloppe (network/envelope.wrap), telle que la mesure network/body_limit.py
+    chez le propriétaire. Le JSON est fait ici une fois de trop : moins coûteux qu'un envoi
+    de dizaines de Mio refusé trois fois."""
+    data = json.dumps(payload, ensure_ascii=False)
+    size = len(data) if data.isascii() else len(data.encode("utf-8", "surrogatepass"))
+    return 4 * ((size + crypto.NONCE + crypto.TAG + 2) // 3) + ENVELOPE_MARGIN
+
+
+def _mib(size: int) -> str:
+    return f"{size / 1024 ** 2:.1f} Mio".replace(".", ",")
+
+
+def _retry_after(reply) -> float:
+    """Délai avant de redemander du travail à cette machine, tel qu'elle le dit ; ASK_AGAIN
+    si elle n'en dit rien de lisible (ni nombre, ni NaN, ni durée négative)."""
+    try:
+        delay = float((reply or {}).get("retry_after") or ASK_AGAIN)
+    except (TypeError, ValueError):
+        return ASK_AGAIN
+    return delay if 0 < delay < float("inf") else ASK_AGAIN
+
+
+def _media_to_index(order) -> bool:
+    """Une image, un son ou une vidéo à indexer ? Un propriétaire à jour ne les confie plus
+    à un ami (son résultat ne se revérifierait pas chez lui : network/work.lease) ; seul un
+    ami malveillant, ou resté sur une version d'avant, en envoie encore, et ma machine ferait
+    tourner pour rien ses décodeurs (vision, ffmpeg) sur un fichier de lui (relecture
+    finale du 21/10/2026). Refusée pour un ami, comme une tâche réservée à mes machines."""
+    if not isinstance(order, dict) or order.get("task") != "index_file":
+        return False
+    blob = order.get("blob") if isinstance(order.get("blob"), dict) else {}
+    return extract.classify(safe_name(blob.get("name"))) in ("image", "media")
+
+
 def label_of(order) -> str:
     payload = order.get("payload") or {}
     return str(payload.get("source") or payload.get("url")
@@ -201,6 +305,8 @@ class Worker:
         # machine -> (instant où lui redemander, ressources déjà proposées) : une
         # machine qui n'avait rien pour le GPU peut en avoir pour les embeddings
         self._next_ask = {}
+        # machine -> {ressource : instant} : ce qui ne lui est plus proposé d'ici là (_rest)
+        self._resting = {}
         self._last_note = {}             # machine -> dernière raison de ne rien recevoir
         self._gpu_rest_until = 0.0       # pause imposée par « GPU prêté au maximum »
         self._caps = (0.0, None)
@@ -248,18 +354,24 @@ class Worker:
         if not offered:
             return CHECK_EVERY
         for peer in await asyncio.to_thread(self._candidates):
+            offer = self._offer_for(peer, offered)
+            if not offer:
+                continue                           # rien à lui proposer pour l'instant
             until, asked = self._next_ask.get(peer["node_id"], (0, set()))
-            if until > time.monotonic() and set(offered) <= asked:
+            if until > time.monotonic() and set(offer) <= asked:
                 continue                           # rien de nouveau à lui proposer
-            reply = await asyncio.to_thread(self._ask, peer, offered)
+            reply = await asyncio.to_thread(self._ask, peer, offer)
             order = (reply or {}).get("unit")
             if order:
                 self._next_ask.pop(peer["node_id"], None)
                 self._last_note.pop(peer["node_id"], None)
+                if not isinstance(order, dict) or order.get("resource") not in offer:
+                    await asyncio.to_thread(self._unexpected, peer, order)
+                    continue
                 self._launch(peer, order)
                 return 0.05                        # d'autres ressources sont peut-être libres
-            delay = float((reply or {}).get("retry_after") or ASK_AGAIN)
-            self._next_ask[peer["node_id"]] = (time.monotonic() + delay, set(offered))
+            self._next_ask[peer["node_id"]] = (time.monotonic() + _retry_after(reply),
+                                               set(offer))
         return CHECK_EVERY
 
     def _interrupt(self, which):
@@ -275,22 +387,63 @@ class Worker:
         free -= leases.local_demand(free)
         return sorted(free)
 
+    def _offer_for(self, peer, offered) -> list:
+        """Ce que je propose à cette machine, parmi les ressources prêtables ici : à une
+        machine qui n'est pas à moi, rien de MINE_ONLY_RESOURCES ; et rien de ce qui est au
+        repos pour elle (_rest)."""
+        now = time.monotonic()
+        resting = self._resting.get(peer["node_id"]) or {}
+        mine = peer.get("trust") == sharing.MINE
+        return [r for r in offered
+                if (mine or r not in MINE_ONLY_RESOURCES) and resting.get(r, 0) <= now]
+
+    def _rest(self, peer_id, resources, seconds):
+        """Ne plus proposer ces ressources à cette machine pendant `seconds` : elle me
+        redonnerait aussitôt l'unité que je viens de lui rendre (ou la même sorte d'unité),
+        et nous ferions des allers-retours sans fin (relecture du 21/10/2026 : des centaines
+        par seconde avec une machine d'une version d'avant)."""
+        until = time.monotonic() + seconds
+        resting = self._resting.setdefault(peer_id, {})
+        for resource in resources:
+            resting[resource] = max(resting.get(resource, 0), until)
+
+    def _unexpected(self, peer, order):
+        """Une unité pour une ressource que je n'ai pas proposée : la machine ne suit pas le
+        protocole (une version d'avant s'en tient aux ressources demandées,
+        leases.claim_remote). Calculée, elle occuperait ici une ressource au-delà de ses
+        places (executor.begin_remote), ou que je garde à mes machines : rendue sans être
+        calculée, et cette machine au repos."""
+        self._rest(peer["node_id"], DEFAULT_SLOTS, REFUSED_RETRY)
+        self._note(peer, "unité reçue pour une ressource que je n'avais pas proposée : rendue")
+        unit = order.get("id") if isinstance(order, dict) else None
+        full = peers.get(peer["node_id"])
+        if unit is None or not full:
+            return
+        try:
+            client.call(self.m.node_id, full, "work/release", {"unit": unit}, timeout=8,
+                        limit=SMALL_REPLY)
+        except PeerError:
+            pass                   # sans réponse, le bail expirera chez elle
+
     def _candidates(self) -> list:
         """Machines en ligne, joignables sur le réseau local ou par Internet (une machine
-        appairée sur invitation n'a qu'une clé Internet), celles qui ont le plus calculé
-        pour moi d'abord."""
+        appairée sur invitation n'a qu'une clé Internet) : mes machines d'abord, puis les
+        amis, et parmi elles celles qui ont le plus calculé pour moi. Les demandes partent
+        l'une après l'autre : un ami qui fait attendre la sienne jusqu'à son échéance ne
+        retarde pas celles de mes machines (relecture finale du 21/10/2026)."""
         online = [p for p in peers.list_peers()
                   if p["online"] and (p.get("address") or p.get("net_id"))]
         if android.is_android() and not friends_welcome():
             online = [p for p in online if p.get("trust") != sharing.FRIEND]
-        online.sort(key=lambda p: p["received_s"] - p["given_s"], reverse=True)
+        online.sort(key=lambda p: (p.get("trust") != sharing.MINE,
+                                   -(p["received_s"] - p["given_s"])))
         return online
 
     def capabilities(self) -> dict:
         at, caps = self._caps
         if caps is None or time.monotonic() - at > CAPS_TTL:
-            caps = {"work_api": work.WORK_API, "version": __version__,
-                    "models": work.local_models(),
+            caps = {"work_api": work.WORK_API, "work_revision": work.WORK_REVISION,
+                    "version": __version__, "models": work.local_models(),
                     "whisper": importlib.util.find_spec("faster_whisper") is not None,
                     "readers": extract.readable_documents(),
                     "images": images_engine.capabilities()}
@@ -307,13 +460,21 @@ class Worker:
             caps = {k: v for k, v in caps.items() if k != "images"}   # pas sans mon accord
         try:
             reply = client.call(self.m.node_id, full, "work/lease",
-                                {"resources": offered, "caps": caps},
-                                timeout=LEASE_TIMEOUT)
+                                {"resources": offered, "caps": caps}, timeout=LEASE_TIMEOUT,
+                                limit=LEASE_REPLY)
         except PeerError as exc:
             self._note(peer, f"demande de travail impossible ({exc})")
+            # Elle m'a fait attendre jusqu'à l'échéance (le prêt attend chaque machine à son
+            # tour) : pas avant un moment
+            if str(exc) == client.TOO_SLOW:
+                return {"unit": None, "retry_after": SLOW_RETRY}
+            return None
+        if not isinstance(reply, dict):
+            self._note(peer, "réponse illisible à une demande de travail")
             return None
         if reply.get("reason"):
-            self._note(peer, reply["reason"])
+            # Bornée : elle vient de l'autre machine (un ami peut-être) et va au journal
+            self._note(peer, str(reply["reason"])[:500])
         return reply
 
     def _note(self, peer, message):
@@ -361,7 +522,8 @@ class Worker:
         peer = peers.get(a.peer_id)
         if not peer:
             raise PeerError("Machine désappairée entre-temps.")
-        return client.call(self.m.node_id, peer, action, payload, timeout=timeout)
+        return client.call(self.m.node_id, peer, action, payload, timeout=timeout,
+                           limit=_reply_size(action, payload))
 
     def _quiet(self, a: Assignment, action, **extra):
         try:
@@ -372,19 +534,29 @@ class Worker:
     def _process(self, a: Assignment) -> str:
         started, waited = time.perf_counter(), pacing.waited()
         folder = paths.work_dir() / f"{a.peer_id[:8]}-{int(a.order['id'])}"
+
+        def computed() -> float:
+            # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
+            return max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
         try:
+            mine = sharing.level(a.peer_id) == sharing.MINE
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
-                raise RuntimeError(f"tâche « {a.order['task']} » inconnue sur cette machine")
-            if sharing.level(a.peer_id) != sharing.MINE \
-                    and not registry.may_compute_for_friend(spec):
+                raise _BadOrder(f"tâche « {str(a.order['task'])[:60]} » inconnue sur cette "
+                                "machine")
+            if not mine and not registry.may_compute_for_friend(spec):
+                raise _NotForFriends()
+            if not mine and _media_to_index(a.order):
                 raise _NotForFriends()
             if not welcomes(a.peer_id):
                 raise _NotNow()
             file = self._download(a, folder) if a.order.get("blob") else None
-            output = spec.compute(a.order["payload"], file, a.order.get("options") or {}, a.stop)
-            # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
-            compute_s = max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
+            # Un modèle Whisper qui manque se télécharge pour une de mes machines, jamais pour
+            # un ami (services/media.py). Le calcul se fait dans ce thread : le contexte y est vu
+            with media.downloads(mine):
+                output = spec.compute(a.order["payload"], file, a.order.get("options") or {},
+                                      a.stop)
+            compute_s = computed()
             reply = self._send_result(a, output, compute_s)
             if not reply.get("accepted"):
                 return f"résultat refusé ({reply.get('reason')})"
@@ -396,10 +568,32 @@ class Worker:
             return "interrompue et rendue"
         except _NotForFriends:
             self._quiet(a, "work/release")
+            # Elle me la redonnerait aussitôt (une version d'avant me confie encore ses
+            # pages) : plus rien ne lui est demandé pendant un moment
+            self._rest(a.peer_id, DEFAULT_SLOTS, REFUSED_RETRY)
             return "réservée à mes machines : rendue"
         except _NotNow:
             self._quiet(a, "work/release")
             return "téléphone hors charge ou hors Wi-Fi : rendue à l'ami"
+        except _NoRoom:
+            self._quiet(a, "work/release")
+            # Rien d'autre de cette machine pendant un moment : elle redonnerait la même
+            self._rest(a.peer_id, DEFAULT_SLOTS, NO_ROOM_RETRY)
+            return "pas assez de place ici pour son fichier : unité rendue"
+        except media.WhisperMissing:
+            # Ni l'unité ni ce fichier n'y sont pour rien : rendue sans compter d'échec (un
+            # ami me mettrait de côté au bout de dix). Ses autres sons demanderaient le même
+            # modèle : plus de cette ressource pour elle pendant un moment
+            self._quiet(a, "work/release")
+            self._rest(a.peer_id, {a.resource}, WHISPER_RETRY)
+            model = str((a.order.get("options") or {}).get("whisper") or "?")[:40]
+            return (f"modèle Whisper « {model} » absent ici, non téléchargé pour cette "
+                    "machine : unité rendue")
+        except _TooBig as exc:
+            self._quiet(a, "work/fail", error=f"résultat trop volumineux pour être rendu "
+                        f"({exc}) : à calculer sur la machine de son propriétaire",
+                        too_big=True, compute_s=computed())
+            return f"résultat trop volumineux pour son propriétaire ({exc}) : rendu en échec"
         except PeerError as exc:
             return f"propriétaire injoignable ({exc})"
         except Exception as exc:
@@ -407,33 +601,61 @@ class Worker:
                 self.executor.cooldown[a.resource] = time.monotonic() + ENGINE_RETRY_DELAY
                 self._quiet(a, "work/release")
                 return "Ollama injoignable ici : unité rendue"
-            self._quiet(a, "work/fail", error=str(exc)[:400],
-                        compute_s=max(0.0, time.perf_counter() - started
-                                      - (pacing.waited() - waited)))
+            self._quiet(a, "work/fail", error=self._reason(a, exc), compute_s=computed())
             return f"échec : {exc}"
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
+    @staticmethod
+    def _reason(a: Assignment, exc) -> str:
+        """Ce que le propriétaire apprend d'un échec. Une de mes machines : le message tel
+        quel. Un ami : rien de cette machine. Seul un refus de son ordre (_BadOrder : tâche,
+        taille, morceaux, empreinte) lui est dit tel quel. Une erreur de lecture ou
+        d'écriture dirait que le disque d'ici est plein ; une erreur du calcul (lecteur de
+        documents, transcription…) peut citer des chemins de ce PC, donc le nom de son
+        compte (relecture du 21/10/2026) : il n'en apprend que la sorte."""
+        if sharing.level(a.peer_id) == sharing.MINE or isinstance(exc, _BadOrder):
+            return str(exc)[:400]
+        if isinstance(exc, OSError):
+            return "erreur de lecture ou d'écriture sur la machine qui calcule"
+        return f"échec du calcul sur la machine qui calcule ({exc.__class__.__name__})"
+
     def _download(self, a: Assignment, folder: Path) -> str:
+        """Le fichier de l'unité, morceau par morceau. Sa taille et ses morceaux viennent de
+        l'autre machine : bornés ici, avant d'écrire quoi que ce soit."""
         blob = a.order["blob"]
+        size = blob.get("size")
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise _BadOrder("taille du fichier illisible dans l'ordre reçu")
+        if size > work.MAX_BLOB:
+            raise _BadOrder(f"fichier annoncé trop gros ({size // 1024 ** 2} Mio, "
+                            f"{work.MAX_BLOB // 1024 ** 2} Mio au plus)")
         folder.mkdir(parents=True, exist_ok=True)
+        if shutil.disk_usage(folder).free - size < DISK_MARGIN:
+            raise _NoRoom()
         target = folder / safe_name(blob.get("name"))
-        size, received, digest = int(blob["size"]), 0, hashlib.sha256()
+        received, digest = 0, hashlib.sha256()
         owner = peers.get(a.peer_id)
         chunk = work.BLOB_CHUNK if owner and route.lan_first(owner) else work.INTERNET_CHUNK
         with open(target, "wb") as f:
             while received < size:
                 if a.stop.is_set():
                     raise registry.Interrupted()
-                reply = self._chunk(a, received, chunk)
-                data = b64d(reply.get("data") or "")
+                want = min(chunk, size - received)
+                reply = self._chunk(a, received, want)
+                text = reply.get("data") or ""
+                if not isinstance(text, str) or len(text) > 4 * ((want + 2) // 3):
+                    raise _BadOrder("morceau du fichier plus long que demandé")
+                data = b64d(text)
+                if len(data) > want:
+                    raise _BadOrder("morceau du fichier plus long que demandé")
                 if not data:
                     break
                 f.write(data)
                 digest.update(data)
                 received += len(data)
         if received != size or digest.hexdigest() != blob.get("sha256"):
-            raise RuntimeError("fichier reçu incomplet ou modifié pendant le transfert")
+            raise _BadOrder("fichier reçu incomplet ou modifié pendant le transfert")
         return str(target)
 
     def _chunk(self, a: Assignment, offset: int, size: int) -> dict:
@@ -456,13 +678,24 @@ class Worker:
 
     def _send_result(self, a: Assignment, output, compute_s) -> dict:
         body = {"unit": a.order["id"], "output": wire.pack(output), "compute_s": compute_s}
-        for attempt in range(3):
+        # Ce que le propriétaire acceptera, dit dans l'ordre (une version d'avant n'en dit
+        # rien, et n'a pas de limite) : au-delà, il refuserait la requête après qu'elle a été
+        # envoyée, trois fois, puis le bail expirerait (relecture du 21/10/2026)
+        limit = a.order.get("result_max")
+        if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0:
+            size = _sealed_size(body)
+            if size > limit:
+                raise _TooBig(f"{_mib(size)}, {_mib(limit)} au plus")
+        # Un gros résultat n'est accepté que de l'adresse connue de cette machine chez le
+        # propriétaire (network/body_limit.py) : après un changement d'adresse, son prochain
+        # « ping » (toutes les 15 s) la lui apprend, d'où des essais sur une trentaine de s
+        for delay in (*RESULT_RETRY_DELAYS, None):
             try:
                 return self._call(a, "work/result", body, timeout=60)
             except PeerError:
-                if attempt == 2:
+                if delay is None:
                     raise
-                time.sleep(3)
+                time.sleep(delay)
         return {}
 
     def _rest_gpu(self, a: Assignment, compute_s):

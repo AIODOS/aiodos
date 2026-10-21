@@ -1,6 +1,7 @@
 """Application FastAPI du nœud : routes /api, flux d'événements, interface web."""
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, Response
@@ -22,6 +23,13 @@ from aiodos.node import identity
 from aiodos.updates.service import UpdateService
 
 
+# Types des fichiers de l'interface, sans demander au registre de Windows : il dit parfois
+# text/plain pour .js ou .css (un éditeur qui s'y est inscrit), et les modules, comme les
+# feuilles de style sous X-Content-Type-Options: nosniff (api/security.py), seraient refusés
+TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+         ".html": "text/html; charset=utf-8"}
+
+
 class Revalidated(StaticFiles):
     """Fichiers de l'interface revalidés à chaque chargement (réponse 304 s'ils n'ont pas
     changé) : après une mise à jour, un navigateur ouvert sur le même port (téléphone,
@@ -30,6 +38,10 @@ class Revalidated(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         response.headers["Cache-Control"] = "no-cache"
+        served = getattr(response, "path", None) or path       # index.html pour « / »
+        kind = TYPES.get(Path(str(served)).suffix.lower())
+        if kind and "content-type" in response.headers:
+            response.headers["Content-Type"] = kind
         return response
 
 

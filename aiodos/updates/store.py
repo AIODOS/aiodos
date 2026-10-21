@@ -2,7 +2,9 @@
 
     packages/<version>/manifest.json     manifeste signé
     packages/<version>/<fichier>         fichiers complets, empreinte vérifiée
-    downloads/<version>/<fichier>.part   téléchargements en cours, repris où ils en étaient
+    downloads/<version>/<fichier>.part.<machine>
+                                         téléchargements en cours, un par machine qui
+                                         l'envoie, repris où ils en étaient quand elle revient
     versions/<version>/                  code installé (cf. install.py, launcher.py)
     bin/                                 compagnon livré, en service (cf. binaries.py)
     state.json                           cf. state.py
@@ -12,9 +14,11 @@ qui ne l'ont pas encore : c'est ainsi qu'une version passe de machine en machine
 compagnon d'une plateforme s'y ajoute quand la machine est de cette plateforme ; une
 machine transmet aussi les fichiers d'un paquet incomplet qu'elle a en entier.
 """
+import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -25,6 +29,8 @@ from aiodos.updates.manifest import UpdateError
 
 MARKER = ".installed.json"         # dans versions/<v>/ : installation menée à son terme
 KEEP_PACKAGES = 2
+KEEP_PARTIALS = 3                  # débuts d'un même fichier gardés, chez autant de machines
+MAX_KEPT = 16 * 1024 ** 2          # manifest.json : sous forme canonique, quelques Ko
 
 
 def sha256_of(path: Path) -> str:
@@ -33,6 +39,22 @@ def sha256_of(path: Path) -> str:
         for block in iter(lambda: f.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _source_tag(source: str) -> str:
+    """La machine qui envoie, dans un nom de fichier : son identifiant, sans rien d'autre."""
+    return re.sub(r"[^0-9A-Za-z_-]", "_", str(source or ""))[:64] or "inconnue"
+
+
+def _glob_escape(name: str) -> str:
+    return glob.escape(name)
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 class Store:
@@ -70,15 +92,52 @@ class Store:
         return found if found["version"] == version else None
 
     def add_manifest(self, signed: dict, trusted=None, approvers=None) -> dict:
-        """Garde l'enveloppe signée, vérifiée ; approvers={} : sans exiger d'approbation
-        (version publiée ici, qui attend la sienne, cf. pending)."""
+        """Garde l'enveloppe signée, vérifiée, sous sa forme canonique (manifest.canonical :
+        rien de ce que la machine qui l'a transmise y aurait ajouté), avec les approbations
+        déjà gardées pour le même texte (manifest.merged) ; approvers={} : sans exiger
+        d'approbation (version publiée ici, qui attend la sienne, cf. pending)."""
         found = manifests.verify(signed, trusted, approvers)
+        kept = manifests.canonical(manifests.merged(signed, self.signed(found["version"])),
+                                   approvers or None)
         folder = self._dir("packages", found["version"])
         folder.mkdir(parents=True, exist_ok=True)
-        temporary = folder / f"manifest.{os.getpid()}.tmp"
-        temporary.write_text(json.dumps(signed, ensure_ascii=False), encoding="utf-8")
-        os.replace(temporary, folder / "manifest.json")
+        self._write_manifest(folder, kept)
         return found
+
+    @staticmethod
+    def _write_manifest(folder: Path, kept: dict):
+        temporary = folder / f"manifest.{os.getpid()}.tmp"
+        temporary.write_text(json.dumps(kept, ensure_ascii=False), encoding="utf-8")
+        os.replace(temporary, folder / "manifest.json")
+
+    def tidy_manifests(self) -> int:
+        """Remet sous sa forme canonique (manifest.canonical) chaque manifest.json gardé
+        autrement : une version plus ancienne le gardait tel que la machine qui l'a transmis
+        l'avait gonflé (champs en plus, milliers d'approbations), et il est relu à chaque
+        manifest(). Au-delà de MAX_KEPT, il n'est même pas lu : retiré, le paquet se
+        redemandera. Rend le nombre de manifestes réécrits ou retirés."""
+        changed = 0
+        for version in self.package_versions():
+            folder = self._dir("packages", version)
+            path = folder / "manifest.json"
+            try:
+                if path.stat().st_size > MAX_KEPT:
+                    path.unlink()
+                    changed += 1
+                    continue
+                signed = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(signed, dict):
+                continue
+            kept = manifests.canonical(signed)
+            if kept != signed:
+                try:
+                    self._write_manifest(folder, kept)
+                except OSError:
+                    continue
+                changed += 1
+        return changed
 
     def pending(self, trusted=None, approvers=None) -> list:
         """[(version, enveloppe)] des paquets signés par l'auteur mais pas encore approuvés
@@ -158,21 +217,44 @@ class Store:
             return f.read(max(0, size))
 
     # ----------------------------------------------------------- téléchargements
-    def partial(self, version: str, name: str) -> Path:
+    def partial(self, version: str, name: str, source: str | None = None) -> Path:
+        """Le fichier en cours de téléchargement : un par machine qui l'envoie
+        (<fichier>.part.<machine>), ou <fichier>.part pour une copie faite ici (reuse)."""
         folder = self._dir("downloads", version)
         folder.mkdir(parents=True, exist_ok=True)
-        return folder / f"{name}.part"
+        if source is None:
+            return folder / f"{name}.part"
+        return folder / f"{name}.part.{_source_tag(source)}"
 
-    def finish_download(self, version: str, item: dict) -> Path:
-        """Téléchargement terminé : taille et empreinte vérifiées, puis rangé dans le
-        paquet. Fichier non conforme : effacé (on repartira de zéro)."""
-        part = self.partial(version, item["name"])
+    def partial_from(self, version: str, name: str, source: str) -> Path:
+        """Le téléchargement en cours de ce fichier chez la machine `source`, repris là où
+        il en était quand elle revient, même si d'autres ont envoyé une partie du fichier
+        entre-temps : chacune a le sien (relecture finale du 21/10/2026 ; un seul fichier
+        par nom, effacé à chaque changement de machine, ne s'achevait jamais tant qu'aucune
+        machine instable, téléphone en 4G ou relais, ne tenait d'un bout à l'autre). Les
+        morceaux d'une machine ne se mêlent jamais à ceux d'une autre : si l'empreinte
+        échoue, c'est bien celle qui a tout envoyé qui est laissée de côté. KEEP_PARTIALS
+        au plus par fichier : les plus anciens des autres machines sont effacés."""
+        part = self.partial(version, name, source)
+        others = [p for p in part.parent.glob(f"{_glob_escape(name)}.part*") if p != part]
+        others.sort(key=_mtime, reverse=True)
+        for old in others[KEEP_PARTIALS - 1:]:
+            old.unlink(missing_ok=True)
+        return part
+
+    def finish_download(self, version: str, item: dict, source: str | None = None) -> Path:
+        """Téléchargement terminé chez `source` : taille et empreinte vérifiées, puis rangé
+        dans le paquet ; les débuts reçus d'autres machines ne servent plus. Fichier non
+        conforme : effacé (cette machine repartira de zéro), les autres débuts restent."""
+        part = self.partial(version, item["name"], source)
         if part.stat().st_size != item["size"] or sha256_of(part) != item["sha256"]:
             part.unlink(missing_ok=True)
             raise UpdateError("Fichier reçu incomplet ou altéré : il sera téléchargé de nouveau.")
         target = self._dir("packages", version) / item["name"]
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(part, target)
+        for old in part.parent.glob(f"{_glob_escape(item['name'])}.part*"):
+            old.unlink(missing_ok=True)       # y compris les repères d'une version d'avant
         try:
             part.parent.rmdir()           # plus rien en cours pour cette version
         except OSError:

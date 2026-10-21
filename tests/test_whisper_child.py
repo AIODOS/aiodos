@@ -29,6 +29,16 @@ def _log(entry):
     with open(os.environ["FAKE_WHISPER_LOG"], "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\\n")
 
+def available_models():
+    return ["tiny", "base", "small", "medium", "large-v3"]
+
+def download_model(name, local_files_only=False):
+    # Le cache de Hugging Face : FAKE_WHISPER_CACHED (« small » par défaut)
+    _log({"fetch": name, "local_only": local_files_only})
+    if local_files_only and name not in os.environ.get("FAKE_WHISPER_CACHED", "small").split(","):
+        raise FileNotFoundError("pas dans le cache")
+    return "cache/" + name
+
 class WhisperModel:
     def __init__(self, name, device, compute_type, cpu_threads):
         _log({"load": name, "threads": cpu_threads, "device": device})
@@ -75,9 +85,9 @@ def test_the_transcription_runs_apart_at_low_priority_and_is_paced(whisper):
     media.transcribe(Path("note.wav"), "small", threads=2)      # même modèle, gardé
     media.transcribe(Path("note.wav"), "small")                 # secteur : fils par défaut
     assert media._child.process.pid == first
-    assert [e for e in whisper() if "load" in e] == [
-        {"load": "small", "threads": 2, "device": "cpu"},
-        {"load": "small", "threads": 0, "device": "cpu"}]
+    assert [e for e in whisper() if "load" in e] == [            # par son dossier du cache
+        {"load": "cache/small", "threads": 2, "device": "cpu"},
+        {"load": "cache/small", "threads": 0, "device": "cpu"}]
 
 
 def test_a_stop_ends_it_at_once(whisper):

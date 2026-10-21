@@ -273,8 +273,9 @@ et les créations en cours.
   sous la lumière de la pleine lune de nuit », même graine, même format.
 - **Une image retouchée part de la précédente** (image vers image de sd-server : son API
   native prend `init_image`, en data URL, et `strength`) : la composition reste. L'image de
-  départ voyage comme le fichier d'une unité (`file_key` : à mes machines, ou à un ami qui
-  l'accepte, sous un nom neutre), et la machine qui calcule revérifie la force. Mesuré sur
+  départ voyage comme le fichier d'une unité (`file_key`), à mes machines seulement : chez
+  un ami, la retouche part sans elle, et `work/blob` la lui refuse même s'il la demande
+  ([securite.md](securite.md), faille n° 18). La machine qui calcule revérifie la force. Mesuré sur
   Z-Image Turbo (8 pas) : la force avance par huitièmes ; 0,75 (6/8) garde la scène et sa
   lumière, de quoi ajouter, retirer ou changer un détail (« des lumières aux fenêtres » :
   même cabane, fenêtres éclairées) ; 0,875 (7/8) change l'ambiance (nuit, saison, style)

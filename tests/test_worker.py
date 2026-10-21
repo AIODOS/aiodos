@@ -15,7 +15,7 @@ from aiodos.network import peers, sharing, work, worker
 from aiodos.network.client import PeerError
 from aiodos.network.worker import Assignment, Worker, sharing_state
 from aiodos.node import identity, power
-from aiodos.services import ollama
+from aiodos.services import extract, ollama
 
 OWNER, LENDER = "machine-a", "machine-b"
 
@@ -165,6 +165,7 @@ def test_presentation_goes_only_to_a_machine_that_can_read_it(setup, monkeypatch
     assert ".pptx" not in without_pptx["readers"] and ".pdf" in without_pptx["readers"]
     assert lease(without_pptx) is None
     missing.clear()                                 # python-pptx installé
+    extract._installed.cache_clear()                # (retenu pour la vie du processus)
     order = lease(Worker(LenderManager()).capabilities())
     assert order["blob"]["name"] == "cours.pptx"
     work.release(OwnerManager(), LENDER, {"unit": order["id"]})
@@ -406,12 +407,13 @@ def test_failed_work_requests_are_logged_once_per_cause_with_a_slow_link_timeout
                              PeerError("Machine injoignable (ReadTimeout)."),
                              {"unit": None, "retry_after": 600, "reason": "Versions différentes"}]
 
-    def fake_call(my_id, peer_row, action, payload, key=None, timeout=10):
+    def fake_call(my_id, peer_row, action, payload, key=None, timeout=10, limit=None):
         timeouts.append(timeout)
         reply = replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
         return reply
+    # Réponse bornée (client.call, limit) : un ordre de calcul ne fait que quelques Kio
     monkeypatch.setattr(worker.client, "call", fake_call)
     with caplog.at_level("INFO", logger="aiodos.worker"):
         for _ in range(3):
@@ -487,7 +489,8 @@ def test_an_owner_reached_only_by_internet_sends_smaller_pieces(setup, monkeypat
     monkeypatch.setattr(lender, "_call", spy)
     _compute_with(monkeypatch, _reading({}))
     assert lender._process(a).startswith("faite")
-    assert sizes and set(sizes) == {10}
+    # Morceaux de 10 octets ; le dernier, seulement ce qui reste du fichier
+    assert len(sizes) > 1 and set(sizes[:-1]) == {10} and 0 < sizes[-1] <= 10
 
 
 def test_a_phone_works_for_a_friend_only_on_power_and_wifi(monkeypatch):

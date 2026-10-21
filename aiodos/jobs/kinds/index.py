@@ -7,26 +7,44 @@ toujours ici. La mémoire des conversations, elle, ne quitte jamais ce nœud.
 Les appels aux modèles suivent la cadence du travail de fond (jobs/pacing.py) :
 ils attendent la fin d'une conversation, et se reposent sur batterie.
 """
+import fnmatch
 import json
 import os
 import random
+import re
+import stat
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
-from aiodos import db, settings
+from aiodos import db, paths, settings
 from aiodos.chat import conversations
 from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import BACKGROUND, QUEUED
-from aiodos.jobs.registry import (Interrupted, SampleMismatch, UnitSpec, register_job_kind,
-                                 register_portable, task)
+from aiodos.jobs.registry import (TASKS, Interrupted, SampleMismatch, TaskSpec, UnitSpec,
+                                 register_job_kind, register_portable, task)
 from aiodos.knowledge import chunking, store
-from aiodos.services import extract, media, ollama, web
+from aiodos.services import addresses, extract, media, ollama, web
 
 # Dossiers jamais parcourus (outils de dev, corbeille…)
 SKIP_DIRS = {"node_modules", "__pycache__", "venv", "$RECYCLE.BIN",
              "System Volume Information"}
+
+# Attributs Windows d'un fichier ou dossier qu'un parcours ne ramasse pas : caché ou
+# système (pas « point d'analyse » : les fichiers OneDrive en portent un)
+_HIDDEN_ATTRS = (getattr(stat, "FILE_ATTRIBUTE_HIDDEN", 0)
+                 | getattr(stat, "FILE_ATTRIBUTE_SYSTEM", 0))
+# Fichiers de clés et de mots de passe (d'AIODOS ou d'autres logiciels) : un parcours de
+# dossier ne les ramasse jamais, ils partiraient sinon chez un ami qui calcule
+SECRET_NAMES = {"aiodos-net.key", "aiodos-public.key", "approbation.pem", "rclone.conf",
+                "sitemanager.xml", "recentservers.xml", "filezilla.xml", "_netrc",
+                "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials"}
+SECRET_EXT = {".key", ".pem", ".p12", ".pfx", ".kdbx", ".ppk", ".ovpn", ".env", ".jks",
+              ".keystore", ".p8", ".gpg"}
+# Clés de comptes de service et jetons OAuth enregistrés en JSON (Google Cloud…)
+SECRET_PATTERNS = ("client_secret*.json", "*credentials*.json", "*service*account*.json")
 
 # Ressource utilisée selon la famille de fichier
 _RESOURCE = {"text": "embed", "document": "embed", "unknown": "embed",
@@ -39,24 +57,137 @@ def _plan_file(path: Path, collection_id, source, kind, skipped: Counter):
     ext = path.suffix.lower() or "(sans extension)"
     ignored = (family == "binary"
                or (family == "image" and not settings.get("media_vision"))
-               or (family == "media" and not settings.get("media_transcribe")))
+               or (family == "media" and not settings.get("media_transcribe"))
+               # Extension inconnue : un binaire (wallet.dat…) ne donnerait aucun texte, et
+               # partirait sinon tel quel chez la machine qui calcule
+               or (family == "unknown" and not extract.looks_like_text(path)))
     if ignored:
         skipped[ext] += 1
         return None
     return UnitSpec("index_file", _RESOURCE[family],
                     {"path": str(path), "collection_id": collection_id,
-                     "source": source, "kind": kind})
+                     "source": source, "kind": kind, "stamp": _stamp(path)})
+
+
+def _stamp(path):
+    """[taille, date de modification en ns] du fichier, ou None s'il est illisible : ce
+    qu'il était à la création de l'unité. Au retour d'un ami, on sait ainsi s'il a changé
+    depuis (sample_embedded) ; s'il a changé, un écart n'est pas forcément le fait de
+    l'ami. Ce repère ne part pas chez lui (shared_keys)."""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return [info.st_size, info.st_mtime_ns]
+
+
+def _real(path) -> str:
+    """Chemin réel comparable (casse et liens compris sous Windows)."""
+    try:
+        return os.path.normcase(str(Path(path).resolve()))
+    except (OSError, RuntimeError):
+        return os.path.normcase(os.path.abspath(str(path)))
+
+
+def _aiodos_roots() -> set:
+    """Les dossiers d'AIODOS : ses données (base, clés des machines appairées et du
+    compagnon), et sa copie installée. Jamais parcourus, même choisis comme dossier."""
+    roots = [paths.data_dir()]
+    installed = paths.installed_data_dir()
+    if installed is not None:
+        roots += [paths.APP_ROOT, installed.parent]
+    return {_real(r) for r in roots}
+
+
+# Sous-dossiers du dossier de données qu'AIODOS remplit lui-même : données de sa fenêtre
+# (webview : stockage local, cookies), journaux, fichiers reçus des autres machines (tmp),
+# clé d'approbation des mises à jour, moteurs, modèles, images et vignettes, cache réparti
+DATA_SUBDIRS = ("cluster", "engines", "images", "llm", "logs", "models", "tmp", "updates",
+                "webview")
+
+
+def _inside_aiodos(folder) -> bool:
+    """Ce dossier choisi est-il un des dossiers d'AIODOS, ou se trouve-t-il dans l'un d'eux ?
+    Son dossier de données lui-même, les sous-dossiers qu'il y remplit (DATA_SUBDIRS) et
+    tout ce qu'ils contiennent, sa copie installée et tout ce qu'elle contient. Un autre
+    dossier rangé dans le dossier de données n'en est pas : AIODOS_DATA_DIR peut viser un
+    dossier de l'utilisateur, où il garde aussi ses documents."""
+    chosen = Path(_real(folder))
+    data = Path(_real(paths.data_dir()))
+    if chosen == data:
+        return True
+    roots = [Path(_real(data / name)) for name in DATA_SUBDIRS]
+    installed = paths.installed_data_dir()
+    if installed is not None:
+        roots += [Path(_real(paths.APP_ROOT)), Path(_real(installed.parent))]
+    return any(chosen.is_relative_to(root) for root in roots)
+
+
+def _app_data_roots() -> set:
+    """Données des applications sous Windows (%APPDATA%, %LOCALAPPDATA%, AppData) : clés et
+    jetons d'autres logiciels, invisibles dans l'Explorateur. Un parcours ne les traverse
+    pas ; l'utilisateur peut encore en choisir un dossier nommément."""
+    if os.name != "nt":
+        return set()
+    roots = [Path.home() / "AppData"]
+    roots += [Path(os.environ[v]) for v in ("APPDATA", "LOCALAPPDATA") if os.environ.get(v)]
+    return {_real(r) for r in roots}
+
+
+def _hidden(entry) -> bool:
+    """Caché : nom en « . » (.git, .ssh, .env…), ou attribut caché ou système de Windows."""
+    if entry.name.startswith("."):
+        return True
+    try:
+        attributes = getattr(entry.stat(follow_symlinks=False), "st_file_attributes", 0)
+    except OSError:
+        return True
+    return bool(attributes & _HIDDEN_ATTRS)
+
+
+def _secret(name: str) -> bool:
+    lowered = name.lower()
+    return (lowered in SECRET_NAMES or Path(lowered).suffix in SECRET_EXT
+            or any(fnmatch.fnmatchcase(lowered, pattern) for pattern in SECRET_PATTERNS))
 
 
 def _walk(folder: Path):
-    """Fichiers d'un dossier, récursivement. Les fichiers et dossiers cachés
-    (.git, .env…) sont ignorés : ils contiennent souvent des secrets."""
-    for dirpath, dirnames, filenames in os.walk(folder):
-        dirnames[:] = sorted(d for d in dirnames
-                             if d not in SKIP_DIRS and not d.startswith("."))
-        for name in sorted(filenames):
-            if not name.startswith("."):
-                yield Path(dirpath) / name
+    """Fichiers d'un dossier, récursivement, dans l'ordre des noms. Ce qu'un parcours
+    ramasse en passant ne comprend pas ce qui contient souvent des secrets : fichiers et
+    dossiers cachés (nom en « . », ou attribut caché ou système de Windows), fichiers de
+    clés (SECRET_NAMES, SECRET_EXT, SECRET_PATTERNS), dossiers d'AIODOS et données des
+    applications. Les liens symboliques et jonctions ne sont pas suivis, ni vers un dossier
+    ni vers un fichier (un lien dans un dépôt cloné peut viser une clé ou AppData). Un
+    dossier d'AIODOS (ou l'un de ses sous-dossiers, cf. _inside_aiodos) n'est jamais
+    parcouru, même choisi directement. Un fichier que l'utilisateur choisit nommément,
+    lui, est indexé (split_index_paths)."""
+    protected = _aiodos_roots() | _app_data_roots()
+    if _inside_aiodos(folder):
+        return
+    stack = [Path(folder)]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as found:
+                entries = sorted(found, key=lambda e: e.name)
+        except OSError:
+            continue
+        subfolders = []
+        for entry in entries:
+            if _hidden(entry):
+                continue
+            try:
+                link = entry.is_symlink() or getattr(entry, "is_junction", lambda: False)()
+                if entry.is_dir(follow_symlinks=False):
+                    if not link and entry.name not in SKIP_DIRS \
+                            and _real(entry.path) not in protected:
+                        subfolders.append(Path(entry.path))
+                elif not link and entry.is_file(follow_symlinks=False) \
+                        and not _secret(entry.name):
+                    yield Path(entry.path)
+            except OSError:
+                continue
+        stack.extend(reversed(subfolders))
 
 
 def split_index_paths(params):
@@ -137,36 +268,188 @@ def compute_index_file(payload, file, options, stop=None):
     if stop is not None and stop.is_set():
         raise Interrupted()
     if not text or not text.strip():
-        return {"skipped": True, "ext": path.suffix.lower() or "(sans extension)",
-                "reason": "aucun texte exploitable"}
+        return _nothing_in(path)
     return _embed(chunking.chunk_text(text), options, stop)
 
 
+def _nothing_in(path) -> dict:
+    """Unité sautée faute de texte, avec la raison quand c'est une limite d'AIODOS (archive
+    refusée, fichier trop gros : extract.why_unread) plutôt que le fichier qui est vide."""
+    return {"skipped": True, "ext": path.suffix.lower() or "(sans extension)",
+            "reason": extract.why_unread(path) or "aucun texte exploitable"}
+
+
 def assimilate_index_file(payload, output):
+    _refuse_unchecked(output)
     if output.get("skipped"):
-        return output
+        return _skipped(output)
     store.upsert_entry(payload["collection_id"], payload["source"], payload["kind"],
                        payload["path"], list(zip(output["pieces"], output["vectors"])))
     return {"chunks": len(output["pieces"])}
 
 
+def _skipped(output) -> dict:
+    """Une unité sautée, telle que la file la garde (units.result) : son extension et sa
+    raison, en texte et bornées, rien d'autre. Une sortie peut venir d'une autre machine :
+    un tableau joint faisait échouer son enregistrement (json.dumps) après la reprise de
+    l'unité, qui restait prise jusqu'au redémarrage, et une longue chaîne était gardée telle
+    quelle à chaque unité (relecture finale du 21/10/2026)."""
+    return {"skipped": True, "ext": str(output.get("ext") or "?")[:40],
+            "reason": str(output.get("reason") or "aucun texte exploitable")[:500]}
+
+
 SAMPLE_MIN = 0.999     # cosinus minimal d'un passage recalculé ici (0,9999 mesuré PC/S9)
+SAMPLE_COUNT = 3       # passages revectorisés ici pour chaque résultat d'ami
+# Posée par le contrôle (sample_embedded) sur la sortie d'un ami qu'on ne peut pas vérifier
+# ici : assimilate la refuse, sans mettre l'ami de côté (cf. _refuse_unchecked)
+REFUSED = "refused_here"
+# Espaces et césures ignorés en comparant un passage au document relu ici
+_IGNORED = re.compile(r"[\s\u00ad\u200b-\u200d\u2060\ufeff]+")
+
+
+def checkable_here(payload) -> bool:
+    """Sais-je relire ici, à bas coût, le texte de cette unité pour contrôler ce qu'un ami
+    en rend ? Oui pour un fichier texte, une extension inconnue, un document dont j'ai le
+    lecteur. Non pour une page web (elle ne se relit pas à l'identique), une image, un son
+    ou une vidéo (OCR, description et transcription coûtent autant que le calcul confié),
+    un document que je ne sais pas lire, un fichier disparu. Seules les unités vérifiables
+    partent chez un ami : c'est le crochet « checkable » de la tâche (registry.
+    friend_checkable, network/work.lease)."""
+    path = payload.get("path")
+    if not path:
+        return False
+    p = Path(path)
+    family = extract.classify(p)
+    if family == "document" and p.suffix.lower() not in extract.readable_documents():
+        return False
+    return family in ("text", "unknown", "document") and p.is_file()
+
+
+def _normalized(text: str) -> str:
+    """Le texte sans espaces ni césures, en forme NFKC : deux versions d'un lecteur
+    (pypdf…) peuvent espacer ou lier les lettres autrement (« ﬁ »), pas changer les mots."""
+    return _IGNORED.sub("", unicodedata.normalize("NFKC", text))
+
+
+def _all_from_document(pieces, local_text) -> bool:
+    """Chaque passage se trouve-t-il dans le document relu ici, dans l'ordre (espaces mis
+    à part) ? Sinon l'ami a glissé sous le nom de mon document un texte à lui."""
+    document, position = _normalized(local_text), 0
+    for piece in pieces:
+        wanted = _normalized(piece)
+        found = document.find(wanted, position)
+        if found < 0:
+            return False
+        position = found
+    return True
+
+
+def _differs(output, reason, excuse):
+    """Écart entre ce que rend l'ami et le découpage refait ici. Un fichier texte (ou
+    d'extension inconnue) inchangé depuis qu'il lui a été confié se relit à l'identique
+    partout : l'écart est son fait (excuse None : SampleMismatch, il est mis de côté).
+    Sinon (excuse : un document peut se lire un peu autrement d'une version de lecteur à
+    l'autre, un fichier a pu changer entre-temps) : refusé sans reproche, recalculé chez
+    moi."""
+    if excuse is None:
+        raise SampleMismatch(reason)
+    output[REFUSED] = f"{reason} ; {excuse}, l'unité sera calculée sur mes machines"
+
+
+def _excuse(path, stamp, before, after):
+    """Pourquoi un écart pourrait ne pas être le fait de l'ami, None s'il n'y a aucune
+    excuse. Le fichier a changé depuis la création de l'unité (journal qui grandit,
+    document modifié pendant le calcul : relecture du 21/10/2026), ou pendant ma relecture ;
+    l'unité ne porte pas de repère (créée par une version d'avant) ; c'est un document."""
+    if not (isinstance(stamp, list) and len(stamp) == 2):
+        return ("unité créée par une version d'AIODOS d'avant le 21/10/2026, impossible de "
+                "savoir si le fichier a changé depuis")
+    if not (before == after == stamp):
+        return "le fichier a changé depuis qu'il lui a été confié"
+    if extract.classify(path) == "document":
+        return "son lecteur de documents diffère peut-être du mien"
+    return None
+
+
+def _sample_vectors(pieces, vectors, options):
+    """SAMPLE_COUNT passages tirés au hasard, revectorisés ici avec le même modèle : leurs
+    vecteurs doivent être ceux reçus. Un ami qui joindrait à un passage un vecteur de son
+    choix (pour le faire remonter à chaque question) a ainsi bien plus d'une chance sur n
+    d'être pris."""
+    picks = random.sample(range(len(pieces)), min(SAMPLE_COUNT, len(pieces)))
+    mine = ollama.embed([pieces[i] for i in picks], model=options["embed_model"])
+    if len(mine) != len(picks):
+        raise RuntimeError("Ollama n'a pas rendu autant de vecteurs que de passages")
+    for i, vector in zip(picks, mine):
+        here = np.asarray(vector, dtype=np.float32)
+        theirs = np.asarray(vectors[i], dtype=np.float32)
+        cosine = float(np.dot(here, theirs) / (np.linalg.norm(here) * np.linalg.norm(theirs)))
+        if not cosine >= SAMPLE_MIN:
+            raise SampleMismatch(f"passage {i + 1} recalculé ici : similarité {cosine:.4f}, "
+                                 f"au moins {SAMPLE_MIN} attendu")
 
 
 def sample_embedded(payload, output, options):
-    """Contrôle par échantillon d'une sortie calculée par un ami : un passage tiré au
-    hasard est recalculé ici, avec le même modèle ; son vecteur doit être celui reçu.
-    SampleMismatch sinon ; une autre exception si le calcul est impossible ici (Ollama)."""
-    if output.get("skipped"):
+    """Contrôle d'une sortie calculée par un ami, avant de l'intégrer (network/work.result).
+    Le document est relu et découpé ici (peu coûteux comparé aux embeddings) : les passages
+    rendus doivent être exactement ce découpage. Ni morceaux choisis, ni oublis, ni
+    répétitions, ni espaces déplacés ; un document qui a du texte ne peut pas être
+    « sauté ». Puis SAMPLE_COUNT vecteurs sont recalculés ici.
+    - Écart sur un fichier texte inchangé depuis la création de l'unité : SampleMismatch,
+      l'ami est mis de côté. Sur un document, ou un fichier qui a changé entre-temps (cf.
+      _excuse) : refusé sans reproche (cf. _differs).
+    - Ce qui ne se relit pas ici (checkable_here : image, son, vidéo, page web, format sans
+      lecteur ici, fichier illisible ici) n'est jamais intégré : marqué REFUSED, refusé par
+      assimilate sans reproche, et recalculé sur mes machines (l'unité ne revient pas à un
+      ami : il ne reçoit jamais le dernier essai).
+    - Un document « sauté » à raison (sans texte ici non plus) garde la raison dite ici : le
+      texte de l'ami n'est pas montré à l'utilisateur.
+    Une autre exception (Ollama injoignable ici) : vérification impossible pour l'instant."""
+    output.pop(REFUSED, None)
+    if not checkable_here(payload):
+        output[REFUSED] = ("texte calculé par un ami pour une image, un son, une vidéo, une "
+                           "page web ou un format que cette machine ne sait pas relire : "
+                           "impossible à vérifier ici, l'unité sera calculée sur mes machines")
         return
-    i = random.randrange(len(output["pieces"]))
-    mine = np.asarray(ollama.embed([output["pieces"][i]], model=options["embed_model"])[0],
-                      dtype=np.float32)
-    theirs = np.asarray(output["vectors"][i], dtype=np.float32)
-    cosine = float(np.dot(mine, theirs) / (np.linalg.norm(mine) * np.linalg.norm(theirs)))
-    if not cosine >= SAMPLE_MIN:
-        raise SampleMismatch(f"passage {i + 1} recalculé ici : similarité {cosine:.4f}, "
-                             f"au moins {SAMPLE_MIN} attendu")
+    path = Path(payload["path"])
+    before = _stamp(path)
+    try:
+        local_text = extract.extract_text(path) or ""
+    except Exception as exc:          # noqa: BLE001  (PDF chiffré, abîmé…)
+        output[REFUSED] = (f"document illisible ici ({exc.__class__.__name__}) : impossible "
+                           "de vérifier le résultat d'un ami, l'unité sera calculée sur mes "
+                           "machines")
+        return
+    excuse = _excuse(path, payload.get("stamp"), before, _stamp(path))
+    expected = chunking.chunk_text(local_text)
+    if output.get("skipped"):
+        if expected:
+            _differs(output, "document ignoré par l'ami alors qu'il a du texte relu ici",
+                     excuse)
+        else:
+            # Refaite ici, pas complétée : rien de ce que l'ami y a joint ne reste
+            output.clear()
+            output.update(_nothing_in(path))
+        return
+    pieces = output["pieces"]
+    if pieces != expected:
+        reason = ("un passage rendu ne figure pas dans le document relu ici"
+                  if not _all_from_document(pieces, local_text) else
+                  "passages découpés autrement qu'ici (morceaux choisis, oublis ou "
+                  "répétitions)")
+        _differs(output, reason, excuse)
+        return
+    _sample_vectors(pieces, output["vectors"], options)
+
+
+def _refuse_unchecked(output):
+    """La sortie d'un ami que le contrôle n'a pas pu vérifier (REFUSED) n'entre pas dans
+    la bibliothèque : l'unité échoue pour cet essai, avec la raison, et se refait ici."""
+    if isinstance(output, dict) and output.get(REFUSED):
+        raise ValueError(str(output[REFUSED]))
+
+
+MAX_PIECE = 2 * chunking.CHUNK_SIZE    # un passage découpé ici en fait au plus CHUNK_SIZE
 
 
 def check_embedded(payload, output):
@@ -177,6 +460,9 @@ def check_embedded(payload, output):
     pieces, vectors = output.get("pieces"), output.get("vectors")
     if not isinstance(pieces, list) or not pieces or not all(isinstance(p, str) for p in pieces):
         raise ValueError("passages absents ou invalides")
+    if any(len(p) > MAX_PIECE for p in pieces):
+        raise ValueError(f"passage de plus de {MAX_PIECE} caractères : le découpage n'en "
+                         "fait pas d'aussi longs")
     if not isinstance(vectors, np.ndarray) or vectors.ndim != 2 or len(vectors) != len(pieces):
         raise ValueError("vecteurs absents ou en nombre différent des passages")
     if not np.isfinite(vectors).all() or (np.linalg.norm(vectors, axis=1) < 1e-6).any():
@@ -189,7 +475,7 @@ def check_embedded(payload, output):
 
 register_portable("index_file", compute_index_file, assimilate_index_file, file_key="path",
                   options=index_options, requires=requires_index, validate=check_embedded,
-                  sample=sample_embedded)
+                  sample=sample_embedded, checkable=checkable_here)
 
 
 def finalize_index(job_id, params, units):
@@ -211,33 +497,72 @@ register_job_kind("index_paths", split_index_paths, finalize_index)
 
 # ------------------------------------------------------------------------ web
 def split_index_urls(params):
+    """Une unité par page. Une page qui vise le réseau local ou cette machine (le wiki du
+    NAS, un service local), demandée ici par l'utilisateur, devient une unité
+    « index_url_here » : lue ici seulement. Elle se reconnaît sans résolution de nom, à son
+    adresse IP privée ou à son nom local (addresses.is_private_target). Les autres,
+    « index_url », ne lisent que des adresses publiques, où qu'elles soient calculées."""
     urls = [u.strip() for u in params["urls"] if u.strip()]
-    units = [UnitSpec("index_url", "net",
-                      {"url": u, "collection_id": params["collection_id"]}) for u in urls]
+    units = [UnitSpec("index_url_here" if addresses.is_private_target(u) else "index_url",
+                      "net", {"url": u, "collection_id": params["collection_id"]})
+             for u in urls]
     target = store.collection_name(params["collection_id"])
     return f"Lire {len(units)} page(s) web → {target}", units, {}
 
 
-def compute_index_url(payload, file, options, stop=None):
-    title, text = web.fetch_url_text(payload["url"])
+def _read_page(url, options, stop, public_only):
+    try:
+        title, text = web.fetch_url_text(url, public_only=public_only, stop=stop)
+    except web.FetchStopped as exc:
+        raise Interrupted() from exc
     if not text.strip():
-        return {"skipped": True, "ext": "url", "reason": "page vide"}
+        return {"skipped": True, "ext": "url", "reason": "page vide, ou pas du texte"}
     output = _embed(chunking.chunk_text(f"{title}\n\n{text}"), options, stop)
     output["title"] = title
     return output
 
 
+def compute_index_url(payload, file, options, stop=None):
+    """Une page web, adresses publiques seulement : l'ordre peut venir d'une autre machine,
+    et il ne doit jamais faire lire notre réseau local ni cette machine (adresse ou
+    redirection : services/addresses.py)."""
+    return _read_page(payload["url"], options, stop, public_only=True)
+
+
 def assimilate_index_url(payload, output):
+    _refuse_unchecked(output)
     if output.get("skipped"):
-        return output
+        return _skipped(output)
     store.upsert_entry(payload["collection_id"], payload["url"], "url", payload["url"],
                        list(zip(output["pieces"], output["vectors"])))
     return {"chunks": len(output["pieces"]), "title": output.get("title")}
 
 
+# Entre mes machines seulement (mine_only, sans friends_out ni friends_in : aucun réglage ne
+# l'ouvre). Jamais confiée à un ami : le texte d'une page ne se relit pas ici à
+# l'identique, il pourrait y substituer le sien. Jamais calculée pour un ami non plus : une
+# version d'AIODOS d'après le 20/10/2026 ne m'en confie pas, et seul un ami malveillant (ou
+# resté sur une version d'avant) m'en confierait, pour lire des pages depuis mon adresse
+# IP (services qui n'ouvrent leur accès qu'à l'adresse de mon entreprise…) et en recevoir
+# le texte. Ma machine refuse alors l'unité (network/worker.py).
 register_portable("index_url", compute_index_url, assimilate_index_url,
                   options=index_options, requires=requires_index, validate=check_embedded,
-                  shared_keys=("url",), sample=sample_embedded)
+                  shared_keys=("url",), sample=sample_embedded, mine_only=True)
+
+
+def run_index_url_here(payload, file=None, options=None, stop=None):
+    """Une page du réseau local ou de cette machine, demandée par l'utilisateur ici :
+    tâche non portable, donc jamais confiée ailleurs ni calculée pour une autre machine.
+    C'est ce qui permet de lever la garde des adresses publiques. stop arrête la lecture et
+    les embeddings, comme pour une page publique."""
+    output = _read_page(payload["url"], index_options(), stop, public_only=False)
+    return assimilate_index_url(payload, output)
+
+
+# Tâche simple (sans assimilate : non portable), enregistrée sans le décorateur task, qui
+# ne transmet pas l'arrêt (stop) à la fonction
+TASKS["index_url_here"] = TaskSpec("index_url_here", run_index_url_here)
+
 
 register_job_kind("index_urls", split_index_urls, finalize_index)
 

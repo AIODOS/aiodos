@@ -7,6 +7,7 @@ L'alimentation (secteur, batterie, température) est lue par node/power.py.
 import ctypes
 import functools
 import json
+import logging
 import os
 import platform
 import subprocess
@@ -19,13 +20,18 @@ from aiodos import __version__, db, settings
 from aiodos.cluster import engine
 from aiodos.imaging import catalog as images_catalog
 from aiodos.imaging import engine as images_engine
+from aiodos.network import route
+from aiodos.network.companion import SERVICE_HOLD, SERVICE_USAGE
 from aiodos.node import android, android_app, power, priority
 from aiodos.services import ollama
 from aiodos.updates.store import Store
 
+log = logging.getLogger("aiodos.cluster")
+
 _NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # pas de console qui clignote
 _cache = {"at": 0.0, "profile": None}
 _cache_lock = threading.Lock()
+_not_lent = {"reason": None}     # dernière raison écrite au journal (cf. _note_not_lent)
 
 
 def node_id() -> str:
@@ -167,15 +173,48 @@ def _models(vram_total) -> list:
     return models
 
 
+def _hold_problem() -> str | None:
+    """Pourquoi le compagnon de cette machine ne tiendrait pas le serveur RPC d'un prêt, ou
+    None s'il le peut. Mêmes conditions que cluster/helper.lend, qui refuse le prêt sans
+    elles : sans compagnon qui tient ce serveur (SERVICE_HOLD, compagnon/src/hold.rs) et
+    dit ses flux (SERVICE_USAGE), n'importe quel programme de cette machine y serait servi."""
+    companion = route.companion()
+    if companion is None or not companion.running:
+        return ("le compagnon aiodos-net ne tourne pas (réglage « Relier mes machines par "
+                "Internet »)")
+    if not (companion.supports(SERVICE_USAGE) and companion.supports(SERVICE_HOLD)):
+        return ("le compagnon aiodos-net est trop ancien pour tenir le serveur prêté, ou ne "
+                "peut pas lire la table des connexions de ce système : mets AIODOS à jour")
+    return None
+
+
+def _note_not_lent(reason: str | None):
+    """Écrit une fois au journal (et de nouveau si elle change) pourquoi la carte n'est pas
+    proposée à mes machines alors que le réglage le demande : sans quoi elle cesserait
+    d'être annoncée sans un mot."""
+    if reason and reason != _not_lent["reason"]:
+        log.info("Carte graphique pas proposée à mes machines malgré le réglage « Prêter ma "
+                 "carte graphique pour les gros modèles » : %s", reason)
+    _not_lent["reason"] = reason
+
+
 def _cluster() -> dict:
     """Carte graphique prêtée à mes machines pour les gros modèles répartis
-    (cluster/helper.py) : version de llama.cpp, mémoire libre de la carte prêtée. Rien
-    n'est demandé à llama.cpp tant que le prêt est coupé."""
-    if not settings.get("lend_gpu"):
+    (cluster/helper.py) : version de llama.cpp, mémoire libre de la carte prêtée.
+
+    « lends » n'est vrai que si helper.lend accepterait le prêt : mes machines choisissent
+    leurs prêteurs d'après lui (cluster/group.lenders), et un refus n'arriverait sinon
+    qu'à l'usage, au premier message d'une conversation. Donc jamais dans l'appli Android
+    (toute appli du téléphone joindrait le serveur RPC), ni sans un compagnon qui tient ce
+    serveur (_hold_problem). Rien n'est demandé à llama.cpp tant que le prêt est coupé, ni
+    sur un téléphone."""
+    if not settings.get("lend_gpu") or android_app.in_app():
         return {"lends": False}
     found = engine.info()
     best = engine.lent_device(found["devices"]) if found else None
-    return {"lends": bool(settings.get("lend_gpu") and best),
+    problem = _hold_problem() if best else None
+    _note_not_lent(problem)
+    return {"lends": bool(best) and problem is None,
             "version": found["version"] if found else None,
             "device": best["label"] if best else None,
             "free_mib": best["free_mib"] if best else 0}

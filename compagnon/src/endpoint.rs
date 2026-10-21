@@ -9,12 +9,15 @@
 //! sélecteur de chemin maison (`path_selector`, API instable) ne choisirait que le chemin
 //! d'envoi de cette machine-ci : les box seraient percées quand même, et l'autre machine
 //! passerait en direct.
+//!
+//! Une autre machine ouvre au plus `MAX_STREAMS` flux en même temps sur une connexion
+//! (100 par défaut dans Iroh) ; au-delà, elle attend qu'un flux se ferme.
 
 use anyhow::{Context, Result, bail};
 use iroh::{
     Endpoint, RelayMode, SecretKey,
     address_lookup::{DnsAddressLookup, PkarrPublisher, PkarrResolver},
-    endpoint::{IdleTimeout, PortmapperConfig, QuicTransportConfig, presets},
+    endpoint::{IdleTimeout, PortmapperConfig, QuicTransportConfig, VarInt, presets},
 };
 use iroh_mainline_address_lookup::DhtAddressLookup;
 
@@ -25,12 +28,19 @@ use crate::{
     dns,
 };
 
+/// Flux bidirectionnels qu'une autre machine peut ouvrir en même temps sur une connexion :
+/// une requête, une conversation ou une connexion de tunnel chacun.
+pub const MAX_STREAMS: u32 = 64;
+
 pub async fn bind(config: &Config, secret: SecretKey, allowlist: Allowlist) -> Result<Endpoint> {
     let idle: IdleTimeout = config
         .idle_timeout
         .try_into()
         .context("délai d'inactivité trop grand")?;
-    let transport = QuicTransportConfig::builder().max_idle_timeout(Some(idle)).build();
+    let transport = QuicTransportConfig::builder()
+        .max_idle_timeout(Some(idle))
+        .max_concurrent_bidi_streams(VarInt::from_u32(MAX_STREAMS))
+        .build();
     let relay_mode = match &config.relays {
         Relays::N0 => RelayMode::Default,
         Relays::Custom(urls) => RelayMode::custom(urls.iter().cloned()),

@@ -180,7 +180,8 @@ Le jeton de l'API locale vient de la variable `AIODOS_NET_TOKEN` (jamais de la l
 commande, visible des autres programmes) ; sans elle, il est tiré au hasard et écrit
 dans `<data-dir>/aiodos-net.token`. Au démarrage, une ligne JSON sur la sortie standard
 annonce que le compagnon est prêt (`{"event": "ready", "id": …, "listen": …, "version":
-…, "commit": …}`, le commit étant `null` hors d'une construction de publication) ; le
+…, "commit": …, "features": […]}`, le commit étant `null` hors d'une construction de
+publication, et `features` ce que ce compagnon sait faire, cf. « Capacités ») ; le
 journal va sur la sortie d'erreur (niveau réglable par `AIODOS_NET_LOG`, par exemple
 `aiodos_net=debug,iroh=info`). Windows peut demander l'autorisation du pare-feu au
 premier lancement : l'accepter pour les réseaux privés suffit en local, mais une
@@ -193,36 +194,139 @@ Toutes les requêtes portent l'en-tête `X-Aiodos-Net-Token`.
 
 | Requête | Effet |
 |---|---|
-| `GET /net/v1/status` | clé publique, relais (connectés ou non, refus du relais : `denied`), relais seulement ou non, adresses, liste blanche, connexions refusées, changements de réseau, et pour chaque machine : connectée, chemin `direct` ou `relay`, adresse distante, latence (`rtt_ms`), sens de la connexion, compteurs |
+| `GET /net/v1/status` | clé publique, capacités (`features`), relais (connectés ou non, refus du relais : `denied`), relais seulement ou non, adresses, liste blanche, connexions refusées, changements de réseau, et pour chaque machine : connectée, chemin `direct` ou `relay`, adresse distante, latence (`rtt_ms`), sens de la connexion, compteurs ; services exposés et tunnels ouverts (`tunnels`, cf. plus bas) |
 | `PUT /net/v1/peers` | remplace la liste blanche : `{"peers": [{"id": "<clé>", "addrs": ["ip:port"], "relays": ["https://…"]}, {"ticket": "endpoint…"}]}` ; les connexions des clés retirées sont fermées |
 | `GET /net/v1/ticket` | ticket Iroh à donner à une autre machine (clé, relais, adresses) ; il ne contient aucun secret et ne fait pas entrer dans la liste blanche à lui seul. Juste après le démarrage, il attend que le relais soit joint (4 s au plus après le démarrage) |
 | `POST /net/v1/shutdown` | arrêt propre |
 | `GET /net/v1/public` | réseau public (phase 3.0) : `enabled`, `key` (la clé publique du nœud, distincte de celle de la machine), `neighbors`, `nodes` (les nœuds publics vus depuis moins de 5 minutes : clé, version, modèles, prête ou non, `seen_s`), `rendezvous` (dernière inscription dans la DHT, clés trouvées, erreur) |
 | `PUT /net/v1/public` | rejoint ou quitte le réseau public, avec le profil à diffuser : `{"enabled": true, "version": "…", "models": ["…"], "lends": false}` ; désactivé tant qu'AIODOS ne le demande pas (docs/phase3-reseau-public.md) |
+| `PUT /net/v1/exposed` | remplace la liste des services TCP locaux (127.0.0.1) ouverts à des machines nommées : `{"services": [{"name": "rpc-…", "port": 50123, "peers": ["<clé>"], "hold": true}]}`. 64 services au plus ; nom en minuscules, chiffres et tirets, 64 caractères au plus. `"hold": true` : le compagnon **tient** le service (cf. plus bas) ; refusé (400) si ce système ne dit pas quel programme se connecte. Tout est vérifié avant de changer quoi que ce soit. Réponse `{"ok": true, "exposed": <nombre>}` |
+| `POST /net/v1/tunnels` | port local (127.0.0.1) relié au service `name` de la machine `peer` : `{"peer": "<clé>", "name": "rpc-…", "await_owner": true, "max_connections": 4}`, ou `"owner_pid": <numéro>` si le programme est déjà connu. Avec l'un ou l'autre, le tunnel est **gardé** (cf. plus bas). `max_connections` : de 1 à 8 (8 par défaut). Réponse `{"port", "guarded", "max_connections"}`. Refus : 400 (clé, nom, `max_connections` ou `owner_pid` invalide), 403 (machine absente de la liste blanche), 501 (tunnel gardé demandé là où le système ne dit pas quel programme se connecte) |
+| `PUT /net/v1/tunnels/<port>` | `{"owner_pid": <numéro>}` : le seul programme dont ce tunnel gardé relaie les connexions, une fois pour toutes (le même numéro peut être redonné). 409 si le tunnel n'est pas gardé, ou s'il est déjà réservé à un autre programme ; 404 sans tunnel sur ce port |
+| `DELETE /net/v1/tunnels/<port>` | ferme le tunnel : plus aucune connexion acceptée sur ce port, celles en cours coupées |
 | `* /peer/<clé>/p2p/…` | requête relayée vers cette machine |
+
+Sans le bon jeton, la réponse est un 401 et la connexion est fermée. Les en-têtes d'une
+requête doivent arriver en 10 s, et 512 connexions au plus attendent de montrer le jeton :
+au-delà, la plus ancienne est fermée. Un programme de la machine qui ouvrirait des milliers
+de connexions muettes ne prive donc le compagnon ni de ses réponses à AIODOS, ni des
+sockets d'Iroh.
 
 Entre compagnons, le protocole `aiodos/2` (ALPN) est simple : un échange HTTP/1.1 par
 flux QUIC bidirectionnel. Le contenu reste l'enveloppe scellée d'`aiodos/1`, que le
-compagnon ne lit pas. Codes de fermeture d'une connexion : 0 arrêt, 1 doublon, 403 clé
-refusée ou retirée.
+compagnon ne lit pas. Codes de fermeture d'une connexion : 0 arrêt, 1 doublon (ou
+connexion de trop : la plus ancienne est fermée), 403 clé refusée ou retirée.
+
+### Tunnels et services (gros modèles répartis)
+
+Premier usage : le serveur RPC de llama.cpp, que la machine qui prête sa carte ouvre à la
+machine qui emprunte ([docs/gros-modeles.md](../docs/gros-modeles.md)). Ce serveur n'a ni
+mot de passe ni chiffrement : tout programme de la machine (un autre compte du PC) qui le
+joindrait s'en servirait. D'où deux gardes, une de chaque côté (audit du 20/10/2026,
+[docs/securite.md](../docs/securite.md)).
+
+- **Tunnel gardé**, chez la machine qui emprunte. Ouvert avec `"await_owner": true`, il ne
+  relaie que le programme qu'AIODOS nomme ensuite (`PUT /net/v1/tunnels/<port>`) : le
+  llama-server qu'il vient de lancer. Pour chaque connexion, le compagnon cherche dans la
+  table des connexions TCP du système quel programme est au bout (`src/owner.rs` :
+  `GetExtendedTcpTable` sous Windows ; `/proc/net/tcp` puis `/proc/<pid>/fd` sous Linux),
+  et ferme les autres. Une connexion arrivée avant que le programme soit nommé attend,
+  30 s au plus. Les connexions en attente sont contrôlées ensemble, d'une seule lecture de
+  la table : un intrus qui en ouvre des milliers ne fait pas écarter celle de
+  llama-server. 512 attendent au plus ; au-delà, la plus ancienne en attente est écartée,
+  jamais une dont le contrôle a commencé. L'état compte les refus (`refused`), et le
+  journal dit le premier.
+- **Service tenu**, chez la machine qui prête. Exposé avec `"hold": true`, le service est
+  tenu par le compagnon (`src/hold.rs`). Le serveur RPC ne sert qu'un client à la fois,
+  dans l'ordre d'arrivée : le compagnon y garde toujours deux connexions à lui, la servie
+  et la suivante, et chaque flux du tunnel prend la plus ancienne libre. Avant de rendre
+  une connexion, il vérifie dans la table qu'aucun autre programme n'est connecté au
+  service, et qu'une des siennes passera ensuite. Sinon il la garde ouverte (le serveur
+  reste occupé, l'intrus n'est jamais servi), refuse les flux suivants (503) et le dit
+  dans l'état (`blocked`) ; AIODOS arrête alors le prêt. La table est aussi relue chaque
+  seconde. Reste ouvert : l'instant entre le démarrage du serveur et la première connexion
+  du compagnon.
+- Un compagnon plus ancien ne répond pas `"guarded": true` : AIODOS referme alors le tunnel
+  aussitôt, et refuse d'emprunter.
+
+**Capacités** (`features`, dans la ligne « ready » et dans l'état) :
+
+| Capacité | Sens | Annoncée |
+|---|---|---|
+| `service-usage` | l'état dit les flux en cours de chaque service exposé | toujours |
+| `body-pace` | corps reçus d'une autre machine coupés sous un débit minimal, réponses jamais lues coupées | toujours |
+| `tunnel-owner` | tunnels gardés | si le système dit quel programme se connecte : Windows, Linux (pas macOS, ni un Android qui ferme `/proc/net` aux applis) |
+| `service-hold` | services tenus | comme `tunnel-owner` |
+
+AIODOS refuse d'emprunter une carte sans `tunnel-owner`, et d'en prêter une sans
+`service-usage` et `service-hold` : il ne demande jamais à un compagnon plus ancien ce
+qu'il ferait sans protection.
+
+**État** (`GET /net/v1/status`, clé `tunnels`) :
+- `exposed`, pour chaque service : `name`, `port`, `peers` (nombre de machines), `active`
+  et `total` (flux en cours, et depuis l'ouverture), `idle_s` (secondes depuis la fin du
+  dernier flux, quand il n'y en a plus), `held` ; pour un service tenu, `holding`
+  (connexions du compagnon établies), `foreign` (connexions d'autres programmes vues) et
+  `blocked` (pourquoi plus aucun flux ne passe) ;
+- `tunnels`, pour chaque tunnel : `port`, `peer`, `name`, `connections`, `total`,
+  `refused`, `max_connections`, `guarded`, `owner_pid`.
+
+## Bornes et délais
+
+Même une machine autorisée (un ami appairé) est bornée, et les autres programmes de la
+machine ne gardent rien ouvert. Les bornes des corps relayés ne doivent jamais être plus
+basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
+
+| Quoi | Valeur | Où |
+|---|---|---|
+| En-têtes d'une requête de l'API locale | 10 s | `control.rs` `HEADER_TIMEOUT` |
+| Connexions de l'API locale qui n'ont pas montré le jeton | 512, la plus ancienne fermée au-delà | `admission.rs` `MAX_WAITING` |
+| Corps d'une requête de l'API locale | 1 Mio | `control.rs` `MAX_PEERS_BODY` |
+| Connexions QUIC ouvertes avec une même machine | 4, la plus ancienne fermée au-delà | `pool.rs` `MAX_CONNECTIONS_PER_PEER` |
+| Flux bidirectionnels par connexion | 64 | `endpoint.rs` `MAX_STREAMS` |
+| En-têtes d'un flux venu d'une autre machine | 60 s | `inbound.rs` `HEADER_TIMEOUT` |
+| Requêtes relayées à la fois vers AIODOS, par machine | 32 conversations (`/p2p/v1/stream/`) et 32 autres requêtes, à part | `pool.rs` `MAX_STREAMS_PER_PEER`, `MAX_REQUESTS_PER_PEER` |
+| Attente d'une place | 30 s, puis 503 | `pool.rs` `SLOT_WAIT` |
+| Corps relayé | 64 Mio ; 1 Gio pour `/p2p/v1/work/result` ; 413 au-delà (une taille annoncée trop grande est refusée sans rien lire) | `relay_body.rs` `MAX_BODY`, `MAX_RESULT_BODY` |
+| Silence pendant un corps | 60 s | `relay_body.rs` `BODY_IDLE` |
+| Débit minimal d'un corps | 120 s de grâce, puis 16 Kio/s en moyenne ; 408 « Envoi trop lent » | `relay_body.rs` `PACE` |
+| Réponse que l'autre machine ne lit plus | 60 s, puis flux coupé (sa place est rendue) | `relay_body.rs` `RESPONSE_STALL` |
+| Services exposés | 64 | `tunnel.rs` `MAX_SERVICES` |
+| Flux d'une machine vers un même service | 8 | `tunnel.rs` `MAX_SERVICE_STREAMS` |
+| Connexions relayées à la fois par un tunnel | 8 (AIODOS en demande 4) | `tunnel.rs` `MAX_CONNECTIONS` |
+| Connexions en attente du contrôle de leur programme | 512, contrôlées par lots de 1024 au plus | `tunnel.rs` `MAX_CHECKING`, `MAX_BATCH` |
+| Attente du programme nommé | 30 s | `tunnel.rs` `OWNER_WAIT` |
+| Service tenu : connexions gardées par le compagnon ; table relue | 2 ; chaque seconde | `hold.rs` `KEPT`, `CHECK_EVERY` |
 
 ## Sécurité
 
 - L'API locale n'écoute que sur la boucle locale et exige le jeton : une page web ouverte
   dans le navigateur ne peut ni lire l'état, ni changer la liste blanche, ni se servir
   du tunnel. Le jeton n'est jamais relayé à l'autre machine.
+- Un autre programme de la machine (un autre compte du PC, une autre appli du téléphone)
+  peut quand même se connecter à 127.0.0.1. L'API locale ne le laisse pas l'épuiser
+  (en-têtes en 10 s, connexion fermée après un refus, 512 connexions sans jeton au plus) ;
+  un tunnel gardé ne relaie que le programme nommé par AIODOS, et un service tenu ne sert
+  que le compagnon (cf. « Tunnels et services »).
+- Même une machine autorisée (un ami appairé) est bornée : connexions, flux, places,
+  taille et débit des corps, réponses qu'elle ne lit pas (cf. « Bornes et délais »).
 - Le contenu des échanges est chiffré deux fois : par QUIC (TLS 1.3, clés éphémères) et
   par l'enveloppe d'AIODOS (clé de la paire). Un relais voit qui parle à qui, quand et
   combien, pas le contenu.
-- Reste à faire (cf. docs/phase2-internet.md) : protéger la clé de la machine (DPAPI sous
-  Windows, étape 2.3) ; invitations à distance (2.4 : l'appairage passe encore par le
-  réseau local) ; une clé de compagnon qui change doit être réapprise par le réseau local.
+- Reste à faire (cf. docs/phase2-internet.md et docs/securite.md) : protéger la clé de la
+  machine (DPAPI sous Windows, étape 2.3) ; réserver des places à mes machines (le
+  compagnon ne connaît pas le niveau de confiance des machines) ; une clé de compagnon qui
+  change doit être réapprise par le réseau local.
 
 ## Tests
 
 ```powershell
-cargo test                     # 16 tests unitaires, 8 tests à deux compagnons (relais coupés),
-                               # 3 par un relais lancé dans l'essai (tests/relay_only.rs)
+cargo test                     # 40 essais unitaires ; à deux compagnons, relais coupés :
+                               # tests/tunnel.rs (8), tests/services.rs (3) et
+                               # tests/bornes.rs (14 : tunnel gardé sous une avalanche de
+                               # connexions, service tenu, corps et places bornés, réponses
+                               # non lues, API locale) ; tests/public.rs (2, réseau public) ;
+                               # tests/relay_only.rs (3, par un relais lancé dans l'essai)
 ```
 
 Côté Python (le compagnon doit être compilé, sinon ces tests sont ignorés) :
@@ -233,7 +337,8 @@ compagnons ; il faut Ollama et le modèle d'embedding),
 compagnons en relais seulement ; il faut aussi `iroh-relay`, cf.
 [docs/relais.md](../docs/relais.md)),
 `tests/test_updates_companion_end_to_end.py` (une version reçue va chercher son
-compagnon livré, le vérifie et le lance), et sans compagnon `tests/test_route.py`,
+compagnon livré, le vérifie et le lance), `tests/test_securite_tunnels.py` (tunnel gardé
+et serveur RPC tenu, avec de vrais compagnons), et sans compagnon `tests/test_route.py`,
 `tests/test_netinfo.py`, `tests/test_updates_binaries.py` (choix du programme).
 
 ## Mesures du 16/10/2026 (PC principal, deux compagnons sur la même machine)

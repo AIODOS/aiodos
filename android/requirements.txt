@@ -5,6 +5,11 @@
 # son dépôt (numpy, cryptography, cffi, lxml, Pillow), sauf pydantic-core, compilé ici
 # (tools/android_wheels.py). Ni fenêtre (pywebview) ni Whisper : comme le nœud sous Termux
 # (requirements-node.txt).
+# requests et urllib3 : TOUJOURS ceux des PC (tools/installer/paquets.txt), avec lesquels
+# tournent les essais. La garde des adresses des pages lues (services/addresses.py) passe par
+# des fonctions internes d'urllib3 : avec une autre version, jamais essayée, elle refuse toute
+# lecture si elles ont changé (GUARD_BYPASSED), et rien ne prouve sinon qu'elle s'applique à
+# chaque connexion. tests/test_securite_divers.py le vérifie.
 
 # Nœud, API locale et réseau entre machines
 fastapi==0.143.2
@@ -12,7 +17,7 @@ starlette==1.8.0
 pydantic==2.13.3
 pydantic-core==2.46.3
 uvicorn==0.54.0
-requests==2.34.2
+requests==2.33.1
 numpy==1.26.2
 cryptography==42.0.8
 markdown-it-py==4.2.0
@@ -43,5 +48,5 @@ opentelemetry-api==1.45.1
 pycparser==3.11
 typing-extensions==4.16.0
 typing-inspection==0.4.4
-urllib3==2.8.0
+urllib3==2.6.3
 xlsxwriter==3.2.9

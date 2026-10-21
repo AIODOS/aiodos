@@ -5,6 +5,13 @@
 ; Installation pour l'utilisateur seul, sans droits administrateur, dans
 ; %LOCALAPPDATA%\Programs\AIODOS ; les données vont dans %LOCALAPPDATA%\AIODOS
 ; (aiodos/paths.py, installation.json) et survivent à une nouvelle installation.
+; Le dossier n'est pas proposé au choix, et un dossier hors du profil (/DIR=C:\AIODOS…)
+; est refusé : sous C:\ ou sur un autre disque, il hériterait de « Utilisateurs
+; authentifiés : modification », et tout autre compte du PC pourrait remplacer le Python
+; ou le code qu'AIODOS lance (PrepareToInstall). Une ancienne installation faite ailleurs
+; n'est pas reprise : AIODOS s'installe à sa place habituelle, le raccourci du démarrage
+; avec Windows qui la lançait est refait sur la nouvelle (MoveStartupShortcut), et l'ancien
+; dossier est signalé à la fin, pour être supprimé.
 
 #ifndef Stage
   #error "Stage n'est pas défini : construire avec tools/build_installer.py"
@@ -32,6 +39,8 @@ AppPublisher=22ème Arkane
 AppPublisherURL=https://github.com/AIODOS/aiodos
 AppComments=Atelier d'IA local, réparti entre tes machines
 DefaultDirName={autopf}\AIODOS
+DisableDirPage=yes
+UsePreviousAppDir=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir={#OutDir}
@@ -70,6 +79,10 @@ fr.DeleteData=Supprimer aussi tes données AIODOS (conversations, bibliothèques
 en.DeleteData=Also delete your AIODOS data (conversations, libraries, settings, images, downloaded models)?
 fr.AppComment=AIODOS, l'atelier d'IA local
 en.AppComment=AIODOS, the local AI workshop
+fr.OutsideProfile=AIODOS s'installe dans ton dossier personnel (%1). Le dossier demandé, %2, est hors de ton profil : les autres comptes de ce PC pourraient y modifier le programme qu'AIODOS lance. Relance l'installeur sans choisir de dossier.
+en.OutsideProfile=AIODOS installs in your personal folder (%1). The requested folder, %2, is outside your profile: other accounts on this PC could modify the program AIODOS runs. Run the installer again without choosing a folder.
+fr.OldFolder=Une ancienne installation d'AIODOS se trouvait dans %1. Elle n'est plus utilisée : AIODOS est maintenant installé dans %2 (tes données ne changent pas de place). Le démarrage avec Windows, s'il était activé, lance maintenant cette nouvelle installation. Tu peux supprimer l'ancien dossier.
+en.OldFolder=An old AIODOS installation was in %1. It is no longer used: AIODOS is now installed in %2 (your data stays where it was). Starting with Windows, if it was enabled, now runs this new installation. You can delete the old folder.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -100,8 +113,74 @@ Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\runtime"
 
 [Code]
+const
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8E1BB2BE-7BA8-4AF2-ACC7-463BA169FCF3}_is1';
+
 var
   DownloadPage: TDownloadWizardPage;
+  PreviousDir: String;
+
+function InitializeSetup: Boolean;
+begin
+  // Dossier d'une installation précédente, lu avant que celle-ci ne le remplace
+  if not RegQueryStringValue(HKCU, UninstallKey, 'Inno Setup: App Path', PreviousDir) then
+    PreviousDir := '';
+  Result := True;
+end;
+
+// Dans le profil de l'utilisateur (%LOCALAPPDATA%) : dossier à lui seul
+function InsideProfile(Dir: String): Boolean;
+var
+  Profile: String;
+begin
+  Profile := Lowercase(AddBackslash(ExpandConstant('{localappdata}')));
+  Result := (Pos('..', Dir) = 0) and (Pos(Profile, Lowercase(AddBackslash(Dir))) = 1);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  // (une ligne de [Code] ne doit pas commencer par un crochet : Inno y verrait une section)
+  if not InsideProfile(ExpandConstant('{app}')) then
+    Result := FmtMessage(CustomMessage('OutsideProfile'), [
+      ExpandConstant('{localappdata}\Programs\AIODOS'), ExpandConstant('{app}')]);
+end;
+
+// Programme que vise un raccourci (vide s'il est illisible)
+function ShortcutTarget(Path: String): String;
+var
+  Shell, Link: Variant;
+begin
+  Result := '';
+  try
+    Shell := CreateOleObject('WScript.Shell');
+    Link := Shell.CreateShortcut(Path);
+    Result := Link.TargetPath;
+  except
+    Result := '';
+  end;
+end;
+
+// Raccourci du démarrage avec Windows (node/autostart.py) qui lance encore l'ancienne
+// installation, hors du profil : il viserait chaque jour un dossier que les autres comptes
+// peuvent modifier. Il est refait sur celle-ci, ou retiré s'il ne peut pas l'être.
+procedure MoveStartupShortcut;
+var
+  Link: String;
+begin
+  Link := ExpandConstant('{userstartup}\AIODOS.lnk');
+  if not FileExists(Link) then
+    exit;
+  if Pos(Lowercase(AddBackslash(PreviousDir)), Lowercase(ShortcutTarget(Link))) <> 1 then
+    exit;
+  try
+    CreateShellLink(Link, 'AIODOS, en arrière-plan', ExpandConstant('{app}\runtime\pythonw.exe'),
+      '-m aiodos --background', ExpandConstant('{app}\app'),
+      ExpandConstant('{app}\app\assets\{#Icon}'), 0, 7);
+  except
+    DeleteFile(Link);
+  end;
+end;
 
 function OllamaInstalled: Boolean;
 begin
@@ -174,6 +253,14 @@ begin
     end;
     if not WebView2Present then
       SuppressibleMsgBox(CustomMessage('NoWebView2'), mbInformation, MB_OK, IDOK);
+    if (PreviousDir <> '') and
+       (CompareText(RemoveBackslash(PreviousDir), RemoveBackslash(ExpandConstant('{app}'))) <> 0) then
+    begin
+      MoveStartupShortcut;
+      if DirExists(PreviousDir) then
+        SuppressibleMsgBox(FmtMessage(CustomMessage('OldFolder'), [
+          PreviousDir, ExpandConstant('{app}')]), mbInformation, MB_OK, IDOK);
+    end;
   end;
 end;
 

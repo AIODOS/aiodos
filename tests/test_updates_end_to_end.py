@@ -54,8 +54,12 @@ def test_installed_machine_updates_itself_from_a_paired_machine(tmp_path):
     try:
         lender.start()
         friend.start()
-        pair(lender, friend)
-        friend.wait_for(lambda: offered_to(friend, "7.0.1"), what="profil du prêteur reçu")
+        lender_id, _ = pair(lender, friend)
+        # Son profil tout de suite, sans attendre le tour suivant (sous la charge d'une suite
+        # complète, 20 s ne suffisaient pas toujours)
+        friend.api("POST", f"/network/peers/{lender_id}/refresh")
+        friend.wait_for(lambda: offered_to(friend, "7.0.1"), timeout=40,
+                        what="profil du prêteur reçu")
         friend.api("POST", "/updates/check")
         friend.wait_for(lambda: version_of(friend) == "7.0.1", timeout=120,
                         what="redémarrage sur la version 7.0.1")

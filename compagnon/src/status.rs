@@ -39,6 +39,7 @@ pub fn snapshot(ctx: &Ctx) -> Value {
     json!({
         "id": endpoint.id().to_string(),
         "version": env!("CARGO_PKG_VERSION"),
+        "features": crate::features(),
         "alpn": String::from_utf8_lossy(ALPN),
         "relay_mode": ctx.config.relays.label(),
         "relay_only": ctx.config.relay_only,

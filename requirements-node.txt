@@ -12,6 +12,7 @@
 fastapi
 uvicorn            # sans [standard] : rien à compiler
 requests
+urllib3>=2.3       # lecture en flux bornée et coupure à l'échéance (network/client.py)
 numpy
 cryptography
 markdown-it-py     # rendu des réponses, chargé au démarrage du nœud

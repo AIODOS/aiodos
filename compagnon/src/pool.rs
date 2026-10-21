@@ -11,7 +11,9 @@
 //! plus petite des deux clés (le même choix des deux côtés) ; l'autre est fermée dès
 //! qu'elle est inactive. Une connexion bien plus récente l'emporte sur l'ancienne (l'autre
 //! machine a redémarré, ou changé de réseau). Une connexion morte est retirée quand Iroh
-//! la déclare fermée ; la requête suivante en ouvre une nouvelle.
+//! la déclare fermée ; la requête suivante en ouvre une nouvelle. Au-delà de
+//! `MAX_CONNECTIONS_PER_PEER` connexions ouvertes avec une même machine, la plus ancienne
+//! est fermée : même autorisée, une machine n'en ouvre pas sans limite.
 
 use std::{
     collections::HashMap,
@@ -29,6 +31,7 @@ use iroh::{
     endpoint::{Connection, PathEvent, Side},
 };
 use n0_future::StreamExt;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
@@ -41,6 +44,34 @@ const DUPLICATE_IDLE: Duration = Duration::from_secs(20);
 /// Deux connexions ouvertes à moins de 10 s d'écart : appels simultanés, pas un
 /// redémarrage (cf. `choose`).
 const RACE_WINDOW: Duration = Duration::from_secs(10);
+/// Connexions ouvertes en même temps avec une même machine, au plus (une dans chaque
+/// sens pendant un appel simultané, plus celles d'avant un redémarrage pas encore éteintes).
+pub const MAX_CONNECTIONS_PER_PEER: usize = 4;
+/// Places pour relayer en même temps vers le serveur réseau local d'AIODOS les requêtes
+/// d'une même machine, partagées par toutes ses connexions, en deux parts : ses réponses en
+/// flux (`STREAM_PREFIX` : une conversation, qui peut attendre plusieurs minutes son tour
+/// chez un modèle prêté) et ses autres requêtes, courtes (ping, profil, baux de travail,
+/// morceaux de mise à jour…). Une rafale de conversations ne prend jamais les places des
+/// requêtes courtes : les nouvelles de la machine et les baux de ses unités passent
+/// toujours. Relecture finale du 21/10/2026 : une seule part de 16 places, refusées sans
+/// attendre, faisait échouer 21 conversations sur 40 envoyées ensemble, et plus rien d'autre
+/// ne passait pendant ce temps.
+///
+/// Par machine : une machine autorisée (un ami) ouvrirait sinon jusqu'à
+/// `endpoint::MAX_STREAMS` × `MAX_CONNECTIONS_PER_PEER` flux, et une machine gourmande ne
+/// gêne pas les autres. Le serveur local accepte, lui, `MAX_LOOPBACK` (512) connexions
+/// venues de cette machine (aiodos/network/connections.py), bien plus que les places de
+/// quelques machines. AIODOS n'envoie pas plus de `STREAMS_PER_PEER` (16) conversations à
+/// la fois à une même machine (aiodos/network/client.py) : la part en flux n'est atteinte
+/// que par une version d'avant ou une machine qui ne suit pas le protocole.
+pub const MAX_STREAMS_PER_PEER: usize = 32;
+pub const MAX_REQUESTS_PER_PEER: usize = 32;
+/// Chemins des réponses en flux.
+pub const STREAM_PREFIX: &str = "/p2p/v1/stream/";
+/// Attente d'une place, au plus (`Config::slot_wait`) : au-delà, 503. La requête attend son
+/// tour plutôt que d'échouer aussitôt ; une machine qui garde ses places ne les tient pas
+/// sans fin pour autant (corps bornés, réponses non lues coupées, cf. relay_body.rs).
+pub const SLOT_WAIT: Duration = Duration::from_secs(30);
 
 /// Activité d'une connexion : flux en cours, et fin du dernier flux.
 #[derive(Debug)]
@@ -112,10 +143,26 @@ pub struct PeerStats {
     pub last_error: Option<(String, SystemTime)>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct PeerState {
     conns: Vec<Tracked>,
     stats: PeerStats,
+    /// Places pour relayer les réponses en flux de cette machine, partagées par ses
+    /// connexions (cf. `MAX_STREAMS_PER_PEER`).
+    streams: Arc<Semaphore>,
+    /// Places pour ses autres requêtes (cf. `MAX_REQUESTS_PER_PEER`).
+    requests: Arc<Semaphore>,
+}
+
+impl Default for PeerState {
+    fn default() -> Self {
+        PeerState {
+            conns: Vec::new(),
+            stats: PeerStats::default(),
+            streams: Arc::new(Semaphore::new(MAX_STREAMS_PER_PEER)),
+            requests: Arc::new(Semaphore::new(MAX_REQUESTS_PER_PEER)),
+        }
+    }
 }
 
 /// Vue d'une machine pour l'état : sa connexion retenue, combien sont ouvertes.
@@ -152,6 +199,12 @@ pub struct Pool {
     pub allowlist: Allowlist,
     /// Serveur réseau local d'AIODOS, destinataire des requêtes reçues.
     pub forward: SocketAddr,
+    /// Taille maximale d'un corps de requête reçu d'une autre machine (cf. relay_body.rs).
+    pub max_body: usize,
+    /// Réponse que l'autre machine ne lit plus depuis ce temps : flux coupé (cf. inbound.rs).
+    pub response_stall: Duration,
+    /// Attente d'une place pour relayer une requête, au plus (cf. `relay_slot`).
+    pub slot_wait: Duration,
     pub shutdown: CancellationToken,
     /// Services ouverts à d'autres machines, et tunnels vers les leurs.
     pub tunnels: Tunnels,
@@ -166,6 +219,9 @@ impl Pool {
         endpoint: Endpoint,
         allowlist: Allowlist,
         forward: SocketAddr,
+        max_body: usize,
+        response_stall: Duration,
+        slot_wait: Duration,
         dial_timeout: Duration,
         shutdown: CancellationToken,
     ) -> Arc<Self> {
@@ -174,6 +230,9 @@ impl Pool {
             endpoint,
             allowlist,
             forward,
+            max_body,
+            response_stall,
+            slot_wait,
             shutdown,
             tunnels: Tunnels::default(),
             dial_timeout,
@@ -235,13 +294,22 @@ impl Pool {
     pub fn register(self: &Arc<Self>, conn: Connection) -> Tracked {
         let id = conn.remote_id();
         let tracked = Tracked::new(conn);
-        let open = {
+        let (open, excess) = {
             let mut peers = self.peers.lock().expect("pool");
             let state = peers.entry(id).or_default();
             state.conns.retain(Tracked::is_open);
             state.conns.push(tracked.clone());
-            state.conns.len()
+            let opened: Vec<Instant> = state.conns.iter().map(|t| t.opened_at).collect();
+            let mut excess = Vec::new();
+            for at in oldest_beyond(&opened, MAX_CONNECTIONS_PER_PEER).into_iter().rev() {
+                excess.push(state.conns.remove(at));
+            }
+            (state.conns.len(), excess)
         };
+        for old in excess {
+            info!("Trop de connexions avec {} : la plus ancienne est fermée", id.fmt_short());
+            old.conn.close(close::DUPLICATE.into(), b"too many connections");
+        }
         info!(
             "Connexion {} {} ({}){}",
             if tracked.outgoing { "ouverte vers" } else { "reçue de" },
@@ -303,6 +371,24 @@ impl Pool {
 
     pub fn count_in(&self, id: EndpointId) {
         self.with_stats(id, |s| s.requests_in += 1);
+    }
+
+    /// Une place pour relayer vers AIODOS une requête de cette machine vers `path`, dans la
+    /// part des réponses en flux ou dans celle des autres requêtes (cf.
+    /// `MAX_STREAMS_PER_PEER`), rendue quand la requête (sa réponse comprise) est finie.
+    /// Attendue au plus `slot_wait` si toutes sont prises ; `None` au-delà, ou à l'arrêt du
+    /// compagnon : le serveur local reste joignable par les autres machines. Partagée par
+    /// toutes les connexions de cette machine.
+    pub async fn relay_slot(&self, id: EndpointId, path: &str) -> Option<OwnedSemaphorePermit> {
+        let places = {
+            let mut peers = self.peers.lock().expect("pool");
+            let state = peers.entry(id).or_default();
+            if is_stream(path) { state.streams.clone() } else { state.requests.clone() }
+        };
+        tokio::select! {
+            _ = self.shutdown.cancelled() => None,
+            waited = tokio::time::timeout(self.slot_wait, places.acquire_owned()) => waited.ok()?.ok(),
+        }
     }
 
     fn with_stats(&self, id: EndpointId, update: impl FnOnce(&mut PeerStats)) {
@@ -385,6 +471,20 @@ fn choose<'a>(
     pick(me, peer, &opened).map(|i| conns[i])
 }
 
+/// Une requête vers ce chemin est-elle une réponse en flux (une conversation) ?
+pub fn is_stream(path: &str) -> bool {
+    path.starts_with(STREAM_PREFIX)
+}
+
+/// Rangs (croissants) des connexions les plus anciennes à fermer pour n'en garder que `max`.
+fn oldest_beyond(opened: &[Instant], max: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..opened.len()).collect();
+    order.sort_by_key(|&i| opened[i]);
+    let mut excess: Vec<usize> = order.into_iter().take(opened.len().saturating_sub(max)).collect();
+    excess.sort_unstable();
+    excess
+}
+
 /// Cœur de `choose` : (ouverte par cette machine-ci, instant d'ouverture) → rang retenu.
 fn pick(me: EndpointId, peer: EndpointId, opened: &[(bool, Instant)]) -> Option<usize> {
     let newest = opened.iter().map(|(_, at)| *at).max()?;
@@ -420,6 +520,23 @@ mod tests {
         assert_eq!(pick(low, high, &[(true, t0), (false, t1)]), Some(0));
         // Vue de la grande clé : l'entrante est celle de la petite clé
         assert_eq!(pick(high, low, &[(false, t0), (true, t1)]), Some(0));
+    }
+
+    #[test]
+    fn only_the_newest_connections_are_kept() {
+        let t0 = Instant::now();
+        let at = |s| t0 + Duration::from_secs(s);
+        assert!(oldest_beyond(&[at(1), at(2)], 4).is_empty());
+        // Les deux plus anciennes (rangs 1 et 3) partent, dans l'ordre des rangs
+        assert_eq!(oldest_beyond(&[at(5), at(1), at(6), at(2), at(7), at(8)], 4), vec![1, 3]);
+    }
+
+    #[test]
+    fn conversations_and_short_requests_take_separate_places() {
+        assert!(is_stream("/p2p/v1/stream/chat"));
+        assert!(!is_stream("/p2p/v1/ping"));
+        assert!(!is_stream("/p2p/v1/work/renew"));
+        assert!(!is_stream("/p2p/v1/streamx/chat"));
     }
 
     #[test]

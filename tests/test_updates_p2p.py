@@ -83,7 +83,8 @@ def test_interrupted_transfer_resumes_where_it_stopped(lender, calls, tmp_path, 
     monkeypatch.setattr(p2p, "CHUNK", 1000)
     mine = Store(tmp_path / "mine")
     source = lender.file_path("2.0.1", "aiodos-2.0.1.zip").read_bytes()
-    mine.partial("2.0.1", "aiodos-2.0.1.zip").write_bytes(source[:2500])
+    # commencé chez la même machine (chez une autre, il repartirait de zéro)
+    mine.partial_from("2.0.1", "aiodos-2.0.1.zip", "lui").write_bytes(source[:2500])
     p2p.fetch("moi", {"node_id": "lui"}, "2.0.1", mine)
     assert [offset for action, offset in calls if action == "update/chunk"][0] == 2500
     assert mine.file_path("2.0.1", "aiodos-2.0.1.zip").read_bytes() == source
@@ -102,7 +103,7 @@ def test_altered_transfer_is_dropped(lender, calls, tmp_path, monkeypatch):
     with pytest.raises(UpdateError, match="altéré"):
         p2p.fetch("moi", {"node_id": "lui"}, "2.0.1", mine)
     assert not mine.complete("2.0.1")
-    assert not mine.partial("2.0.1", "aiodos-2.0.1.zip").exists()
+    assert not mine.partial("2.0.1", "aiodos-2.0.1.zip", "lui").exists()
 
 
 def test_another_version_than_announced_is_refused(lender, tmp_path, key, monkeypatch):

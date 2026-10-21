@@ -61,6 +61,10 @@ class TaskSpec:
     # l'ordre part sans le fichier ni les clés file_extras, et la tâche fait sans
     file_optional: Optional[Callable] = None
     file_extras: tuple = ()
+    # checkable(payload) -> bool : ce qu'un ami rendrait pour cette unité, sample sait-il le
+    # contrôler ici (un document que je sais relire ; pas une image, un son, une vidéo, ni un
+    # format sans lecteur ici) ? Sinon l'unité ne part pas chez un ami (friend_checkable)
+    checkable: Optional[Callable] = None
 
     @property
     def portable(self) -> bool:
@@ -96,15 +100,33 @@ def task(name):
 def register_portable(name, compute, assimilate, file_key=None, options=None,
                       requires=None, validate=None, shared_keys=(), sample=None, here=None,
                       mine_only=False, friends_out=None, friends_in=None, file_optional=None,
-                      file_extras=()):
+                      file_extras=(), checkable=None):
     TASKS[name] = TaskSpec(name, compute, assimilate, file_key, options, requires, validate,
                            tuple(shared_keys), sample, here, mine_only, friends_out, friends_in,
-                           file_optional, tuple(file_extras))
+                           file_optional, tuple(file_extras), checkable)
 
 
 def friends_may_take(spec) -> bool:
     """Chez le propriétaire : une unité de cette tâche peut-elle partir chez un ami ?"""
     return not spec.mine_only or bool(spec.friends_out and settings.get(spec.friends_out))
+
+
+def friend_checkable(spec, payload) -> bool:
+    """Chez le propriétaire : ce qu'un ami rendrait pour cette unité pourrait-il être pris ?
+    Sinon elle ne part pas chez lui : il calculerait pour rien (son résultat serait refusé,
+    puis l'unité refaite ici), et ce qu'on ne contrôle pas n'entre pas dans mes données
+    (audit du 20/10/2026, relecture du 21/10).
+    - Tâche contrôlée par échantillon (sample) : seulement ce que ce contrôle sait vérifier
+      ici (checkable). Une telle tâche qui ne le dit pas ne part jamais chez un ami : une
+      tâche ajoutée sans y penser n'ouvre pas de brèche.
+    - Tâche sans contrôle : seulement celle que l'utilisateur accepte de confier à ses amis
+      sans contrôle possible (mine_only avec friends_out, cf. friends_may_take : ses images,
+      qu'il voit)."""
+    if spec.sample is None:
+        return spec.mine_only and spec.friends_out is not None
+    if spec.checkable is None:
+        return False
+    return bool(spec.checkable(payload))
 
 
 def may_compute_for_friend(spec) -> bool:

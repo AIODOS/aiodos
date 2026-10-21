@@ -4,10 +4,17 @@ Requête :  {"from", "to", "ts", "box"}   (box = JSON scellé avec la clé de la
 Réponse :  {"box"}                       (liée à l'horodatage de la requête)
 Flux    :  une ligne par morceau, scellé et numéroté (lié à la requête et à son rang :
            un morceau retiré, déplacé ou rejoué est détecté) ; le dernier dit « fin ».
+
+Le contenu ouvert est du JSON strict : ni NaN ni infini (audit du 20/10/2026, faille 16).
+json.loads les acceptait, et une seule de ces valeurs, gardée puis servie à l'interface,
+faisait tomber toute la réponse (Starlette sérialise avec allow_nan=False). Un message qui en
+contient est refusé (SealError) ; pour que cela n'arrive jamais entre machines honnêtes, une
+valeur non finie (un capteur illisible…) part ici en null.
 """
 import base64
 import binascii
 import json
+import math
 import threading
 import time
 
@@ -26,27 +33,82 @@ def b64d(text: str) -> bytes:
     return base64.b64decode(text.encode("ascii"))
 
 
+class NotFinite(ValueError):
+    """Nombre non fini dans du JSON reçu : NaN, Infinity, ou 1e999 qui en deviendrait un."""
+
+
+def _constant(name):
+    raise NotFinite(name)
+
+
+def _float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise NotFinite(text[:24])
+    return value
+
+
+def parse_json(data):
+    """JSON reçu d'une autre machine, en refusant tout nombre non fini (NotFinite, une
+    ValueError) : NaN et Infinity, que json.loads accepte, et les nombres qui débordent
+    (« 1e999 » devient l'infini sans passer par eux)."""
+    return json.loads(data, parse_constant=_constant, parse_float=_float)
+
+
+def _opened(data: bytes):
+    """Le contenu d'un message ouvert, ou SealError s'il n'est pas du JSON strict."""
+    try:
+        return parse_json(data)
+    except NotFinite as exc:
+        raise SealError(f"Nombre non fini ({exc}) : message refusé.") from exc
+    except (ValueError, RecursionError) as exc:
+        raise SealError("Contenu illisible : message refusé.") from exc
+
+
+def _finite(value):
+    """`value` où chaque nombre non fini devient None."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite(item) for item in value]
+    return value
+
+
+def _dumps(payload) -> bytes:
+    """Le contenu d'un message à sceller, sans nombre non fini, que l'autre machine refuserait
+    (_opened) : il y devient null. La recherche ne coûte rien tant qu'il n'y en a pas."""
+    try:
+        text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    except ValueError:
+        text = json.dumps(_finite(payload), ensure_ascii=False, allow_nan=False)
+    return text.encode()
+
+
 def _aad(kind, action, sender, recipient, ts) -> bytes:
     return f"{PROTOCOL}|{kind}|{action}|{sender}|{recipient}|{ts:.6f}".encode()
 
 
 def wrap(key: bytes, action: str, sender: str, recipient: str, payload: dict) -> dict:
     ts = time.time()
-    data = json.dumps(payload, ensure_ascii=False).encode()
-    box = crypto.seal(key, data, _aad("req", action, sender, recipient, ts))
+    box = crypto.seal(key, _dumps(payload), _aad("req", action, sender, recipient, ts))
     return {"from": sender, "to": recipient, "ts": ts, "box": b64e(box)}
 
 
 def wrap_reply(key: bytes, action: str, sender: str, recipient: str, ts: float,
                payload: dict) -> dict:
-    data = json.dumps(payload, ensure_ascii=False).encode()
-    return {"box": b64e(crypto.seal(key, data, _aad("rep", action, sender, recipient, ts)))}
+    return {"box": b64e(crypto.seal(key, _dumps(payload),
+                                    _aad("rep", action, sender, recipient, ts)))}
 
 
 def unwrap_reply(key: bytes, action: str, sender: str, recipient: str, ts: float,
                  reply: dict) -> dict:
-    data = crypto.open_sealed(key, b64d(reply["box"]), _aad("rep", action, sender, recipient, ts))
-    return json.loads(data)
+    try:
+        box = b64d(reply["box"])
+    except (KeyError, TypeError, AttributeError, ValueError) as exc:
+        raise SealError("Réponse incomplète.") from exc
+    return _opened(crypto.open_sealed(key, box, _aad("rep", action, sender, recipient, ts)))
 
 
 def _frame_aad(action, sender, recipient, ts, seq) -> bytes:
@@ -56,8 +118,7 @@ def _frame_aad(action, sender, recipient, ts, seq) -> bytes:
 def wrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float, seq: int,
                payload: dict) -> str:
     """Un morceau d'une réponse en flux (une ligne de texte)."""
-    data = json.dumps(payload, ensure_ascii=False).encode()
-    return b64e(crypto.seal(key, data, _frame_aad(action, sender, recipient, ts, seq)))
+    return b64e(crypto.seal(key, _dumps(payload), _frame_aad(action, sender, recipient, ts, seq)))
 
 
 def unwrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float, seq: int,
@@ -66,7 +127,7 @@ def unwrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float
         box = b64d(line.strip())
     except (binascii.Error, ValueError) as exc:
         raise SealError("Morceau de réponse illisible.") from exc
-    return json.loads(crypto.open_sealed(key, box, _frame_aad(action, sender, recipient, ts, seq)))
+    return _opened(crypto.open_sealed(key, box, _frame_aad(action, sender, recipient, ts, seq)))
 
 
 class ReplayGuard:
@@ -93,12 +154,15 @@ def unwrap(key: bytes, action: str, recipient: str, envelope: dict,
         ts = float(envelope["ts"])
         sender = envelope["from"]
         box = b64d(envelope["box"])
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, AttributeError, ValueError) as exc:
         raise SealError("Enveloppe incomplète.") from exc
+    # Un horodatage NaN passerait le contrôle d'écart (toute comparaison avec NaN est fausse)
+    if not math.isfinite(ts):
+        raise SealError("Enveloppe incomplète.")
     if envelope.get("to") != recipient:
         raise SealError("Message destiné à un autre nœud.")
     if abs(time.time() - ts) > MAX_SKEW:
         raise SealError("Horloges trop décalées entre les deux machines.")
     data = crypto.open_sealed(key, box, _aad("req", action, sender, recipient, ts))
     guard.check(sender, box[:crypto.NONCE])
-    return json.loads(data)
+    return _opened(data)

@@ -557,7 +557,7 @@ et les tâches portables passent telles quelles dans un tuyau qui sait traverser
 | Identité `node_id = uuid4().hex`, tirée au hasard | [`identity.py`](../aiodos/node/identity.py) | **Identité réseau = clé publique Ed25519** (l'EndpointId d'Iroh) : c'est l'adresse du nœud sur Internet, et le transport l'authentifie. L'identifiant actuel peut rester le nom du nœud dans le protocole, lié à sa clé lors de l'appairage. La clé privée devient le secret le plus précieux du nœud (à protéger, par exemple avec DPAPI sous Windows). Migration : les paires existantes échangent leurs clés par un message scellé avec leur clé de paire actuelle, sans nouvel appairage. |
 | Machine jointe à `peers.address:port`, mise à jour par les annonces UDP | [`peers.py`](../aiodos/network/peers.py), [`manager.py`](../aiodos/network/manager.py) | **On joint une clé, pas une adresse.** IP directes et relais deviennent des indices mis en cache, retrouvés par la découverte. |
 | Découverte par diffusion UDP (`255.255.255.255:47700`) | [`discovery.py`](../aiodos/network/discovery.py) | **Gardée pour le réseau local** (ou remplacée par la découverte locale du transport). Sur Internet, pas de découverte d'inconnus en phase 2 : on ajoute ses amis par invitation, puis on retrouve leurs adresses par une publication signée (cf. § 2). |
-| Appairage : code à 6 chiffres comparé sur les deux écrans ; `pair/start` ouvert à toute machine du réseau local (3 demandes en attente au plus) | [`pairing.py`](../aiodos/network/pairing.py), [`p2p_app.py`](../aiodos/network/p2p_app.py) | Les deux écrans ne sont plus côte à côte. **Invitation** : un lien ou un QR code contenant la clé publique de l'invitant, un secret à usage unique et une date d'expiration, transmis par un canal que les deux amis jugent sûr (en personne, messagerie chiffrée). `pair/start` exige ce secret : un inconnu qui connaît la clé ne peut pas déclencher de demande. Le code à 6 chiffres reste possible par téléphone ou en visio ; il faudra alors le dériver aussi des deux clés publiques (liaison au canal), pour qu'un intermédiaire ne puisse pas relayer l'appairage. |
+| Appairage : code à 6 chiffres comparé sur les deux écrans ; `pair/start` ouvert à toute machine du réseau local (3 demandes en attente au plus) | [`pairing.py`](../aiodos/network/pairing.py), [`p2p_app.py`](../aiodos/network/p2p_app.py) | Les deux écrans ne sont plus côte à côte. **Invitation** : un lien ou un QR code contenant la clé publique de l'invitant, un secret à usage unique et une date d'expiration, transmis par un canal que les deux amis jugent sûr (en personne, messagerie chiffrée). `pair/start` exige ce secret : un inconnu qui connaît la clé ne peut pas déclencher de demande. Le code à 6 chiffres reste possible par téléphone ou en visio ; il faudra alors le dériver aussi des deux clés publiques (liaison au canal), pour qu'un intermédiaire ne puisse pas relayer l'appairage (fait le 21/10/2026 : protocole 2, avec engagement, cf. [securite.md](securite.md)). |
 | Serveur entre nœuds FastAPI sur `0.0.0.0:47701`, en HTTP (contenus scellés) | [`p2p_app.py`](../aiodos/network/p2p_app.py) | **Jamais exposé tel quel sur Internet** (pas de redirection de port ni d'UPnP vers lui) : il passe derrière le transport P2P (le compagnon du § 4), qui ne laisse entrer que des clés connues (liste blanche) et les porteurs d'une invitation valide, et pour ce chemin il n'écoute plus que sur `127.0.0.1`. Comme l'adresse vue est alors locale, l'identité de l'appelant vient du transport et de l'enveloppe, plus de l'adresse IP. Le code des routes ne change pas. |
 | Appels `requests.post("http://ip:port/p2p/v1/…")`, délai 10 s | [`client.py`](../aiodos/network/client.py) | Même requête, autre chemin : le port local que le compagnon ouvre vers chaque machine appairée. Délais à revoir : un passage par relais ajoute de la latence. |
 | Clé de paire statique : qui la vole peut déchiffrer tout trafic enregistré | `crypto.pair_secrets` | Sur Internet, le trafic peut être enregistré en route. La **confidentialité persistante** (*forward secrecy*) viendra du transport (TLS 1.3 dans Iroh, à clés éphémères) ; prévoir aussi une rotation de la clé de paire. |
@@ -912,6 +912,13 @@ Android, rien ne change (fichiers de l'utilisateur seul). Restent : la clé du c
 (fichier `aiodos-net.key`, lu par le compagnon en Rust) et le code à 6 chiffres lié aux
 clés des compagnons.
 
+**Fait le 21/10/2026** (audit de sécurité, [securite.md](securite.md)) : l'appairage par
+code passe au protocole 2, avec engagement. Le code à 6 chiffres et la clé de la paire
+sont tirés de toute la transcription de l'échange (identifiants, clés, nonces) : un
+intermédiaire ne peut plus faire apparaître le même code des deux côtés. Le code n'est pas
+lié aux clés des compagnons : par Internet, c'est l'invitation qui les authentifie. Reste
+la clé du compagnon.
+
 **2.5 Politique de partage** (selon les réponses de 2.1) : niveaux de confiance,
 portée des bibliothèques, métadonnées réduites (nom de fichier neutre, profil allégé),
 plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
@@ -936,14 +943,21 @@ plafonds de volume (données mobiles), journal de ce qui est parti et chez qui.
   alimentation, ni inactivité.
 - **Q9, contrôle par échantillon.**
   - Un passage tiré au hasard est recalculé chez le propriétaire ; le cosinus doit être au
-    moins de 0,999.
+    moins de 0,999. Depuis le 21/10/2026 ([securite.md](securite.md), § 3.2), le document
+    est en plus relu et redécoupé chez le propriétaire : les passages rendus doivent être
+    exactement ce découpage, et 3 vecteurs sont recalculés. Ce qui ne se relit pas ici
+    (image, son, vidéo, page web, format sans lecteur) ne part plus chez un ami.
   - En cas d'écart, le résultat est refusé, l'unité est refaite ailleurs, et la machine est
     mise de côté : plus rien ne lui est confié jusqu'à ce que l'utilisateur la rétablisse.
+    Un écart sur un document, ou sur un fichier modifié depuis qu'il a été confié, est
+    refusé sans mise de côté.
   - Si le contrôle est impossible (Ollama arrêté), l'unité retourne en file sans compter
     d'essai.
   - Les résultats de mes machines ne sont pas contrôlés.
-- **Q3, calculer pour un ami.** Pas de règle à part : les conditions du partage de
-  puissance s'appliquent.
+- **Q3, calculer pour un ami.** Les conditions du partage de puissance s'appliquent, et
+  depuis le 21/10/2026 quelques règles à part ([securite.md](securite.md), § 3.4) : jamais
+  lire le Web pour lui, ni décoder ses images, sons ou vidéos à indexer ; aucun modèle
+  Whisper téléchargé pour lui ; un échec ne lui dit que la sorte d'erreur.
 - **Journal.** Chaque fichier ou page confié à un ami est noté (`shared_log`). La vue Réseau
   en montre le total, et la liste.
 - **Tests.** 11 tests (`tests/test_sharing.py`), plus un essai à deux vrais nœuds avec

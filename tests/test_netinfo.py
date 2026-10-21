@@ -1,5 +1,7 @@
 """Clés Internet des machines appairées : échange scellé « net/info », liste blanche du
-compagnon, et requêtes arrivées par le compagnon (en-tête X-Aiodos-Peer)."""
+compagnon, et requêtes arrivées par le compagnon (en-tête X-Aiodos-Peer). Le compagnon
+tourne sur cette machine : ses requêtes viennent de 127.0.0.1 (_companion), et l'en-tête
+n'est cru que de là (network/connections.internet_key)."""
 import json
 
 import pytest
@@ -46,6 +48,13 @@ def server():
     return TestClient(create_p2p_app(manager)), manager
 
 
+def _companion(client):
+    """Le même serveur, joint comme par le compagnon : depuis cette machine (127.0.0.1).
+    Le client d'essai par défaut, lui, vient d'une autre adresse (« testclient »), comme
+    une machine du réseau local."""
+    return TestClient(client.app, client=("127.0.0.1", 50000))
+
+
 def _sealed(client, action, payload, headers=None):
     env = envelope.wrap(KEY, action, PEER_ID, MY_ID, payload)
     response = client.post(f"/p2p/v1/{action}", json=env, headers=headers or {})
@@ -82,17 +91,30 @@ def test_keys_are_exchanged_by_a_sealed_message(server):
 
 def test_requests_through_the_companion(server):
     client, _ = server
+    companion = _companion(client)
     _sealed(client, "net/info", {"net": {"id": NET}})
     peers.touch(PEER_ID, "192.168.1.20")                # adresse connue sur le réseau local
     # Par le compagnon, avec la bonne clé : accepté, et l'adresse 127.0.0.1 n'est pas retenue
-    status, _ = _sealed(client, "ping", {}, headers={"X-Aiodos-Peer": NET})
+    status, _ = _sealed(companion, "ping", {}, headers={"X-Aiodos-Peer": NET})
     assert status == 200
     assert peers.get(PEER_ID)["address"] == "192.168.1.20"
     # Une autre clé Internet que celle de la machine qui a scellé : refusé
-    status, body = _sealed(client, "ping", {}, headers={"X-Aiodos-Peer": "e" * 64})
+    status, body = _sealed(companion, "ping", {}, headers={"X-Aiodos-Peer": "e" * 64})
     assert status == 403 and "Clé Internet" in body["detail"]
     # Par le réseau local, l'adresse vue reste retenue comme avant
     status, _ = _sealed(client, "ping", {})
+    assert status == 200 and peers.get(PEER_ID)["address"] == "testclient"
+
+
+def test_the_companion_header_proves_nothing_from_the_network(server):
+    """Seul le compagnon, sur cette machine, ajoute X-Aiodos-Peer. Envoyé par un appareil du
+    réseau local, l'en-tête ne fait pas passer sa requête pour une requête venue par
+    Internet : elle est traitée comme toute requête du réseau local (adresse vue retenue,
+    aucune clé Internet comparée)."""
+    client, _ = server
+    _sealed(client, "net/info", {"net": {"id": NET}})
+    peers.touch(PEER_ID, "192.168.1.20")
+    status, _ = _sealed(client, "ping", {}, headers={"X-Aiodos-Peer": "e" * 64})
     assert status == 200 and peers.get(PEER_ID)["address"] == "testclient"
 
 
@@ -102,7 +124,8 @@ def test_pairing_through_the_companion_needs_an_invitation(server):
     client, _ = server
     request = {"node_id": "c" * 32, "name": "Inconnue", "port": 47701, "pub": "AAAA",
                "invitation": "d" * 32}
-    refused = client.post("/p2p/v1/pair/start", json=request, headers={"X-Aiodos-Peer": NET})
+    refused = _companion(client).post("/p2p/v1/pair/start", json=request,
+                                      headers={"X-Aiodos-Peer": NET})
     assert refused.status_code == 403 and "invitation" in refused.json()["detail"]
 
 
