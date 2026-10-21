@@ -26,6 +26,7 @@ def test_no_network_means_no_address(monkeypatch):
         def connect(self, target):
             raise OSError("Network is unreachable")
     monkeypatch.setattr(discovery.socket, "socket", NoRoute)
+    monkeypatch.setattr(discovery.interfaces, "lan_interfaces", lambda max_age=60: [])
     assert discovery.lan_address() is None
 
 
@@ -46,4 +47,5 @@ def test_loopback_is_not_an_address_for_other_machines(monkeypatch):
         def getsockname(self):
             return ("127.0.0.1", 40000)
     monkeypatch.setattr(discovery.socket, "socket", Loopback)
+    monkeypatch.setattr(discovery.interfaces, "lan_interfaces", lambda max_age=60: [])
     assert discovery.lan_address() is None

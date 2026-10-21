@@ -47,6 +47,11 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
 2. **Appairer** : les machines AIODOS du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
+   **Sous un VPN** (NordVPN…) : AIODOS annonce sur chaque vrai réseau local (Wi-Fi,
+   Ethernet) et montre l'adresse de la vraie carte, pas celle du VPN
+   (`network/interfaces.py`). Il faut seulement que le VPN laisse passer le réseau local :
+   chez NordVPN, « Invisibilité sur le réseau local » désactivée. Sinon, les machines déjà
+   appairées passent toutes seules par Internet ; une nouvelle s'appaire par invitation.
 3. **Prêter sa puissance** (vue « Cette machine ») : par défaut sur secteur seulement.
    Pendant que tu te sers du PC, le calcul prêté continue en priorité basse, jamais sur
    batterie, la carte graphique la moitié du temps au plus ; une conversation passe
@@ -294,6 +299,7 @@ aiodos/
 │   └── kinds/         types de travaux (indexation, réindexation, images…)
 ├── network/           réseau local (protocole « aiodos/1 »)
 │   ├── discovery.py   annonces UDP sur le réseau local
+│   ├── interfaces.py  vraies cartes réseau (Wi-Fi, Ethernet), sans celles d'un VPN
 │   ├── pairing.py     appairage par code à 6 chiffres (X25519 → HKDF)
 │   ├── group.py       appairage par groupe : une machine en présente une autre, sans code
 │   ├── envelope.py    messages scellés, horodatés, anti-rejeu (ChaCha20-Poly1305)

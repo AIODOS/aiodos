@@ -4,12 +4,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.BatteryManager;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.net.Inet4Address;
 
 /**
  * Ce que le nœud Python demande au téléphone (aiodos/node/android_app.py), sans permission
@@ -61,6 +66,43 @@ public final class Device {
             }
         } catch (JSONException e) {
             return "";
+        }
+        return out.toString();
+    }
+
+    /** Les adresses IPv4 du Wi-Fi et de l'Ethernet, sans celles d'un VPN (NordVPN…) :
+     *  [{"name", "address", "prefix"}] en JSON, lu par aiodos/network/interfaces.py pour
+     *  annoncer le nœud sur le vrai réseau local ; "[]" si rien n'est lisible. */
+    public static String lanAddresses() {
+        Context app = context;
+        ConnectivityManager manager = app == null ? null
+            : app.getSystemService(ConnectivityManager.class);
+        JSONArray out = new JSONArray();
+        if (manager == null) {
+            return out.toString();
+        }
+        for (Network network : manager.getAllNetworks()) {
+            NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+            LinkProperties link = manager.getLinkProperties(network);
+            if (capabilities == null || link == null
+                    || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                    || !(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                        || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))) {
+                continue;
+            }
+            for (LinkAddress address : link.getLinkAddresses()) {
+                if (!(address.getAddress() instanceof Inet4Address)) {
+                    continue;
+                }
+                try {
+                    out.put(new JSONObject()
+                        .put("name", String.valueOf(link.getInterfaceName()))
+                        .put("address", address.getAddress().getHostAddress())
+                        .put("prefix", address.getPrefixLength()));
+                } catch (JSONException ignored) {
+                    // adresse suivante
+                }
+            }
         }
         return out.toString();
     }

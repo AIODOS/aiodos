@@ -76,6 +76,21 @@ def on_wifi() -> bool | None:
     return None if value < 0 else value == 1
 
 
+def lan_addresses() -> list:
+    """Les adresses IPv4 du Wi-Fi et de l'Ethernet que donne Android, sans celles d'un VPN :
+    [{"name", "address", "prefix"}] ; [] hors de l'appli ou si Android ne les donne pas
+    (network/interfaces.py)."""
+    if not in_app():
+        return []
+    try:
+        text = str(_device().lanAddresses() or "")
+        found = json.loads(text) if text else []
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Adresses du réseau local illisibles : %s", exc)
+        return []
+    return found if isinstance(found, list) else []
+
+
 def link_programs(files_dir, native_dir) -> Path:
     """engines/<moteur>/<programme> → la bibliothèque qui le contient. Refaits à chaque
     démarrage : le dossier des bibliothèques change à chaque mise à jour de l'appli."""
