@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response, Streami
 from aiodos.gateway import answer, catalog, engine, errors, openai_api, scopes
 from aiodos.gateway.answer import GatewayError
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 from aiodos.network import placement, remote_models
 from aiodos.services import ollama
 
@@ -33,7 +34,7 @@ NDJSON = "application/x-ndjson"
 FORMATS = "0.40.5"          # version d'Ollama dont la passerelle suit les formats (plus haut)
 
 
-def _error(exc, lang: str = "fr") -> Response:
+def _error(exc, lang: str | None = None) -> Response:
     """{"error": "…", "code": "…", "hint": "…"} : les clients d'Ollama ne lisent que
     « error », les applis le code."""
     if isinstance(exc, answer.Upstream):
@@ -45,9 +46,9 @@ async def _body(request: Request) -> dict:
     try:
         body = await request.json()
     except ValueError as exc:
-        raise GatewayError(400, "Corps JSON illisible.") from exc
+        raise GatewayError(400, t("gateway_api.json_unreadable")) from exc
     if not isinstance(body, dict):
-        raise GatewayError(400, "Corps JSON attendu : un objet.")
+        raise GatewayError(400, t("gateway_api.json_not_object"))
     return body
 
 
@@ -58,7 +59,8 @@ def _executor(request: Request):
 # ------------------------------------------------------------------ état
 @router.api_route("/", methods=["GET", "HEAD"])
 def root():
-    return PlainTextResponse("Ollama is running")    # le texte qu'attendent les outils
+    # i18n: tel quel (le texte qu'attendent les outils)
+    return PlainTextResponse("Ollama is running")
 
 
 @router.api_route("/api/version", methods=["GET", "HEAD"])
@@ -141,8 +143,8 @@ async def _embed(request: Request, path: str):
     try:
         where = scopes.for_request(request, "embed")
         if where is not None and "here" not in where:
-            raise ApiError("where_denied", "Les embeddings ne se calculent que sur ce PC, que "
-                           "cette requête exclut.", detail={"allowed": ["here"]})
+            raise ApiError("where_denied", t("gateway_api.embed_where_denied"),
+                           detail={"allowed": ["here"]})
     except ApiError as exc:
         return _error(exc, errors.lang_of(request.headers))
     try:
@@ -166,14 +168,14 @@ def _embedded(path: str, body: dict, name: str) -> dict:
     if path == "/api/embeddings":                 # l'ancienne route : un texte, « prompt »
         prompt = body.get("prompt") or ""
         if not isinstance(prompt, str):
-            raise GatewayError(400, "« prompt » doit être du texte.")
+            raise GatewayError(400, t("gateway_api.prompt_not_text"))
         vectors = engine.embed(name, [prompt] if prompt else [])
         return {"embedding": vectors[0] if vectors else []}
     texts = body.get("input")
     if isinstance(texts, str):
         texts = [texts]
-    if not isinstance(texts, list) or not all(isinstance(t, str) for t in texts):
-        raise GatewayError(400, "« input » doit être un texte ou une liste de textes.")
+    if not isinstance(texts, list) or not all(isinstance(text, str) for text in texts):
+        raise GatewayError(400, t("gateway_api.input_invalid"))
     vectors = engine.embed(name, texts, body.get("dimensions"))
     return {"model": body.get("model"), "embeddings": vectors,
             "total_duration": int((time.perf_counter() - started) * 1e9), "load_duration": 0,
@@ -195,17 +197,17 @@ def plain_messages(messages) -> list:
     """La conversation telle qu'une machine appairée la reçoit : rôles system, user et
     assistant, texte seul ; un résultat d'outil devient un message de l'utilisateur."""
     if not isinstance(messages, list):
-        raise GatewayError(400, "« messages » doit être une liste.")
+        raise GatewayError(400, t("gateway_api.messages_not_list"))
     out = []
     for m in messages:
         if not isinstance(m, dict):
-            raise GatewayError(400, "Message invalide.")
+            raise GatewayError(400, t("gateway_api.message_invalid"))
         role = str(m.get("role") or "user").lower()
         content = m.get("content") or ""
         if not isinstance(content, str):
-            raise GatewayError(400, "Le contenu d'un message doit être du texte.")
+            raise GatewayError(400, t("gateway_api.content_not_text"))
         if role == "tool":
-            role, content = "user", f"[Résultat d'un outil] {content}"
+            role, content = "user", t("gateway_prompts.tool_result", content=content)
         elif role not in ("system", "user", "assistant"):
             role = "user"
         out.append({"role": role, "content": content})
@@ -347,7 +349,7 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
     lieu d'Ollama (engine.py)."""
     lang = errors.lang_of(request.headers)
     model_id = str(body.get("model") or "")
-    if not model_id:
+    if not model_id:                      # i18n: tel quel (le message d'Ollama lui-même)
         return JSONResponse({"error": "model is required", "code": "invalid_request"},
                             status_code=400)
     streaming = body.get("stream") is not False          # en flux par défaut
@@ -416,7 +418,7 @@ async def chat(request: Request):
         return _error(exc)
     messages = body.get("messages") or []
     if not isinstance(messages, list):
-        return JSONResponse({"error": "« messages » doit être une liste."}, status_code=400)
+        return JSONResponse({"error": t("gateway_api.messages_not_list")}, status_code=400)
     images = any(isinstance(m, dict) and m.get("images") for m in messages)
     tools = bool(body.get("tools")) or any(
         isinstance(m, dict) and (m.get("tool_calls") or m.get("role") == "tool")
@@ -441,7 +443,7 @@ async def generate(request: Request):
         return _error(exc)
     prompt = body.get("prompt") or ""
     if not isinstance(prompt, str):
-        return JSONResponse({"error": "« prompt » doit être du texte."}, status_code=400)
+        return JSONResponse({"error": t("gateway_api.prompt_not_text")}, status_code=400)
     special = any(body.get(k) for k in ("images", "suffix", "raw", "format", "template",
                                         "context"))
     messages = None
@@ -452,9 +454,7 @@ async def generate(request: Request):
 
     def here(model, stop):
         if body.get("template") or body.get("context"):
-            raise GatewayError(400, "« template » et « context » (propres à Ollama) ne sont pas "
-                               "pris par le moteur intégré : envoie la conversation entière par "
-                               "/api/chat.")
+            raise GatewayError(400, t("gateway_api.template_unsupported"))
         suffix = body.get("suffix")
         if suffix or body.get("raw"):     # complétion de code, texte brut
             return engine.complete(model, prompt, suffix if isinstance(suffix, str) else None,
@@ -470,7 +470,6 @@ async def generate(request: Request):
 # ------------------------------------------------------------- le reste
 @router.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD"])
 def unknown(rest: str):
-    return JSONResponse({"error": f"« /api/{rest} » n'est pas servi par la passerelle "
-                         "d'AIODOS : les modèles s'installent et se gèrent dans AIODOS "
-                         "(« Installer un modèle ») ou avec Ollama.", "code": "not_supported",
-                         "hint": "Installe le modèle dans AIODOS."}, status_code=404)
+    return JSONResponse({"error": t("gateway_api.route_unknown", route=f"/api/{rest}"),
+                         "code": "not_supported", "hint": t("gateway_api.route_unknown_hint")},
+                        status_code=404)

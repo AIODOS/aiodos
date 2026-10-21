@@ -19,8 +19,10 @@ import time
 
 import requests
 
+from aiodos import i18n
 from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
+from aiodos.i18n import t
 from aiodos.network import placement, remote_models
 from aiodos.network.client import PeerError
 from aiodos.services import cloud, ollama
@@ -49,7 +51,7 @@ class Disconnected(GatewayError):
     """L'outil est parti avant la réponse : le calcul est arrêté."""
 
     def __init__(self):
-        super().__init__(499, "Outil déconnecté avant la réponse.")
+        super().__init__(499, t("gateway_api.disconnected"))
 
 
 class Upstream(Exception):
@@ -104,31 +106,27 @@ def plan(model_id, executor, *, local_only=False, prefer_local=False, where=None
     # l'interface, message par message
     models = [m for m in models if not cloud.provider_of(m)]
     if not models:
-        raise GatewayError(404, f"« {model_id} » n'est pas un modèle du cercle AIODOS.",
+        raise GatewayError(404, t("gateway_api.not_in_circle", model=model_id),
                            code="model_not_found", param="model")
     if where is not None:
         allowed = [m for m in models if circle_of(m) in where]
         if not allowed:
             if placement.parse(internal) is None:          # une machine désignée
-                raise GatewayError(403, f"Lieu de calcul refusé pour « {model_id} » : cette "
-                                   f"application n'y a pas accès.", code="where_denied",
-                                   detail={"allowed": sorted(where)})
-            raise GatewayError(404, f"Aucune machine permise à cette application ne peut "
-                               f"répondre avec « {model_id} » en ce moment.",
+                raise GatewayError(403, t("gateway_api.where_refused_model", model=model_id),
+                                   code="where_denied", detail={"allowed": sorted(where)})
+            raise GatewayError(404, t("gateway_api.no_allowed_machine", model=model_id),
                                code="model_not_found", param="model")
         models = allowed
     if local_only:
         models = [m for m in models if is_local(m)]
         if not models:
-            raise GatewayError(400, f"Cette demande (images, format imposé, complétion de "
-                               f"code…) ne peut être calculée que par cette machine, qui n'a "
-                               f"pas « {model_id} ».", code="local_only", param="model")
+            raise GatewayError(400, t("gateway_api.local_only", model=model_id),
+                               code="local_only", param="model")
     elif tools and require_tools:
         models = [m for m in models if is_local(m)]
         if not models:
-            raise GatewayError(400, f"« {model_id} » n'est que sur une autre machine, qui ne "
-                               f"reçoit pas encore les outils.", code="tools_unavailable",
-                               param="tools")
+            raise GatewayError(400, t("gateway_api.tools_elsewhere", model=model_id),
+                               code="tools_unavailable", param="tools")
     elif prefer_local:
         models.sort(key=lambda m: not is_local(m))
     return models
@@ -149,8 +147,8 @@ def local_raw(path: str, body: dict, stop):
         response = requests.post(ollama.base() + path, json=body, stream=True,
                                  timeout=UPSTREAM_TIMEOUT)
     except requests.RequestException as exc:
-        raise GatewayError(502, f"Ollama ne répond pas sur cette machine "
-                           f"({exc.__class__.__name__}).") from exc
+        raise GatewayError(502, t("gateway_api.ollama_down",
+                                  error=exc.__class__.__name__)) from exc
     with response:
         kind = response.headers.get("content-type", "application/json")
         if response.status_code >= 400:
@@ -170,8 +168,8 @@ def local_generate(body: dict, stop):
         response = requests.post(ollama.base() + "/api/generate", json={**body, "stream": True},
                                  stream=True, timeout=UPSTREAM_TIMEOUT)
     except requests.RequestException as exc:
-        raise GatewayError(502, f"Ollama ne répond pas sur cette machine "
-                           f"({exc.__class__.__name__}).") from exc
+        raise GatewayError(502, t("gateway_api.ollama_down",
+                                  error=exc.__class__.__name__)) from exc
     with response:
         if response.status_code >= 400:
             raise GatewayError(response.status_code,
@@ -212,8 +210,8 @@ def _local(method, path, body, timeout):
     try:
         response = requests.request(method, ollama.base() + path, json=body, timeout=timeout)
     except requests.RequestException as exc:
-        raise GatewayError(502, f"Ollama ne répond pas sur cette machine "
-                           f"({exc.__class__.__name__}).") from exc
+        raise GatewayError(502, t("gateway_api.ollama_down",
+                                  error=exc.__class__.__name__)) from exc
     return (response.status_code, response.content,
             response.headers.get("content-type", "application/json"))
 
@@ -270,6 +268,7 @@ class Stream:
         self._inbox = asyncio.Queue()
         self._watched = time.monotonic()
         loop = asyncio.get_running_loop()
+        lang = i18n.current()
 
         def pump():
             def put(item):
@@ -280,8 +279,8 @@ class Stream:
                         break
                     if cut is not None and cut.is_set():
                         self.stop.set()
-                        put(("error", GatewayError(401, "L'accès de cette application a été "
-                                                   "retiré dans AIODOS.", code="key_revoked")))
+                        put(("error", GatewayError(401, t("gateway_errors.key_revoked"),
+                                                   code="key_revoked")))
                         return
                     put(("item", item))
                 put(("end", None))
@@ -290,7 +289,11 @@ class Stream:
                     put(("error", exc))
                 except RuntimeError:          # boucle déjà fermée (arrêt d'AIODOS)
                     pass
-        threading.Thread(target=pump, daemon=True, name="aiodos-passerelle").start()
+
+        def in_language():                    # les messages du calcul : ceux de la requête
+            with i18n.using(lang):
+                pump()
+        threading.Thread(target=in_language, daemon=True, name="aiodos-passerelle").start()
 
     async def next(self, request=None):
         """Élément suivant ; None à la fin. L'erreur du calcul remonte ici. request : la
@@ -302,8 +305,7 @@ class Stream:
         while True:
             if self.cut is not None and self.cut.is_set():
                 self.close()                          # appli retirée : tout de suite
-                raise GatewayError(401, "L'accès de cette application a été retiré dans "
-                                   "AIODOS.", code="key_revoked")
+                raise GatewayError(401, t("gateway_errors.key_revoked"), code="key_revoked")
             if request is not None and time.monotonic() - self._watched >= WATCH_EVERY:
                 self._watched = time.monotonic()      # même quand les mots arrivent vite
                 if await request.is_disconnected():

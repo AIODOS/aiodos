@@ -8,6 +8,7 @@ avant. Le contexte est celui, réel, du moteur intégré de ce PC (llm/context.p
 autre machine n'est pas transmis (null).
 """
 from aiodos.gateway import catalog
+from aiodos.i18n import t
 from aiodos.llm import catalog as llm_catalog
 from aiodos.llm import context as llm_context
 from aiodos.llm.engine import EMBED_CONTEXT
@@ -135,6 +136,6 @@ def logical(entries: list, wanted_kind: str) -> list:
 
 def _machine_name() -> str:
     try:
-        return identity.profile().get("name") or "cette machine"
+        return identity.profile().get("name") or t("gateway_api.this_machine")
     except Exception:
-        return "cette machine"
+        return t("gateway_api.this_machine")

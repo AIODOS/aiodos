@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from aiodos.gateway import access_flow, apps, scopes, usage
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/api/gateway")
 
@@ -86,7 +87,7 @@ async def approve(request_id: str, body: ApproveIn, request: Request):
 @router.post("/requests/{request_id}/deny")
 async def deny(request_id: str, body: DenyIn, request: Request):
     if not await asyncio.to_thread(access_flow.deny, request_id, body.block):
-        raise HTTPException(404, "Demande inconnue, expirée ou déjà traitée.")
+        raise HTTPException(404, t("gateway_access.request_unknown"))
     _refresh(request)
     return {"denied": True, "blocked": body.block}
 
@@ -105,7 +106,7 @@ async def list_apps():
 @router.get("/apps/{app_id}/log")
 async def app_log(app_id: str, limit: int = 50):
     if await asyncio.to_thread(apps.get, app_id) is None:
-        raise HTTPException(404, "Accès inconnu.")
+        raise HTTPException(404, t("gateway_access.app_unknown"))
     return await asyncio.to_thread(usage.recent, app_id, limit)
 
 
@@ -113,7 +114,7 @@ async def app_log(app_id: str, limit: int = 50):
 async def change_app(app_id: str, body: AppIn, request: Request):
     current = await asyncio.to_thread(apps.get, app_id)
     if current is None or current["revoked"]:
-        raise HTTPException(404, "Accès inconnu ou retiré.")
+        raise HTTPException(404, t("gateway_access.app_unknown_or_revoked"))
     fields = {}
     try:
         if body.scopes is not None:
@@ -143,7 +144,7 @@ async def change_app(app_id: str, body: AppIn, request: Request):
 @router.delete("/apps/{app_id}")
 async def revoke_app(app_id: str, request: Request):
     if not await asyncio.to_thread(apps.revoke, app_id):
-        raise HTTPException(404, "Accès inconnu ou déjà retiré.")
+        raise HTTPException(404, t("gateway_access.app_already_revoked"))
     _refresh(request)
     return {"revoked": True}
 
@@ -160,7 +161,7 @@ async def manual_key(body: ManualIn, request: Request):
     except ApiError as exc:
         _bad(exc)
     if not granted:
-        raise HTTPException(400, "Choisis au moins un droit.")
+        raise HTTPException(400, t("gateway_access.scope_required"))
     ident, key = await asyncio.to_thread(lambda: apps.create(
         kind="manual", name=name, scopes_granted=granted, reach=where,
         account_check=not body.container))
@@ -177,6 +178,6 @@ async def blocked():
 @router.post("/blocked/remove")
 async def unblock(body: BlockedIn, request: Request):
     if not await asyncio.to_thread(access_flow.unblock, body.exe_path):
-        raise HTTPException(404, "Programme inconnu.")
+        raise HTTPException(404, t("gateway_access.program_unknown"))
     _refresh(request)
     return {"unblocked": True}

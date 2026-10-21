@@ -9,15 +9,17 @@ from fastapi.responses import JSONResponse
 
 from aiodos.gateway import access_flow, apps, errors
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/aiodos/v1/access")
+DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
 
 async def _json(request: Request):
     try:
         return await request.json()
     except ValueError as exc:
-        raise ApiError("invalid_request", "Corps JSON illisible.") from exc
+        raise ApiError("invalid_request", t("gateway_api.json_unreadable")) from exc
 
 
 def _failure(request: Request, exc: ApiError):
@@ -47,11 +49,10 @@ async def token(request: Request):
         body = await _json(request)
     except ApiError as exc:
         return _failure(request, exc)
-    if not isinstance(body, dict) or body.get("grant_type") != \
-            "urn:ietf:params:oauth:grant-type:device_code":
+    if not isinstance(body, dict) or body.get("grant_type") != DEVICE_GRANT:
         return JSONResponse({"error": "unsupported_grant_type",
-                             "error_description": "grant_type attendu : "
-                             "urn:ietf:params:oauth:grant-type:device_code."}, status_code=400)
+                             "error_description": t("gateway_access.grant_type_expected",
+                                                    grant=DEVICE_GRANT)}, status_code=400)
     status, reply = await asyncio.to_thread(access_flow.poll, body.get("device_code"))
     return JSONResponse(reply, status_code=status, headers={"Cache-Control": "no-store"})
 
@@ -62,9 +63,8 @@ async def revoke(request: Request):
     RFC 7009. La clé générale ne se retire pas ainsi (elle se renouvelle dans AIODOS)."""
     context = request.state.aiodos_app
     if context.kind == "general":
-        return _failure(request, ApiError("invalid_request", "La clé générale se renouvelle "
-                                          "dans AIODOS (Réglages → Applications et autres "
-                                          "outils)."))
+        return _failure(request, ApiError("invalid_request",
+                                          t("gateway_access.general_key_renew")))
     await asyncio.to_thread(apps.revoke, context.id)
     access_flow.publish({"type": "gateway"})
     return {"revoked": True}

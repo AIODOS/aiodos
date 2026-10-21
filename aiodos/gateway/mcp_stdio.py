@@ -24,18 +24,18 @@ a déjà été cherché là : il faut recopier la configuration (Réglages → A
 import os
 import sys
 
-if not sys.flags.safe_path:
+if not sys.flags.safe_path:              # signalé au lancement (main)
     _here = os.path.normcase(os.path.abspath(os.getcwd()))
     sys.path[:] = [p for p in sys.path
                    if p and os.path.normcase(os.path.abspath(p)) != _here]
-    print("AIODOS : pont MCP lancé sans -P ; recopie sa configuration (Réglages → Autres "
-          "outils).", file=sys.stderr)
 
 import base64  # noqa: E402  (après le nettoyage de sys.path)
 import json  # noqa: E402
 from urllib.parse import urlsplit  # noqa: E402
 
 import requests  # noqa: E402
+
+from aiodos.i18n import t  # noqa: E402
 
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
 TIMEOUT = (5, 900)                   # une réponse de modèle peut prendre plusieurs minutes
@@ -48,16 +48,14 @@ def target() -> tuple:
     if url and key:
         return url, key
     if url and _host(url) not in LOOPBACK:
-        raise RuntimeError(f"AIODOS_MCP_URL ({url}) n'est pas sur cette machine : la clé "
-                           "d'AIODOS n'y part pas d'elle-même, donne-la par AIODOS_KEY.")
+        raise RuntimeError(t("gateway_mcp.bridge_remote_url", url=url))
     from aiodos import paths, settings
     from aiodos.gateway import access
     if not paths.db_path().exists():
-        raise RuntimeError("AIODOS n'a pas encore été lancé sur cette machine.")
+        raise RuntimeError(t("gateway_mcp.bridge_never_started"))
     key = key or access.existing()
     if not key:
-        raise RuntimeError("La passerelle d'AIODOS n'a jamais été ouverte : active-la dans "
-                           "Réglages → Autres outils.")
+        raise RuntimeError(t("gateway_mcp.bridge_never_opened"))
     return url or f"http://127.0.0.1:{int(settings.get('gateway_port'))}/mcp", key
 
 
@@ -118,15 +116,14 @@ class Bridge:
         try:
             response = self.post(message)
         except (requests.RequestException, RuntimeError, ValueError) as exc:
-            reason = (f"AIODOS ne répond pas sur {self.url} : lance AIODOS et ouvre la "
-                      "passerelle (Réglages → Autres outils)."
+            reason = (t("gateway_mcp.bridge_no_answer", url=self.url)
                       if isinstance(exc, requests.RequestException) else str(exc))
             self.url = None                      # adresse relue au prochain message
             return _failure(message, reason)
         if response.status_code == 202 or not response.content:
             return None
         if response.status_code == 401:
-            return _failure(message, "Clé d'accès refusée par AIODOS (Réglages → Autres outils).")
+            return _failure(message, t("gateway_mcp.bridge_key_refused"))
         if "text/event-stream" in response.headers.get("content-type", ""):
             replies = [json.loads(line[5:]) for line in response.text.splitlines()
                        if line.startswith("data:") and line[5:].strip()]
@@ -135,8 +132,8 @@ class Bridge:
             try:
                 reply = response.json()
             except ValueError:
-                return _failure(message, f"Réponse illisible d'AIODOS (HTTP "
-                                         f"{response.status_code}).")
+                return _failure(message, t("gateway_mcp.bridge_unreadable",
+                                           status=response.status_code))
         if isinstance(message, dict) and message.get("method") == "initialize":
             self.version = ((reply or {}).get("result") or {}).get("protocolVersion")
         return reply
@@ -153,6 +150,8 @@ def _failure(message, reason: str):
 
 
 def main():
+    if not sys.flags.safe_path:          # sys.path déjà nettoyé, au chargement (plus haut)
+        print(t("gateway_mcp.bridge_without_p"), file=sys.stderr)
     bridge = Bridge()
     out = sys.stdout.buffer
     for line in sys.stdin.buffer:
@@ -163,7 +162,7 @@ def main():
             message = json.loads(line)
         except ValueError:
             reply = {"jsonrpc": "2.0", "id": None,
-                     "error": {"code": -32700, "message": "Message JSON illisible."}}
+                     "error": {"code": -32700, "message": t("gateway_mcp.json_unreadable")}}
         else:
             reply = bridge.forward(message)
         if reply is not None:

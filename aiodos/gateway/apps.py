@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from aiodos import db
 from aiodos.gateway import scopes
+from aiodos.i18n import t
 
 PREFIX = "aiodos_app_"
 ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567"
@@ -61,13 +62,16 @@ class AppContext:
         return dict(self.consents).get(capability, ())
 
     def public(self) -> dict:
-        """Ce que l'appli peut savoir d'elle-même (GET /aiodos/v1/info)."""
-        return {"id": self.id, "name": self.name, "kind": self.kind,
+        """Ce que l'appli peut savoir d'elle-même (GET /aiodos/v1/info) ; le nom de la clé
+        générale, dans la langue de la requête."""
+        name = t("gateway_access.general_name") if self.kind == "general" else self.name
+        return {"id": self.id, "name": name, "kind": self.kind,
                 "scopes": [s for s in scopes.SCOPES if s in self.scopes],
                 "where": [c for c in scopes.CIRCLES if c in self.reach],
                 "priority": self.priority, "expires": self.expires}
 
 
+# i18n: tel quel (son nom montré, traduit, est celui de public())
 GENERAL = AppContext(id=GENERAL_ID, kind="general", name="Autres outils",
                      scopes=frozenset({"chat", "embed", "libraries"}),
                      reach=frozenset({"here", "mine", "friends"}), account_check=False)
@@ -212,7 +216,7 @@ def create(*, kind: str, name: str, scopes_granted, reach, priority="interactive
            account_check=True, libraries=(), expires=None, session_only=False,
            consents=None) -> tuple:
     """Nouvel accès → (id, clé en clair, à remettre une seule fois)."""
-    if kind not in KINDS:
+    if kind not in KINDS:                 # i18n: tel quel (erreur de programmation)
         raise ValueError(f"sorte d'accès inconnue : {kind}")
     ident = _new_id()
     key = _new_key(ident)

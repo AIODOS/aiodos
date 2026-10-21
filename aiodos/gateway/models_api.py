@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 
 from aiodos.gateway import catalog, errors, model_card, scopes
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/aiodos/v1")
 KINDS = ("chat", "embed")
@@ -16,7 +17,7 @@ KINDS = ("chat", "embed")
 async def models(request: Request, kind: str = "chat"):
     if kind not in KINDS:
         return errors.response(request.url.path, ApiError(
-            "invalid_request", "« kind » : chat ou embed.", param="kind"),
+            "invalid_request", t("gateway_api.kind_invalid"), param="kind"),
             errors.lang_of(request.headers))
     if not scopes.has(request, kind):
         return {"object": "list", "models": []}

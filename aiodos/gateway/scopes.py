@@ -12,6 +12,7 @@
 - Priorité : interactive (par défaut) ou background ; une requête peut la baisser.
 """
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 SCOPES = ("chat", "embed", "libraries")
 CIRCLES = ("here", "mine", "friends", "public")
@@ -50,12 +51,11 @@ def parse_scopes(value) -> list:
     elif isinstance(value, list) and all(isinstance(v, str) for v in value):
         items = value
     else:
-        raise ApiError("invalid_request", "« scope » : des droits séparés par des espaces.",
-                       param="scope")
+        raise ApiError("invalid_request", t("gateway_access.scope_format"), param="scope")
     unknown = [s for s in items if s not in SCOPES]
     if unknown:
-        raise ApiError("invalid_request", f"Droit inconnu : « {unknown[0]} » (connus : "
-                       f"{', '.join(SCOPES)}).", param="scope")
+        raise ApiError("invalid_request", t("gateway_access.scope_unknown", scope=unknown[0],
+                                            known=", ".join(SCOPES)), param="scope")
     return [s for s in SCOPES if s in items]
 
 
@@ -69,12 +69,11 @@ def parse_where(value, param: str = "where") -> list:
     elif isinstance(value, list) and all(isinstance(v, str) for v in value):
         items = [v.strip() for v in value]
     else:
-        raise ApiError("invalid_request", "« where » : une liste de cercles (here, mine, "
-                       "friends, public).", param=param)
+        raise ApiError("invalid_request", t("gateway_access.where_format"), param=param)
     unknown = [c for c in items if c not in CIRCLES]
     if unknown or not items:
-        raise ApiError("invalid_request", f"Cercle inconnu : « {unknown[0] if unknown else ''} » "
-                       "(connus : here, mine, friends, public).", param=param)
+        raise ApiError("invalid_request", t("gateway_access.where_unknown",
+                                            circle=unknown[0] if unknown else ""), param=param)
     return [c for c in CIRCLES if c in items]
 
 
@@ -91,8 +90,8 @@ def effective(granted, header, capability: str, consented=None) -> frozenset:
         asked = frozenset(parse_where(header, param="X-Aiodos-Where"))
         wider = asked - granted
         if wider:
-            raise ApiError("where_denied", f"Lieu de calcul refusé : cette application n'a "
-                           f"pas accès à « {sorted(wider)[0]} ».",
+            raise ApiError("where_denied", t("gateway_access.where_refused",
+                                             circle=sorted(wider)[0]),
                            detail={"allowed": [c for c in CIRCLES if c in granted]})
         granted = asked
     served = SERVED.get(capability, frozenset({"here"}))

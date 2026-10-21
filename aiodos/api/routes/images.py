@@ -46,7 +46,7 @@ def _models() -> dict:
     models = []
     for model_id, spec in catalog.MODELS.items():
         # Description, licence, formats et durées : dans la langue de la requête
-        models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
+        models.append({"id": model_id, "label": catalog.label(model_id), "license": spec["license"],
                        "about": catalog.about(model_id), "steps": spec["steps"],
                        "kind": spec.get("kind", "image"), "fps": spec.get("fps"),
                        "sizes": catalog.sizes(model_id), "durations": catalog.durations(model_id),

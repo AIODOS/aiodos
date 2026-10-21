@@ -36,6 +36,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from aiodos.gateway import answer, catalog, engine, errors, model_card, scopes
 from aiodos.gateway.answer import GatewayError
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 from aiodos.llm import context as llm_context
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
@@ -49,7 +50,7 @@ LOADING_AFTER = 2.0         # s sans premier morceau (modèle à charger) : la r
 LOADING_EVERY = 5.0         # … avec « : aiodos loading <s> » toutes les 5 s
 
 
-def error(status: int, message: str, code=None, param=None, lang: str = "fr"):
+def error(status: int, message: str, code=None, param=None, lang: str | None = None):
     return errors.response("/v1/", errors.from_status(status, message, code=code, param=param),
                            lang)
 
@@ -66,7 +67,7 @@ def api_error(exc) -> ApiError:
     return errors.from_status(answer.status_of(exc), str(exc))
 
 
-def _failure(exc, lang: str = "fr"):
+def _failure(exc, lang: str | None = None):
     if isinstance(exc, answer.Upstream):        # Ollama répond déjà au format d'OpenAI
         return Response(exc.body, status_code=exc.status, media_type=exc.content_type)
     return errors.response("/v1/", api_error(exc), lang)
@@ -76,9 +77,9 @@ async def _body(request: Request) -> dict:
     try:
         body = await request.json()
     except ValueError as exc:
-        raise GatewayError(400, "Corps JSON illisible.") from exc
+        raise GatewayError(400, t("gateway_api.json_unreadable")) from exc
     if not isinstance(body, dict):
-        raise GatewayError(400, "Corps JSON attendu : un objet.")
+        raise GatewayError(400, t("gateway_api.json_not_object"))
     return body
 
 
@@ -150,7 +151,7 @@ async def model(request: Request, model_id: str):
     except ApiError as exc:
         return errors.response("/v1/", exc, _lang(request))
     if entry is None:
-        return error(404, f"Le modèle « {model_id} » n'existe pas dans le cercle AIODOS.",
+        return error(404, t("gateway_api.model_unknown", model=model_id),
                      code="model_not_found",
                      param="model", lang=_lang(request))
     loaded = await asyncio.to_thread(model_card._loaded)
@@ -166,7 +167,7 @@ def _text(content) -> str:
     if isinstance(content, list):
         return "\n".join(str(p.get("text") or p.get("refusal") or "") for p in content
                          if isinstance(p, dict) and p.get("type") in TEXT_PARTS)
-    raise GatewayError(400, "Contenu de message illisible.")
+    raise GatewayError(400, t("gateway_api.content_unreadable"))
 
 
 def _parts(messages) -> set:
@@ -183,13 +184,13 @@ def plain_messages(messages) -> list:
     out = []
     for m in messages:
         if not isinstance(m, dict):
-            raise GatewayError(400, "Message invalide.")
+            raise GatewayError(400, t("gateway_api.message_invalid"))
         role = str(m.get("role") or "user")
         content = _text(m.get("content"))
         if role == "developer":
             role = "system"
         elif role in ("tool", "function"):
-            role, content = "user", f"[Résultat d'un outil] {content}"
+            role, content = "user", t("gateway_prompts.tool_result", content=content)
         elif role not in ("system", "user", "assistant"):
             role = "user"
         out.append({"role": role, "content": content})
@@ -255,6 +256,7 @@ class Chunks:
 
     def _chunk(self, choice: dict | None, last=False) -> str:
         obj = {"id": self.id, "created": self.created, "model": self.model_id,
+               # i18n: tel quel (type d'objet de l'API OpenAI)
                "object": "chat.completion.chunk" if self.kind == "chat" else "text_completion",
                "choices": [choice] if choice is not None else []}
         if self.include_usage:
@@ -304,6 +306,7 @@ class Chunks:
                       "finish_reason": self.finish}
         else:
             choice = {"index": 0, "text": text, "logprobs": None, "finish_reason": self.finish}
+        # i18n: tel quel (type d'objet de l'API OpenAI)
         whole = {"id": self.id, "object": "chat.completion" if self.kind == "chat"
                  else "text_completion", "created": self.created, "model": self.model_id,
                  "choices": [choice], "usage": self.usage}
@@ -419,15 +422,15 @@ async def chat_completions(request: Request):
     model_id = str(body.get("model") or "")
     messages = body.get("messages")
     if not model_id:
-        return error(400, "Il manque le modèle (« model »).", param="model", lang=lang)
+        return error(400, t("gateway_api.model_required"), param="model", lang=lang)
     if not isinstance(messages, list) or not messages:
-        return error(400, "Il manque les messages (« messages »).", param="messages", lang=lang)
+        return error(400, t("gateway_api.messages_required"), param="messages", lang=lang)
     refused = next((p for p in REFUSED if body.get(p) is not None), None)
     modalities = body.get("modalities")
     if refused is None and isinstance(modalities, list) and "audio" in modalities:
         refused = "modalities"
     if refused:
-        return error(400, f"« {refused} » n'est pas pris en charge par AIODOS.",
+        return error(400, t("gateway_api.param_unsupported", param=refused),
                      code="unsupported_parameter", param=refused, lang=lang)
     streaming = bool(body.get("stream"))
     include_usage = streaming and bool((body.get("stream_options") or {}).get("include_usage"))
@@ -504,10 +507,9 @@ async def completions(request: Request):
     if isinstance(prompt, list) and len(prompt) == 1 and isinstance(prompt[0], str):
         prompt = prompt[0]
     if not model_id:
-        return error(400, "Il manque le modèle (« model »).", param="model", lang=lang)
+        return error(400, t("gateway_api.model_required"), param="model", lang=lang)
     if not isinstance(prompt, str):
-        return error(400, "« prompt » doit être un texte (une seule complétion à la fois).",
-                     param="prompt", lang=lang)
+        return error(400, t("gateway_api.prompt_single"), param="prompt", lang=lang)
     streaming = bool(body.get("stream"))
     include_usage = streaming and bool((body.get("stream_options") or {}).get("include_usage"))
     executor = _executor(request)
@@ -558,8 +560,8 @@ async def embeddings(request: Request):
     try:
         where = scopes.for_request(request, "embed")
         if where is not None and "here" not in where:
-            raise ApiError("where_denied", "Les embeddings ne se calculent que sur ce PC, que "
-                           "cette requête exclut.", detail={"allowed": ["here"]})
+            raise ApiError("where_denied", t("gateway_api.embed_where_denied"),
+                           detail={"allowed": ["here"]})
         body = await _body(request)
         name = catalog.local_name(body.get("model"))
     except catalog.UnknownModel as exc:
@@ -569,9 +571,9 @@ async def embeddings(request: Request):
     inputs = body.get("input")
     if isinstance(inputs, str):
         inputs = [inputs]
-    if not isinstance(inputs, list) or not inputs or not all(isinstance(t, str) for t in inputs):
-        return error(400, "« input » doit être un texte ou une liste de textes.", param="input",
-                     lang=lang)
+    if (not isinstance(inputs, list) or not inputs
+            or not all(isinstance(text, str) for text in inputs)):
+        return error(400, t("gateway_api.input_invalid"), param="input", lang=lang)
     payload = {"model": name, "input": inputs, "truncate": True}
     if isinstance(body.get("dimensions"), int):
         payload["dimensions"] = body["dimensions"]
@@ -600,4 +602,4 @@ def _embed(payload: dict) -> dict:
     try:
         return json.loads(content)
     except ValueError as exc:
-        raise GatewayError(502, "Réponse illisible d'Ollama.") from exc
+        raise GatewayError(502, t("gateway_api.ollama_unreadable")) from exc

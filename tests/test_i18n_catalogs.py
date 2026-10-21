@@ -112,8 +112,10 @@ def test_french_differs_from_english():
     """Un texte resté le même dans les deux langues est le plus souvent un oubli."""
     fr, en = catalog.read(I18N / "fr"), catalog.read(I18N / "en")
 
-    def words(value):
-        return [w for w in i18n_scan.WORD.findall(FIELD.sub(" ", str(value))) if len(w) > 2]
+    def words(value):              # les mots d'un texte (de sa forme la plus longue)
+        forms = value.values() if isinstance(value, dict) else [value]
+        return max(([w for w in i18n_scan.WORD.findall(FIELD.sub(" ", form)) if len(w) > 2]
+                    for form in forms), key=len)
     same = [k for k in fr if fr[k] == en.get(k) and len(words(fr[k])) >= 3]
     assert not same, "Textes identiques dans les deux langues :\n" + "\n".join(same)
 

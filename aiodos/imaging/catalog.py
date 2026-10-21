@@ -74,7 +74,7 @@ MODELS = {
     },
     # Licences vérifiées le 17/10/2026 : Apache-2.0 pour les trois fichiers
     "wan2.1-t2v-1.3b": {
-        "label": "Wan 2.1 · vidéo",          # i18n: tel quel (nom du modèle)
+        "label": "Wan 2.1", "label_kind": "imaging_models.kind_video",
         "license": "Apache-2.0",
         "about": "imaging_models.about_wan2_1",
         "files": {
@@ -119,7 +119,7 @@ MODELS = {
     # stable-diffusion.cpp (docs/minimax_h3.md), en version allégée pour une machine à 32 Go
     # de mémoire vive. Pas encore essayé ici (30 Go à télécharger).
     "minimax-h3": {
-        "label": "MiniMax H3 · vidéo et son",          # i18n: tel quel (nom du modèle)
+        "label": "MiniMax H3", "label_kind": "imaging_models.kind_video_sound",
         "license": "MiniMax H3 Community License",
         "notice": "imaging_models.notice_minimax_h3",
         "about": "imaging_models.about_minimax_h3",
@@ -338,6 +338,14 @@ def state(model_id: str, check: bool = True) -> dict:
             "missing_bytes": missing}
 
 
+def label(model_id: str) -> str:
+    """Le nom affiché d'un modèle : son nom propre, et ce qu'il crée quand ce n'est pas
+    une image (« Wan 2.1 · vidéo »), dans la langue en cours."""
+    spec = model(model_id)
+    kind = spec.get("label_kind")
+    return f"{spec['label']} · {t(kind)}" if kind else spec["label"]
+
+
 def ready(model_id: str) -> bool:
     return model_id in MODELS and state(model_id)["state"] == "ready"
 
@@ -345,7 +353,7 @@ def ready(model_id: str) -> bool:
 def files(model_id: str) -> dict:
     """{partie : chemin} d'un modèle complet et vérifié ; ModelError sinon."""
     if not ready(model_id):
-        raise ModelError(t("imaging.model_incomplete", name=model(model_id)["label"]))
+        raise ModelError(t("imaging.model_incomplete", name=label(model_id)))
     return {part: folder() / spec["name"] for part, spec in model(model_id)["files"].items()}
 
 

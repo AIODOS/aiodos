@@ -1,0 +1,15 @@
+{
+  "roles_alternate": "le gabarit de ce modèle exige que les rôles alternent (utilisateur, assistant, utilisateur…), avec une seule consigne système, en tête.",
+  "down": "Le moteur intégré ne répond pas ({error}).",
+  "context_exceeded": "Le texte fait {needed} jetons, ce modèle en accepte {limit}.",
+  "refused": "Le moteur intégré ne prend pas cette demande : {error}",
+  "failed": "Le moteur intégré n'a pas pu répondre : {error}",
+  "model_missing": "Le modèle « {model} » n'est pas sur cette machine.",
+  "embedding_only": "« {model} » est un modèle d'embedding : il ne converse pas.",
+  "no_vision": "« {model} » ne voit pas les images sur cette machine : choisis un modèle qui les voit (qwen3.5…).",
+  "no_infill": "« {model} » ne sait pas compléter du code au milieu d'un texte (il n'a pas les jetons de complétion) : choisis un modèle de code (qwen2.5-coder…).",
+  "unknown_error": "erreur",
+  "images_invalid": "« images » : une liste d'images en base64.",
+  "format_invalid": "« format » : « json » ou un schéma JSON.",
+  "text_too_long": "Texte trop long pour « {model} » : {tokens} jetons, {limit} au plus par texte avec le moteur intégré. Découpe-le."
+}

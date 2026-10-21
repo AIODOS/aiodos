@@ -1,0 +1,4 @@
+{
+  "mcp_instructions": "AIODOS is the user's local AI workshop. To answer from their documents, search them with rechercher_bibliotheques (lister_bibliotheques gives the names of the libraries). To have a model on their machine or on their paired machines answer, use converser.",
+  "tool_result": "[Tool result] {content}"
+}

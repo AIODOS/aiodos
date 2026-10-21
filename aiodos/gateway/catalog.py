@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import requests
 
 from aiodos.cluster import group as cluster
+from aiodos.i18n import t
 from aiodos.network import placement, remote_models
 from aiodos.services import cloud, ollama
 
@@ -36,17 +37,17 @@ def internal(model_id) -> str:
     (« local:cloud:… ») : son envoi se valide dans l'interface, message par message."""
     name = str(model_id or "").strip()
     if not name:
-        raise UnknownModel("Modèle manquant.")
+        raise UnknownModel(t("gateway_api.model_missing"))
     if name.startswith(cloud.MODEL_PREFIX):
-        raise UnknownModel(f"Les modèles du cloud ne passent pas par la passerelle : « {name} ».")
+        raise UnknownModel(t("gateway_api.cloud_refused", model=name))
     if remote_models.parse(name) or placement.parse(name) or cluster.parse(name):
         return name
     if name.startswith(LOCAL):
         rest = name[len(LOCAL):]
         if not rest:
-            raise UnknownModel("Modèle manquant après « local: ».")
+            raise UnknownModel(t("gateway_api.model_missing_local"))
         if placement.reserved(rest):
-            raise UnknownModel(f"« {name} » n'est pas un modèle de cette machine.")
+            raise UnknownModel(t("gateway_api.not_local_model", model=name))
         return rest
     return placement.auto_id(name)
 
@@ -55,8 +56,7 @@ def local_name(model_id) -> str:
     """Modèle de cette machine désigné par un outil (embeddings : jamais ailleurs)."""
     model = internal(model_id)
     if remote_models.parse(model) or cluster.parse(model):
-        raise UnknownModel("Les embeddings ne se calculent que sur cette machine : "
-                           f"« {model_id} » n'est pas un de ses modèles.")
+        raise UnknownModel(t("gateway_api.embed_here_only", model=model_id))
     return placement.parse(model) or model
 
 
@@ -104,13 +104,13 @@ def entries() -> list:
         tags = local_tags()
     except (requests.RequestException, ValueError):
         tags = []                         # Ollama arrêté ici : restent les autres machines
-    for t in tags:
-        name = t.get("name") or t.get("model")
-        caps = t.get("capabilities") or ollama.capabilities(name)
+    for tag in tags:
+        name = tag.get("name") or tag.get("model")
+        caps = tag.get("capabilities") or ollama.capabilities(name)
         out.append({"id": name, "name": name, "machine": None, "remote": False,
-                    "size": t.get("size", 0), "digest": t.get("digest", ""),
-                    "details": t.get("details") or {}, "capabilities": caps,
-                    "modified_at": t.get("modified_at") or now_iso(), "trust": "local"})
+                    "size": tag.get("size", 0), "digest": tag.get("digest", ""),
+                    "details": tag.get("details") or {}, "capabilities": caps,
+                    "modified_at": tag.get("modified_at") or now_iso(), "trust": "local"})
         seen.add(name)
     remote = remote_models.available()
     for m in remote:                      # seulement chez mes machines : mode automatique
@@ -124,8 +124,8 @@ def entries() -> list:
     except Exception:
         offers = []
     for m in offers:
-        out.append({"id": m["id"], "name": m["label"], "machine": "réparti", "remote": True,
-                    "size": m.get("size", 0), "digest": "", "details": details({}),
+        out.append({"id": m["id"], "name": m["label"], "machine": t("gateway_api.split"),
+                    "remote": True, "size": m.get("size", 0), "digest": "", "details": details({}),
                     "capabilities": ["completion"], "modified_at": now_iso(), "trust": "mine"})
     return out
 

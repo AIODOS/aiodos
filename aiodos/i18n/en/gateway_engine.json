@@ -1,0 +1,15 @@
+{
+  "roles_alternate": "this model's template requires the roles to alternate (user, assistant, user…), with a single system instruction, at the start.",
+  "down": "The built-in engine is not responding ({error}).",
+  "context_exceeded": "The text is {needed} tokens long; this model accepts {limit}.",
+  "refused": "The built-in engine does not accept this request: {error}",
+  "failed": "The built-in engine could not answer: {error}",
+  "model_missing": "The model “{model}” is not on this machine.",
+  "embedding_only": "“{model}” is an embedding model: it cannot chat.",
+  "no_vision": "“{model}” cannot see images on this machine: pick a model that can (qwen3.5…).",
+  "no_infill": "“{model}” cannot complete code in the middle of a text (it lacks the completion tokens): pick a code model (qwen2.5-coder…).",
+  "unknown_error": "error",
+  "images_invalid": "“images”: a list of base64 images.",
+  "format_invalid": "“format”: “json” or a JSON schema.",
+  "text_too_long": "Text too long for “{model}”: {tokens} tokens, {limit} at most per text with the built-in engine. Split it."
+}

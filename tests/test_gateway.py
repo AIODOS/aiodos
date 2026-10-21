@@ -138,6 +138,59 @@ def test_the_key_is_required_in_the_format_of_each_family(gateway):
     assert root.status_code == 200 and root.text == "Ollama is running"
 
 
+def test_messages_follow_accept_language(gateway):
+    """Messages et conseils suivent Accept-Language (la première langue connue, français ou
+    anglais), ceux de la garde comme ceux des routes ; sans en-tête, la langue du nœud (le
+    français des essais). Les codes, eux, ne changent pas."""
+    english = {"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"}
+    error = requests.get(gateway.base + "/v1/models", headers=english, timeout=10).json()["error"]
+    assert error["code"] == "invalid_api_key"
+    assert error["message"] == ("Missing or invalid AIODOS key (Settings → Applications and "
+                                "other tools).")
+    assert error["aiodos"]["hint"] == "Connect the application to AIODOS."
+    error = requests.get(gateway.base + "/v1/models", timeout=10).json()["error"]
+    assert error["code"] == "invalid_api_key" and error["message"].startswith("Clé d'accès")
+    assert error["aiodos"]["hint"] == "Connecte l'application à AIODOS."
+    missing = gateway.post("/v1/chat/completions", {"messages": []}, headers=english).json()
+    assert missing["error"]["message"] == "The model (“model”) is missing."
+    assert gateway.post("/api/chat", {"messages": "x"}, headers=english).json()["error"] \
+        == "“messages” must be a list."
+    tools = gateway.post("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                         headers=english).json()["result"]["tools"]
+    assert {tool["name"]: tool["title"] for tool in tools}["lister_bibliotheques"] \
+        == "AIODOS libraries"
+    tools = gateway.post("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).json()
+    assert tools["result"]["tools"][0]["title"] == "Bibliothèques d'AIODOS"
+    with socket.socket() as taken:          # gardée à traduire : chacun la lit dans sa langue
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        busy = taken.getsockname()[1]
+        refused = gateway.ui.post("/api/gateway", json={"port": busy},
+                                  headers={**UI, **english}).json()
+        assert refused["error"].startswith(f"Port {busy} is already in use on this machine")
+        again = gateway.ui.get("/api/gateway", headers=UI).json()
+        assert again["error"].startswith(f"Le port {busy} est déjà pris sur cette machine")
+
+
+def test_the_computation_speaks_the_language_of_its_request():
+    """Le calcul tourne dans un fil à lui (answer.Stream) : ses messages restent dans la
+    langue de la requête qui l'a lancé."""
+    import asyncio
+    from aiodos import i18n
+    from aiodos.gateway import answer
+
+    def produce(stop):
+        raise answer.GatewayError(400, i18n.t("gateway_api.message_invalid"))
+        yield
+
+    async def computed():
+        with i18n.using("en"):
+            stream = answer.Stream(produce)
+        with pytest.raises(answer.GatewayError, match="Invalid message"):
+            await stream.next()
+    asyncio.run(computed())
+
+
 def test_web_pages_and_other_hosts_are_refused(gateway):
     port = gateway.base.rsplit(":", 1)[1]
     assert gateway.get("/api/tags", headers={"Host": f"evil.example:{port}"}).status_code == 400

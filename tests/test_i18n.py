@@ -102,6 +102,18 @@ def test_setting_changes_the_node_language_and_tells_listeners(client, monkeypat
     assert language.node() == "fr" and heard == ["en", "fr"]       # AIODOS_LANGUAGE=fr
 
 
+def test_the_node_language_follows_the_data_folder(tmp_path, monkeypatch):
+    """La ligne de commande parle avant que --data-dir ne soit lu : la langue du nœud ne
+    reste pas celle d'un autre dossier (essai du 21/10 : « Nœud AIODOS prêt » en français
+    alors que la base demandait l'anglais)."""
+    settings.set_value("language", "en")
+    mine = str(tmp_path)
+    monkeypatch.setenv("AIODOS_DATA_DIR", str(tmp_path / "autre"))
+    assert language.node() == "fr"                       # pas de base là : le système
+    monkeypatch.setenv("AIODOS_DATA_DIR", mine)
+    assert language.node() == "en"                       # sans forget() ni changed()
+
+
 def test_an_unknown_language_is_not_stored(client):
     client.put("/api/settings", json={"language": "en"}, headers=AUTH)
     client.put("/api/settings", json={"language": "de"}, headers=AUTH)
@@ -118,6 +130,18 @@ def test_default_instructions_follow_the_language():
     settings.set_value("system_prompt", "Réponds en latin.")
     with i18n.using("en"):
         assert settings.get("system_prompt") == "Réponds en latin."   # les siennes, telles quelles
+
+
+def test_the_waiting_window_speaks_the_node_language():
+    pytest.importorskip("webview")
+    from aiodos.ui import window
+    with i18n.using("en"):
+        english = window.waiting_page()
+        failed = window.waiting_page(i18n.t("window.start_failed", error="port pris"))
+    assert 'lang="en"' in english and "AIODOS is starting" in english
+    assert "AIODOS could not start: port pris" in failed and "Details: " in failed
+    with i18n.using("fr"):
+        assert "AIODOS démarre" in window.waiting_page()
 
 
 def test_lazy_texts():

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from aiodos import instance
 from aiodos.gateway import access_flow, errors
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/aiodos/v1")
 EVERY = 10
@@ -32,8 +33,7 @@ async def open_page(request: Request):
     page = body.get("page") if isinstance(body, dict) else None
     if page not in PAGES:
         return errors.response(request.url.path, ApiError(
-            "invalid_request", "« page » : applications, models, jobs ou gallery.",
-            param="page"), lang)
+            "invalid_request", t("gateway_api.page_invalid"), param="page"), lang)
     context = request.state.aiodos_app
     now = time.monotonic()
     with _lock:

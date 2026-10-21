@@ -33,6 +33,7 @@ from pathlib import Path
 from aiodos import instance, paths
 from aiodos.gateway import caller as callers
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 READY_TIMEOUT = 60
 STDIN_LIMIT = 64 * 1024
@@ -93,7 +94,7 @@ def run_helper(stdin=None, stdout=None) -> int:
     try:
         return _helper(stdin, stdout)
     except Exception as exc:              # l'appli lit la sortie : jamais de boîte d'erreur
-        return _fail(stdout, "internal_error", f"Programme d'aide en échec : {exc}")
+        return _fail(stdout, "internal_error", t("gateway_access.helper_failed", error=exc))
 
 
 def _helper(stdin, stdout) -> int:
@@ -102,18 +103,17 @@ def _helper(stdin, stdout) -> int:
     try:
         body = json.loads(line)
     except ValueError:
-        return _fail(stdout, "invalid_request", "Demande illisible : une ligne JSON attendue "
-                     "sur l'entrée standard.")
+        return _fail(stdout, "invalid_request", t("gateway_access.helper_no_json_line"))
     if not isinstance(body, dict):
-        return _fail(stdout, "invalid_request", "Demande illisible : un objet JSON attendu.")
+        return _fail(stdout, "invalid_request", t("gateway_access.helper_not_object"))
     pid = app_pid()
     if not instance.running():
         try:
             _launch()
         except OSError as exc:
-            return _fail(stdout, "not_running", f"AIODOS ne démarre pas : {exc}")
+            return _fail(stdout, "not_running", t("gateway_access.helper_start_failed", error=exc))
     deadline = time.monotonic() + READY_TIMEOUT
-    last = "AIODOS ne répond pas."
+    last = t("gateway_access.helper_no_answer")
     while time.monotonic() < deadline:
         lock = _lock() if instance.running() else None
         if lock:
@@ -132,9 +132,9 @@ def _helper(stdin, stdout) -> int:
                     _emit(stdout, {"error": {"code": error["code"],
                                              "message": error.get("message") or ""}})
                     return 1
-                last = f"Réponse inattendue d'AIODOS (HTTP {reply.status_code})."
+                last = t("gateway_access.helper_unexpected", status=reply.status_code)
             except (requests.RequestException, ValueError) as exc:
-                last = f"AIODOS ne répond pas encore ({exc.__class__.__name__})."
+                last = t("gateway_access.helper_not_yet", error=exc.__class__.__name__)
         time.sleep(0.5)
     return _fail(stdout, "not_running", last)
 
@@ -144,7 +144,8 @@ def instance_request(body, gateway_port: int) -> tuple:
     """POST /instance/app-request (après la clé show_key) → (statut HTTP, corps)."""
     from aiodos.gateway import access_flow
     if not isinstance(body, dict) or not isinstance(body.get("request"), dict):
-        return 400, {"error": {"code": "invalid_request", "message": "Demande illisible."}}
+        return 400, {"error": {"code": "invalid_request",
+                               "message": t("gateway_access.helper_unreadable")}}
     pid = body.get("pid")
     who = callers.of_pid(pid) if isinstance(pid, int) and pid > 0 else callers.UNKNOWN
     try:

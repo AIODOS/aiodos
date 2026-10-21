@@ -31,6 +31,7 @@ from aiodos import db, settings
 from aiodos.gateway import apps, scopes
 from aiodos.gateway.caller import Caller
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 log = logging.getLogger("aiodos.gateway")
 
@@ -42,6 +43,7 @@ PER_HOUR = 10
 MUTE_AFTER = 3
 MUTE_S = 3600
 RAISE_EVERY = 30
+# i18n: tel quel (noms qu'une appli ne peut pas prendre, en français comme en anglais)
 RESERVED = {"aiodos", "autres outils", "other tools", "windows", "microsoft"}
 CLIENT_ID = re.compile(r"[a-z0-9.-]{2,40}")
 _INVISIBLE = {0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A)}
@@ -128,31 +130,35 @@ def clean_text(value, limit: int, what: str, required: bool = False) -> str:
     if value is None:
         value = ""
     if not isinstance(value, str):
-        raise ApiError("invalid_request", f"« {what} » doit être du texte.", param=what)
+        raise ApiError("invalid_request", t("gateway_access.field_not_text", field=what),
+                       param=what)
     text = unicodedata.normalize("NFC", value)
     text = "".join(c for c in text if ord(c) not in _INVISIBLE
                    and not unicodedata.category(c).startswith("C"))
     text = " ".join(text.split())
     if len(text) > limit:
-        raise ApiError("invalid_request", f"« {what} » : {limit} caractères au plus.", param=what)
+        raise ApiError("invalid_request", t("gateway_access.field_too_long", field=what,
+                                            limit=limit), param=what)
     if required and not text:
-        raise ApiError("invalid_request", f"Il manque « {what} ».", param=what)
+        raise ApiError("invalid_request", t("gateway_access.field_missing", field=what),
+                       param=what)
     return text
 
 
 def _validate(body) -> dict:
     if not isinstance(body, dict):
-        raise ApiError("invalid_request", "Corps JSON attendu : un objet.")
+        raise ApiError("invalid_request", t("gateway_api.json_not_object"))
     name = clean_text(body.get("client_name"), 40, "client_name", required=True)
     if name.lower() in RESERVED:
-        raise ApiError("invalid_request", f"Nom réservé : « {name} ».", param="client_name")
+        raise ApiError("invalid_request", t("gateway_access.name_reserved", name=name),
+                       param="client_name")
     client_id = str(body.get("client_id") or "")
     if not CLIENT_ID.fullmatch(client_id):
-        raise ApiError("invalid_request", "« client_id » : 2 à 40 caractères parmi a-z, 0-9, "
-                       "« . » et « - ».", param="client_id")
+        raise ApiError("invalid_request", t("gateway_access.client_id_invalid"),
+                       param="client_id")
     wanted = scopes.parse_scopes(body.get("scope") or "")
     if not wanted:
-        raise ApiError("invalid_request", "Il manque les droits (« scope »).", param="scope")
+        raise ApiError("invalid_request", t("gateway_access.scopes_missing"), param="scope")
     return {"client_name": name, "client_id": client_id,
             "client_version": clean_text(body.get("client_version"), 40, "client_version"),
             "purpose": clean_text(body.get("purpose"), 200, "purpose"),
@@ -186,20 +192,17 @@ def _limits_locked(info: dict, caller: Caller, now: float):
     name = info["client_name"].lower()
     denied = [h for h in _history if h[3] == "denied" and (h[1] == name or (program and h[2] == program))]
     if len(denied) >= MUTE_AFTER:
-        raise ApiError("rate_limited", f"« {info['client_name']} » insiste : ses demandes sont "
-                       "en sourdine pendant une heure.", retry_after=MUTE_S)
+        raise ApiError("rate_limited", t("gateway_access.muted", name=info["client_name"]),
+                       retry_after=MUTE_S)
     asked = [h for h in _history if h[3] == "asked" and h[2] == program]
     if program and len(asked) >= PER_HOUR:
-        raise ApiError("rate_limited", "Trop de demandes de ce programme en une heure.",
-                       retry_after=600)
+        raise ApiError("rate_limited", t("gateway_access.too_many_per_hour"), retry_after=600)
     waiting = [r for r in _requests.values() if r.status == "pending"]
     if len(waiting) >= MAX_PENDING:
-        raise ApiError("rate_limited", "Trop de demandes d'accès en attente dans AIODOS.",
-                       retry_after=30)
+        raise ApiError("rate_limited", t("gateway_access.too_many_pending"), retry_after=30)
     if any(r.client_name.lower() == name and (r.caller.program or "").lower() == program
            for r in waiting):
-        raise ApiError("rate_limited", "Une demande de cette application attend déjà dans "
-                       "AIODOS.", retry_after=10)
+        raise ApiError("rate_limited", t("gateway_access.already_waiting"), retry_after=10)
 
 
 # --------------------------------------------------------------------- demande
@@ -235,8 +238,7 @@ def start(body, caller: Caller, *, upgrade_of: str | None = None, via: str = "ga
     _raise_window()
     return {"device_code": device_code, "user_code": user_code, "expires_in": EXPIRES_IN,
             "interval": INTERVAL, "request_id": ident,
-            "message": f"Une demande d'accès t'attend dans AIODOS. Vérifie que le code est "
-                       f"{user_code}."}
+            "message": t("gateway_access.request_waiting", code=user_code)}
 
 
 def _raise_window():
@@ -269,20 +271,19 @@ def poll(device_code) -> tuple:
         _expire_locked(now)
         req = _find_locked(device_code) if isinstance(device_code, str) and device_code else None
         if req is None:
-            return 400, _oauth("invalid_grant", "Demande inconnue, ou clé déjà relevée.")
+            return 400, _oauth("invalid_grant", t("gateway_access.grant_unknown"))
         if req.status == "pending":
             too_soon = now - req.last_poll < req.interval * 0.8
             req.last_poll = now
             if too_soon:
                 req.interval += SLOW_DOWN
-                return 400, _oauth("slow_down", f"Interroge moins souvent : {SLOW_DOWN} s de plus.")
-            return 400, _oauth("authorization_pending",
-                               "La demande attend la réponse de l'utilisateur dans AIODOS.")
+                return 400, _oauth("slow_down", t("gateway_access.slow_down", seconds=SLOW_DOWN))
+            return 400, _oauth("authorization_pending", t("gateway_access.pending_user"))
         if req.status == "denied":
             del _requests[req.id]
-            return 400, _oauth("access_denied", "L'accès a été refusé dans AIODOS.")
+            return 400, _oauth("access_denied", t("gateway_access.access_denied"))
         if req.status != "approved":
-            return 400, _oauth("invalid_grant", "Demande inconnue, ou clé déjà relevée.")
+            return 400, _oauth("invalid_grant", t("gateway_access.grant_unknown"))
         granted = dict(req.granted)
         key, req.key, req.status = req.key, None, "collected"
         replace = req.replace
@@ -320,16 +321,16 @@ def approve(request_id: str, *, scopes_granted=None, where=None, priority="inter
     with _lock:
         req = _requests.get(request_id)
         if req is None or req.status != "pending":
-            raise ApiError("invalid_request", "Demande inconnue, expirée ou déjà traitée.")
+            raise ApiError("invalid_request", t("gateway_access.request_unknown"))
         granted_scopes = scopes.parse_scopes(scopes_granted if scopes_granted is not None
                                              else req.scopes)
         if not set(granted_scopes) <= set(req.scopes) or not granted_scopes:
-            raise ApiError("invalid_request", "Droits accordés : parmi ceux demandés.")
+            raise ApiError("invalid_request", t("gateway_access.scopes_beyond"))
         granted_where = scopes.parse_where(where if where is not None else req.where)
         if not set(granted_where) <= set(req.where):
-            raise ApiError("invalid_request", "Cercles accordés : parmi ceux demandés.")
+            raise ApiError("invalid_request", t("gateway_access.where_beyond"))
         if duration not in DURATIONS:
-            raise ApiError("invalid_request", "Durée : forever, 30d ou session.")
+            raise ApiError("invalid_request", t("gateway_access.duration_invalid"))
         now = time.time()
         consents = {cap: {c: now for c in granted_where if c in scopes.SERVED[cap]}
                     for cap in granted_scopes}
@@ -338,7 +339,7 @@ def approve(request_id: str, *, scopes_granted=None, where=None, priority="inter
         if req.upgrade_of:
             current = apps.get(req.upgrade_of)
             if current is None or current["revoked"]:
-                raise ApiError("invalid_request", "L'accès à compléter a été retiré.")
+                raise ApiError("invalid_request", t("gateway_access.upgrade_revoked"))
             merged = sorted(set(current["scopes"]) | set(granted_scopes),
                             key=scopes.SCOPES.index)
             old = current["consents"]

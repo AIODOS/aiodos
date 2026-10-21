@@ -7,82 +7,87 @@
 // renderRequest est pure et exportée : l'essai d'échappement s'en sert (tests/test_ui_gateway.py).
 import { get, post } from '../api.js';
 import { esc, h } from '../dom.js';
+import { locale, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 
 const ARM_MS = 1500;
+// Libellés : des clés de textes (i18n/*/gateway_request.json), traduites à l'affichage
 const SCOPES = {
-  chat: 'Converser avec tes modèles (textes, images jointes, outils de l\'application)',
-  embed: 'Calculer des embeddings (représenter des textes pour les retrouver), sur ce PC',
-  libraries: 'Lire des passages de tes bibliothèques',
+  chat: 'gateway_request.scope_chat',
+  embed: 'gateway_request.scope_embed',
+  libraries: 'gateway_request.scope_libraries',
 };
-const CIRCLES = {
-  here: ['Ce PC', ''],
-  mine: ['Mes machines', 'celles que j\'ai appairées comme « mes machines »'],
-  friends: ['Chez mes amis qui prêtent leur puissance', 'seulement si « Mode automatique : aussi chez mes amis » est activé, ou si l\'appli désigne une machine'],
-  public: ['Chez des inconnus du réseau public', ''],
+const CIRCLES = {                    // [libellé, aide]
+  here: ['gateway_request.circle_here', ''],
+  mine: ['gateway_request.circle_mine', 'gateway_request.circle_mine_help'],
+  friends: ['gateway_request.circle_friends', 'gateway_request.circle_friends_help'],
+  public: ['gateway_request.circle_public', ''],
 };
-const CONTENT_NOTICE = 'Les textes, images et documents envoyés par l\'application partent chez la machine '
-  + 'qui calcule, le temps du calcul, sans y être gardés : décoche un cercle pour l\'exclure. AIODOS n\'envoie '
-  + 'rien dans le cloud. Ce que l\'application fait ensuite de ce qu\'elle reçoit ne dépend que d\'elle.';
+const CONTENT_NOTICE = 'gateway_request.content_notice';
 
 function served(req, circle) {
   return Object.values(req.served || {}).some(list => list.includes(circle));
 }
 
-// Le HTML de la carte, tout échappé (nom, raison, programme viennent de l'appli ou du système)
+// Le HTML de la carte, tout échappé (nom, raison, programme viennent de l'appli ou du système).
+// name, déjà échappé, va tel quel dans le HTML ; un texte traduit reçoit req.client_name et
+// s'échappe en entier
 export function renderRequest(req) {
   const name = esc(req.client_name);
   const version = req.client_version ? ` ${esc(req.client_version)}` : '';
   const program = req.program
-    ? `Programme vu par Windows : <code class="mono">${esc(req.program)}</code>, sous ton compte Windows.`
-    : '<span class="warn">Programme inconnu : AIODOS n\'a pas pu voir quel programme demande.</span>';
+    ? t('gateway_request.program_seen_html', { program: `<code class="mono">${esc(req.program)}</code>` })
+    : `<span class="warn">${esc(t('gateway_request.program_unknown'))}</span>`;
   const generic = req.program_generic
-    ? '<div class="warn">Programme générique (interpréteur) : n\'importe quel script peut s\'en servir.</div>' : '';
+    ? `<div class="warn">${esc(t('gateway_request.program_generic'))}</div>` : '';
   const upgrade = req.upgrade;
   const already = new Set(upgrade ? upgrade.scopes : []);
   const scopes = req.scopes.map(s => `
     <label class="choice"><input type="checkbox" data-scope="${esc(s)}" checked ${already.has(s) ? 'disabled' : ''}>
-      <span><b>${esc(SCOPES[s] || s)}</b>${already.has(s) ? '<small>déjà accordé</small>' : ''}</span></label>`).join('');
+      <span><b>${esc(SCOPES[s] ? t(SCOPES[s]) : s)}</b>${already.has(s) ? `<small>${esc(t('gateway_request.already_granted'))}</small>` : ''}</span></label>`).join('');
   const circles = upgrade ? '' : req.where.map(c => {
-    const [label, help] = CIRCLES[c] || [c, ''];
-    const later = served(req, c) ? '' : 'pas encore servi par cette version : il te sera redemandé à son arrivée';
-    const small = [help, later].filter(Boolean).join(' ; ');
+    const [label, help] = CIRCLES[c] ? CIRCLES[c].map(key => (key ? t(key) : '')) : [c, ''];
+    const later = served(req, c) ? '' : t('gateway_request.not_served_yet');
+    const small = [help, later].filter(Boolean).join(t('gateway_request.notes_join'));
     return `<label class="choice"><input type="checkbox" data-where="${esc(c)}" checked>
       <span><b>${esc(label)}</b>${small ? `<small>${esc(small)}</small>` : ''}</span></label>`;
   }).join('');
   const replace = req.existing ? `<label class="check"><input type="checkbox" data-replace checked>
-    Remplacer l'accès actuel de ${name} (accordé le ${esc(new Date(req.existing.created * 1000).toLocaleDateString('fr-FR'))})</label>` : '';
-  const purpose = req.purpose ? `<div class="quote">Raison donnée par ${name} : « ${esc(req.purpose)} »</div>` : '';
+    ${esc(t('gateway_request.replace', { name: req.client_name,
+      date: new Date(req.existing.created * 1000).toLocaleDateString(locale()) }))}</label>` : '';
+  const purpose = req.purpose ? `<div class="quote">${esc(t('gateway_request.purpose',
+    { name: req.client_name, purpose: req.purpose }))}</div>` : '';
   return `
-    <h3>${icon('shield')}${upgrade ? `${name} demande des droits en plus` : 'Une application demande à utiliser AIODOS'}</h3>
-    <div class="text"><b>${name}</b>${version}. C'est le nom que donne le programme : AIODOS ne peut pas le vérifier.
+    <h3>${icon('shield')}${esc(upgrade ? t('gateway_request.title_upgrade', { name: req.client_name })
+      : t('gateway_request.title'))}</h3>
+    <div class="text"><b>${name}</b>${version}. ${esc(t('gateway_request.name_unverified'))}
 ${program}</div>${generic}
     <div class="pair-code">${esc(req.user_code)}</div>
-    <div class="text">Ce code doit s'afficher en ce moment dans ${name}. S'il est différent, ou si tu n'as rien demandé, refuse.</div>
+    <div class="text">${esc(t('gateway_request.code_check', { name: req.client_name }))}</div>
     ${purpose}
-    <div class="text" style="margin-top:14px"><b>Ce que ${name} pourra faire</b></div>
+    <div class="text" style="margin-top:14px"><b>${esc(t('gateway_request.can_do', { name: req.client_name }))}</b></div>
     <div class="choices">${scopes}</div>
-    ${circles ? `<div class="text" style="margin-top:14px"><b>Où ses calculs peuvent se faire</b></div>
-    <div class="choices">${circles}</div><div class="help">${esc(CONTENT_NOTICE)}</div>` : ''}
-    <details class="more"><summary>Plus de réglages</summary>
-      <label class="check"><input type="checkbox" data-background> Ses demandes passent après mes travaux de fond (priorité basse)</label>
-      <label class="check">Durée de l'accès :
+    ${circles ? `<div class="text" style="margin-top:14px"><b>${esc(t('gateway_request.where_title'))}</b></div>
+    <div class="choices">${circles}</div><div class="help">${esc(t(CONTENT_NOTICE))}</div>` : ''}
+    <details class="more"><summary>${esc(t('gateway_request.more_settings'))}</summary>
+      <label class="check"><input type="checkbox" data-background> ${esc(t('gateway_request.background'))}</label>
+      <label class="check">${esc(t('gateway_request.duration'))}
         <select class="input" data-duration>
-          <option value="forever">jusqu'à ce que je le retire</option>
-          <option value="30d">30 jours</option>
-          <option value="session">jusqu'à la fermeture d'AIODOS</option>
+          <option value="forever">${esc(t('gateway_request.duration_forever'))}</option>
+          <option value="30d">${esc(t('gateway_request.duration_30d'))}</option>
+          <option value="session">${esc(t('gateway_request.duration_session'))}</option>
         </select></label>
       <label class="check"><input type="checkbox" data-pin ${req.program && !req.program_generic ? '' : 'disabled'}>
-        Lier la clé à ce programme : refuser tout autre programme qui s'en servirait</label>
+        ${esc(t('gateway_request.pin'))}</label>
     </details>
     ${replace}
-    <div class="help">AIODOS s'ouvrira aux applications de ce PC (127.0.0.1 seulement).</div>
+    <div class="help">${esc(t('gateway_request.opens_apps'))}</div>
     <div class="buttons">
-      <button class="btn ghost" data-act="deny">Refuser</button>
-      <button class="btn ghost" data-act="block">Refuser et bloquer ce programme</button>
-      <button class="btn primary" data-act="allow" disabled>Autoriser</button>
+      <button class="btn ghost" data-act="deny">${esc(t('gateway_request.deny'))}</button>
+      <button class="btn ghost" data-act="block">${esc(t('gateway_request.deny_block'))}</button>
+      <button class="btn primary" data-act="allow" disabled>${esc(t('gateway_request.allow'))}</button>
     </div>
     <div class="help" data-expires></div>`;
 }
@@ -91,7 +96,7 @@ let showing = null;                  // id de la carte affichée
 
 function remaining(req) {
   const left = Math.max(0, Math.round(req.expires - Date.now() / 1000));
-  return `Expire dans ${Math.floor(left / 60)} min ${String(left % 60).padStart(2, '0')} s.`;
+  return t('gateway_request.expires', { min: Math.floor(left / 60), sec: String(left % 60).padStart(2, '0') });
 }
 
 function choices(card, req) {
@@ -145,10 +150,11 @@ function open(req) {
 async function answer(req, r) {
   if (r.how === 'allow') {
     await post(`/gateway/requests/${encodeURIComponent(req.id)}/approve`, r.choices);
-    toast(`${req.client_name} peut maintenant utiliser AIODOS.`, 'ok', 5000);
+    toast(t('gateway_request.allowed', { name: req.client_name }), 'ok', 5000);
   } else if (r.how === 'deny' || r.how === 'block') {
     await post(`/gateway/requests/${encodeURIComponent(req.id)}/deny`, { block: r.how === 'block' });
-    toast(r.how === 'block' ? `${req.client_name} refusé, et son programme bloqué.` : `${req.client_name} refusé.`, 'info');
+    toast(t(r.how === 'block' ? 'gateway_request.denied_blocked' : 'gateway_request.denied',
+      { name: req.client_name }), 'info');
   }
 }
 

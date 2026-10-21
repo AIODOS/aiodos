@@ -1,0 +1,6 @@
+{
+  "too_large": "Requête trop grosse : {size} Mio au plus.",
+  "port_taken_by": "Le port {port} est déjà pris sur cette machine ({program}) : choisis-en un autre dans les Réglages.",
+  "port_taken": "Le port {port} est déjà pris sur cette machine : choisis-en un autre dans les Réglages.",
+  "port_range": "Choisis un port entre 1024 et 65535."
+}

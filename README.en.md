@@ -63,7 +63,7 @@ The documents in `docs/` are written in French.
 3. **Lend your computing power** (“This machine” view): plugged in only, by default.
    While you use the PC, the lent computing goes on at low priority, never on battery,
    the graphics card half of the time at most; a conversation goes first: the GPU comes
-   back to it. “Only when I am not using this PC” keeps it for idle times (10 minutes by
+   back to it. “Only when I'm not using this PC” keeps it for idle times (10 minutes by
    default), like a screensaver: as soon as the user comes back, the units in progress
    are handed back.
 4. **See who is there** (Network view, “Connected machines”; number of machines online at
@@ -109,9 +109,18 @@ sent replaces them with a note); at a friend's, only the libraries shared with y
 friends give their excerpts. A cloud model, after confirmation, receives neither the
 libraries kept on this PC nor the conversation memory.
 
-**Opening AIODOS to other tools** (Settings → Other tools, off by default): an
-OpenAI- and Ollama-compatible API, and an MCP server, on this machine only (`127.0.0.1`,
-fixed port 11435, access key to copy). Open WebUI, AnythingLLM, Continue, a code editor
+**Opening AIODOS to applications** (PANDORA, ARKLIGHT PC…): each app asks for access by
+itself; a card shows up in AIODOS with a 6-digit code to compare, what it will be able to
+do and where its computing may take place (this PC, my machines, my friends, strangers on
+the public network), to untick if needed. The first approval opens the gateway; each app
+has its own key, removable in one click. Dependency-free client libraries, Python and
+JavaScript, under Apache-2.0 (`clients/`): [docs/integrer-aiodos.md](docs/integrer-aiodos.md),
+reference [docs/api-applications.md](docs/api-applications.md) (in French).
+
+**Opening AIODOS to other tools** (Settings → Applications and other tools, off by
+default): an OpenAI- and Ollama-compatible API, and an MCP server, on this machine only
+(`127.0.0.1`, fixed port 11435, general key or a “by hand” key per tool). Open WebUI,
+AnythingLLM, Continue, a code editor
 or an assistant (Claude Desktop, Claude Code…) find there the models of this machine and
 those your machines lend you, with the same automatic choice, and search your libraries.
 **Without Ollama**: the built-in engine (llama.cpp) serves these APIs itself, tools (*tool
@@ -136,8 +145,9 @@ enough and not too hot, like BOINC on Android. Step by step:
 [docs/android.md](docs/android.md) (in French).
 
 **With friends (phase 2)**: when confirming a pairing, each machine says whether the other
-is one of its own or a friend's. A friend only receives the libraries “shared with my
-friends” (⋯ menu of the library), under neutral file names, without path or library name,
+is one of its own or a friend's. A friend only receives the libraries you share with your
+friends (“Also share with my friends”, ⋯ menu of the library), under neutral file names,
+without path or library name,
 and only sees a reduced profile of your machine. What they compute is checked by
 sampling: in case of a mismatch, their machine is set aside. The Network view shows what
 was given to them. A friend who is not on your network pairs by invitation (Network view,
@@ -287,14 +297,27 @@ aiodos/
 ├── cluster/           large models split across my machines (llama.cpp RPC):
 │                      splitting (plan.py), lent card (helper.py), group (group.py),
 │                      engine delivered with the versions (delivery.py), docs/gros-modeles.md
-├── gateway/           AIODOS open to other tools (docs/autres-outils.md)
-│   ├── server.py      server on 127.0.0.1, fixed port, access key (access.py)
+├── gateway/           AIODOS open to applications and other tools
+│   │                  (docs/integrer-aiodos.md, docs/api-applications.md, docs/autres-outils.md)
+│   ├── server.py      server on 127.0.0.1, fixed port; Guard: host, web pages, key, caller,
+│   │                  limits, rights, log
+│   ├── apps.py        one key per app (only its hash is kept), keys by hand
+│   ├── access_flow.py access request (RFC 8628), consent card, mute; access_api.py: routes
+│   ├── app_connect.py connecting while the gateway is closed (python -m aiodos --app-request)
+│   ├── caller.py      program and Windows account of the caller (TCP table, token)
+│   ├── scopes.py      rights, circles (here, mine, friends, public), priority
+│   ├── web_guard.py   no web page (Origin, Fetch Metadata, JSON required)
+│   ├── info.py        /aiodos/v1/info and the identity proof; discovery.py: gateway.json
+│   ├── errors.py      stable error codes, their messages in French and English
+│   ├── limits.py      rate and concurrency per app; usage.py: log without content
+│   ├── model_card.py  model cards; models_api.py: /aiodos/v1/models; open_page.py
+│   ├── access.py      general key for other tools (DPAPI)
 │   ├── openai_api.py  OpenAI-compatible API (/v1/…)
 │   ├── ollama_api.py  Ollama-compatible API (/api/…)
 │   ├── mcp_server.py  MCP server: libraries and conversation for assistants
 │   ├── mcp_stdio.py   stdio bridge, for assistants that start a program
 │   ├── catalog.py     models offered and their identifiers
-│   ├── answer.py      answer by this machine or by a paired machine
+│   ├── answer.py      answer by this machine or by a paired machine, according to the place
 │   └── engine.py      answer by the built-in engine, without Ollama (llama.cpp router)
 ├── jobs/              task queue: jobs split into units (BOINC model)
 │   ├── queue.py       persistence, priorities, retries, resumption

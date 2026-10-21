@@ -28,10 +28,12 @@ import time
 import uvicorn
 from fastapi import FastAPI
 
-from aiodos import paths, settings
+from aiodos import i18n, paths, settings
 from aiodos.gateway import (access, access_flow, apps, caller, discovery, errors, limits,
                             scopes, usage, web_guard)
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t, using
+from aiodos.i18n.middleware import Language, requested
 
 log = logging.getLogger("aiodos.gateway")
 
@@ -69,6 +71,13 @@ class Guard:
             return await self.app(scope, receive, send)
         if scope["type"] != "http":
             return                        # pas de WebSocket ici
+        # Les refus de la garde, qui passe avant le middleware des langues, et ce qui suit :
+        # dans la langue de la requête (Accept-Language), sinon dans celle du nœud, jamais
+        # dans celle de la requête de l'interface qui a ouvert la passerelle
+        with using(requested(scope)):
+            return await self._guard(scope, receive, send)
+
+    async def _guard(self, scope, receive, send):
         headers = dict(scope["headers"])
         path = scope.get("path") or "/"
         method = scope.get("method", "GET")
@@ -85,8 +94,7 @@ class Guard:
             if context is not None:
                 limits.take(context.id, general=context.kind == "general")
                 if needed in scopes.SCOPES and needed not in context.scopes:
-                    raise ApiError("scope_denied", f"Cette application n'a pas le droit "
-                                   f"« {needed} » : demande-le dans AIODOS.",
+                    raise ApiError("scope_denied", t("gateway_access.scope_missing", scope=needed),
                                    detail={"scope": needed})
         except ApiError as exc:
             if exc.status == 401:
@@ -145,8 +153,7 @@ class Guard:
 
     @staticmethod
     def _too_big() -> ApiError:
-        return ApiError("file_too_large", f"Requête trop grosse : {MAX_BODY // 1024 ** 2} Mio "
-                        "au plus.")
+        return ApiError("file_too_large", t("gateway_server.too_large", size=MAX_BODY // 1024 ** 2))
 
     async def _identify(self, scope, headers, path, method, public):
         """(AppContext | None, Caller) : l'appli qui appelle et son programme, ou ApiError."""
@@ -165,11 +172,9 @@ class Guard:
             if general:
                 context = apps.GENERAL
             elif not public:
-                raise ApiError("invalid_api_key", "Clé d'accès d'AIODOS manquante ou invalide "
-                               "(Réglages → Applications et autres outils).")
+                raise ApiError("invalid_api_key", t("gateway_access.key_invalid"))
         elif not public:
-            raise ApiError("invalid_api_key", "Clé d'accès d'AIODOS manquante ou invalide "
-                           "(Réglages → Applications et autres outils).")
+            raise ApiError("invalid_api_key", t("gateway_access.key_invalid"))
         who = caller.UNKNOWN
         asking = method == "POST" and path == "/aiodos/v1/access/requests"
         app_key = context is not None and context.kind != "general"
@@ -177,8 +182,7 @@ class Guard:
             # info, elle, dit l'état de la clé même quand AIODOS est fermé aux applis
             if app_key and (asking or not public) and not await asyncio.to_thread(
                     settings.get, "gateway_apps"):
-                raise ApiError("apps_closed", "AIODOS n'est ouvert qu'aux autres outils : "
-                               "ouvre-le aussi aux applications.")
+                raise ApiError("apps_closed", t("gateway_access.only_other_tools"))
             who = await asyncio.to_thread(caller.identify, scope)
         if context is not None and context.kind != "general":
             same = await asyncio.to_thread(settings.get, "gateway_same_account")
@@ -189,8 +193,7 @@ class Guard:
                 raise ApiError("program_mismatch")
         if asking and context is None and not await asyncio.to_thread(settings.get,
                                                                        "gateway_apps"):
-            raise ApiError("apps_closed", "AIODOS n'est pas encore ouvert aux applications : "
-                           "connecte-toi par le programme d'aide d'AIODOS (--app-request).")
+            raise ApiError("apps_closed", t("gateway_access.apps_not_open_yet"))
         return context, who
 
     @staticmethod
@@ -258,6 +261,7 @@ def create_gateway_app(node, port: int):
     app.state.node = node
     for module in (info, access_api, models_api, open_page, openai_api, ollama_api, mcp_server):
         app.include_router(module.router)
+    app.add_middleware(Language)              # les textes d'une requête, dans sa langue
     return Guard(app, hosts(port))
 
 
@@ -334,9 +338,12 @@ class Gateway:
         self._task = self._server = None
         holder = await asyncio.to_thread(caller.holder_of, port)
         held = f" ({holder})" if holder else ""
-        self.error = (f"Le port {port} est déjà pris sur cette machine{held} : choisis-en un "
-                      "autre dans les Réglages.")
-        log.warning(self.error)
+        # Gardé à traduire : l'interface le lit dans sa langue (snapshot), les applis dans
+        # celle du nœud (fichier de découverte)
+        self.error = (i18n.lazy("gateway_server.port_taken_by", port=port, program=holder)
+                      if holder else i18n.lazy("gateway_server.port_taken", port=port))
+        log.warning("Le port %s est déjà pris sur cette machine%s : choisis-en un autre dans "
+                    "les Réglages.", port, held)
 
     async def _stop(self):
         if self._server:
@@ -356,18 +363,24 @@ class Gateway:
 
     def _discovery(self):
         state = "error" if self.error else ("open" if self.running else "closed")
+        with using(None):                 # lu par les applis : dans la langue du nœud
+            error = self._error()
         discovery.write(discovery.content(
             running=True, state=state, url=f"http://{HOST}:{self.port or _port()}",
             apps=bool(settings.get("gateway_apps")),
             requests=bool(settings.get("gateway_requests")),
-            approval_ui=access_flow.approval_ui(), error=self.error))
+            approval_ui=access_flow.approval_ui(), error=error))
+
+    def _error(self) -> str | None:
+        """L'erreur d'ouverture (port pris), dans la langue de celui qui la lit."""
+        return i18n.render(self.error) if self.error else None
 
     def snapshot(self) -> dict:
         port = self.port if self.running else _port()
         base = f"http://{HOST}:{port}"
         general = bool(settings.get("gateway_enabled"))
         return {
-            "enabled": general, "running": self.running, "port": port, "error": self.error,
+            "enabled": general, "running": self.running, "port": port, "error": self._error(),
             "apps": bool(settings.get("gateway_apps")),
             "requests": bool(settings.get("gateway_requests")),
             "same_account": bool(settings.get("gateway_same_account")),

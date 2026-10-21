@@ -30,12 +30,19 @@ def current() -> str:
 
 
 def node() -> str:
-    """La langue du nœud hors de toute requête (gardée jusqu'au prochain changement)."""
-    value = _node["value"]
-    if value is None:
-        value = chosen() or system() or FALLBACK
-        _node["value"] = value
-    return value
+    """La langue du nœud hors de toute requête, gardée jusqu'au prochain changement du
+    réglage, ou du dossier de données et de l'ouverture de sa base : la ligne de commande
+    parle avant que --data-dir ne soit lu, et avant que la base ne soit ouverte."""
+    where = _where()
+    if _node["value"] is None or _node.get("where") != where:
+        _node["value"] = chosen() or system() or FALLBACK
+        _node["where"] = where
+    return _node["value"]
+
+
+def _where() -> tuple:
+    from aiodos import db, paths
+    return str(paths.data_path()), db.is_open()
 
 
 def chosen() -> str | None:

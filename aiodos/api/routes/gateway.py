@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from aiodos import settings
 from aiodos.gateway import access
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/api/gateway")
 
@@ -40,7 +41,7 @@ async def change(body: GatewayIn, request: Request):
             values[setting] = getattr(body, field)
     if body.port is not None:
         if not 1024 <= body.port <= 65535:
-            raise HTTPException(400, "Choisis un port entre 1024 et 65535.")
+            raise HTTPException(400, t("gateway_server.port_range"))
         values["gateway_port"] = body.port
     if values:
         await asyncio.to_thread(settings.set_many, values)

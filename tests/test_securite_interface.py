@@ -672,7 +672,15 @@ class NodeService {
     static volatile String url;
     static volatile String error;
     static void start(android.content.Context context) { }
+    static void languageChanged() { }
 }""", encoding="utf-8")
+    # Les identifiants des textes (res/values*.xml, Texts.java) : R, que la construction génère
+    names = sorted({m for xml in (paths.APP_ROOT / "android" / "res" / "values").glob("*.xml")
+                    for m in re.findall(r'<string name="(\w+)"', xml.read_text(encoding="utf-8"))})
+    (stubs / "R.java").write_text(
+        "package fr.arkane.aiodos;\npublic final class R {\n    public static final class string {\n"
+        + "".join(f"        public static final int {name} = {i + 1};\n" for i, name in enumerate(names))
+        + "    }\n}\n", encoding="utf-8")
     (stubs / "Essai.java").write_text("""package fr.arkane.aiodos;
 public class Essai {
     public static void main(String[] links) {
@@ -683,7 +691,8 @@ public class Essai {
     built = subprocess.run(
         ["javac", "-nowarn", "-encoding", "UTF-8", "-cp", jar, "-d", str(tmp_path / "out"),
          str(source / "MainActivity.java"), str(source / "Relaunch.java"),
-         str(stubs / "NodeService.java"), str(stubs / "Essai.java")],
+         str(source / "Texts.java"), str(stubs / "NodeService.java"), str(stubs / "R.java"),
+         str(stubs / "Essai.java")],
         capture_output=True, text=True, errors="replace")
     assert built.returncode == 0, built.stderr[-1500:]
     links = ["mailto:moi@exemple.fr",

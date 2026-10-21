@@ -17,6 +17,7 @@ Pas de CORS : rien ne s'ajoute pour un navigateur.
 from urllib.parse import urlsplit
 
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 
 LOCAL_ORIGINS = {"127.0.0.1", "localhost", "[::1]", "::1"}
 DOCKER_HOST = "host.docker.internal"
@@ -48,8 +49,7 @@ def check(headers: dict, path: str, public: bool, method: str):
         raise ApiError("origin_refused")
     if public and method == "POST":
         if _header(headers, b"host").lower().startswith(DOCKER_HOST):
-            raise ApiError("origin_refused", "Les demandes d'accès ne passent pas par "
-                           "host.docker.internal : lance-les depuis ce PC.")
+            raise ApiError("origin_refused", t("gateway_access.docker_refused"))
         kind = _header(headers, b"content-type").split(";")[0].strip().lower()
         if kind != "application/json":
             raise ApiError("unsupported_media_type")

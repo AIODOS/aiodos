@@ -80,7 +80,7 @@ suit aucune redirection et n'utilise aucun proxy.
 | `X-Aiodos-Where` | cercles séparés par des virgules : `here`, `mine`, `friends`, `public` | resserre le lieu de calcul ; plus large que l'accord : 403 `where_denied` |
 | `X-Aiodos-Priority` | `background` | baisse la priorité (lots, découpages) ; jamais l'inverse |
 | `X-Aiodos-Tools` | `optional` | accepte une réponse sans outils plutôt que 400 `tools_unavailable` |
-| `Accept-Language` | `fr`, `en` | langue des messages d'erreur (français par défaut) |
+| `Accept-Language` | `fr`, `en` | langue des messages d'erreur (sans lui, celle d'AIODOS) |
 | `X-Aiodos-Client` | `python/0.1.0`, `js/0.1.0` | journal |
 
 **En-têtes de réponse** : `X-Aiodos-Api` ; `X-Aiodos-Model` (identifiant concret qui a

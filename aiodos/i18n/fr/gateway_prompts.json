@@ -1,0 +1,4 @@
+{
+  "mcp_instructions": "AIODOS est l'atelier d'IA local de l'utilisateur. Pour répondre à partir de ses documents, cherche-les avec rechercher_bibliotheques (lister_bibliotheques donne les noms des bibliothèques). Pour faire répondre un modèle de sa machine ou de ses machines appairées, utilise converser.",
+  "tool_result": "[Résultat d'un outil] {content}"
+}

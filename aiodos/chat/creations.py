@@ -322,7 +322,7 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
         return None
     model_id = pick(found["kind"], found.pop("model_wanted", None))
     return {**found, "model": model_id,
-            "label": catalog.MODELS[model_id]["label"] if model_id else None}
+            "label": catalog.label(model_id) if model_id else None}
 
 
 # ------------------------------------------------------------------- dans la conversation
@@ -454,7 +454,7 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
         job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
                                   URGENT)
         media = {"kind": "video" if catalog.is_video(model_id) else "image", "model": model_id,
-                 "label": catalog.MODELS[model_id]["label"], "prompt": params["prompt"],
+                 "label": catalog.label(model_id), "prompt": params["prompt"],
                  "count": params["count"], "batch": params["batch"], "job_id": job_id,
                  "width": params["width"], "height": params["height"], "seed": params["seed"]}
         if "frames" in params:

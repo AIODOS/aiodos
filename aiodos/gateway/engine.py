@@ -32,8 +32,10 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from aiodos import i18n
 from aiodos.gateway import catalog
 from aiodos.gateway.answer import GatewayError
+from aiodos.i18n import t
 from aiodos.llm import integrated, models as registry
 from aiodos.llm import context as llm_context
 from aiodos.llm.engine import EMBED_CONTEXT, EngineUnavailable
@@ -45,10 +47,9 @@ log = logging.getLogger("aiodos.gateway")
 TIMEOUT = (10, 900)
 # Ce que le routeur refuse en connaissance de cause, même quand il répond 500
 REFUSED = ("not supported", "too large", "exceeds the available context")
-# Refus dont le message de llama-server, un extrait du gabarit, ne dirait rien à l'outil
-EXPLAINED = {"roles must alternate": "le gabarit de ce modèle exige que les rôles alternent "
-                                     "(utilisateur, assistant, utilisateur…), avec une seule "
-                                     "consigne système, en tête."}
+# Refus dont le message de llama-server, un extrait du gabarit, ne dirait rien à l'outil :
+# son explication (clé de texte)
+EXPLAINED = {"roles must alternate": "gateway_engine.roles_alternate"}
 ROLES = {"system", "user", "assistant", "tool"}
 IMAGE_TYPES = {"iVBOR": "image/png", "/9j/": "image/jpeg", "R0lG": "image/gif",
                "UklG": "image/webp"}
@@ -66,8 +67,17 @@ def failure(exc) -> GatewayError:
     if isinstance(exc, EngineUnavailable):
         return GatewayError(503, str(exc))
     if isinstance(exc, requests.RequestException):
-        return GatewayError(502, f"Le moteur intégré ne répond pas ({exc.__class__.__name__}).")
-    return _refusal(500, str(exc).removeprefix("Moteur intégré : "))
+        return GatewayError(502, t("gateway_engine.down", error=exc.__class__.__name__))
+    return _refusal(500, _engine_text(str(exc)))
+
+
+def _engine_text(message: str) -> str:
+    """Le message de llama-server sans le « Moteur intégré : » de llm/integrated.py (dans
+    l'une ou l'autre langue)."""
+    for lang in i18n.LANGUAGES:
+        with i18n.using(lang):
+            message = message.removeprefix(t("llm.engine_error", error=""))
+    return message
 
 
 def _refusal(status: int, message: str, error=None) -> GatewayError:
@@ -80,15 +90,14 @@ def _refusal(status: int, message: str, error=None) -> GatewayError:
         needed, limit = error.get("n_prompt_tokens"), error.get("n_ctx")
         detail = ({"needed": needed, "limit": limit}
                   if isinstance(needed, int) and isinstance(limit, int) else {})
-        text = (f"Le texte fait {needed} jetons, ce modèle en accepte {limit}." if detail
-                else "La demande dépasse le contexte du modèle.")
+        text = (t("gateway_engine.context_exceeded", needed=needed, limit=limit) if detail
+                else t("gateway_errors.context_length_exceeded"))
         return GatewayError(400, text, code="context_length_exceeded", detail=detail,
                             param="messages")
     if status in (400, 413, 422, 501) or any(r in lowered for r in REFUSED):
-        message = next((text for key, text in EXPLAINED.items() if key in lowered), message)
-        return GatewayError(400, f"Le moteur intégré ne prend pas cette demande : {message}")
-    return GatewayError(502, f"Le moteur intégré n'a pas pu répondre : {message}",
-                        code="engine_failed")
+        message = next((t(text) for key, text in EXPLAINED.items() if key in lowered), message)
+        return GatewayError(400, t("gateway_engine.refused", error=message))
+    return GatewayError(502, t("gateway_engine.failed", error=message), code="engine_failed")
 
 
 @contextmanager
@@ -125,7 +134,7 @@ def _caps(model: str) -> list:
     """Capacités d'un modèle de cette machine ; 404 s'il n'y est pas."""
     caps = ollama.capabilities(model)
     if not caps:
-        raise GatewayError(404, f"Le modèle « {model} » n'est pas sur cette machine.")
+        raise GatewayError(404, t("gateway_engine.model_missing", model=model))
     return caps
 
 
@@ -133,10 +142,9 @@ def _conversing(model: str, images=False):
     """Un modèle d'ici qui converse, et qui voit les images s'il en reçoit."""
     caps = _caps(model)
     if "completion" not in caps:
-        raise GatewayError(400, f"« {model} » est un modèle d'embedding : il ne converse pas.")
+        raise GatewayError(400, t("gateway_engine.embedding_only", model=model))
     if images and "vision" not in caps:
-        raise GatewayError(400, f"« {model} » ne voit pas les images sur cette machine : "
-                           "choisis un modèle qui les voit (qwen3.5…).",
+        raise GatewayError(400, t("gateway_engine.no_vision", model=model),
                            code="vision_unsupported", param="messages")
 
 
@@ -294,9 +302,7 @@ def complete(model: str, prompt: str, suffix, options, stop):
         response = _forward(model, "/infill", payload, stream=True)
     except GatewayError as exc:
         if exc.status == 400 and "not supported" in str(exc):
-            raise GatewayError(400, f"« {model} » ne sait pas compléter du code au milieu d'un "
-                               "texte (il n'a pas les jetons de complétion) : choisis un modèle "
-                               "de code (qwen2.5-coder…).") from exc
+            raise GatewayError(400, t("gateway_engine.no_infill", model=model)) from exc
         raise
     with response:
         yield from _infilled(response, stop)
@@ -331,7 +337,8 @@ def _events(response, stop):
                     "message": event["error"]}
                 code = error.get("code")
                 raise _refusal(code if isinstance(code, int) else 500,
-                               str(error.get("message") or "erreur"), error)
+                               str(error.get("message") or t("gateway_engine.unknown_error")),
+                               error)
             yield event
 
 
@@ -410,17 +417,17 @@ def _openai_messages(messages: list) -> list:
     out, waiting, made = [], [], 0
     for m in messages:
         if not isinstance(m, dict):
-            raise GatewayError(400, "Message invalide.")
+            raise GatewayError(400, t("gateway_api.message_invalid"))
         role = str(m.get("role") or "user").lower()
         role = role if role in ROLES else "user"
         content = m.get("content") or ""
         if not isinstance(content, str):
-            raise GatewayError(400, "Le contenu d'un message doit être du texte.")
+            raise GatewayError(400, t("gateway_api.content_not_text"))
         item = {"role": role, "content": content}
         images = m.get("images") or []
         if images:
             if not isinstance(images, list) or not all(isinstance(i, str) and i for i in images):
-                raise GatewayError(400, "« images » : une liste d'images en base64.")
+                raise GatewayError(400, t("gateway_engine.images_invalid"))
             item["content"] = ([{"type": "text", "text": content}] if content else []) + [
                 {"type": "image_url", "image_url": {"url": _data_url(i)}} for i in images]
         calls = m.get("tool_calls") if role == "assistant" else None
@@ -470,7 +477,7 @@ def _response_format(wanted):
         return {"type": "json_object"}
     if isinstance(wanted, dict):
         return {"type": "json_schema", "json_schema": {"name": "format", "schema": wanted}}
-    raise GatewayError(400, "« format » : « json » ou un schéma JSON.")
+    raise GatewayError(400, t("gateway_engine.format_invalid"))
 
 
 # --------------------------------------------------------------- embeddings
@@ -478,7 +485,7 @@ def embed(model: str, texts: list, dimensions=None) -> list:
     """Vecteurs normés de ces textes (ollama.embed) ; dimensions : les premières seulement,
     normées de nouveau, comme Ollama (modèles « Matryoshka »)."""
     if "embedding" not in _caps(model):
-        raise GatewayError(400, f"« {model} » n'est pas un modèle d'embedding.")
+        raise GatewayError(400, t("llm.not_embedding", name=model))
     if not texts:
         return []
     try:
@@ -486,9 +493,9 @@ def embed(model: str, texts: list, dimensions=None) -> list:
     except (RuntimeError, requests.RequestException) as exc:
         too_large = _TOO_LARGE.search(str(exc))
         if too_large:
-            raise GatewayError(400, f"Texte trop long pour « {model} » : {too_large.group(1)} "
-                               f"jetons, {too_large.group(2)} au plus par texte avec le moteur "
-                               "intégré. Découpe-le.") from exc
+            raise GatewayError(400, t("gateway_engine.text_too_long", model=model,
+                                      tokens=too_large.group(1),
+                                      limit=too_large.group(2))) from exc
         raise failure(exc) from exc
     if (isinstance(dimensions, int) and not isinstance(dimensions, bool)
             and 0 < dimensions < len(vectors[0])):

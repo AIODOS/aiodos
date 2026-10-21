@@ -1,0 +1,6 @@
+{
+  "too_large": "Request too large: {size} MB at most.",
+  "port_taken_by": "Port {port} is already in use on this machine ({program}): choose another one in Settings.",
+  "port_taken": "Port {port} is already in use on this machine: choose another one in Settings.",
+  "port_range": "Choose a port between 1024 and 65535."
+}

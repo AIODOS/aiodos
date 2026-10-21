@@ -31,6 +31,7 @@ from aiodos.chat import pipeline
 from aiodos.gateway import answer, catalog, scopes
 from aiodos.gateway.answer import GatewayError
 from aiodos.gateway.errors import ApiError
+from aiodos.i18n import t
 from aiodos.knowledge import search, store
 from aiodos.network import placement
 from aiodos.services import ollama
@@ -52,51 +53,43 @@ TOOL_SCOPES = {"lister_bibliotheques": "libraries", "rechercher_bibliotheques": 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600, -32601, -32602
 HEADER_MISMATCH, UNSUPPORTED_VERSION = -32020, -32022
 
-INSTRUCTIONS = (
-    "AIODOS est l'atelier d'IA local de l'utilisateur. Pour répondre à partir de ses "
-    "documents, cherche-les avec rechercher_bibliotheques (lister_bibliotheques donne les "
-    "noms des bibliothèques). Pour faire répondre un modèle de sa machine ou de ses machines "
-    "appairées, utilise converser.")
 CAPABILITIES = {"tools": {"listChanged": False}}
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
              "openWorldHint": False}
 
-TOOLS = [
-    {"name": "lister_bibliotheques", "title": "Bibliothèques d'AIODOS",
-     "description": "Liste les bibliothèques de connaissance d'AIODOS ouvertes aux assistants "
-                    "(documents de l'utilisateur indexés sur sa machine) : nom, nombre "
-                    "d'éléments et de passages. Utile pour limiter une recherche à une "
-                    "bibliothèque.",
-     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-     "annotations": READ_ONLY},
-    {"name": "rechercher_bibliotheques", "title": "Rechercher dans les bibliothèques d'AIODOS",
-     "description": "Recherche par le sens dans les documents de l'utilisateur indexés par "
-                    "AIODOS (PDF, Word, pages web, notes, code, transcriptions…). Renvoie les "
-                    "passages les plus proches de la question, avec leur source et un score de "
-                    "0 à 1. Pose une question précise, en langage naturel.",
-     "inputSchema": {"type": "object", "properties": {
-         "question": {"type": "string", "description": "Ce que l'on cherche, en langage naturel."},
-         "bibliotheque": {"type": "string",
-                          "description": "Nom d'une bibliothèque pour s'y limiter "
-                                         "(voir lister_bibliotheques)."},
-         "nombre": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5,
-                    "description": "Nombre maximal de passages (5 par défaut)."}},
-         "required": ["question"], "additionalProperties": False},
-     "annotations": READ_ONLY},
-    {"name": "converser", "title": "Converser avec un modèle d'AIODOS",
-     "description": "Fait répondre un modèle de langage du cercle AIODOS (cette machine, ou une "
-                    "machine appairée qui prête ses modèles) et renvoie sa réponse complète. "
-                    "Sans historique : chaque appel est indépendant. Peut prendre une minute.",
-     "inputSchema": {"type": "object", "properties": {
-         "message": {"type": "string", "description": "La question ou la consigne."},
-         "modele": {"type": "string",
-                    "description": "Nom d'un modèle (ex. qwen3.5:9b), la machine étant choisie "
-                                   "seule, ou peer:<machine>:<modèle>. Par défaut, celui "
-                                   "d'AIODOS."},
-         "consignes": {"type": "string", "description": "Consignes système, facultatives."}},
-         "required": ["message"], "additionalProperties": False},
-     "annotations": {**READ_ONLY, "idempotentHint": False}},
-]
+
+def _instructions() -> str:
+    """Ce que l'assistant doit savoir d'AIODOS, dans la langue de la requête."""
+    return t("gateway_prompts.mcp_instructions")
+
+
+def _all_tools() -> list:
+    """Les outils, leurs titres et descriptions dans la langue de la requête (leurs noms et
+    ceux de leurs arguments, eux, sont des identifiants : les mêmes dans toutes les langues)."""
+    return [
+        {"name": "lister_bibliotheques", "title": t("gateway_mcp.list_title"),
+         "description": t("gateway_mcp.list_description"),
+         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+         "annotations": READ_ONLY},
+        {"name": "rechercher_bibliotheques", "title": t("gateway_mcp.search_title"),
+         "description": t("gateway_mcp.search_description"),
+         "inputSchema": {"type": "object", "properties": {
+             "question": {"type": "string", "description": t("gateway_mcp.search_question")},
+             "bibliotheque": {"type": "string", "description": t("gateway_mcp.search_library")},
+             "nombre": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5,
+                        "description": t("gateway_mcp.search_count")}},
+             "required": ["question"], "additionalProperties": False},
+         "annotations": READ_ONLY},
+        {"name": "converser", "title": t("gateway_mcp.converse_title"),
+         "description": t("gateway_mcp.converse_description"),
+         "inputSchema": {"type": "object", "properties": {
+             "message": {"type": "string", "description": t("gateway_mcp.converse_message")},
+             "modele": {"type": "string", "description": t("gateway_mcp.converse_model")},
+             "consignes": {"type": "string",
+                           "description": t("gateway_mcp.converse_instructions")}},
+             "required": ["message"], "additionalProperties": False},
+         "annotations": {**READ_ONLY, "idempotentHint": False}},
+    ]
 
 
 class RpcError(Exception):
@@ -123,12 +116,12 @@ async def mcp(request: Request):
     try:
         message = json.loads(await request.body())
     except ValueError:
-        return _reply(_error(None, RpcError(PARSE_ERROR, "Message JSON illisible.")), 400)
+        return _reply(_error(None, RpcError(PARSE_ERROR, t("gateway_mcp.json_unreadable"))), 400)
     header = request.headers.get("mcp-protocol-version")
     if isinstance(message, list):         # lot de messages : versions 2025-03-26 seulement
         if not message or header not in (None, WITHOUT_HEADER):
-            return _reply(_error(None, RpcError(INVALID_REQUEST, "Lot de messages refusé.")),
-                          400)
+            return _reply(_error(None, RpcError(INVALID_REQUEST,
+                                                t("gateway_mcp.batch_refused"))), 400)
         replies = []
         for item in message:
             reply, _ = await _handle(request, item, header)
@@ -161,7 +154,7 @@ def _error(message_id, exc: RpcError) -> dict:
 async def _handle(request: Request, message, header) -> tuple:
     """(réponse JSON-RPC ou None, statut HTTP)."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
-        return _error(None, RpcError(INVALID_REQUEST, "Message JSON-RPC 2.0 attendu.")), 400
+        return _error(None, RpcError(INVALID_REQUEST, t("gateway_mcp.jsonrpc_expected"))), 400
     if "method" not in message:           # réponse du client à une demande : rien à en faire
         return None, 202
     message_id = message.get("id")
@@ -170,7 +163,7 @@ async def _handle(request: Request, message, header) -> tuple:
     params = message.get("params") if message.get("params") is not None else {}
     try:
         if not isinstance(params, dict):
-            raise RpcError(INVALID_PARAMS, "« params » doit être un objet.")
+            raise RpcError(INVALID_PARAMS, t("gateway_mcp.params_not_object"))
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         version = meta.get(META + "protocolVersion")
         if method == "notifications/cancelled":     # l'assistant n'attend plus la réponse
@@ -186,9 +179,9 @@ async def _handle(request: Request, message, header) -> tuple:
             result = await _modern(request, method, params)
         else:
             if header is not None and header not in LEGACY:
-                raise RpcError(UNSUPPORTED_VERSION, f"Version du protocole MCP inconnue : "
-                               f"{header}.", {"supported": list(SUPPORTED), "requested": header},
-                               status=400)
+                raise RpcError(UNSUPPORTED_VERSION, t("gateway_mcp.version_unknown",
+                                                      version=header),
+                               {"supported": list(SUPPORTED), "requested": header}, status=400)
             request.state.rpc_id = message_id
             result = await _legacy(request, method, params)
     except RpcError as exc:
@@ -211,15 +204,12 @@ def _header(request: Request, name: str):
 
 def _check_modern(request: Request, method, params: dict, meta: dict, version):
     if version is None:
-        raise RpcError(INVALID_PARAMS, "params._meta doit porter "
-                       "« io.modelcontextprotocol/protocolVersion ».", status=400)
+        raise RpcError(INVALID_PARAMS, t("gateway_mcp.meta_version_missing"), status=400)
     if version != MODERN:
-        raise RpcError(UNSUPPORTED_VERSION, f"Version du protocole MCP non prise en charge : "
-                       f"{version}.", {"supported": list(SUPPORTED), "requested": version},
-                       status=400)
+        raise RpcError(UNSUPPORTED_VERSION, t("gateway_mcp.version_unsupported", version=version),
+                       {"supported": list(SUPPORTED), "requested": version}, status=400)
     if not isinstance(meta.get(META + "clientCapabilities"), dict):
-        raise RpcError(INVALID_PARAMS, "params._meta doit porter "
-                       "« io.modelcontextprotocol/clientCapabilities ».", status=400)
+        raise RpcError(INVALID_PARAMS, t("gateway_mcp.meta_capabilities_missing"), status=400)
     expected = [("MCP-Protocol-Version", version), ("Mcp-Method", method)]
     if method in ("tools/call", "prompts/get"):
         expected.append(("Mcp-Name", params.get("name")))
@@ -228,6 +218,7 @@ def _check_modern(request: Request, method, params: dict, meta: dict, version):
     for name, value in expected:
         given = _header(request, name.lower())
         if given != value:
+            # i18n: tel quel (le message d'erreur que donne la spécification MCP)
             raise RpcError(HEADER_MISMATCH, f"Header mismatch: {name} header value "
                            f"'{given}' does not match body value '{value}'", status=400)
 
@@ -245,19 +236,19 @@ def _complete(result: dict, cacheable=False) -> dict:
 async def _modern(request: Request, method, params: dict) -> dict:
     if method == "server/discover":
         return _complete({"supportedVersions": list(SUPPORTED), "capabilities": CAPABILITIES,
-                          "instructions": INSTRUCTIONS}, cacheable=True)
+                          "instructions": _instructions()}, cacheable=True)
     if method == "tools/list":
         return _complete({"tools": _tools(request)}, cacheable=True)
     if method == "tools/call":
         return _complete(await _call(request, params))
-    raise RpcError(METHOD_NOT_FOUND, f"Méthode inconnue : {method}", status=404)
+    raise RpcError(METHOD_NOT_FOUND, t("gateway_mcp.method_unknown", method=method), status=404)
 
 
 def _initialize(params: dict) -> dict:
     requested = params.get("protocolVersion")
     return {"protocolVersion": requested if requested in LEGACY else LEGACY[0],
             "capabilities": CAPABILITIES, "serverInfo": server_info(),
-            "instructions": INSTRUCTIONS}
+            "instructions": _instructions()}
 
 
 async def _legacy(request: Request, method, params: dict) -> dict:
@@ -267,12 +258,12 @@ async def _legacy(request: Request, method, params: dict) -> dict:
         return {"tools": _tools(request)}
     if method == "tools/call":
         return await _call(request, params)
-    raise RpcError(METHOD_NOT_FOUND, f"Méthode inconnue : {method}")
+    raise RpcError(METHOD_NOT_FOUND, t("gateway_mcp.method_unknown", method=method))
 
 
 def _tools(request: Request) -> list:
     """Les outils que cette clé peut appeler (droits de l'appli)."""
-    return [t for t in TOOLS if scopes.has(request, TOOL_SCOPES[t["name"]])]
+    return [tool for tool in _all_tools() if scopes.has(request, TOOL_SCOPES[tool["name"]])]
 
 
 def _key(request: Request, rpc_id) -> str:
@@ -287,13 +278,13 @@ async def _call(request: Request, params: dict) -> dict:
     tool = {"lister_bibliotheques": _list, "rechercher_bibliotheques": _search,
             "converser": _converse}.get(name)
     if tool is None:
-        raise RpcError(INVALID_PARAMS, f"Outil inconnu : {name}")
+        raise RpcError(INVALID_PARAMS, t("gateway_mcp.tool_unknown", name=name))
     if not scopes.has(request, TOOL_SCOPES[name]):
-        raise RpcError(INVALID_PARAMS, f"Cette application n'a pas le droit "
-                       f"« {TOOL_SCOPES[name]} » qu'exige « {name} ».",
+        raise RpcError(INVALID_PARAMS, t("gateway_mcp.scope_missing", scope=TOOL_SCOPES[name],
+                                         tool=name),
                        {"code": "scope_denied", "scope": TOOL_SCOPES[name]})
     if not isinstance(arguments, dict):
-        raise RpcError(INVALID_PARAMS, "« arguments » doit être un objet.")
+        raise RpcError(INVALID_PARAMS, t("gateway_mcp.arguments_not_object"))
     try:
         text, structured = await tool(request, arguments)
     except ToolError as exc:
@@ -317,8 +308,10 @@ async def _list(request: Request, arguments: dict):
     libraries = await asyncio.to_thread(_active_libraries, request.state.aiodos_app)
     structured = {"bibliotheques": [{"nom": c["name"], "elements": c["entries"],
                                      "passages": c["chunks"]} for c in libraries]}
-    text = "\n".join(f"- {c['name']} : {c['entries']} éléments, {c['chunks']} passages"
-                     for c in libraries) or "Aucune bibliothèque active dans AIODOS."
+    text = "\n".join(t("gateway_mcp.library_line", name=c["name"],
+                       entries=t("gateway_mcp.entries", n=c["entries"]),
+                       chunks=t("gateway_mcp.chunks", n=c["chunks"]))
+                     for c in libraries) or t("gateway_mcp.no_library")
     return text, structured
 
 
@@ -328,16 +321,15 @@ def _find(question: str, library, count: int, context=None) -> list:
     if library:
         match = [c for c in shown if c["name"] == library]
         if not match:
-            raise ToolError(f"Bibliothèque inconnue, désactivée ou gardée sur ce PC : "
-                            f"« {library} » (voir lister_bibliotheques).")
+            raise ToolError(t("gateway_mcp.library_unknown", library=library))
         only = {match[0]["id"]}
     if not only:
         return []
     try:
         vector = ollama.embed([question])[0]
     except Exception as exc:
-        raise ToolError(f"Recherche impossible : le modèle d'embedding "
-                        f"« {settings.get('embed_model')} » ne répond pas ({exc}).") from exc
+        raise ToolError(t("gateway_mcp.search_failed", model=settings.get("embed_model"),
+                          error=exc)) from exc
     hits = search.search(vector, k=count, libraries=True, conversations=False, only=only)
     return pipeline.select_relevant(hits, float(settings.get("rag_min_score") or 0), count)
 
@@ -345,21 +337,20 @@ def _find(question: str, library, count: int, context=None) -> list:
 async def _search(request: Request, arguments: dict):
     question = arguments.get("question")
     if not isinstance(question, str) or not question.strip():
-        raise ToolError("Il manque la question (« question »).")
+        raise ToolError(t("gateway_mcp.question_missing"))
     try:
         count = max(1, min(20, int(arguments.get("nombre") or 5)))
     except (TypeError, ValueError) as exc:
-        raise ToolError("« nombre » doit être un entier de 1 à 20.") from exc
+        raise ToolError(t("gateway_mcp.count_invalid")) from exc
     library = arguments.get("bibliotheque")
     if library is not None and not isinstance(library, str):
-        raise ToolError("« bibliotheque » doit être un nom de bibliothèque.")
+        raise ToolError(t("gateway_mcp.library_invalid"))
     hits = await asyncio.to_thread(_find, question.strip(), library, count,
                                    request.state.aiodos_app)
     passages = [{"texte": h["text"], "source": h["source"], "bibliotheque": h["collection"],
                  "score": round(h["score"], 3)} for h in hits]
     if not passages:
-        return ("Aucun passage assez proche de la question dans les bibliothèques d'AIODOS.",
-                {"passages": []})
+        return t("gateway_mcp.no_passage"), {"passages": []}
     text = "\n\n".join(f"[{i}] {p['source']} ({p['bibliotheque']}, score {p['score']})\n"
                        f"{p['texte']}" for i, p in enumerate(passages, 1))
     return text, {"passages": passages}
@@ -373,14 +364,14 @@ def _default_model() -> str:
     entries = [e for e in catalog.entries()
                if not e["capabilities"] or "completion" in e["capabilities"]]
     if not entries:
-        raise ToolError("Aucun modèle de conversation dans le cercle AIODOS.")
+        raise ToolError(t("gateway_mcp.no_chat_model"))
     return entries[0]["id"]
 
 
 async def _converse(request: Request, arguments: dict):
     message = arguments.get("message")
     if not isinstance(message, str) or not message.strip():
-        raise ToolError("Il manque le message (« message »).")
+        raise ToolError(t("gateway_mcp.message_missing"))
     instructions = arguments.get("consignes")
     messages = ([{"role": "system", "content": instructions}]
                 if isinstance(instructions, str) and instructions.strip() else [])
@@ -410,14 +401,14 @@ async def _converse(request: Request, arguments: dict):
             elif item[0] == "content":
                 parts.append(item[1])
     except Exception as exc:
-        raise ToolError(f"Le modèle n'a pas pu répondre : {exc}") from exc
+        raise ToolError(t("gateway_mcp.model_failed", error=exc)) from exc
     finally:
         stream.close()
         if _running.get(key) is stream:
             del _running[key]
     if stream.stop.is_set() and not parts:
-        raise ToolError("Réponse annulée.")
+        raise ToolError(t("gateway_mcp.cancelled"))
     machine = await asyncio.to_thread(placement.machine_of, used)
     reply = "".join(parts).strip()
-    return reply or "(réponse vide)", {"reponse": reply, "modele": used,
-                                       "machine": machine or "cette machine"}
+    return reply or t("gateway_mcp.empty_reply"), {
+        "reponse": reply, "modele": used, "machine": machine or t("gateway_api.this_machine")}
