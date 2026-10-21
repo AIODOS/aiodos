@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """FakeAiodos : un faux AIODOS pour les essais d'une appli (et de ce client).
 
 Un http.server sur 127.0.0.1, sur un port libre, dans un fil, qui sert le contrat partagé
@@ -10,6 +10,10 @@ Un http.server sur 127.0.0.1, sur un port libre, dans un fil, qui sert le contra
   slow_down() (ou `auto_approve=True`) ; la relève, le retrait ;
 - le catalogue, la conversation en flux (les flux de chat.json, « : aiodos loading »
   compris ; chat_script() en donne un autre), les embeddings ;
+- les travaux ComfyUI (moteurs, entrées, travaux, événements, fichiers par plages), en
+  mémoire, avec le droit « engines:comfyui » : voir _fake_jobs.py (advance(), fail_unit(),
+  cut_events(), cut_content(), `job_delay`, `comfyui`) ; `features=L1_FEATURES` les retire,
+  comme une version d'AIODOS qui ne les sert pas ;
 - les erreurs à la demande (fail_next()), ou n'importe quelle réponse (override()).
 
 Il écrit un faux gateway.json dans un dossier temporaire (`discovery_file`, à désigner par
@@ -22,8 +26,9 @@ jamais au vrai fichier de découverte, ni au réseau. Il garde ce qu'il reçoit 
     with FakeAiodos(auto_approve=True) as fake:
         os.environ.update(fake.environ())
         ai = Aiodos(app="PANDORA", app_id="arkane.pandora", version="3.2.0")
-        ai.connect(["chat"])
+        ai.connect(["chat", "engines:comfyui"])
         print(ai.chat([{"role": "user", "content": "Bonjour"}]).text)      # « Bonjour ! »
+        job = ai.comfy.submit(graph=api)                # fini en 0,05 s par unité
 """
 
 import base64
@@ -42,12 +47,14 @@ import http.server
 from urllib.parse import parse_qs, quote, urlsplit
 
 from . import _proof, texts
+from ._fake_jobs import JOB_FEATURES, MAX_INPUT, PREFIXES, FakeJobs, png  # noqa: F401
 
 log = logging.getLogger("aiodos_client.fake")
 
 BASE32 = "abcdefghijklmnopqrstuvwxyz234567"
-FEATURES = ("access", "models", "chat", "embed", "open")
-SCOPES = ("chat", "embed", "libraries")
+L1_FEATURES = ("access", "models", "chat", "embed", "open")
+FEATURES = L1_FEATURES + JOB_FEATURES
+SCOPES = ("chat", "embed", "libraries", "engines:comfyui")
 CIRCLES = ("here", "mine", "friends", "public")
 GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 MAX_BODY = 64 * 1024 * 1024
@@ -111,7 +118,14 @@ STATUS = {"host_refused": 400, "invalid_request": 400, "context_length_exceeded"
           "not_supported": 404, "no_machine": 409, "file_too_large": 413,
           "unsupported_media_type": 415, "rate_limited": 429, "busy": 429,
           "peer_failed": 502, "engine_failed": 502, "engine_unavailable": 503,
-          "approval_unavailable": 503}
+          "approval_unavailable": 503,
+          "graph_not_api": 400, "graph_invalid": 400, "patch_invalid": 400,
+          "forbidden_value": 400, "forbidden_node": 400, "input_missing": 400,
+          "input_hash_mismatch": 400, "engine_not_found": 404, "job_not_found": 404,
+          "file_not_found": 404, "input_not_found": 404, "model_unavailable": 409,
+          "model_unresolved": 409, "model_ambiguous": 409, "job_not_cancellable": 409,
+          "job_not_pausable": 409, "graph_too_large": 413, "input_too_large": 413,
+          "quota_exceeded": 429}
 OAUTH_DESCRIPTIONS = {
     "authorization_pending": "La demande attend la réponse de l'utilisateur dans AIODOS.",
     "slow_down": "Interroge moins souvent : 5 s de plus.",
@@ -234,7 +248,7 @@ class _Server(http.server.ThreadingHTTPServer):
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "FakeAiodos/0.1.0"
+    server_version = "FakeAiodos/0.2.0"
     sys_version = ""
 
     def log_message(self, format, *args):
@@ -249,14 +263,17 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = do_HEAD = _dispatch
 
 
-class FakeAiodos:
-    """Un faux AIODOS sur 127.0.0.1 (voir l'en-tête du module)."""
+class FakeAiodos(FakeJobs):
+    """Un faux AIODOS sur 127.0.0.1 (voir l'en-tête du module). `job_delay` : les secondes
+    de chaque unité d'un travail ComfyUI (None : il n'avance que par advance()) ;
+    `ping_every` : la cadence des « : ping » de ses événements."""
 
     def __init__(self, *, features=FEATURES, version="2.1.0", instance=None, apps=True,
                  requests=True, approval_ui=True, interval=2, expires_in=600,
                  user_code="482 197", impostor=False, mode="aiodos", other_account=False,
                  auto_approve=False, granted_where=("here", "mine"), machine="PC-BUREAU",
-                 chat_models=CHAT_MODELS, embed_models=EMBED_MODELS):
+                 chat_models=CHAT_MODELS, embed_models=EMBED_MODELS, job_delay=0.05,
+                 ping_every=5.0):
         if mode not in ("aiodos", "old", "ollama"):
             raise ValueError("mode : aiodos, old ou ollama")
         self.features = list(features)
@@ -293,6 +310,7 @@ class FakeAiodos:
         self._dir = None
         self.port = None
         self.discovery_file = None
+        self._init_jobs(job_delay, ping_every)
 
     # --- Démarrage ----------------------------------------------------------------------
     def start(self):
@@ -585,10 +603,12 @@ class FakeAiodos:
         split = urlsplit(h.path)
         path, query = split.path, parse_qs(split.query)
         length = h.headers.get("Content-Length")
-        too_big = length is not None and (not length.isdigit() or int(length) > MAX_BODY)
+        uploading = h.command == "PUT" and path.startswith("/aiodos/v1/inputs/")
+        limit = MAX_INPUT if uploading else MAX_BODY        # une entrée : 100 Mo
+        too_big = length is not None and (not length.isdigit() or int(length) > limit)
         raw = h.rfile.read(int(length)) if length and not too_big else b""
         parsed = None
-        if raw:
+        if raw and not uploading:
             try:
                 parsed = json.loads(raw.decode("utf-8"))
             except (UnicodeDecodeError, ValueError):
@@ -596,7 +616,7 @@ class FakeAiodos:
         key = self._given_key(h.headers)
         with self._lock:
             self.log.append({"method": h.command, "path": h.path, "headers": dict(h.headers),
-                             "json": parsed, "at": time.monotonic()})
+                             "json": parsed, "bytes": len(raw), "at": time.monotonic()})
             if key:
                 self.seen_keys.append(key)
         if self.mode == "old":
@@ -626,11 +646,13 @@ class FakeAiodos:
                                retryable=failure["retryable"], detail=failure["detail"],
                                retry_after=failure["retry_after"], param=failure["param"])
         if too_big:
-            return self._error(h, path, "file_too_large")
-        if (h.command == "POST" and path.startswith("/aiodos/v1/")
+            return self._error(h, path, "input_too_large" if uploading else "file_too_large")
+        if (h.command == "POST" and path.startswith("/aiodos/v1/") and raw     # un corps : JSON
                 and (h.headers.get("Content-Type") or "").split(";")[0].strip()
                 != "application/json"):
             return self._error(h, path, "unsupported_media_type")
+        if path.startswith(PREFIXES):                   # les travaux ComfyUI (_fake_jobs.py)
+            return self._jobs_route(h, h.command, path, query, parsed, raw, key)
         return self._route(h, h.command, path, query, parsed, key)
 
     def _take(self, queue, match):
@@ -963,7 +985,8 @@ class FakeAiodos:
 
     def _send_sse(self, h, status, headers, items, hold, cut=False):
         """Un flux SSE découpé (chunked). `hold` : des morceaux jusqu'au départ du client ;
-        `cut` : la connexion se ferme après les lignes, sans le morceau final."""
+        `cut` : la connexion se ferme après les lignes, sans le morceau final. Une ligne
+        « event: … » nomme l'événement qui la suit (sans ligne vide entre les deux)."""
         h.send_response(status)
         if not any(name.lower() == "content-type" for name in headers):
             h.send_header("Content-Type", "text/event-stream")
@@ -979,7 +1002,9 @@ class FakeAiodos:
                 if isinstance(item, (int, float)) and not isinstance(item, bool):
                     time.sleep(item)
                     continue
-                self._chunk(h, (str(item) + "\n\n").encode("utf-8"))
+                line = str(item)
+                end = "\n" if line.startswith("event:") and "\n" not in line else "\n\n"
+                self._chunk(h, (line + end).encode("utf-8"))
             if hold:
                 piece = _chunk("chatcmpl-hold", "qwen3.5:9b", {"content": "."})
                 deadline = time.monotonic() + 30.0

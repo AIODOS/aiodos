@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le paquet : en-têtes de licence et version partout, syntaxe de Python 3.10, imports en
 tête de module (PyInstaller), jamais print, versions concordantes, LICENSE d'AIODOS."""
 
@@ -22,7 +22,7 @@ FILES = sorted(PACKAGE.glob("src/aiodos_client/*.py")) + sorted(PACKAGE.glob("te
 def test_headers(path):
     head = path.read_text(encoding="utf-8").splitlines()[:4]
     assert any("SPDX-License-Identifier: Apache-2.0" in line for line in head)
-    assert any("aiodos-client 0.1.0" in line for line in head)
+    assert any("aiodos-client 0.2.0" in line for line in head)
 
 
 @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
@@ -52,11 +52,11 @@ def test_imports_on_top_and_no_print(path):
 
 def test_versions_agree():
     project = (PACKAGE / "pyproject.toml").read_text(encoding="utf-8")
-    assert re.search(r'^version = "0\.1\.0"$', project, re.MULTILINE)
+    assert re.search(r'^version = "0\.2\.0"$', project, re.MULTILINE)
     assert re.search(r"^dependencies = \[\]$", project, re.MULTILINE)
-    assert aiodos_client.__version__ == "0.1.0" and aiodos_client.API_VERSION == 1
+    assert aiodos_client.__version__ == "0.2.0" and aiodos_client.API_VERSION == 1
     init = (SOURCE / "__init__.py").read_text(encoding="utf-8")
-    assert re.search(r'^__version__\s*=\s*"0\.1\.0"', init, re.MULTILINE)
+    assert re.search(r'^__version__\s*=\s*"0\.2\.0"', init, re.MULTILINE)
 
 
 def test_license_is_the_one_of_aiodos():

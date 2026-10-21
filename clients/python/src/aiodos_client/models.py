@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le catalogue des modèles : `GET /aiodos/v1/models?kind=chat|embed` (docs/api-applications.md
 § 5.2), filtré par AIODOS selon les droits et le lieu de calcul de l'appli.
 

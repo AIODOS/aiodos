@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Aiodos : le client d'une appli pour la passerelle locale d'AIODOS.
 
 Sans état global modifiable et sûr entre threads : chaque requête a sa propre connexion, et
@@ -28,6 +28,7 @@ from urllib.parse import urlencode
 from . import API_VERSION, __version__, _discovery, _proof, _transport, errors, texts
 from . import access as _access
 from . import chat as _chat
+from . import engines as _engines
 from . import models as _models
 from . import status as _status
 from .comfy import Comfy
@@ -179,17 +180,18 @@ class Aiodos:
         « gallery ») ; rend vrai si une fenêtre l'a montrée."""
         return _chat.open_in_aiodos(self, page, model)
 
-    # --- Livraison 2 : présentes, NotSupported tant que features ne les annonce pas ------
+    # --- Les travaux ComfyUI : NotSupported tant que features ne les annonce pas ---------
     def engines(self):
-        """Les moteurs (ComfyUI…) des machines permises (L2)."""
-        self._refuse_unserved("engines")
+        """Les moteurs (ComfyUI) des machines permises, leurs modèles : EngineList."""
+        return _engines.list_engines(self)
 
     def jobs(self, active=True, client_ref=None, status=None):
-        """Les travaux de l'appli, pour les retrouver après un redémarrage (L2)."""
+        """Les travaux de l'appli, pour les retrouver après un redémarrage : une liste de Job
+        (`active` : True les travaux en cours, False les finis, None tous)."""
         return list_jobs(self, active, client_ref, status)
 
     def job(self, job_id):
-        """Un travail par son identifiant (L2)."""
+        """Un travail par son identifiant (« job_… ») : Job, ou JobNotFound."""
         return get_job(self, job_id)
 
     # --- Adresse --------------------------------------------------------------------
@@ -345,11 +347,33 @@ class Aiodos:
 
     # --- Fonctions annoncées (features) ---------------------------------------------
     def _require(self, info, feature):
-        """NotSupported, sans rien essayer, si AIODOS n'annonce pas cette fonction."""
+        """NotSupported, sans rien essayer, si AIODOS n'annonce pas cette fonction (ou l'une
+        de ces fonctions : un tuple)."""
         features = info.get("features") if isinstance(info, dict) else None
-        if isinstance(features, list) and feature not in features:
-            raise errors.make("not_supported", self.lang, feature=feature,
-                              detail={"feature": feature})
+        if not isinstance(features, list):
+            return
+        for name in (feature,) if isinstance(feature, str) else feature:
+            if name not in features:
+                raise errors.make("not_supported", self.lang, feature=name,
+                                  detail={"feature": name})
+
+    def _gate(self, *features):
+        """La preuve d'identité faite et ces fonctions annoncées, sans appeler d'autre route :
+        pour vérifier d'emblée ce qui ne parle à AIODOS que plus tard (watch, tokenize…).
+        Lève NotSupported, NeedsAccess, Unreachable…"""
+        endpoint, disc = self._target()
+        _, info = self._trust(endpoint, disc)
+        self._require(info, features)
+
+    def _granted(self):
+        """Les cercles accordés à l'appli (`info` avec la clé, après la preuve), ou None si
+        AIODOS ne les dit pas."""
+        endpoint, disc = self._target()
+        key, _ = self._trust(endpoint, disc)
+        info = self._info(endpoint, key=key)
+        app = info.get("app") if isinstance(info.get("app"), dict) else {}
+        where = app.get("where")
+        return tuple(c for c in where if isinstance(c, str)) if isinstance(where, list) else None
 
     def _serves(self, feature):
         """AIODOS annonce-t-il `feature` ? (None : on ne sait pas) ; ne lève jamais."""
@@ -367,8 +391,9 @@ class Aiodos:
         return feature in features if isinstance(features, list) else None
 
     def _refuse_unserved(self, feature):
-        """Les fonctions de la livraison 2 : NotSupported, sans rien essayer. Si AIODOS les
-        annonce déjà, c'est ce client (0.1.0) qui est à mettre à jour."""
+        """Les fonctions que ce client ne sert pas encore (recettes, object_info, liens
+        signés…) : NotSupported, sans rien essayer. Si AIODOS les annonce déjà, c'est ce
+        client qui est à mettre à jour."""
         if self._serves(feature):
             raise errors.make("not_supported", self.lang,
                               message=texts.error("client_too_old", self.lang, feature=feature,
@@ -392,14 +417,18 @@ class Aiodos:
             self._forget_trust()
         raise exc
 
-    def _call(self, method, path, *, body=None, feature=None, headers=None, timeout=None,
-              cancel=None):
-        """Une requête avec la clé (après la preuve) : la réponse JSON, ou l'erreur."""
+    def _request(self, method, path, *, body=None, data=None, feature=None, headers=None,
+                 timeout=None, cancel=None):
+        """Une requête avec la clé (après la preuve) : (Response lue en entier, adresse),
+        sans en juger le statut. `body` : du JSON ; `data` : un corps brut (octets, ou fichier
+        ouvert), son Content-Type et son Content-Length dans `headers`."""
         endpoint, disc = self._target()
         key, info = self._trust(endpoint, disc)
         if feature:
             self._require(info, feature)
-        payload = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
+        payload = data
+        if body is not None:
+            payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
         try:
             resp = _transport.request(endpoint, method, path,
                                       headers=self._headers(key, json_body=body is not None,
@@ -409,13 +438,21 @@ class Aiodos:
         except errors.Unreachable:
             self._forget_trust()
             raise
+        return resp, endpoint
+
+    def _call(self, method, path, *, body=None, feature=None, headers=None, timeout=None,
+              cancel=None):
+        """Une requête avec la clé (après la preuve) : la réponse JSON, ou l'erreur."""
+        resp, endpoint = self._request(method, path, body=body, feature=feature,
+                                       headers=headers, timeout=timeout, cancel=cancel)
         self._check(resp.status, resp.headers, resp.body, endpoint)
         return resp.json(self.lang)
 
-    def _stream(self, path, body, *, headers=None, first_timeout=None, timeout=None,
-                cancel=None, feature=None):
-        """Une requête avec la clé dont la réponse se lit en flux : rend l'échange ouvert
-        (Exchange, à fermer), sa réponse déjà vérifiée."""
+    def _stream(self, path, body=None, *, method="POST", accept="text/event-stream",
+                headers=None, first_timeout=None, timeout=None, cancel=None, feature=None):
+        """Une requête avec la clé dont la réponse se lit en flux (SSE, contenu d'un fichier) :
+        rend l'échange ouvert (Exchange, à fermer), sa réponse déjà vérifiée. Sans `body`,
+        une requête sans corps (GET)."""
         endpoint, disc = self._target()
         key, info = self._trust(endpoint, disc)
         if feature:
@@ -423,10 +460,10 @@ class Aiodos:
         idle = float(timeout or self.timeout)
         exchange = _transport.Exchange(endpoint, timeout=idle, first_timeout=first_timeout or idle,
                                        cancel=cancel, lang=self.lang)
-        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        payload = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
         try:
-            resp = exchange.send("POST", path,
-                                 self._headers(key, json_body=True, accept="text/event-stream",
+            resp = exchange.send(method, path,
+                                 self._headers(key, json_body=body is not None, accept=accept,
                                                extra=headers), payload)
             if not 200 <= resp.status < 300:
                 self._check(resp.status, resp.headers, exchange.read_body(ERROR_LIMIT),

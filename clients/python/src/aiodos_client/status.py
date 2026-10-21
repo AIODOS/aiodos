@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """L'état d'AIODOS vu par l'appli (docs/api-applications.md § 6) : `status()`, qui ne lève
 jamais, et `wait_ready()`.
 

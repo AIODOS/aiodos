@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Les erreurs d'aiodos-client : une sous-classe par code stable (docs/api-applications.md § 3).
 
 Toutes dérivent d'AiodosError(code, status, message, hint, retryable, detail, retry_after) :
@@ -40,6 +40,13 @@ STATUS_OF = {
     "not_supported": 404, "no_machine": 409, "file_too_large": 413,
     "unsupported_media_type": 415, "rate_limited": 429, "busy": 429, "peer_failed": 502,
     "engine_failed": 502, "engine_unavailable": 503, "approval_unavailable": 503,
+    # les travaux ComfyUI (§ 5.7)
+    "graph_not_api": 400, "graph_invalid": 400, "patch_invalid": 400, "forbidden_value": 400,
+    "forbidden_node": 400, "input_missing": 400, "input_hash_mismatch": 400,
+    "engine_not_found": 404, "job_not_found": 404, "file_not_found": 404,
+    "input_not_found": 404, "model_unavailable": 409, "model_unresolved": 409,
+    "model_ambiguous": 409, "job_not_cancellable": 409, "job_not_pausable": 409,
+    "graph_too_large": 413, "input_too_large": 413, "quota_exceeded": 429,
 }
 
 # Codes à réessayer quand la réponse ne le dit pas elle-même.
@@ -304,6 +311,148 @@ class EngineFailed(PeerFailed):
     default_code = "engine_failed"
 
 
+# --- Les travaux ComfyUI (docs/api-applications.md § 3, « Les travaux ComfyUI ajoutent ») -
+class GraphInvalid(InvalidRequest):
+    """Graphe refusé avant toute mise en file : mal formé (graph_invalid), au format de
+    l'éditeur (graph_not_api), ou retouche impossible (patch_invalid) ; `code` les distingue."""
+    default_code = "graph_invalid"
+
+    @property
+    def node(self):
+        return self.detail.get("node")
+
+    @property
+    def graph(self):
+        """L'indice du graphe en cause (dans `graphs`)."""
+        return self.detail.get("graph")
+
+
+class ForbiddenValue(InvalidRequest):
+    """Un chemin, une adresse ou une annotation de dossier dans une valeur du graphe."""
+    default_code = "forbidden_value"
+
+    @property
+    def node(self):
+        return self.detail.get("node")
+
+    @property
+    def input(self):
+        return self.detail.get("input")
+
+    @property
+    def reason(self):
+        return self.detail.get("reason")
+
+
+class ForbiddenNode(InvalidRequest):
+    """Un nœud d'un service en ligne (`detail["class"]`)."""
+    default_code = "forbidden_node"
+
+    @property
+    def node_class(self):
+        return self.detail.get("class")
+
+
+class InputMissing(InvalidRequest):
+    """Jeton @in: sans entrée déclarée, ou entrée jamais envoyée par cette appli."""
+    default_code = "input_missing"
+
+    @property
+    def input(self):
+        return self.detail.get("input")
+
+
+class InputHashMismatch(InvalidRequest):
+    """Les octets reçus par AIODOS n'ont pas l'empreinte de l'adresse (`sha256` : la leur)."""
+    default_code = "input_hash_mismatch"
+
+    @property
+    def sha256(self):
+        return self.detail.get("sha256")
+
+
+class InputTooLarge(FileTooLarge):
+    """Une entrée de plus de 100 Mo : refusée par le client avant l'envoi, ou par AIODOS."""
+    default_code = "input_too_large"
+
+
+class GraphTooLarge(FileTooLarge):
+    """2 Mo par graphe, 8 Mo et 64 graphes par travail."""
+    default_code = "graph_too_large"
+
+
+class NotFound(AiodosError):
+    """Introuvable, ou à une autre appli (une appli ne voit que ce qui est à elle)."""
+    default_code = "not_found"
+
+
+class JobNotFound(NotFound):
+    default_code = "job_not_found"
+
+
+class FileNotFound(NotFound):
+    default_code = "file_not_found"
+
+
+class InputNotFound(NotFound):
+    default_code = "input_not_found"
+
+
+class EngineNotFound(NotFound):
+    default_code = "engine_not_found"
+
+
+class ModelUnavailable(AiodosError):
+    """Il manque des modèles aux machines permises (`models` : [{folder, name}] ; `machine` :
+    celle à qui il en manque le moins)."""
+    default_code = "model_unavailable"
+
+    @property
+    def models(self):
+        found = self.detail.get("models")
+        return found if isinstance(found, list) else []
+
+    @property
+    def machine(self):
+        return self.detail.get("machine")
+
+
+class ModelUnresolved(AiodosError):
+    """Un jeton @model: sans modèle déclaré dans « models »."""
+    default_code = "model_unresolved"
+
+
+class ModelAmbiguous(AiodosError):
+    """Le même nom de modèle dans plusieurs dossiers (`candidates`) : le déclarer."""
+    default_code = "model_ambiguous"
+
+    @property
+    def candidates(self):
+        found = self.detail.get("candidates")
+        return found if isinstance(found, list) else []
+
+
+class JobNotCancellable(AiodosError):
+    """Le travail est déjà fini (ou, pour l'oublier, pas encore fini)."""
+    default_code = "job_not_cancellable"
+
+
+class JobNotPausable(AiodosError):
+    """Le travail est déjà fini."""
+    default_code = "job_not_pausable"
+
+
+class QuotaExceeded(AiodosError):
+    """Une limite de l'appli atteinte (`quota` : active_jobs, inputs, unfetched_files…) :
+    récupérer ou supprimer des fichiers et des travaux finis. Pas un RateLimited : attendre
+    ne suffit pas toujours."""
+    default_code = "quota_exceeded"
+
+    @property
+    def quota(self):
+        return self.detail.get("quota")
+
+
 BY_CODE = {
     "not_installed": NotInstalled, "not_running": NotRunning, "unreachable": Unreachable,
     "gateway_closed": GatewayClosed, "apps_closed": AppsClosed, "not_aiodos": NotAiodos,
@@ -324,6 +473,15 @@ BY_CODE = {
     "no_machine": NoMachine, "not_supported": NotSupported, "rate_limited": RateLimited,
     "busy": Busy, "engine_unavailable": EngineUnavailable, "peer_failed": PeerFailed,
     "engine_failed": EngineFailed,
+    "graph_invalid": GraphInvalid, "graph_not_api": GraphInvalid, "patch_invalid": GraphInvalid,
+    "forbidden_value": ForbiddenValue, "forbidden_node": ForbiddenNode,
+    "input_missing": InputMissing, "input_hash_mismatch": InputHashMismatch,
+    "input_too_large": InputTooLarge, "graph_too_large": GraphTooLarge,
+    "job_not_found": JobNotFound, "file_not_found": FileNotFound,
+    "input_not_found": InputNotFound, "engine_not_found": EngineNotFound,
+    "model_unavailable": ModelUnavailable, "model_unresolved": ModelUnresolved,
+    "model_ambiguous": ModelAmbiguous, "job_not_cancellable": JobNotCancellable,
+    "job_not_pausable": JobNotPausable, "quota_exceeded": QuotaExceeded,
 }
 
 
