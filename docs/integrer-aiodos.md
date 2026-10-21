@@ -5,8 +5,10 @@
 > RFC 8628 device-flow: the app shows a 6-digit code, the user compares and approves). The app
 > then talks OpenAI-compatible chat/embeddings (`/v1/*`) plus a small `/aiodos/v1/*` API, and
 > AIODOS decides which machine computes — this PC, the user's paired machines, friends — within
-> the circles the user granted. Use the zero-dependency clients `aiodos-client` (Python, npm),
-> Apache-2.0. Reference: [api-applications.md](api-applications.md).
+> the circles the user granted. ComfyUI jobs (API-format graphs) are replayed on the ComfyUI of
+> this PC and of the user's other machines, and the files are kept for the app. Use the
+> zero-dependency clients `aiodos-client` (Python, npm), Apache-2.0. Reference:
+> [api-applications.md](api-applications.md).
 
 Ce guide s'adresse à qui branche une application sur AIODOS : PANDORA, ARKLIGHT PC, ou toute
 autre. La référence, route par route, est [api-applications.md](api-applications.md) ; les
@@ -20,7 +22,8 @@ bibliothèques clientes sont dans `clients/` (leurs README donnent chaque foncti
   (l'hôte, l'origine et les en-têtes d'un navigateur sont refusés ; pas de CORS).
 - **Une appli, une clé**, accordée dans AIODOS après comparaison d'un code à 6 chiffres. Seul
   son haché est gardé ; elle se retire d'un clic, avec effet immédiat.
-- **Les droits par capacité** (conversation, embeddings, bibliothèques) et **les cercles** où
+- **Les droits par capacité** (conversation, embeddings, bibliothèques, travaux ComfyUI) et
+  **les cercles** où
   ses calculs peuvent se faire (ce PC, mes machines, mes amis, les inconnus du réseau public) :
   l'utilisateur peut décocher, jamais l'appli ajouter. Une requête peut resserrer, jamais
   élargir.
@@ -143,7 +146,45 @@ préférer les clients.
 - Pendant qu'un modèle se charge, le flux porte `: aiodos loading <s>` : les clients remettent
   leur délai d'inactivité à zéro.
 
-## 8. Les erreurs
+## 8. Travaux ComfyUI (images, vidéos)
+
+AIODOS ne remplace pas votre ComfyUI : il rejoue **vos graphes, au format API**, dans le
+ComfyUI de ce PC et dans celui des autres machines de l'utilisateur qui l'ont (chacun accordé
+dans AIODOS, Réglages → Moteurs des applications), plusieurs unités en même temps, et garde
+les fichiers pour vous jusqu'à ce que vous les récupériez. Droit : `engines:comfyui`.
+
+```python
+ai.connect(scopes=["chat", "engines:comfyui"], purpose="Textes, moods et vidéos")
+api, inputs = ai.comfy.tokenize(graph_api, {ref_node: png_bytes})    # @in: dans LoadImage
+job = ai.comfy.submit(graph=api, inputs=inputs,
+                      items=[{"seed": 1201 + i, "set": [[text_node, "text", p]]}
+                             for i, p in enumerate(prompts)],
+                      label=f"Mood · {plan}", client_ref=f"pandora:mood:{uid}")
+for ev in job.watch(cancel=self.isInterruptionRequested):
+    self.progress.emit(ev.job.progress.percent or 0, ev.job.progress.message)
+paths = job.download(dest_dir, stem=plan)
+```
+
+- **Une unité par image** (`items`, ou `repeat` pour des variations) : AIODOS ne coupe pas
+  un graphe, il répartit les unités entre les machines.
+- **Les fichiers ne se donnent que par jeton** : `@in:<id>` (l'entrée envoyée à part, par
+  empreinte), `@seed`, `@model:<clé>` ; par défaut AIODOS relève lui-même les noms de modèles.
+  Un chemin, une adresse ou une annotation de dossier dans une valeur est refusé avant la mise
+  en file (`forbidden_value`).
+- **Retrouver ses travaux** après un redémarrage de l'appli ou d'AIODOS : `ai.jobs(active=None)`,
+  ou le même `client_ref` (qui rend le même travail) ; récupérez les fichiers pas encore
+  récupérés. Un fichier récupéré est gardé encore 7 jours ; un fichier jamais récupéré n'est
+  jamais effacé seul.
+- **Pause** après l'unité en cours (rien ne se perd) ou tout de suite ; **annulation** :
+  AIODOS n'arrête dans ComfyUI que ce calcul-là, jamais ceux de l'utilisateur.
+- **Où** : ce PC et mes machines dans cette version (les amis et les inconnus viendront, sur
+  recettes) ; une autre machine ne reçoit que l'ordre de calcul, ni le nom de votre appli, ni
+  le libellé, ni `client_ref`. Pour une photo de personne, `sensitive=True` (ce PC et mes
+  machines seulement, aussi plus tard).
+- Avant de déposer, `ai.comfy.plan(...)` dit où le travail peut tourner et ce qui manque
+  (`missing` : un modèle absent, et la machine).
+
+## 9. Les erreurs
 
 Réagissez au **code**, jamais au message (fait pour l'utilisateur, en français ou en anglais
 selon `Accept-Language`). La table complète est au § 3 de la référence ; les plus courants :
@@ -157,17 +198,20 @@ selon `Accept-Language`). La table complète est au § 3 de la référence ; les
 | `tools_unavailable`, `local_only`, `vision_unsupported` | choisir un modèle de ce PC qui sait le faire |
 | `model_not_found`, `no_machine` | proposer « L'installer dans AIODOS » (`open_in_aiodos("models")`) |
 | `rate_limited`, `busy` | attendre `Retry-After` |
-| `engine_unavailable`, `engine_failed`, `peer_failed` | réessayer un peu plus tard |
+| `engine_unavailable`, `engine_failed`, `peer_failed` | réessayer un peu plus tard (travail ComfyUI : ComfyUI n'est ouvert et accordé sur aucune machine permise) |
+| `model_unavailable` | dire quel modèle manque et où (`detail.models`, `detail.machine`) |
+| `graph_not_api`, `graph_invalid`, `patch_invalid`, `forbidden_value`, `forbidden_node` | corriger le graphe (format API, jetons) : ce n'est pas à réessayer |
+| `quota_exceeded` | récupérer ou supprimer des fichiers et des travaux finis |
 | `unreachable` | « AIODOS n'est pas lancé » (son message contient « Connexion refusée ») |
 
-## 9. Essayer sans AIODOS
+## 10. Essayer sans AIODOS
 
 Les deux clients ont un faux serveur qui sert le contrat partagé (`clients/contract/`) :
 `FakeAiodos` en Python, `createFakeFetch()` et `startFakeServer()` en JavaScript. Ils simulent
 l'accord, le refus, le retrait, un flux avec outils, une erreur en route. Ils ne touchent ni au
 réseau, ni au vrai fichier de découverte.
 
-## 10. Licences et versions
+## 11. Licences et versions
 
 - Les clients sont sous **Apache-2.0** : une appli sous GPL-3.0 peut les inclure (en gardant
   `LICENSE`, `NOTICE` et les en-têtes) ; l'inverse est interdit (aucune ligne d'une appli GPL
@@ -175,10 +219,11 @@ réseau, ni au vrai fichier de découverte.
 - Les licences des modèles : affichez celle du catalogue ; une licence restrictive s'accepte
   dans AIODOS, par l'utilisateur.
 - **Lisez `features`** (`GET /aiodos/v1/info`) : une fonction absente lève `NotSupported`.
-  Ne comparez jamais de numéros de version. L2 ajoutera les travaux de moteur (ComfyUI…), la
-  file et les fichiers ; votre code n'aura pas à changer.
+  Ne comparez jamais de numéros de version. Les travaux ComfyUI (`engines.comfyui`, `jobs`,
+  `inputs`, `files`) demandent un client 0.2.0 ou plus : le 0.1.0 lève `NotSupported`, avec le
+  conseil de le mettre à jour.
 
-## 11. Liste de contrôle
+## 12. Liste de contrôle
 
 - [ ] `127.0.0.1` seulement, sans proxy ni redirection (les clients le font).
 - [ ] Droits minimaux ; `here` pour les données sensibles.
@@ -191,10 +236,10 @@ réseau, ni au vrai fichier de découverte.
 - [ ] Annuler ce que l'utilisateur abandonne (les clients coupent vraiment le flux).
 - [ ] Sur `key_revoked`, une seule nouvelle demande, après un clic.
 
-## 12. Recettes
+## 13. Recettes
 
 **PANDORA** (Python, PyQt) :
-- `requirements.txt` : `aiodos-client==0.1.*`, épinglé par empreinte (`--require-hashes`).
+- `requirements.txt` : `aiodos-client==0.2.*`, épinglé par empreinte (`--require-hashes`).
 - `core/aiodos.py`, sans Qt : le client, l'état en cache, `connect` appelé depuis un QThread
   (`on_code` émet un signal ; `cancel=self.isInterruptionRequested`).
 - Un moteur « aiodos » pour translate, enhance, video_prompt, la vision et les conversations
@@ -203,8 +248,12 @@ réseau, ni au vrai fichier de découverte.
 - La clé dans `%LOCALAPPDATA%\PANDORA\aiodos.key` (DPAPI) ; `config.json` ne garde que
   `aiodos_url` et `aiodos_where`.
 - Les erreurs par `exc.code` ; le conseil devient « Réglages → Applications et autres outils ».
-- Les images et vidéos de PANDORA restent calculées par ses moteurs (ComfyUI…) : AIODOS les
-  répartira entre les machines en L2 (`comfy.submit`), sans que PANDORA change de moteur.
+- Les images et vidéos de PANDORA restent calculées par ComfyUI : `core/comfy_transport.py`
+  offre deux transports aux mêmes fonctions, « ComfyUI de ce PC » (celui d'aujourd'hui) et
+  « Mes machines par AIODOS » (`comfy.submit`, § 8), choisi par un réglage. Le transport
+  AIODOS corrige au passage trois pièges : plus d'interruption globale de ComfyUI, des noms de
+  fichiers neutres, un clip de plus de 100 Mo refusé avant l'envoi. `sensitive=True` pour les
+  fiches de casting et les visages de référence.
 
 **ARKLIGHT PC** (Node.js, Electron) :
 - D'abord, réserver les messages `ai.*` de son serveur aux clients de la machine elle-même
