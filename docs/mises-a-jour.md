@@ -32,17 +32,21 @@ AIODOS lui-même**, comme un fichier de travail.
    ce fichier par un commit. **Sauvegarder la clé à part** (clé USB, gestionnaire de mots
    de passe). Sans elle, plus aucune mise à jour ne peut être publiée pour les machines
    déjà installées.
-2. Écrire le numéro de la version dans `aiodos/__init__.py` (ex. `2.0.1`), puis faire un
+2. Écrire le numéro de la version dans `aiodos/__init__.py` (ex. `1.0.1`), puis faire un
    commit.
 3. Publier :
    ```
    python tools/publish.py release --notes "Ce qui change, en une phrase"
    ```
    L'outil construit d'abord le compagnon de chaque plateforme (voir ci-dessous), ce qui
-   prend quelques minutes. Le paquet signé est rangé dans `data/updates/packages/2.0.1/`
-   et l'étiquette `v2.0.1` marque le commit. Le nœud de ce PC le propose à ses machines
+   prend quelques minutes. Le paquet signé est rangé dans `data/updates/packages/1.0.1/`
+   et l'étiquette `v1.0.1` marque le commit. Le nœud de ce PC le propose à ses machines
    appairées dans la minute. Il n'a pas besoin d'être redémarré.
-4. Repasser le numéro en `2.0.2-dev` pour la suite, puis faire un commit.
+4. Repasser le numéro en `1.0.2-dev` pour la suite, puis faire un commit.
+
+La numérotation part de 1.0.0 (21/10/2026). Les 2.0.0 et 2.0.1 citées plus bas étaient
+des versions d'essai, jamais publiées hors des machines de l'auteur : leurs paquets et
+leurs étiquettes sont retirés.
 
 Avec `--out dossier`, l'archive, les compagnons et le manifeste sont aussi copiés dans
 ce dossier, pour une installation à la main (voir plus bas). L'outil refuse :

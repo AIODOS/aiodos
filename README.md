@@ -1,16 +1,25 @@
 # AIODOS
 
-> *AI* + *hodos*, « le chemin » en grec, celui de « méthode » et de « synode » (faire
-> route ensemble) : **la voie de l'IA, faite ensemble**. Le projet s'appelait Cœur IA
-> jusqu'au 16/10/2026 ; ses données sont reprises telles quelles.
+**La voie de l'IA, faite ensemble.** AIODOS fait tourner l'IA sur tes propres machines et
+les fait travailler ensemble : tes PC, ton téléphone, ceux de tes amis et, à terme, ceux de
+tous les participants du réseau public. Chaque gros travail est découpé en petites unités
+que les machines libres se partagent, comme les morceaux d'un torrent ; un modèle trop gros
+pour une seule carte graphique se répartit entre plusieurs.
 
-Atelier d'IA **100 % local** : chat, code et documents avec des modèles open source
-(Mistral, Qwen…), sur ta machine, servis par llama.cpp intégré à AIODOS (ou par [Ollama]). **Plusieurs machines peuvent
-travailler ensemble** : chaque gros travail est découpé en petites unités
-indépendantes, que tes PC appairés se partagent sur le réseau local.
+- **Converser, coder, chercher dans tes documents** avec des modèles ouverts (Mistral,
+  Qwen…), servis par llama.cpp, intégré à AIODOS (ou par [Ollama]) ; l'IA cite ses sources.
+- **Créer des images et des vidéos** dans la conversation, calculées par les machines qui
+  ont le modèle.
+- **Brancher tes applications et tes outils** (PANDORA, ARKLIGHT PC, un éditeur de code, un
+  assistant…) : ils profitent de la même puissance partagée.
 
-> **Local par défaut, distribué à la demande.** Rien ne quitte la machine sans
-> action explicite : le web et le cloud sont optionnels et validés avant chaque envoi.
+> **Tes machines d'abord, le reste avec ton accord.** Tes machines appairées calculent
+> ensemble dès la première ouverture ; tes amis et le réseau public, seulement si tu
+> l'acceptes. Entre machines, tout est chiffré, et rien n'est gardé par celle qui calcule.
+> Le web et le cloud restent optionnels, et chaque envoi se valide d'abord.
+
+*AI* + *hodos* : « le chemin » en grec, celui de « méthode » et de « synode » (faire route
+ensemble).
 
 ## Où en est le projet
 
@@ -42,8 +51,9 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
 
 ## Faire travailler plusieurs machines (phase 1)
 
-1. **Activer le réseau local** sur chaque PC (vue « Réseau local »). Windows demande
-   l'autorisation du pare-feu pour Python : l'accepter pour les **réseaux privés** seulement.
+1. **Le réseau local** est actif dès la première ouverture (vue « Réseau local » pour le
+   couper). Windows demande l'autorisation du pare-feu pour Python : l'accepter pour les
+   **réseaux privés** seulement.
 2. **Appairer** : les machines AIODOS du réseau apparaissent d'elles-mêmes (sinon,
    les ajouter par adresse IP). Un code à 6 chiffres s'affiche sur les deux écrans :
    l'appairage n'aboutit que s'il est confirmé **sur chacune des deux machines**.
@@ -84,8 +94,8 @@ Comment le travail circule :
 - **Réciprocité** : chaque machine tient le compte du temps de calcul donné et reçu ;
   celles qui ont le plus calculé pour toi sont servies en premier.
 
-**Prêter ses modèles pour les conversations** (vue « Cette machine », désactivé par
-défaut) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, fait répondre
+**Prêter ses modèles pour les conversations** (vue « Cette machine », activé par défaut
+entre mes machines) : une machine sans GPU, ou dont le modèle ne tient pas en mémoire, fait répondre
 ses conversations par le modèle d'une autre machine. La réponse est calculée là-bas et
 arrive en flux chiffré, morceau par morceau ; le bouton Stop coupe la génération là-bas.
 Le texte de la conversation passe par la machine qui prête le temps de la réponse, sans y
@@ -163,8 +173,8 @@ recherche reçue est notée dans la vue Réseau, sans la question. Détails :
 [`aiodos-net`](compagnon/README.md) (Rust, Iroh), relie les machines appairées quand
 elles ne sont plus sur le même réseau (téléphone en 4G…) : une connexion chiffrée par
 machine, en direct ou par un relais, qui n'accepte que les machines appairées. Il est
-désactivé par défaut (réglage `internet_enabled`) ; le réseau local reste le premier
-chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
+actif dès la première ouverture (réglage `internet_enabled`, pour le couper) ; le réseau
+local reste le premier chemin essayé. Étude et plan : [docs/phase2-internet.md](docs/phase2-internet.md).
 
 **Un modèle trop gros pour une seule machine (prototype)** se découpe entre mes machines
 avec [llama.cpp] : chacune en garde une tranche de couches sur sa carte graphique le temps
@@ -387,7 +397,7 @@ seule, et ses liens ne s'ouvrent que vers le web ou un courriel. La passerelle d
 outils, fermée par défaut, n'écoute elle aussi que sur `127.0.0.1`, vérifie `Host` et
 `Origin` (une page web ne s'en sert pas) et exige sa clé d'accès, stable et renouvelable.
 
-**Audit du 20/10/2026** : 37 failles confirmées, corrigées le 21/10 pour la version 2.0.2,
+**Audit du 20/10/2026** : 37 failles confirmées, corrigées le 21/10 pour la version 1.0.0,
 sauf une (le pont MCP de la passerelle, réécrite à part). Modèle de menace, failles,
 bornes, compatibilité et ce qui reste ouvert : [docs/securite.md](docs/securite.md).
 **L'appairage par code passe au protocole 2** : mettre à jour toutes les machines,
@@ -396,7 +406,8 @@ se parler.
 
 ## Données
 
-Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais versionné.
+Tout est dans `data/` (base `aiodos.db`, journaux) : ce dossier n'est jamais versionné. Le
+projet s'appelait Cœur IA jusqu'au 16/10/2026 : ses données sont reprises telles quelles.
 
 ## Tests
 

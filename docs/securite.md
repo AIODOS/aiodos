@@ -1,7 +1,7 @@
 # Sécurité d'AIODOS
 
 Pour l'auteur et pour qui lit le code. Ce document décrit l'audit de sécurité du
-20/10/2026, le lot de corrections qui l'a suivi (20 et 21/10/2026, pour la version 2.0.2),
+20/10/2026, le lot de corrections qui l'a suivi (20 et 21/10/2026, pour la version 1.0.0),
 les bornes qu'il pose, et ce qui reste ouvert.
 
 ## En bref
@@ -809,7 +809,7 @@ le reconstruire (`cargo build --release`) après chaque changement de `compagnon
   que son code (`PRAGMA user_version` plus grand que `SCHEMA_VERSION`).
 - `tools/android_wheels.py`, lancé seul, ne contrôle ni le dépôt ni ses outils (il l'est
   quand `build_android.py` le lance).
-- La note de version 2.0.2 reste à écrire : elle doit dire le protocole 2 de l'appairage.
+- La note de version 1.0.0 reste à écrire : elle doit dire le protocole 2 de l'appairage.
 
 **Stockage**
 - Les deux essais des vrais droits Unix (`tests/test_securite_stockage.py`) n'ont pas
@@ -857,7 +857,7 @@ le n° 3 et faire auditer la passerelle.
   puis la même commande). Sinon, chaque construction du compagnon avertit qu'un autre
   compte pourrait y poser une configuration de cargo.
 - **Avant de publier** : commiter tout le lot (les outils refusent les fichiers non
-  suivis), publier la 2.0.2 avec sa note de version, reconstruire et installer l'appli du
+  suivis), publier la 1.0.0 avec sa note de version, reconstruire et installer l'appli du
   téléphone, puis mettre à jour toutes les machines avant tout nouvel appairage.
 - **Sur une machine Linux ou macOS partagée** qui a fait tourner une version d'avant :
   refaire les appairages, et changer les clés du cloud et de la passerelle (§ 3.8).

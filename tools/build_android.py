@@ -146,9 +146,9 @@ def python313() -> str:
                      f"(« uv python install {android_deps.PYTHON} »)")
 
 
-# La numérotation a repris à 1.0.0 le 21/10/2026, après des 2.0.x : Android refuse un
-# versionCode plus petit que celui de l'appli en place (20002 pour 2.0.2-dev), sauf à la
-# désinstaller et perdre les données du nœud. Le décalage garde chaque code au-dessus.
+# Les versions d'essai d'avant la 1.0.0 portaient des versionCode jusqu'à 20002 : Android
+# refuse un code plus petit que celui de l'appli en place, sauf à la désinstaller et perdre
+# les données du nœud. Le décalage garde chaque code au-dessus.
 CODE_OFFSET = 100000
 
 

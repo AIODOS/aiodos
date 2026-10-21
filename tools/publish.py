@@ -282,7 +282,7 @@ def cmd_release(args):
         sys.exit(f"Numéro de version illisible dans aiodos/__init__.py : {number!r}")
     if "-dev" in number and not args.dev:
         sys.exit(f"{number} est une version de développement : écris le numéro de la version "
-                 "(ex. 2.0.0) dans aiodos/__init__.py et fais un commit, ou passe --dev.")
+                 "(ex. 1.0.1) dans aiodos/__init__.py et fais un commit, ou passe --dev.")
     committed_keys = git("show", f"{commit}:aiodos/updates/keys.py")
     if kid not in committed_keys:
         sys.exit("Le commit à publier ne fait pas confiance à cette clé : sa clé publique doit "

@@ -53,8 +53,9 @@ MAX_ATTEMPTS = 2
 HEALTHY_AFTER = 10
 START_TIMEOUT = 240                    # pas en bonne santé au-delà : arrêtée, écartée
 MAX_RESTARTS = 5                       # par lancement : garde-fou contre une boucle
-TRUST_SINCE = "2.0.2-dev"              # première version qui connaît les amis (2.0.0, 2.0.1 : non)
-# Ce qui le prouve dans son code : des copies « 2.0.2-dev » ont précédé les amis (804bd7c)
+TRUST_SINCE = "1.0.0"                  # toutes les versions depuis la 1.0.0 connaissent les amis
+# Une copie d'essai d'avant (numérotée 2.0.x) se reconnaît à son code : des copies
+# « 2.0.2-dev » ont précédé les amis (804bd7c)
 TRUST_MARK = ("aiodos/network/sharing.py", 'FRIEND = "friend"')
 
 

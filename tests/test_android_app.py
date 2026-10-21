@@ -249,9 +249,8 @@ def test_the_engine_is_called_llama_cpp_in_the_app_even_when_missing(monkeypatch
 
 
 def test_the_app_installs_over_the_2_0_x_already_there():
-    """La numérotation a repris à 1.0.0 : l'APK doit s'installer par-dessus l'appli en
-    2.0.2-dev (versionCode 20002) sans qu'il faille la désinstaller, et donc garder les
-    données du nœud."""
+    """L'APK s'installe par-dessus une version d'essai d'avant la 1.0.0 (versionCode
+    jusqu'à 20002) sans qu'il faille la désinstaller : le nœud garde ses données."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     import build_android
     name, code = build_android.version()

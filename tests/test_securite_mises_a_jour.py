@@ -387,7 +387,7 @@ def test_a_node_whose_original_version_ignores_friends_refuses_them(tmp_path, mo
     assert launcher.friends_refused() is None
     monkeypatch.setattr(vault, "available", lambda: False)   # Termux, Linux : en clair
     for number, refused in (("2.0.1", True), ("2.0.0", True), ("2.0.2", False),
-                            ("2.1.0", False)):
+                            ("2.1.0", False), ("1.0.0", False), ("1.0.1", False)):
         base = fake_code(tmp_path / f"origine-{number}", number)
         if not refused:
             knows_friends(base)
