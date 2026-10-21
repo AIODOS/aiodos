@@ -28,8 +28,9 @@ from fastapi.responses import JSONResponse, Response
 
 from aiodos import __version__, settings
 from aiodos.chat import pipeline
-from aiodos.gateway import answer, catalog
+from aiodos.gateway import answer, catalog, scopes
 from aiodos.gateway.answer import GatewayError
+from aiodos.gateway.errors import ApiError
 from aiodos.knowledge import search, store
 from aiodos.network import placement
 from aiodos.services import ollama
@@ -43,7 +44,10 @@ WITHOUT_HEADER = "2025-03-26"
 META = "io.modelcontextprotocol/"
 TTL_MS = 300_000                    # liste des outils : la même pendant 5 min au moins
 
-_running = {}                       # identifiant JSON-RPC -> réponse de « converser » en cours
+_running = {}                       # (appli, identifiant JSON-RPC) -> « converser » en cours
+# Droit qu'exige chaque outil (gateway/scopes.py) : une appli ne voit que les siens
+TOOL_SCOPES = {"lister_bibliotheques": "libraries", "rechercher_bibliotheques": "libraries",
+               "converser": "chat"}
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600, -32601, -32602
 HEADER_MISMATCH, UNSUPPORTED_VERSION = -32020, -32022
@@ -170,7 +174,7 @@ async def _handle(request: Request, message, header) -> tuple:
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
         version = meta.get(META + "protocolVersion")
         if method == "notifications/cancelled":     # l'assistant n'attend plus la réponse
-            running = _running.get(str(params.get("requestId")))
+            running = _running.get(_key(request, params.get("requestId")))
             if running is not None:
                 running.close()
             return None, 202
@@ -243,7 +247,7 @@ async def _modern(request: Request, method, params: dict) -> dict:
         return _complete({"supportedVersions": list(SUPPORTED), "capabilities": CAPABILITIES,
                           "instructions": INSTRUCTIONS}, cacheable=True)
     if method == "tools/list":
-        return _complete({"tools": TOOLS}, cacheable=True)
+        return _complete({"tools": _tools(request)}, cacheable=True)
     if method == "tools/call":
         return _complete(await _call(request, params))
     raise RpcError(METHOD_NOT_FOUND, f"Méthode inconnue : {method}", status=404)
@@ -260,10 +264,20 @@ async def _legacy(request: Request, method, params: dict) -> dict:
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": TOOLS}
+        return {"tools": _tools(request)}
     if method == "tools/call":
         return await _call(request, params)
     raise RpcError(METHOD_NOT_FOUND, f"Méthode inconnue : {method}")
+
+
+def _tools(request: Request) -> list:
+    """Les outils que cette clé peut appeler (droits de l'appli)."""
+    return [t for t in TOOLS if scopes.has(request, TOOL_SCOPES[t["name"]])]
+
+
+def _key(request: Request, rpc_id) -> str:
+    context = getattr(request.state, "aiodos_app", None)
+    return f"{context.id if context is not None else ''}:{rpc_id}"
 
 
 # --------------------------------------------------------------------- outils
@@ -274,6 +288,10 @@ async def _call(request: Request, params: dict) -> dict:
             "converser": _converse}.get(name)
     if tool is None:
         raise RpcError(INVALID_PARAMS, f"Outil inconnu : {name}")
+    if not scopes.has(request, TOOL_SCOPES[name]):
+        raise RpcError(INVALID_PARAMS, f"Cette application n'a pas le droit "
+                       f"« {TOOL_SCOPES[name]} » qu'exige « {name} ».",
+                       {"code": "scope_denied", "scope": TOOL_SCOPES[name]})
     if not isinstance(arguments, dict):
         raise RpcError(INVALID_PARAMS, "« arguments » doit être un objet.")
     try:
@@ -284,13 +302,19 @@ async def _call(request: Request, params: dict) -> dict:
             "isError": False}
 
 
-def _active_libraries() -> list:
-    """Bibliothèques montrées aux assistants : actives, et pas gardées sur ce PC."""
-    return [c for c in store.list_collections() if c["enabled"] and c["scope"] != "local"]
+def _active_libraries(context=None) -> list:
+    """Bibliothèques montrées aux assistants : actives, et pas gardées sur ce PC ; pour une
+    appli, seulement celles choisies à l'accord (id et date de création : un numéro peut
+    resservir après une suppression)."""
+    shown = [c for c in store.list_collections() if c["enabled"] and c["scope"] != "local"]
+    if context is None or context.kind != "app":
+        return shown
+    chosen = {(int(i), round(float(created), 3)) for i, created in context.libraries}
+    return [c for c in shown if (int(c["id"]), round(float(c.get("created") or 0), 3)) in chosen]
 
 
 async def _list(request: Request, arguments: dict):
-    libraries = await asyncio.to_thread(_active_libraries)
+    libraries = await asyncio.to_thread(_active_libraries, request.state.aiodos_app)
     structured = {"bibliotheques": [{"nom": c["name"], "elements": c["entries"],
                                      "passages": c["chunks"]} for c in libraries]}
     text = "\n".join(f"- {c['name']} : {c['entries']} éléments, {c['chunks']} passages"
@@ -298,8 +322,8 @@ async def _list(request: Request, arguments: dict):
     return text, structured
 
 
-def _find(question: str, library, count: int) -> list:
-    shown = _active_libraries()
+def _find(question: str, library, count: int, context=None) -> list:
+    shown = _active_libraries(context)
     only = {c["id"] for c in shown}
     if library:
         match = [c for c in shown if c["name"] == library]
@@ -329,7 +353,8 @@ async def _search(request: Request, arguments: dict):
     library = arguments.get("bibliotheque")
     if library is not None and not isinstance(library, str):
         raise ToolError("« bibliotheque » doit être un nom de bibliothèque.")
-    hits = await asyncio.to_thread(_find, question.strip(), library, count)
+    hits = await asyncio.to_thread(_find, question.strip(), library, count,
+                                   request.state.aiodos_app)
     passages = [{"texte": h["text"], "source": h["source"], "bibliotheque": h["collection"],
                  "score": round(h["score"], 3)} for h in hits]
     if not passages:
@@ -362,17 +387,20 @@ async def _converse(request: Request, arguments: dict):
     messages.append({"role": "user", "content": message})
     executor = request.app.state.node.executor
     think = bool(settings.get("think"))
+    app = answer.for_app(request)
     try:
+        where = scopes.for_request(request, "chat")
         model_id = arguments.get("modele") or await asyncio.to_thread(_default_model)
-        models = await asyncio.to_thread(answer.plan, str(model_id), executor)
-    except GatewayError as exc:
+        models = await asyncio.to_thread(answer.plan, str(model_id), executor, where=where)
+    except (GatewayError, ApiError) as exc:
         raise ToolError(str(exc)) from exc
 
     def attempt(model, stop):
         yield from pipeline.generate(model, messages, think, stop)
 
-    stream = answer.Stream(answer.run(models, attempt, executor))
-    key = str(getattr(request.state, "rpc_id", None))
+    stream = answer.Stream(answer.run(models, attempt, executor,
+                                      interactive=app["interactive"]), cut=app["cut"])
+    key = _key(request, getattr(request.state, "rpc_id", None))
     _running[key] = stream            # notifications/cancelled l'arrête
     parts, used = [], models[0]
     try:

@@ -16,13 +16,28 @@ Continue, et des clients officiels openai 3.33.0 et mcp 2.3.0, avec lesquels AIO
 (`tests/test_gateway.py`, `tests/test_gateway_nodes.py`) ; ceux du moteur intégré, le
 20/10/2026 avec llama.cpp b11707 (`tests/test_gateway_integrated.py`, et un essai réel).
 
+Les **applications** (PANDORA, ARKLIGHT PC…) passent par la même passerelle, mais chacune avec
+sa propre clé, demandée par l'appli et accordée sur une carte dans AIODOS :
+[integrer-aiodos.md](integrer-aiodos.md). Ce document-ci parle des outils qu'on branche à la
+main.
+
 ## 1. Ouvrir la passerelle
 
-**Réglages → Autres outils** :
+**Réglages → Applications et autres outils** : deux façons de donner une clé à un outil.
 
-1. active **« Ouvrir AIODOS aux autres outils »** (désactivé par défaut) ;
-2. copie la **clé d'accès** (bouton « Copier ») : c'est la « clé d'API » à donner à l'outil ;
-3. copie l'**adresse** qui convient à l'outil :
+- **Une clé « à la main » pour cet outil** (conseillé) : « Ajouter un outil », un nom ; la clé
+  (`aiodos_app_…`) n'est montrée qu'une fois. Elle a ses propres droits (conversation,
+  embeddings) et ses cercles (ce PC et mes machines), et se retire seule, sans toucher aux
+  autres outils. AIODOS doit alors être ouvert aux applications (premier interrupteur).
+- **La clé générale** : active **« Clé générale pour les autres outils »** (désactivé par
+  défaut ; la clé est créée à ce moment, plus d'office, et gardée chiffrée par DPAPI). Elle a
+  les droits d'avant : conversation, embeddings et bibliothèques, pour tous les outils à la
+  fois. C'est elle que lit le pont MCP des assistants qui lancent un programme (§ 7).
+
+Puis :
+
+1. copie la **clé** : c'est la « clé d'API » à donner à l'outil ;
+2. copie l'**adresse** qui convient à l'outil :
 
 | Pour un outil qui parle… | Adresse |
 |---|---|
@@ -277,7 +292,7 @@ dossier où l'assistant lance le pont, souvent le projet ouvert, et un `requests
 dossier `aiodos/` de ce projet s'exécuterait à sa place (faille corrigée le 21/10/2026 : une
 configuration copiée avant doit être recopiée). La configuration exacte, avec
 le chemin de Python et celui d'AIODOS sur ta machine, est prête à copier dans **Réglages →
-Autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
+Applications et autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
 `%APPDATA%\Claude\claude_desktop_config.json` (Settings → Developer → « Edit Config »), puis
 on relance Claude Desktop. Ce fichier n'accepte que ce genre de serveur : les « connecteurs »
 distants de Claude Desktop passent par les serveurs d'Anthropic, qui ne joignent pas

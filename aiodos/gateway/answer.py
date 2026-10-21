@@ -33,11 +33,16 @@ WATCH_EVERY = 1.0             # outil encore là ? (réponse attendue sans flux)
 
 
 class GatewayError(Exception):
-    """Demande refusée, avec le statut HTTP à rendre et un message lisible."""
+    """Demande refusée, avec le statut HTTP à rendre, un message lisible et, pour les applis,
+    un code stable (gateway/errors.py ; sans lui, celui du statut)."""
 
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, code: str | None = None, detail=None,
+                 param=None):
         super().__init__(message)
         self.status = status
+        self.code = code
+        self.detail = detail
+        self.param = param
 
 
 class Disconnected(GatewayError):
@@ -62,25 +67,68 @@ def is_local(model) -> bool:
     return not (remote_models.parse(model) or cluster.parse(model))
 
 
-def plan(model_id, executor, *, local_only=False, prefer_local=False) -> list:
-    """Identifiants concrets à essayer, dans l'ordre (cf. placement.plan)."""
+def circle_of(model) -> str:
+    """Le cercle de la machine qui répondrait avec cet identifiant concret : here, mine
+    (une de mes machines, ou un gros modèle réparti entre elles) ou friends."""
+    parsed = remote_models.parse(model)
+    if parsed:
+        return "friends" if placement.destination(model) == "friend" else "mine"
+    return "mine" if cluster.parse(model) else "here"
+
+
+def route_info(model) -> dict:
+    """Qui répond avec cet identifiant concret : {"model", "machine", "place"} (en-têtes
+    X-Aiodos-Model, X-Aiodos-Machine, X-Aiodos-Place)."""
+    from aiodos.gateway import model_card
+    place = {"here": "here", "mine": "mine", "friends": "friend"}[circle_of(model)]
+    machine = placement.machine_of(model) if place != "here" else model_card._machine_name()
+    return {"model": model, "machine": machine, "place": place}
+
+
+def plan(model_id, executor, *, local_only=False, prefer_local=False, where=None,
+         tools=False, require_tools=False) -> list:
+    """Identifiants concrets à essayer, dans l'ordre (cf. placement.plan).
+
+    where : les cercles permis à l'appli (None : pas de filtre, clé générale). Un modèle
+    désigné précisément hors de ces cercles : 403 where_denied ; le choix automatique, lui,
+    ne garde que les machines permises. tools et require_tools : seule cette machine reçoit
+    les outils ; sans elle, 400 tools_unavailable plutôt qu'une réponse sans outils."""
     try:
-        models = placement.plan(catalog.internal(model_id), executor)
+        internal = catalog.internal(model_id)
+        models = placement.plan(internal, executor)
     except catalog.UnknownModel as exc:
-        raise GatewayError(404, str(exc)) from exc
+        raise GatewayError(404, str(exc), code="model_not_found", param="model") from exc
     except placement.NoMachine as exc:
-        raise GatewayError(404, str(exc)) from exc
+        raise GatewayError(404, str(exc), code="model_not_found", param="model") from exc
     # Rien vers le cloud par ici, quel que soit le chemin : son envoi se valide dans
     # l'interface, message par message
     models = [m for m in models if not cloud.provider_of(m)]
     if not models:
-        raise GatewayError(404, f"« {model_id} » n'est pas un modèle du cercle AIODOS.")
+        raise GatewayError(404, f"« {model_id} » n'est pas un modèle du cercle AIODOS.",
+                           code="model_not_found", param="model")
+    if where is not None:
+        allowed = [m for m in models if circle_of(m) in where]
+        if not allowed:
+            if placement.parse(internal) is None:          # une machine désignée
+                raise GatewayError(403, f"Lieu de calcul refusé pour « {model_id} » : cette "
+                                   f"application n'y a pas accès.", code="where_denied",
+                                   detail={"allowed": sorted(where)})
+            raise GatewayError(404, f"Aucune machine permise à cette application ne peut "
+                               f"répondre avec « {model_id} » en ce moment.",
+                               code="model_not_found", param="model")
+        models = allowed
     if local_only:
         models = [m for m in models if is_local(m)]
         if not models:
             raise GatewayError(400, f"Cette demande (images, format imposé, complétion de "
                                f"code…) ne peut être calculée que par cette machine, qui n'a "
-                               f"pas « {model_id} ».")
+                               f"pas « {model_id} ».", code="local_only", param="model")
+    elif tools and require_tools:
+        models = [m for m in models if is_local(m)]
+        if not models:
+            raise GatewayError(400, f"« {model_id} » n'est que sur une autre machine, qui ne "
+                               f"reçoit pas encore les outils.", code="tools_unavailable",
+                               param="tools")
     elif prefer_local:
         models.sort(key=lambda m: not is_local(m))
     return models
@@ -190,21 +238,35 @@ def remote(model, messages, think, options, stop):
                                              stats=True)
 
 
-def run(models: list, attempt, executor):
-    """produce(stop) pour Stream : les machines du plan essayées tour à tour."""
+def run(models: list, attempt, executor, interactive: bool = True):
+    """produce(stop) pour Stream : les machines du plan essayées tour à tour. interactive :
+    faux pour une appli en priorité basse (rien n'est suspendu ici pour elle)."""
     def produce(stop):
-        for kind, value in placement.run(models, lambda m: attempt(m, stop), executor, stop):
+        for kind, value in placement.run(models, lambda m: attempt(m, stop), executor, stop,
+                                         interactive=interactive):
             if kind == "route":
                 log.info("Passerelle : réponse par « %s »", value)
             yield kind, value
     return produce
 
 
-class Stream:
-    """Calcul bloquant (dans un thread) lu en asynchrone ; close() l'arrête."""
+def for_app(request) -> dict:
+    """Ce que la requête d'une appli impose au calcul : {"where", "interactive", "cut"}
+    (cut : le signal d'arrêt de l'appli, levé si on la retire)."""
+    from aiodos.gateway import apps, scopes
+    context = getattr(request.state, "aiodos_app", None)
+    cut = apps.stop_event(context.id) if context is not None and context.kind != "general" \
+        else None
+    return {"interactive": scopes.priority_of(request) == "interactive", "cut": cut}
 
-    def __init__(self, produce):
+
+class Stream:
+    """Calcul bloquant (dans un thread) lu en asynchrone ; close() l'arrête. cut : un
+    signal qui, levé (appli retirée), l'arrête aussi."""
+
+    def __init__(self, produce, cut: threading.Event | None = None):
         self.stop = threading.Event()
+        self.cut = cut
         self._inbox = asyncio.Queue()
         self._watched = time.monotonic()
         loop = asyncio.get_running_loop()
@@ -216,6 +278,11 @@ class Stream:
                 for item in produce(self.stop):
                     if self.stop.is_set():
                         break
+                    if cut is not None and cut.is_set():
+                        self.stop.set()
+                        put(("error", GatewayError(401, "L'accès de cette application a été "
+                                                   "retiré dans AIODOS.", code="key_revoked")))
+                        return
                     put(("item", item))
                 put(("end", None))
             except Exception as exc:
@@ -231,7 +298,12 @@ class Stream:
         déconnecte, le calcul s'arrête (Disconnected). Une réponse en flux, elle, est
         coupée par Starlette, qui ferme alors le générateur. Un relais vers l'Ollama d'ici
         sans flux ne s'arrête pas en route : Ollama n'envoie rien avant la fin."""
+        watched = request is not None or self.cut is not None
         while True:
+            if self.cut is not None and self.cut.is_set():
+                self.close()                          # appli retirée : tout de suite
+                raise GatewayError(401, "L'accès de cette application a été retiré dans "
+                                   "AIODOS.", code="key_revoked")
             if request is not None and time.monotonic() - self._watched >= WATCH_EVERY:
                 self._watched = time.monotonic()      # même quand les mots arrivent vite
                 if await request.is_disconnected():
@@ -239,7 +311,7 @@ class Stream:
                     raise Disconnected()
             try:
                 kind, value = await asyncio.wait_for(
-                    self._inbox.get(), None if request is None else WATCH_EVERY)
+                    self._inbox.get(), WATCH_EVERY if watched else None)
                 break
             except TimeoutError:
                 continue

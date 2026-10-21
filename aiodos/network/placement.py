@@ -278,14 +278,15 @@ def destination(model) -> str | None:
 
 # ------------------------------------------------------------------ réponse
 @contextmanager
-def _occupy(model, executor):
+def _occupy(model, executor, interactive: bool = True):
     """Pendant une réponse : ici, les unités GPU de fond attendent (l'interactif
     d'abord) ; ailleurs, la conversation compte dans la charge de cette machine. Un gros
     modèle réparti, qui ne tourne pas seulement ici, garde la règle de chat.py avant le
-    mode automatique (pipeline.runs_here) : pas de pause."""
+    mode automatique (pipeline.runs_here) : pas de pause. interactive faux (une appli en
+    priorité basse, gateway/scopes.py) : rien n'est suspendu ici pour elle."""
     parsed = remote_models.parse(model)
-    local = (executor is not None and not parsed and not str(model).startswith("cloud:")
-             and not cluster.parse(model))
+    local = (executor is not None and interactive and not parsed
+             and not str(model).startswith("cloud:") and not cluster.parse(model))
     if local:
         executor.interactive_begin()
     elif parsed:
@@ -317,7 +318,7 @@ def _hands_over(exc) -> bool:
                 and status not in (404, 408, 429))
 
 
-def run(models: list, attempt, executor=None, stop=None):
+def run(models: list, attempt, executor=None, stop=None, interactive: bool = True):
     """Couples (genre, valeur) de la réponse, par la première machine du plan qui répond.
 
     attempt(modèle) produit les couples d'un essai. Avant chacun vient ("route", modèle).
@@ -328,7 +329,7 @@ def run(models: list, attempt, executor=None, stop=None):
         yield "route", model
         started = False
         try:
-            with _occupy(model, executor):
+            with _occupy(model, executor, interactive):
                 for kind, value in attempt(model):
                     if kind not in QUIET:
                         started = True

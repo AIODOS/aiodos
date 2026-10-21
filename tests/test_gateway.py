@@ -19,7 +19,7 @@ import pytest
 import requests
 from fastapi.testclient import TestClient
 
-from aiodos import paths, settings
+from aiodos import db, paths, settings
 from aiodos.api.server import create_app
 from aiodos.gateway import access, server
 from aiodos.knowledge import chunking, store
@@ -102,18 +102,26 @@ def _sse(response) -> list:
 
 # ------------------------------------------------------------------- sécurité
 def test_closed_by_default_with_a_key_made_by_aiodos(ollama):
+    """Fermée par défaut, sans clé générale : elle n'est créée qu'à l'ouverture aux autres
+    outils (plus d'office, conception des applications § 3.12), puis protégée par DPAPI."""
     port = free_port()
     settings.set_many({"ollama_url": ollama.url, "gateway_port": port})
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         info = ui.get("/api/gateway", headers=UI).json()
-        assert not info["enabled"] and not info["running"]
-        assert info["key"].startswith("aiodos-") and len(info["key"]) > 40
+        assert not info["enabled"] and not info["running"] and info["key"] is None
+        assert not info["apps"] and info["requests"]
         with pytest.raises(requests.ConnectionError):
             requests.get(f"http://127.0.0.1:{port}/", timeout=2)
+        info = ui.post("/api/gateway", json={"enabled": True}, headers=UI).json()
+        assert info["running"] and info["key"].startswith("aiodos-") and len(info["key"]) > 40
         # La clé n'est pas un réglage ordinaire : ni lisible ni remplaçable par /api/settings
         assert "gateway_key" not in ui.get("/api/settings", headers=UI).json()
         ui.put("/api/settings", json={"gateway_key": "choisie"}, headers=UI)
         assert ui.get("/api/gateway", headers=UI).json()["key"] == info["key"]
+        stored = json.loads(db.query_one("SELECT value FROM settings WHERE key='gateway_key'")
+                            ["value"])
+        if sys.platform == "win32":                     # protégée par DPAPI
+            assert stored.startswith("dpapi1:") and info["key"] not in stored
 
 
 def test_the_key_is_required_in_the_format_of_each_family(gateway):

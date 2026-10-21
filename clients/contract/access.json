@@ -41,9 +41,9 @@
                   "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                            "device_code": "{device_code}"}},
       "response": {"status": 200, "headers": {"X-Aiodos-Api": "1"},
-                   "json": {"access_token": "aiodos_app_k3j9m2qa_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                   "json": {"access_token": "aiodos_app_k3j7m2qa_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                             "token_type": "Bearer", "scope": "chat embed",
-                            "aiodos": {"app_id": "k3j9m2qa", "where": ["here", "mine"],
+                            "aiodos": {"app_id": "k3j7m2qa", "where": ["here", "mine"],
                                        "priority": "interactive", "expires": null}}},
       "exact": ["token_type"]
     },
@@ -55,7 +55,7 @@
                            "device_code": "{device_code}"}},
       "response": {"status": 200, "headers": {"X-Aiodos-Api": "1"},
                    "json": {"token_type": "Bearer", "scope": "chat embed libraries",
-                            "aiodos": {"app_id": "k3j9m2qa", "where": ["here", "mine"],
+                            "aiodos": {"app_id": "k3j7m2qa", "where": ["here", "mine"],
                                        "priority": "interactive", "expires": null, "upgraded": true}}},
       "exact": ["aiodos.upgraded"]
     },

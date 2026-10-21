@@ -28,6 +28,7 @@ def ensure_defaults():
 def list_collections(include_system=False) -> list:
     rows = db.query("""
         SELECT c.id, c.name, c.enabled, c.system, c.local_only, c.share_friends, c.open_to,
+               c.created,
                (SELECT COUNT(*) FROM entries e WHERE e.collection_id = c.id) AS entries,
                (SELECT COUNT(*) FROM chunks k JOIN entries e ON e.id = k.entry_id
                  WHERE e.collection_id = c.id) AS chunks

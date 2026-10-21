@@ -105,9 +105,17 @@ une mention) ; chez un ami, seules les bibliothèques partagées avec tes amis d
 extraits. Un modèle du cloud, après validation, ne reçoit ni les bibliothèques gardées sur ce
 PC, ni la mémoire des conversations.
 
-**Ouvrir AIODOS aux autres outils** (Réglages → Autres outils, désactivé par défaut) : une
-API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement
-(`127.0.0.1`, port fixe 11435, clé d'accès à copier). Open WebUI, AnythingLLM, Continue, un
+**Ouvrir AIODOS aux applications** (PANDORA, ARKLIGHT PC…) : chaque appli demande l'accès
+d'elle-même ; une carte s'affiche dans AIODOS avec un code à 6 chiffres à comparer, ce qu'elle
+pourra faire et où ses calculs pourront se faire (ce PC, mes machines, mes amis, les inconnus
+du réseau public), à décocher au besoin. Le premier accord ouvre la passerelle ; chaque appli a
+sa clé, retirable d'un clic. Bibliothèques clientes sans dépendance, Python et JavaScript,
+sous Apache-2.0 (`clients/`) : [docs/integrer-aiodos.md](docs/integrer-aiodos.md), référence
+[docs/api-applications.md](docs/api-applications.md).
+
+**Ouvrir AIODOS aux autres outils** (Réglages → Applications et autres outils, désactivé par
+défaut) : une API compatible OpenAI et Ollama, et un serveur MCP, sur cette machine seulement
+(`127.0.0.1`, port fixe 11435, clé générale ou clé « à la main » par outil). Open WebUI, AnythingLLM, Continue, un
 éditeur de code ou un assistant (Claude Desktop, Claude Code…) y trouvent les modèles de
 cette machine et ceux que te prêtent tes machines, avec le même choix automatique, et
 cherchent dans tes bibliothèques. **Sans Ollama** : le moteur intégré (llama.cpp) sert ces
@@ -285,14 +293,27 @@ aiodos/
 ├── cluster/           gros modèles répartis entre mes machines (llama.cpp RPC) :
 │                      découpage (plan.py), carte prêtée (helper.py), groupe (group.py),
 │                      moteur livré avec les versions (delivery.py), docs/gros-modeles.md
-├── gateway/           AIODOS ouvert aux autres outils (docs/autres-outils.md)
-│   ├── server.py      serveur sur 127.0.0.1, port fixe, clé d'accès (access.py)
+├── gateway/           AIODOS ouvert aux applications et aux autres outils
+│   │                  (docs/integrer-aiodos.md, docs/api-applications.md, docs/autres-outils.md)
+│   ├── server.py      serveur sur 127.0.0.1, port fixe ; Guard : hôte, pages web, clé, appelant,
+│   │                  limites, droits, journal
+│   ├── apps.py        une clé par appli (seul le haché est gardé), clés à la main
+│   ├── access_flow.py demande d'accès (RFC 8628), carte d'accord, sourdine ; access_api.py : routes
+│   ├── app_connect.py se connecter passerelle fermée (python -m aiodos --app-request)
+│   ├── caller.py      programme et compte Windows de l'appelant (table TCP, jeton)
+│   ├── scopes.py      droits, cercles (here, mine, friends, public), priorité
+│   ├── web_guard.py   aucune page web (Origin, Fetch Metadata, JSON exigé)
+│   ├── info.py        /aiodos/v1/info et la preuve d'identité ; discovery.py : gateway.json
+│   ├── errors.py      codes d'erreur stables, en français et en anglais
+│   ├── limits.py      débit et simultanéité par appli ; usage.py : journal sans contenu
+│   ├── model_card.py  fiches des modèles ; models_api.py : /aiodos/v1/models ; open_page.py
+│   ├── access.py      clé générale des autres outils (DPAPI)
 │   ├── openai_api.py  API compatible OpenAI (/v1/…)
 │   ├── ollama_api.py  API compatible Ollama (/api/…)
 │   ├── mcp_server.py  serveur MCP : bibliothèques et conversation pour les assistants
 │   ├── mcp_stdio.py   pont stdio, pour les assistants qui lancent un programme
 │   ├── catalog.py     modèles proposés et leurs identifiants
-│   ├── answer.py      réponse par cette machine ou par une machine appairée
+│   ├── answer.py      réponse par cette machine ou par une machine appairée, selon le lieu
 │   └── engine.py      réponse par le moteur intégré, sans Ollama (routeur de llama.cpp)
 ├── jobs/              file de tâches : travaux découpés en unités (modèle BOINC)
 │   ├── queue.py       persistance, priorités, réessais, reprise

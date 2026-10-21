@@ -19,7 +19,8 @@ from aiodos import settings
 from aiodos.api.server import create_app
 from aiodos.knowledge import chunking, store
 from aiodos.llm import integrated, models
-from aiodos.llm.engine import CHAT_CONTEXT, EMBED_CONTEXT, EngineUnavailable
+from aiodos.llm.context import chat_context
+from aiodos.llm.engine import EMBED_CONTEXT, EngineUnavailable
 from aiodos.network import client, peers, placement
 from aiodos.node import identity
 from tests.conftest import _bag_of_words
@@ -155,8 +156,8 @@ def test_the_models_of_the_integrated_engine_without_ollama(tool):
     # La version d'Ollama dont la passerelle suit les formats (Open WebUI la lit par nombres)
     assert tool.get("/api/version").json() == {"version": "0.40.5"}
     shown = tool.post("/api/show", {"model": LOCAL}).json()
-    assert shown["model_info"]["llama.context_length"] == CHAT_CONTEXT
-    assert shown["parameters"] == f"num_ctx {CHAT_CONTEXT}"
+    assert shown["model_info"]["llama.context_length"] == chat_context()
+    assert shown["parameters"] == f"num_ctx {chat_context()}"
     assert shown["capabilities"] == tags[LOCAL]["capabilities"] and "tools" in shown["template"]
     shown = tool.post("/api/show", {"name": "bge-m3"}).json()      # ancien « name », sans tag
     assert shown["model_info"]["llama.context_length"] == EMBED_CONTEXT
@@ -164,7 +165,7 @@ def test_the_models_of_the_integrated_engine_without_ollama(tool):
     tool.router.loaded[rid(LOCAL)] = "loaded"
     running = tool.get("/api/ps").json()["models"]
     assert [m["name"] for m in running] == [LOCAL]
-    assert running[0]["context_length"] == CHAT_CONTEXT and running[0]["expires_at"]
+    assert running[0]["context_length"] == chat_context() and running[0]["expires_at"]
 
 
 # --------------------------------------------------------- API compatible Ollama

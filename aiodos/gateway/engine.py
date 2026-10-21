@@ -35,7 +35,8 @@ import requests
 from aiodos.gateway import catalog
 from aiodos.gateway.answer import GatewayError
 from aiodos.llm import integrated, models as registry
-from aiodos.llm.engine import CHAT_CONTEXT, EMBED_CONTEXT, EngineUnavailable
+from aiodos.llm import context as llm_context
+from aiodos.llm.engine import EMBED_CONTEXT, EngineUnavailable
 from aiodos.llm.messages import SAMPLING, for_template
 from aiodos.services import ollama
 
@@ -69,12 +70,25 @@ def failure(exc) -> GatewayError:
     return _refusal(500, str(exc).removeprefix("Moteur intégré : "))
 
 
-def _refusal(status: int, message: str) -> GatewayError:
+def _refusal(status: int, message: str, error=None) -> GatewayError:
+    """error : l'objet d'erreur de llama-server, s'il en a donné un (n_prompt_tokens, n_ctx
+    pour un texte trop long)."""
     lowered = message.lower()
+    error = error if isinstance(error, dict) else {}
+    if error.get("type") == "exceed_context_size_error" or "exceeds the available context" \
+            in lowered or "context size" in lowered and "exceed" in lowered:
+        needed, limit = error.get("n_prompt_tokens"), error.get("n_ctx")
+        detail = ({"needed": needed, "limit": limit}
+                  if isinstance(needed, int) and isinstance(limit, int) else {})
+        text = (f"Le texte fait {needed} jetons, ce modèle en accepte {limit}." if detail
+                else "La demande dépasse le contexte du modèle.")
+        return GatewayError(400, text, code="context_length_exceeded", detail=detail,
+                            param="messages")
     if status in (400, 413, 422, 501) or any(r in lowered for r in REFUSED):
         message = next((text for key, text in EXPLAINED.items() if key in lowered), message)
         return GatewayError(400, f"Le moteur intégré ne prend pas cette demande : {message}")
-    return GatewayError(502, f"Le moteur intégré n'a pas pu répondre : {message}")
+    return GatewayError(502, f"Le moteur intégré n'a pas pu répondre : {message}",
+                        code="engine_failed")
 
 
 @contextmanager
@@ -90,20 +104,20 @@ def _forward(model: str, path: str, body: dict, stream=False, timeout=TIMEOUT):
     with _guard():
         response = integrated.forward(model, path, body, stream=stream, timeout=timeout)
     if response.status_code >= 400:
-        message = _router_error(response)
+        message, error = _router_error(response)
         response.close()
-        raise _refusal(response.status_code, message)
+        raise _refusal(response.status_code, message, error)
     return response
 
 
-def _router_error(response) -> str:
-    """{"error": {"code", "message", "type"}} : le message de llama-server."""
+def _router_error(response) -> tuple:
+    """{"error": {"code", "message", "type", …}} : le message de llama-server, et l'objet."""
     try:
         error = response.json().get("error")
         message = error.get("message") if isinstance(error, dict) else error
     except (ValueError, AttributeError):
-        message = None
-    return str(message or f"HTTP {response.status_code}")
+        error = message = None
+    return str(message or f"HTTP {response.status_code}"), error
 
 
 # ---------------------------------------------------------------- catalogue
@@ -122,12 +136,13 @@ def _conversing(model: str, images=False):
         raise GatewayError(400, f"« {model} » est un modèle d'embedding : il ne converse pas.")
     if images and "vision" not in caps:
         raise GatewayError(400, f"« {model} » ne voit pas les images sur cette machine : "
-                           "choisis un modèle qui les voit (qwen3.5…).")
+                           "choisis un modèle qui les voit (qwen3.5…).",
+                           code="vision_unsupported", param="messages")
 
 
 def _context(found: registry.Model) -> int:
     """Le contexte que le routeur donne à ce modèle (llm/engine.py)."""
-    return EMBED_CONTEXT if found.embedding else CHAT_CONTEXT
+    return EMBED_CONTEXT if found.embedding else llm_context.chat_context(found.name)
 
 
 def show(name: str) -> dict | None:
@@ -159,7 +174,8 @@ def running() -> dict:
         out.append({"name": m["name"], "model": m["name"], "size": m["size"],
                     "digest": tag.get("digest", ""), "details": tag.get("details") or {},
                     "expires_at": until, "size_vram": m["size_vram"],
-                    "context_length": _context(found) if found else CHAT_CONTEXT})
+                    "context_length": _context(found) if found
+                    else llm_context.chat_context(m["name"])})
     return {"models": out}
 
 
@@ -185,13 +201,28 @@ def converse(model: str, messages: list, think: bool, options, stop):
                                       stop=stop, options=options, stats=True)
 
 
+def stopped_by(finish, limit=None, usage=None) -> str:
+    """Pourquoi la réponse s'est arrêtée : stop, tool_calls, max_tokens (la limite demandée)
+    ou context (la fin du contexte du modèle, sans limite demandée ou avant elle)."""
+    if finish == "tool_calls":
+        return "tool_calls"
+    if finish != "length":
+        return "stop"
+    produced = (usage or {}).get("completion_tokens") if isinstance(usage, dict) else None
+    if limit and (not produced or produced >= limit):
+        return "max_tokens"
+    return "context"
+
+
 def openai_chat(model: str, model_id: str, body: dict, stop, *, plain=None, images=False,
-                think=True):
+                think=True, extra=None):
     """/v1/chat/completions d'un outil, tel quel par le routeur : ("head", type de contenu),
     puis ("raw", octets). model : le modèle d'ici qui répond ; model_id : celui qu'a demandé
     l'outil, remis dans la réponse à la place de l'identifiant du routeur. plain : la
     conversation en texte, quand elle n'est que cela, mise en forme pour les gabarits stricts
-    (for_template). think : faux pour une réponse sans réflexion (reasoning_effort « none »)."""
+    (for_template). think : faux pour une réponse sans réflexion (reasoning_effort « none »).
+    extra : l'objet « aiodos » (qui a répondu, contexte) ajouté au morceau qui porte
+    finish_reason, avec stopped_by, ou à la réponse entière sans flux."""
     _conversing(model, images=images)
     payload = dict(body)
     if plain is not None:
@@ -200,17 +231,30 @@ def openai_chat(model: str, model_id: str, body: dict, stop, *, plain=None, imag
         kwargs = body.get("chat_template_kwargs")
         payload["chat_template_kwargs"] = {**(kwargs if isinstance(kwargs, dict) else {}),
                                            "enable_thinking": False}
+    limit = body.get("max_completion_tokens") or body.get("max_tokens")
+    limit = limit if isinstance(limit, int) and not isinstance(limit, bool) else None
     streaming = bool(body.get("stream"))
     with _forward(model, "/v1/chat/completions", payload, stream=streaming) as response:
         if not streaming:
             with _guard():
                 reply = response.json()
+            out = {**reply, "model": model_id}
+            if extra is not None:
+                choice = (reply.get("choices") or [None])[0] if isinstance(reply, dict) else None
+                finish = choice.get("finish_reason") if isinstance(choice, dict) else None
+                out["aiodos"] = {**extra, "stopped_by": stopped_by(finish, limit,
+                                                                   reply.get("usage"))}
             yield "head", "application/json"
-            yield "raw", _dumps({**reply, "model": model_id})
+            yield "raw", _dumps(out)
             return
         yield "head", "text/event-stream"
         for event in _events(response, stop):
-            yield "raw", b"data: " + _dumps({**event, "model": model_id}) + b"\n\n"
+            out = {**event, "model": model_id}
+            choice = (event.get("choices") or [None])[0]
+            if extra is not None and isinstance(choice, dict) and choice.get("finish_reason"):
+                out["aiodos"] = {**extra, "stopped_by": stopped_by(
+                    choice["finish_reason"], limit, event.get("usage"))}
+            yield "raw", b"data: " + _dumps(out) + b"\n\n"
         if not stop.is_set():
             yield "raw", b"data: [DONE]\n\n"
 
@@ -287,7 +331,7 @@ def _events(response, stop):
                     "message": event["error"]}
                 code = error.get("code")
                 raise _refusal(code if isinstance(code, int) else 500,
-                               str(error.get("message") or "erreur"))
+                               str(error.get("message") or "erreur"), error)
             yield event
 
 

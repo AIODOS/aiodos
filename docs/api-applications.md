@@ -198,8 +198,8 @@ refus) ; 415 ; 400 `invalid_request`.
 Succès 200, **une seule fois** :
 
 ```json
-{ "access_token": "aiodos_app_k3j9m2qa_…", "token_type": "Bearer", "scope": "chat embed",
-  "aiodos": { "app_id": "k3j9m2qa", "where": ["here", "mine"], "priority": "interactive",
+{ "access_token": "aiodos_app_k3j7m2qa_…", "token_type": "Bearer", "scope": "chat embed",
+  "aiodos": { "app_id": "k3j7m2qa", "where": ["here", "mine"], "priority": "interactive",
               "expires": null } }
 ```
 
@@ -303,7 +303,7 @@ Sans clé, toujours 200 :
   `valid` :
 
   ```json
-  "app": { "id": "k3j9m2qa", "name": "PANDORA", "kind": "app", "scopes": ["chat", "embed"],
+  "app": { "id": "k3j7m2qa", "name": "PANDORA", "kind": "app", "scopes": ["chat", "embed"],
            "where": ["here", "mine"], "priority": "interactive", "expires": null },
   "limits": { "requests_per_minute": 120, "streams": 4, "max_body_bytes": 67108864 }
   ```

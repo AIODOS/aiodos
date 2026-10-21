@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -231,6 +231,67 @@ MIGRATIONS = {
     19: """
     UPDATE images SET seconds = NULL
      WHERE seconds IS NOT NULL AND NOT (seconds >= 0 AND seconds <= 604800);
+    """,
+    # Applications (gateway/apps.py, docs/api-applications.md) : une clé par appli, dont
+    # seul le haché est gardé ; programmes bloqués ; journal sans contenu et compteurs.
+    # reach : cercles accordés (here, mine, friends, public) ; consents : par capacité, les
+    # cercles montrés à l'accord alors qu'ils étaient servis (gateway/consents.py).
+    20: """
+    CREATE TABLE IF NOT EXISTS gateway_apps (
+        id            TEXT PRIMARY KEY,
+        kind          TEXT NOT NULL DEFAULT 'app',
+        client_id     TEXT,
+        name          TEXT NOT NULL,
+        version       TEXT,
+        purpose       TEXT,
+        key_hash      TEXT NOT NULL UNIQUE,
+        scopes        TEXT NOT NULL,
+        libraries     TEXT NOT NULL DEFAULT '[]',
+        reach         TEXT NOT NULL DEFAULT 'here,mine,friends,public',
+        consents      TEXT NOT NULL DEFAULT '{}',
+        priority      TEXT NOT NULL DEFAULT 'interactive',
+        exe_path      TEXT,
+        exe_pinned    INTEGER NOT NULL DEFAULT 0,
+        account_check INTEGER NOT NULL DEFAULT 1,
+        created       REAL NOT NULL,
+        last_used     REAL,
+        last_program  TEXT,
+        expires       REAL,
+        session_only  INTEGER NOT NULL DEFAULT 0,
+        revoked       REAL
+    );
+    CREATE TABLE IF NOT EXISTS gateway_blocked (
+        exe_path TEXT PRIMARY KEY,
+        name     TEXT,
+        at       REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS gateway_usage (
+        app_id    TEXT NOT NULL,
+        day       TEXT NOT NULL,
+        family    TEXT NOT NULL,
+        place     TEXT NOT NULL,
+        requests  INTEGER NOT NULL DEFAULT 0,
+        errors    INTEGER NOT NULL DEFAULT 0,
+        tokens_in INTEGER NOT NULL DEFAULT 0,
+        tokens_out INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (app_id, day, family, place)
+    );
+    CREATE TABLE IF NOT EXISTS gateway_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        at         REAL NOT NULL,
+        app_id     TEXT,
+        route      TEXT NOT NULL,
+        model      TEXT,
+        machine    TEXT,
+        place      TEXT,
+        status     INTEGER NOT NULL,
+        code       TEXT,
+        ms         INTEGER,
+        bytes_in   INTEGER,
+        bytes_out  INTEGER,
+        program    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS ix_gateway_log_app ON gateway_log(app_id, at);
     """,
 }
 

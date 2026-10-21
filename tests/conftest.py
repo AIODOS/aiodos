@@ -8,6 +8,8 @@ import os
 # Réseau, Internet et prêt sont activés par défaut depuis le 20/10 : les essais les gardent
 # éteints tant qu'ils ne les demandent pas (settings.FOR_MY_MACHINES), nœuds lancés compris
 os.environ["AIODOS_QUIET"] = "1"
+# Le fichier de découverte des applications (gateway/discovery.py) : jamais le vrai
+os.environ["AIODOS_DISCOVERY_FILE"] = "-"
 
 import numpy as np
 import pytest
@@ -34,6 +36,12 @@ def data_dir(tmp_path, monkeypatch):
     work.forget_friends()
     client._turns.clear()
     client._lingering.clear()
+    # Applications (gateway/) : clés en cache, demandes d'accès, limites
+    from aiodos.gateway import access_flow, apps, limits, open_page
+    apps.forget_all()
+    access_flow.forget()
+    limits.forget()
+    open_page.forget()
     yield tmp_path
     db.close()
 

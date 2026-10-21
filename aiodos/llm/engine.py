@@ -30,12 +30,12 @@ import requests
 
 from aiodos import paths
 from aiodos.cluster import engine as programs
-from aiodos.llm import models as registry
+from aiodos.llm import context, models as registry
 
 log = logging.getLogger("aiodos.llm")
 
 MODELS_MAX = 2                     # un modèle de conversation et un modèle d'embedding
-CHAT_CONTEXT = 8192
+CHAT_CONTEXT = context.LOW            # contexte d'une conversation : llm/context.py
 EMBED_CONTEXT = 2048
 START_TIMEOUT = 60
 NO_PROXY = {"http": None, "https": None}
@@ -56,7 +56,7 @@ def presets(models: list) -> str:
             lines += ["embeddings = true", f"ctx-size = {EMBED_CONTEXT}",
                       f"batch-size = {EMBED_CONTEXT}", f"ubatch-size = {EMBED_CONTEXT}"]
         else:
-            lines.append(f"ctx-size = {CHAT_CONTEXT}")
+            lines.append(f"ctx-size = {context.chat_context(m.name)}")
         sections.append("\n".join(lines))
     return "\n\n".join(sections) + "\n"
 

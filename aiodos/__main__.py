@@ -353,6 +353,10 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--ui-file", default=None, metavar="FICHIER",
                         help="écrit l'adresse de l'interface, jeton compris, dans ce fichier "
                              "lisible par soi seul, effacé à l'arrêt (application Android)")
+    parser.add_argument("--app-request", action="store_true",
+                        help="programme d'aide des applications : transmet à AIODOS (lancé "
+                             "au besoin) la demande d'accès lue sur l'entrée standard, écrit la "
+                             "réponse sur la sortie standard (gateway/app_connect.py)")
     return parser
 
 
@@ -360,6 +364,9 @@ def main():
     args = parser().parse_args()
     if args.data_dir:
         os.environ["AIODOS_DATA_DIR"] = os.path.abspath(args.data_dir)
+    if args.app_request:                  # ni journal, ni lanceur : il parle à l'instance
+        from aiodos.gateway import app_connect
+        return app_connect.run_helper()
 
     _setup_logging()
     _windows_app_id()

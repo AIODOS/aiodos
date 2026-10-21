@@ -7,12 +7,13 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from aiodos import paths, render
+from aiodos import instance, paths, render
 from aiodos.api.events import EventBus
 from aiodos.api.security import Guard
 from aiodos.api.routes import (autostart, chat, cluster, conversations, creations, gateway,
-                               images, jobs, knowledge, model_install, network, node, system,
-                               updates)
+                               gateway_apps, images, jobs, knowledge, model_install, network,
+                               node, system, updates)
+from aiodos.gateway import access_flow, apps
 from aiodos.gateway.server import Gateway
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
@@ -66,7 +67,10 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         await app.state.network.apply()          # ne démarre que si le réseau est activé
         app.state.updates = UpdateService(bus, executor, app.state.network, windowed)
         app.state.updates.start()
-        app.state.gateway = Gateway(app.state)    # autres outils : si l'accès est ouvert
+        app.state.gateway = Gateway(app.state)    # applis et autres outils : si ouvert
+        access_flow.configure(approval_ui=windowed, on_new=instance.show_window,
+                              on_open=app.state.gateway.apply_from_thread, publish=bus.publish)
+        await asyncio.to_thread(apps.purge_session_keys)   # « jusqu'à la fermeture »
         await app.state.gateway.apply()
         yield
         await app.state.gateway.shutdown()
@@ -79,8 +83,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
     app.state.show_key = show_key
-    for module in (autostart, chat, cluster, conversations, creations, gateway, images, knowledge, jobs,
-                   model_install, network, node, system, updates):
+    for module in (autostart, chat, cluster, conversations, creations, gateway, gateway_apps,
+                   images, knowledge, jobs, model_install, network, node, system, updates):
         app.include_router(module.router)
     app.include_router(system.window_router)
 

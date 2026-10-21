@@ -20,7 +20,7 @@
         "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
                  "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
                  "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "none",
-                 "proof": "ocmP0gkcKMVVkGsuQx5Je8XzeMOmfAyld2V9GopffCw"}
+                 "proof": "kzujpClJtfCeF66dvjiKZvhVjt_Gf-u5t_oCAAOeIks"}
       },
       "exact": ["object", "auth"]
     },
@@ -33,7 +33,7 @@
         "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
                  "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
                  "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "valid",
-                 "app": {"id": "k3j9m2qa", "name": "PANDORA", "kind": "app",
+                 "app": {"id": "k3j7m2qa", "name": "PANDORA", "kind": "app",
                          "scopes": ["chat", "embed"], "where": ["here", "mine"],
                          "priority": "interactive", "expires": null},
                  "limits": {"requests_per_minute": 120, "streams": 4, "max_body_bytes": 67108864}}

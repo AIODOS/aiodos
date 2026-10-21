@@ -1,5 +1,6 @@
-"""Passerelle vers les autres outils, vue par l'interface (Réglages → Autres outils) :
-ouverture, port, clé d'accès à copier ou à renouveler (cf. aiodos/gateway)."""
+"""Passerelle, vue par l'interface (Réglages → Applications et autres outils) :
+ouverture aux applications et aux autres outils, port, clé générale à copier ou à
+renouveler (cf. aiodos/gateway ; les applications elles-mêmes : gateway_apps.py)."""
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
@@ -12,8 +13,11 @@ router = APIRouter(prefix="/api/gateway")
 
 
 class GatewayIn(BaseModel):
-    enabled: bool | None = None
+    enabled: bool | None = None         # clé générale des autres outils
     port: int | None = None
+    apps: bool | None = None            # ouvert aux applications de ce PC
+    requests: bool | None = None        # accepte les nouvelles demandes d'accès
+    same_account: bool | None = None    # refuse les applis d'un autre compte Windows
 
 
 def _gateway(request: Request):
@@ -30,6 +34,10 @@ async def change(body: GatewayIn, request: Request):
     values = {}
     if body.enabled is not None:
         values["gateway_enabled"] = body.enabled
+    for field, setting in (("apps", "gateway_apps"), ("requests", "gateway_requests"),
+                           ("same_account", "gateway_same_account")):
+        if getattr(body, field) is not None:
+            values[setting] = getattr(body, field)
     if body.port is not None:
         if not 1024 <= body.port <= 65535:
             raise HTTPException(400, "Choisis un port entre 1024 et 65535.")

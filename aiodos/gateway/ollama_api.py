@@ -22,8 +22,9 @@ import time
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 
-from aiodos.gateway import answer, catalog, engine
+from aiodos.gateway import answer, catalog, engine, errors, openai_api, scopes
 from aiodos.gateway.answer import GatewayError
+from aiodos.gateway.errors import ApiError
 from aiodos.network import placement, remote_models
 from aiodos.services import ollama
 
@@ -32,10 +33,12 @@ NDJSON = "application/x-ndjson"
 FORMATS = "0.40.5"          # version d'Ollama dont la passerelle suit les formats (plus haut)
 
 
-def _error(exc) -> JSONResponse:
+def _error(exc, lang: str = "fr") -> Response:
+    """{"error": "…", "code": "…", "hint": "…"} : les clients d'Ollama ne lisent que
+    « error », les applis le code."""
     if isinstance(exc, answer.Upstream):
         return Response(exc.body, status_code=exc.status, media_type=exc.content_type)
-    return JSONResponse({"error": str(exc)}, status_code=answer.status_of(exc))
+    return errors.response("/api/", openai_api.api_error(exc), lang)
 
 
 async def _body(request: Request) -> dict:
@@ -74,8 +77,12 @@ def _tag(entry: dict) -> dict:
 
 
 @router.api_route("/api/tags", methods=["GET", "HEAD"])
-async def tags():
-    return {"models": [_tag(e) for e in await asyncio.to_thread(catalog.entries)]}
+async def tags(request: Request):
+    try:
+        entries = openai_api.visible(request, await asyncio.to_thread(catalog.entries))
+    except ApiError as exc:
+        return _error(exc, errors.lang_of(request.headers))
+    return {"models": [_tag(e) for e in entries]}
 
 
 @router.get("/api/ps")
@@ -131,6 +138,13 @@ def _local_names() -> set:
 
 # --------------------------------------------------------------- embeddings
 async def _embed(request: Request, path: str):
+    try:
+        where = scopes.for_request(request, "embed")
+        if where is not None and "here" not in where:
+            raise ApiError("where_denied", "Les embeddings ne se calculent que sur ce PC, que "
+                           "cette requête exclut.", detail={"allowed": ["here"]})
+    except ApiError as exc:
+        return _error(exc, errors.lang_of(request.headers))
     try:
         body = await _body(request)
         name = catalog.local_name(body.get("model"))
@@ -264,7 +278,16 @@ def _ndjson(obj) -> bytes:
 async def _respond(stream: answer.Stream, head: list, model_id: str, chat: bool,
                    streaming: bool, request: Request):
     """Réponse HTTP une fois la machine engagée : relais tel quel (l'Ollama d'ici) ou mise
-    au format d'Ollama (machine appairée, moteur intégré)."""
+    au format d'Ollama (machine appairée, moteur intégré). Les en-têtes X-Aiodos-* disent qui
+    a répondu."""
+    response = await _respond_body(stream, head, model_id, chat, streaming, request)
+    for name, value in openai_api._route_headers(head).items():
+        response.headers[name] = value
+    return response
+
+
+async def _respond_body(stream: answer.Stream, head: list, model_id: str, chat: bool,
+                        streaming: bool, request: Request):
     raw = next((value for kind, value in head if kind == "head"), None)
     if raw is not None:
         async def relay():
@@ -322,18 +345,34 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
                   local_only: bool, prefer_local: bool, here):
     """here(modèle, stop) : la réponse du moteur intégré de cette machine, quand il tient
     lieu d'Ollama (engine.py)."""
+    lang = errors.lang_of(request.headers)
     model_id = str(body.get("model") or "")
     if not model_id:
-        return JSONResponse({"error": "model is required"}, status_code=400)
+        return JSONResponse({"error": "model is required", "code": "invalid_request"},
+                            status_code=400)
     streaming = body.get("stream") is not False          # en flux par défaut
     executor = _executor(request)
+    context = request.state.aiodos_app
+    app_key = context is not None and context.kind != "general"
+    # Une appli ne charge ni ne décharge rien (invariant I5) : elle ne décide pas pour les
+    # autres ; une requête sans rien à calculer lui répond aussitôt
+    if app_key and messages is None:
+        line = Lines(model_id, chat).final()
+        line.update(done_reason="load", total_duration=0, eval_duration=0)
+        return JSONResponse(line)
+    require_tools = (app_key and prefer_local and request.headers.get(
+        "x-aiodos-tools", "").strip().lower() != "optional")
+    app = answer.for_app(request)
     try:
+        where = scopes.for_request(request, "chat")
         models = await asyncio.to_thread(answer.plan, model_id, executor,
-                                         local_only=local_only, prefer_local=prefer_local)
-    except GatewayError as exc:
-        return _error(exc)
+                                         local_only=local_only, prefer_local=prefer_local,
+                                         where=where, tools=prefer_local,
+                                         require_tools=require_tools)
+    except (GatewayError, ApiError) as exc:
+        return _error(exc, lang)
     think, options = _think(body), _options(body)
-    unload = body.get("keep_alive") in (0, "0", "0s")
+    unload = body.get("keep_alive") in (0, "0", "0s") and not app_key
 
     def attempt(model, stop):
         if not answer.is_local(model):
@@ -349,12 +388,13 @@ async def _answer(request: Request, path: str, body: dict, messages, *, chat: bo
         else:
             yield from here(model, stop)
 
-    stream = answer.Stream(answer.run(models, attempt, executor))
+    stream = answer.Stream(answer.run(models, attempt, executor,
+                                      interactive=app["interactive"]), cut=app["cut"])
     try:
         head = await stream.head(request)
     except Exception as exc:
         stream.close()
-        return _error(exc)
+        return _error(exc, lang)
     if messages is None and raw_head(head) is None:
         stream.close()
         line = Lines(model_id, chat).final()
@@ -432,4 +472,5 @@ async def generate(request: Request):
 def unknown(rest: str):
     return JSONResponse({"error": f"« /api/{rest} » n'est pas servi par la passerelle "
                          "d'AIODOS : les modèles s'installent et se gèrent dans AIODOS "
-                         "(« Installer un modèle ») ou avec Ollama."}, status_code=404)
+                         "(« Installer un modèle ») ou avec Ollama.", "code": "not_supported",
+                         "hint": "Installe le modèle dans AIODOS."}, status_code=404)

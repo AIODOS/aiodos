@@ -5,6 +5,7 @@ import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
+import { appsCard, bindApps } from './gateway-apps.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
@@ -18,6 +19,11 @@ const SECTIONS = [
         + 'extraits des bibliothèques partagées avec tes amis.' },
     { key: 'think', label: 'Laisser les modèles réfléchir avant de répondre', type: 'switch',
       help: 'Qwen3 et compagnie : de meilleures réponses, mais plus lentes à démarrer.' },
+    { key: 'chat_context', label: 'Contexte des conversations (moteur intégré)', type: 'select', options: [
+      ['0', 'Selon la carte graphique (16 384 jetons à partir de 8 Go)'], ['8192', '8 192 jetons'],
+      ['16384', '16 384 jetons'], ['32768', '32 768 jetons (plus de mémoire vidéo)']],
+      help: 'Ce qu\'un modèle lit d\'un coup : la conversation, les extraits et la réponse. Plus grand, il prend '
+        + 'plus de mémoire vidéo ; le moteur repart avec le nouveau réglage. Les applications ne le changent jamais.' },
     { key: 'system_prompt', label: 'Consignes générales données à l\'IA', type: 'textarea' },
   ] },
   { title: 'Connaissances', icon: 'book', fields: [
@@ -112,7 +118,7 @@ const SECTIONS = [
     { type: 'updates' },
     { type: 'approval' },
   ] },
-  { title: 'Autres outils', icon: 'plug', fields: [
+  { title: 'Applications et autres outils', icon: 'plug', fields: [
     { type: 'gateway' },
   ] },
   { title: 'Avancé', icon: 'settings', fields: [
@@ -144,6 +150,10 @@ export function mountSettings(container) {
   on('gateway:loaded', () => {
     const box = root && $('#gateway-box', root);
     if (box) { box.innerHTML = gatewayCard(); bindGateway(box); }
+  });
+  on('gateway-apps:loaded', () => {
+    const box = root && $('#gateway-apps-box', root);
+    if (box) { box.innerHTML = appsCard(); bindApps(box); }
   });
 }
 

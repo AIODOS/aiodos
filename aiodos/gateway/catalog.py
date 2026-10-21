@@ -110,7 +110,7 @@ def entries() -> list:
         out.append({"id": name, "name": name, "machine": None, "remote": False,
                     "size": t.get("size", 0), "digest": t.get("digest", ""),
                     "details": t.get("details") or {}, "capabilities": caps,
-                    "modified_at": t.get("modified_at") or now_iso()})
+                    "modified_at": t.get("modified_at") or now_iso(), "trust": "local"})
         seen.add(name)
     remote = remote_models.available()
     for m in remote:                      # seulement chez mes machines : mode automatique
@@ -126,15 +126,18 @@ def entries() -> list:
     for m in offers:
         out.append({"id": m["id"], "name": m["label"], "machine": "réparti", "remote": True,
                     "size": m.get("size", 0), "digest": "", "details": details({}),
-                    "capabilities": ["completion"], "modified_at": now_iso()})
+                    "capabilities": ["completion"], "modified_at": now_iso(), "trust": "mine"})
     return out
 
 
 def _remote_entry(m: dict, model_id: str, machine) -> dict:
+    """trust : « mine » ou « friend », la machine qui le prête ; pour une entrée du choix
+    automatique (machine None), celle qui le prête d'office."""
     return {"id": model_id, "name": m["label"], "machine": machine, "remote": True,
             "size": m.get("size", 0), "digest": m.get("digest", ""),
             "details": details(m), "capabilities": m.get("caps") or ["completion"],
-            "modified_at": now_iso()}
+            "modified_at": now_iso(), "trust": m.get("trust") or "mine",
+            "loaded": bool(m.get("loaded"))}
 
 
 def find(model_id) -> dict | None:
