@@ -29,6 +29,11 @@ function installLines(c) {
 
 function instanceLine(c) {
   const i = c.instance;
+  if (!i && c.launched) return line('Lancé par AIODOS, sans fenêtre, pour les travaux en cours.', 'ok');
+  if (!i && c.launch && c.enabled) {
+    return line('Fermé : AIODOS le lancera sans fenêtre quand un travail attendra'
+      + (c.learned ? '.' : ' (il le lance une fois pour lire ce qu\'il sait faire).'));
+  }
   if (!i) {
     return line('ComfyUI n\'est pas ouvert : ouvre-le pour que les travaux des applications partent. '
       + 'D\'ici là, ils attendent dans la file.', 'warn');

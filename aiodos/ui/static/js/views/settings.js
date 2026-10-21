@@ -131,6 +131,10 @@ const SECTIONS = [
         + 'quand une appli annule. Rien n’est installé ni téléchargé.' },
     { key: 'engines_comfyui_path', label: 'Dossier de ComfyUI', type: 'folder',
       help: 'Vide : trouvé seul (Comfy Desktop, version portable).' },
+    { key: 'engines_comfyui_launch', label: 'Lancer ComfyUI sans fenêtre quand il n’est pas ouvert', type: 'switch',
+      help: 'Quand un travail attend et que ComfyUI est fermé, AIODOS le lance lui-même, sans fenêtre, avec tes '
+        + 'modèles et tes nœuds ajoutés, puis l’arrête 10 minutes après la dernière unité. Il n’y touche à rien '
+        + 'd’autre. À l’activation, il est lancé une fois, le temps de lire ce qu’il sait faire.' },
     { key: 'keep_awake_jobs', label: 'Pas de mise en veille pendant un travail d’application (sur secteur)',
       type: 'switch', help: 'Tant qu’une unité ComfyUI calcule, ici ou ailleurs pour ce PC, Windows ne met pas le PC '
         + 'en veille (l’écran peut s’éteindre). Sur batterie, rien ne change.' },

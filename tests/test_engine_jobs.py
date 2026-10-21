@@ -271,6 +271,34 @@ def test_no_sleep_on_mains_while_a_unit_runs(comfy, monkeypatch):
     assert not keep_awake.wanted()
 
 
+def test_comfyui_is_launched_when_it_is_closed(comfy, monkeypatch):
+    """L2c : le ComfyUI de l'utilisateur fermé, AIODOS lance le sien (ici : le faux, prêt)
+    pour l'unité qui attend ; la file l'a jugée faisable d'après les modèles du disque."""
+    from aiodos.engines import comfy_find, comfy_instance
+    sha = put(APP, png())
+    submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}})
+    launched = []
+    monkeypatch.setattr(comfyui, "instance", lambda: None)            # celui de l'utilisateur
+    monkeypatch.setattr(comfy_instance, "launchable", lambda: True)
+    monkeypatch.setattr(comfy_instance, "disk_models",
+                        lambda: {"checkpoints": ["sd_xl_base_1.0.safetensors"]})
+    monkeypatch.setattr(comfy_instance, "current",
+                        lambda: comfy_find.probe(comfy.url) if launched else None)
+
+    def ensure(stop=None, timeout=None):
+        launched.append(True)
+        return comfy_find.probe(comfy.url)
+    monkeypatch.setattr(comfy_instance, "ensure", ensure)
+    engine.forget_here()
+    assert run_all() == 1 and launched == [True]
+    assert comfy_instance.cached_inventory()["classes"]           # gardé pour l'annoncer
+    monkeypatch.setattr(comfy_instance, "disk_models", lambda: {})  # le modèle n'y est pas
+    engine.forget_here()
+    launched.clear()
+    submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}})
+    assert run_all() == 0 and launched == []                    # rien de lancé pour rien
+
+
 def test_matching_a_machine_that_asks_for_work():
     """engines/lending.can_serve, chez le propriétaire : le moteur, ses classes, ses modèles
     (un modèle sans dossier se cherche dans tous) ; une annonce mal formée vaut un refus."""

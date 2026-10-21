@@ -13,6 +13,7 @@ from aiodos.api.security import Guard
 from aiodos.api.routes import (autostart, chat, cluster, conversations, creations, engines,
                                gateway, gateway_apps, images, jobs, knowledge, model_install,
                                network, node, system, updates)
+from aiodos.engines import comfy_instance
 from aiodos.gateway import access_flow, apps, retention
 from aiodos.gateway.server import Gateway
 from aiodos.imaging import engine as images_engine
@@ -77,6 +78,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         yield
         keep_awake.stop()
         keeping.cancel()
+        await asyncio.to_thread(comfy_instance.stop_instance)   # le ComfyUI lancé par AIODOS
         await app.state.gateway.shutdown()
         app.state.updates.stop()
         await app.state.network.shutdown()

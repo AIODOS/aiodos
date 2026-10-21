@@ -6,17 +6,21 @@ import asyncio
 from fastapi import APIRouter, Request
 
 from aiodos import db, settings
-from aiodos.engines import comfy_client, comfy_find, comfyui
+from aiodos.engines import comfy_client, comfy_find, comfy_instance, comfyui
 from aiodos.jobs.kinds import engine
 
 router = APIRouter(prefix="/api")
-ENGINE_OPTIONS = {"engines_comfyui_enabled", "engines_comfyui_path", "engines_comfyui_url"}
+ENGINE_OPTIONS = {"engines_comfyui_enabled", "engines_comfyui_path", "engines_comfyui_url",
+                  "engines_comfyui_launch"}
 
 
 def forget():
-    """Après un changement de réglage : ComfyUI se recherche, son inventaire se relit."""
+    """Après un changement de réglage : ComfyUI se recherche, son inventaire se relit ; s'il
+    peut maintenant être lancé et qu'on ne sait pas encore ce qu'il sait faire, il est lancé
+    le temps de le lire (comfy_instance.learn_soon)."""
     engine.forget_here()
     comfyui.forget_inventory()
+    comfy_instance.learn_soon()
 
 
 def status() -> dict:
@@ -36,6 +40,9 @@ def status() -> dict:
         "instance": ({"url": found.url, "version": found.version, "vram_mib": found.vram_mib,
                       "device": found.device, "program": found.program, "models": models}
                      if found is not None else None),
+        "launch": bool(settings.get("engines_comfyui_launch")),
+        "launched": comfy_instance.current() is not None,
+        "learned": comfy_instance.cached_inventory() is not None,
         "jobs": {"active": sum(jobs.get(s, 0) for s in ("queued", "running", "paused")),
                  "done": jobs.get("done", 0)}}}
 

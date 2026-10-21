@@ -323,6 +323,7 @@ aiodos/
 ├── engines/           moteurs des applis : AIODOS rejoue leurs graphes, ne les remplace pas
 │   ├── comfy_find.py  ComfyUI de ce PC (Desktop, version portable, instance ouverte)
 │   ├── comfy_client.py son API ; comfyui.py : rejouer une unité (entrées, suivi, sorties)
+│   ├── comfy_instance.py ComfyUI lancé sans fenêtre quand il n'est pas ouvert (L2c)
 │   ├── comfy_graph.py graphes au format API, en fonctions pures ; comfy_contract.py : empreintes
 │   ├── lending.py     ce qu'une machine annonce de son ComfyUI à mes machines, appariement
 │   ├── machines.py    où un travail peut tourner (ce PC, mes machines qui ont ComfyUI)

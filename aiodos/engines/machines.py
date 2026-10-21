@@ -16,11 +16,11 @@ def known(circles) -> list:
     """[{name, place, online, version, vram_mib, models}] dans ces cercles."""
     out = []
     if "here" in circles:
-        found, inv = lending._here()
-        if found is not None:
+        view = lending.local_view()           # ouvert, ou qu'AIODOS lancera
+        if view is not None:
             out.append({"name": this_name(), "place": "here", "online": True,
-                        "version": inv.get("version"), "vram_mib": inv.get("vram_mib"),
-                        "models": inv.get("models") or {}})
+                        "version": view["version"], "vram_mib": view["vram_mib"],
+                        "models": view["models"] or {}, "launch": view["launch"]})
     if "mine" in circles:
         for peer in peers.list_peers():
             if peer.get("trust") != peers.MINE or peer.get("set_aside_at"):

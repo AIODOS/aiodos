@@ -26,7 +26,8 @@ import time
 from pathlib import Path
 
 from aiodos import db, paths, settings
-from aiodos.engines import comfy_client, comfy_contract, comfy_graph, comfyui, gpu_share
+from aiodos.engines import (comfy_client, comfy_contract, comfy_graph, comfy_instance, comfyui,
+                            gpu_share)
 from aiodos.jobs import pacing
 from aiodos.jobs.models import BACKGROUND, NORMAL, URGENT
 from aiodos.jobs.registry import UnitSpec, register_job_kind, register_portable
@@ -481,12 +482,13 @@ def _current_run_id(unit) -> str:
 
 # ----------------------------------------------------------------- calculer
 def instance_here():
-    """Le ComfyUI de ce PC s'il est accordé et ouvert (gardé HERE_TTL s : la file le
-    demande souvent)."""
+    """Le ComfyUI de ce PC s'il est accordé et ouvert : celui de l'utilisateur, ou celui
+    qu'AIODOS a lancé (engines/comfy_instance.py). Gardé HERE_TTL s : la file le demande
+    souvent."""
     now = time.monotonic()
     if now - _here["at"] < HERE_TTL:
         return _here["found"]
-    found = comfyui.instance()
+    found = comfyui.instance() or (comfy_instance.current() if comfyui.enabled() else None)
     _here.update(at=now, found=found)
     return found
 
@@ -496,19 +498,22 @@ def forget_here():
 
 
 def runnable_here(model) -> bool:
-    """L'exécuteur de ce PC prend-il les unités de ces modèles ? ComfyUI accordé, ouvert, et
-    tous les modèles de l'unité présents."""
+    """L'exécuteur de ce PC prend-il les unités de ces modèles ? ComfyUI accordé, ouvert (ou
+    qu'AIODOS peut lancer : ses modèles lus sur le disque), et tous les modèles de l'unité
+    présents."""
     found = instance_here()
-    if found is None:
+    if found is None and not comfy_instance.launchable():
         return False
     needs = _needs(model)
     if needs is None:
         return False
-    try:
-        inv = comfyui.inventory(found.url)
-    except comfy_client.Unreachable:
-        return False
-    have = inv.get("models") or {}
+    if found is not None:
+        try:
+            have = comfyui.inventory(found.url).get("models") or {}
+        except comfy_client.Unreachable:
+            return False
+    else:
+        have = comfy_instance.disk_models()
     return all(comfyui.local_name(have, m.get("folder"), m["name"]) for m in needs)
 
 
@@ -577,12 +582,23 @@ def stage_of(run_id) -> str | None:
 
 
 def _compute(order, halt, progress, local, remote):
-    found = instance_here()
-    if found is None:
-        from aiodos.jobs.registry import Interrupted
-        raise Interrupted("ComfyUI n'est pas ouvert sur ce PC.")
+    from aiodos.jobs.registry import Interrupted
     pacing.wait_turn(halt, True)            # les conversations d'abord
     gpu_share.before_unit()                 # la mémoire vidéo qu'AIODOS tient sans s'en servir
+    found = instance_here()
+    if found is None and comfy_instance.launchable():
+        progress("waiting_engine")          # ComfyUI se lance sans fenêtre (L2c)
+        try:
+            found = comfy_instance.ensure(stop=halt)
+        except comfy_instance.Unavailable as exc:
+            raise Interrupted(str(exc)) from exc
+        forget_here()
+        try:
+            comfy_instance.save_inventory(comfyui.inventory(found.url))
+        except comfy_client.Unreachable:
+            pass
+    if found is None:
+        raise Interrupted("ComfyUI n'est pas ouvert sur ce PC.")
     folder = paths.engine_runs_dir() / order["run_uuid"]
     began = time.monotonic()
     files = (order.get("files") if remote else local.get("files")) or {}
@@ -598,6 +614,8 @@ def _compute(order, halt, progress, local, remote):
     except Exception:
         shutil.rmtree(folder, ignore_errors=True)
         raise
+    finally:
+        comfy_instance.touch()              # l'instance d'AIODOS reste prête un moment
     machine = str(settings.get("node_name") or settings.machine_name())[:80]
     version = (comfyui.inventory(found.url) or {}).get("version")
     progress("checking")
