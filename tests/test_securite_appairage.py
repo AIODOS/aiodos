@@ -22,6 +22,7 @@ from aiodos import db, paths
 from aiodos.network import crypto, envelope, pairing, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.pairing import PairingRefused
+from tests import i18n_js
 
 A_ID, B_ID, M_ID = "a" * 32, "b" * 32, "c" * 32
 A_IP, B_IP, M_IP = "192.168.1.10", "192.168.1.20", "192.168.1.66"
@@ -363,8 +364,9 @@ def _run_network_js(tmp_path, script: str, *args) -> object:
         (js / name).write_bytes((static / name).read_bytes())
     for name, text in STUBS.items():
         (js / name).write_text(text, encoding="utf-8")
+    prelude = i18n_js.install(js, module="./js/i18n.js")      # les textes, en français
     (tmp_path / "package.json").write_text('{"type": "module"}', encoding="utf-8")
-    (tmp_path / "run.js").write_text(script, encoding="utf-8")
+    (tmp_path / "run.js").write_text(prelude + script, encoding="utf-8")
     done = subprocess.run([NODE, str(tmp_path / "run.js"), *args], capture_output=True,
                           text=True, encoding="utf-8", cwd=tmp_path)
     assert done.returncode == 0, done.stderr
@@ -383,8 +385,8 @@ def test_a_hostile_profile_never_becomes_html(tmp_path):
         json.dumps([HOSTILE, HOSTILE_FRIEND, PHONE]))
     for html in (hostile, friend):
         assert "<" not in html and ">" not in html, html
-    assert "0 modèle(s)" in hostile and "&lt;script&gt;" in hostile
-    assert "2 modèle(s)" in phone and "batterie 84 %" in phone and "31,2 °C" in phone
+    assert "· 0 modèle ·" in hostile and "&lt;script&gt;" in hostile
+    assert "· 2 modèles ·" in phone and "batterie 84 %" in phone and "31,2 °C" in phone
     assert "en charge" in phone and "utilisée en ce moment" in phone
 
 

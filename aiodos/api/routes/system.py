@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from aiodos import instance, settings
+from aiodos.i18n import t
 from aiodos.jobs.kinds import reindex
 
 router = APIRouter(prefix="/api")
@@ -61,7 +62,7 @@ def show_window(request: Request):
     given = request.headers.get("x-aiodos-show", "")
     # En octets : un en-tête non ASCII doit être refusé, pas faire échouer la comparaison
     if not expected or not secrets.compare_digest(given.encode(), expected.encode()):
-        raise HTTPException(403, "Clé refusée.")
+        raise HTTPException(403, t("settings.show_key_refused"))
     return {"shown": instance.show_window()}
 
 
@@ -69,6 +70,6 @@ def show_window(request: Request):
 def open_url(body: UrlIn):
     """Ouvre un lien dans le navigateur par défaut (pas dans la fenêtre de l'app)."""
     if not body.url.startswith(("http://", "https://")):
-        raise HTTPException(400, "Seuls les liens http(s) sont ouverts.")
+        raise HTTPException(400, t("settings.web_links_only"))
     webbrowser.open(body.url)
     return {"ok": True}

@@ -1,0 +1,8 @@
+{
+  "hidden_notice": "AIODOS keeps running in the background. Click the icon to reopen the window, right-click to quit.",
+  "starting": "AIODOS is starting",
+  "details": "Details: {path}",
+  "start_failed": "AIODOS could not start: {error}",
+  "tray_open": "Open AIODOS",
+  "tray_quit": "Quit AIODOS"
+}

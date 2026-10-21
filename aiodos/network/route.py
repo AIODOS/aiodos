@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass, field
 
 from aiodos import settings
+from aiodos.i18n import t
 
 MODES = ("auto", "lan", "internet")
 LAN_RETRY_AFTER = 60       # après un échec du réseau local, on passe par Internet pendant 1 min
@@ -40,7 +41,7 @@ class Path:
 
     @property
     def label(self) -> str:
-        return "réseau local" if self.kind == "lan" else "Internet"
+        return t("net.local_network") if self.kind == "lan" else "Internet"
 
 
 def attach(companion):

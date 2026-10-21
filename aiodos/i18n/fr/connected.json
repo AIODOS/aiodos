@@ -1,0 +1,87 @@
+{
+  "route_lan": "réseau local",
+  "route_direct": "Internet, en direct",
+  "route_relay": "Internet, par un relais",
+  "route_internet": "Internet",
+  "offline_seen": "hors ligne · vue {ago}",
+  "never_seen": "jamais vue",
+  "online": "en ligne",
+  "lends_power": "sa puissance",
+  "power_paused": "puissance en pause",
+  "lends_models": "ses modèles",
+  "lends_gpu": "sa carte graphique",
+  "lends_nothing": "rien",
+  "job_units": {
+    "one": "{title} ({n} unité)",
+    "other": "{title} ({n} unités)"
+  },
+  "computing_for_you": {
+    "one": "calcule {n} unité pour toi",
+    "other": "calcule {n} unités pour toi"
+  },
+  "answering_your_chat": "répond à ta conversation",
+  "you_compute": {
+    "one": "tu calcules {n} unité pour elle",
+    "other": "tu calcules {n} unités pour elle"
+  },
+  "you_answer_its_chat": "tu réponds à sa conversation",
+  "nothing_now": "rien en ce moment",
+  "received_units": {
+    "one": "{n} unité calculée pour toi",
+    "other": "{n} unités calculées pour toi"
+  },
+  "received": "reçu {time}",
+  "given_units": {
+    "one": "{n} unité calculée pour elle",
+    "other": "{n} unités calculées pour elle"
+  },
+  "given": "donné {time}",
+  "chats_for_you": "{n} pour toi",
+  "chats_for_it": "{n} pour elle",
+  "refused_results": {
+    "one": "{n} résultat refusé",
+    "other": "{n} résultats refusés"
+  },
+  "failures": {
+    "one": "{n} échec",
+    "other": "{n} échecs"
+  },
+  "trouble_title": "Résultats qu'elle t'a rendus et qui ont été refusés (faux ou illisibles), et unités qu'elle n'a pas pu calculer pour toi",
+  "chats_title": "Réponses de ses modèles à tes conversations, et des tiens aux siennes",
+  "chats": {
+    "one": "conversation : {list}",
+    "other": "conversations : {list}"
+  },
+  "nothing_yet": "rien encore",
+  "online_of": "{online} en ligne sur {total}",
+  "lending": {
+    "one": "{n} prête sa puissance",
+    "other": "{n} prêtent leur puissance"
+  },
+  "helping": {
+    "one": "{n} travaille pour toi",
+    "other": "{n} travaillent pour toi"
+  },
+  "helped": "tu travailles pour {n}",
+  "me_lending": "cette machine prête la sienne",
+  "me_not_lending": "cette machine ne prête pas en ce moment",
+  "nudge": "Tes machines et tes amis t'ont déjà rendu {n} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour participer : active « Prêter mes modèles » ou « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.",
+  "nudge_no_models": "Tes machines et tes amis t'ont déjà rendu {n} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour participer : installe un modèle, puis active « Prêter mes modèles » ou « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.",
+  "introduced_by": "Présentée par « {name} »",
+  "introduced_by_removed": "Présentée par une machine retirée depuis",
+  "friend": "ami",
+  "col_machine": "Machine",
+  "col_link": "Liaison",
+  "col_lends": "Prête",
+  "col_now": "En ce moment",
+  "col_exchanged": "Échangé",
+  "title": "Machines connectées",
+  "hint": "En direct : qui est en ligne, qui prête sa puissance, et ce que chaque machine fait pour l'autre. Nouvelles toutes les 15 secondes environ.",
+  "empty": "Aucune machine appairée : appaire tes machines plus bas.",
+  "rail_no_peers": "Aucune machine appairée",
+  "rail_online": {
+    "one": "{n} machine en ligne",
+    "other": "{n} machines en ligne"
+  },
+  "rail_none_online": "Aucune machine en ligne"
+}

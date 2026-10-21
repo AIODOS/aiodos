@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from aiodos import settings
 from aiodos.chat import conversations
+from aiodos.i18n import t
 from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share, thumbs
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import queue
@@ -44,12 +45,13 @@ def _models() -> dict:
     offered = lenders.helpers(friends=True)              # amis prêts à calculer, si je l'accepte
     models = []
     for model_id, spec in catalog.MODELS.items():
+        # Description, licence, formats et durées : dans la langue de la requête
         models.append({"id": model_id, "label": spec["label"], "license": spec["license"],
-                       "about": spec["about"], "steps": spec["steps"],
+                       "about": catalog.about(model_id), "steps": spec["steps"],
                        "kind": spec.get("kind", "image"), "fps": spec.get("fps"),
-                       "sizes": spec["sizes"], "durations": spec.get("durations") or [],
+                       "sizes": catalog.sizes(model_id), "durations": catalog.durations(model_id),
                        "default_frames": spec.get("default_frames"),
-                       "notice": spec.get("notice"),
+                       "notice": catalog.notice(model_id),
                        "negative": spec["negative"], **catalog.state(model_id),
                        "helpers": others.get(model_id, []),
                        "friends": [name for name in offered.get(model_id, [])
@@ -96,8 +98,7 @@ async def generate(body: GenerateIn, request: Request):
         raise HTTPException(400, str(exc))
     here, others = await asyncio.to_thread(lenders.can_compute, params["model"])
     if not here and not others:
-        raise HTTPException(409, "Ni cette machine ni mes machines en ligne ne peuvent "
-                                 "calculer ce modèle : télécharge-le d'abord.")
+        raise HTTPException(409, t("imaging.nobody_can_compute"))
     executor = request.app.state.executor
     job_id = await asyncio.to_thread(queue.create_job, "generate_images", params, URGENT)
     executor.wake()
@@ -122,7 +123,7 @@ async def list_images(limit: int = 60, before: int | None = None, batch: str | N
 def image_file(image_id: int, size: int | None = None):
     row = gallery.get(image_id)
     if row is None or not gallery.path_of(row).is_file():
-        raise HTTPException(404, "Image introuvable.")
+        raise HTTPException(404, t("imaging.image_not_found"))
     cache = {"Cache-Control": "private, max-age=86400"}
     small = thumbs.thumbnail(row, size) if size and size > 0 else None
     if small is not None:
@@ -135,7 +136,7 @@ def image_file(image_id: int, size: int | None = None):
 @router.delete("/{image_id}")
 def delete_image(image_id: int, request: Request):
     if not gallery.delete(image_id):
-        raise HTTPException(404, "Image introuvable.")
+        raise HTTPException(404, t("imaging.image_not_found"))
     thumbs.remove(image_id)
     request.app.state.bus.publish({"type": "images"})
     return {"ok": True}

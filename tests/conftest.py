@@ -8,11 +8,15 @@ import os
 # Réseau, Internet et prêt sont activés par défaut depuis le 20/10 : les essais les gardent
 # éteints tant qu'ils ne les demandent pas (settings.FOR_MY_MACHINES), nœuds lancés compris
 os.environ["AIODOS_QUIET"] = "1"
+# Les essais lisent les textes en français, quelle que soit la langue de la machine qui les
+# lance (nœuds lancés compris) ; test_i18n.py passe à l'anglais quand il le faut
+os.environ["AIODOS_LANGUAGE"] = "fr"
 
 import numpy as np
 import pytest
 
 from aiodos import db
+from aiodos.i18n import language
 from aiodos.jobs import pacing
 from aiodos.knowledge import search
 from aiodos.network import client, work
@@ -25,6 +29,7 @@ def data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AIODOS_SIMULATE_POWER", "ac")
     monkeypatch.setenv("AIODOS_SIMULATE_IDLE", "86400")
     search.invalidate()
+    language.forget()                  # la langue choisie dans la base d'un essai précédent
     pacing.start()                     # ni conversation en cours, ni arrêt d'un test précédent
     ollama.set_thread_limit(None)
     # Ce qu'un essai précédent a retenu en mémoire : paquets de lecture « installés » (il a

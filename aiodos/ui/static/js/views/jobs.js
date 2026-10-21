@@ -1,16 +1,15 @@
 // Tâches : la file d'attente (travaux découpés en unités), priorités, commandes.
 import { get, post, patch } from '../api.js';
 import { $, h, esc, duration, ago } from '../dom.js';
+import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast, confirmDanger } from '../ui.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
-const PRIORITIES = [[1, 'Urgent'], [2, 'Normal'], [3, 'De fond']];
-const RESOURCES = { gpu: 'GPU', embed: 'Embeddings', cpu: 'Processeur', net: 'Réseau' };
+const PRIORITIES = [1, 2, 3];                      // libellés : jobs.priority_1…3
 const STATUS = {
-  running: ['run', 'En cours'], queued: ['idle', 'En attente'], paused: ['warn', 'En pause'],
-  done: ['ok', 'Terminé'], failed: ['err', 'Échec'], cancelled: ['idle', 'Annulé'],
+  running: 'run', queued: 'idle', paused: 'warn', done: 'ok', failed: 'err', cancelled: 'idle',
 };
 const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry' };
 
@@ -19,15 +18,18 @@ const cards = new Map();             // job id → { el, shape }
 const expanded = new Set();
 const failuresCache = new Map();     // job id → { count, list }
 
+/** Le titre d'un travail, dans la langue de l'interface s'il est venu traduisible
+ *  (title_t, cf. jobs/queue.py), sinon tel qu'il a été écrit à sa création. */
+export const jobTitle = j => tt(j?.title_t, j?.title || '');
+
 export function mountJobs(container) {
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>Tâches</h1>
-          <div class="sub">Les gros travaux sont découpés en petites unités indépendantes, traitées en
-          arrière-plan : ici, ou sur tes machines appairées qui prêtent leur puissance.</div></div>
+        <div><h1>${esc(t('jobs.title'))}</h1>
+          <div class="sub">${esc(t('jobs.intro'))}</div></div>
         <div class="grow"></div>
-        <button class="btn" id="jobs-clear">${icon('trash')}Nettoyer les terminées</button>
+        <button class="btn" id="jobs-clear">${icon('trash')}${esc(t('jobs.clear_finished'))}</button>
       </div>
       <div class="stats" id="jobs-stats"></div>
       <div class="slots" id="jobs-slots"></div>
@@ -73,8 +75,8 @@ function render() {
   }
   list.querySelector(':scope > .empty')?.remove();
   if (!jobs.length) {
-    list.append(h(`<div class="card empty">${icon('jobs')}<div>Aucune tâche.<br>
-      Ajoute un dossier dans une bibliothèque pour voir la file au travail.</div></div>`));
+    list.append(h(`<div class="card empty">${icon('jobs')}<div>${esc(t('jobs.empty'))}<br>
+      ${esc(t('jobs.empty_hint'))}</div></div>`));
     return;
   }
   // Mise à jour en place : une carte n'est reconstruite que si sa structure
@@ -119,13 +121,13 @@ function renderStats() {
   const units = jobs.filter(j => ACTIVE.includes(j.status))
     .reduce((n, j) => n + j.total - j.done - j.skipped - j.failed, 0);
   $('#jobs-stats', root).innerHTML = [
-    [count('running'), 'en cours'], [count('queued'), 'en attente'], [count('paused'), 'en pause'],
-    [units, 'unités restantes'], [count('done'), 'terminées'],
-  ].map(([n, label]) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`).join('');
+    [count('running'), 'jobs.stat_running'], [count('queued'), 'jobs.stat_queued'],
+    [count('paused'), 'jobs.stat_paused'], [units, 'jobs.stat_units_left'], [count('done'), 'jobs.stat_done'],
+  ].map(([n, key]) => `<div class="stat"><b>${n}</b><span>${esc(t(key, { n }))}</span></div>`).join('');
 }
 
 function peerName(id) {
-  return state.network?.peers?.find(p => p.node_id === id)?.name || 'une autre machine';
+  return state.network?.peers?.find(p => p.node_id === id)?.name || t('jobs.another_machine');
 }
 
 // Unités de ce travail calculées en ce moment sur d'autres machines
@@ -133,7 +135,7 @@ function remoteText(j) {
   const where = Object.entries(j.remote || {});
   if (!where.length) return '';
   return `<span class="remote-where">${icon('network')}${where.map(([id, n]) =>
-    `${n} sur « ${esc(peerName(id))} »`).join(', ')}</span>`;
+    esc(t('jobs.remote_on', { n, name: peerName(id) }))).join(', ')}</span>`;
 }
 
 // Unités d'autres machines calculées ici, regroupées par machine
@@ -141,47 +143,49 @@ function lentPills(ex) {
   const byPeer = new Map();
   for (const w of ex.remote || []) byPeer.set(w.peer_name, (byPeer.get(w.peer_name) || 0) + 1);
   return [...byPeer].map(([name, n]) =>
-    `<span class="pill run">${icon('network')}Calcule pour « ${esc(name)} » : ${n} unité(s)</span>`).join('');
+    `<span class="pill run">${icon('network')}${esc(t('jobs.computing_for', { name, n }))}</span>`).join('');
 }
 
 // Sur batterie : moins d'unités à la fois (les points ci-contre), ou aucune (jobs/pacing.py)
 function batteryPill(p) {
   if (!p?.on_battery || p.mode === 'normal') return '';
-  const text = p.mode === 'pause' ? 'Sur batterie : en attente du secteur'
-    : 'Sur batterie : travail de fond ménagé';
-  return `<span class="pill warn" title="${esc(p.detail)}">${icon('bolt')}${text}</span>`;
+  const text = t(p.mode === 'pause' ? 'jobs.battery_waiting' : 'jobs.battery_eco');
+  return `<span class="pill warn" title="${esc(p.detail)}">${icon('bolt')}${esc(text)}</span>`;
 }
 
 function renderSlots() {
   const ex = state.executor;
   const box = $('#jobs-slots', root);
   if (!ex || !box) return;
-  box.innerHTML = '<span>Ressources de cette machine :</span>' + Object.entries(ex.slots).map(([name, n]) => {
+  box.innerHTML = `<span>${esc(t('jobs.resources'))}</span>` + Object.entries(ex.slots).map(([name, n]) => {
     const busy = ex.busy[name] || 0;
     const dots = Array.from({ length: n }, (_, i) => `<i class="${i < busy ? 'busy' : ''}"></i>`).join('');
-    return `<span class="slot">${dots} ${RESOURCES[name] || name} ${busy}/${n}</span>`;
+    const label = ['gpu', 'embed', 'cpu', 'net'].includes(name) ? t(`jobs.resource_${name}`) : name;
+    return `<span class="slot">${dots} ${esc(label)} ${busy}/${n}</span>`;
   }).join('') + (ex.interactive
-    ? `<span class="pill warn">${icon('chat')}Conversation en cours : le GPU lui est réservé</span>` : '')
+    ? `<span class="pill warn">${icon('chat')}${esc(t('jobs.chat_running'))}</span>` : '')
     + batteryPill(ex.pacing)
     + lentPills(ex)
     + (Object.keys(ex.waiting || {}).length
-      ? `<span class="pill warn">${icon('warn')}Moteur des modèles injoignable : nouvel essai automatique</span>` : '');
+      ? `<span class="pill warn">${icon('warn')}${esc(t('jobs.engine_unreachable'))}</span>` : '');
 }
 
 function card(j) {
   const active = ACTIVE.includes(j.status);
   const processed = j.done + j.skipped + j.failed;
   const [done, skipped, failed] = widths(j);
-  let [cls, label] = STATUS[j.status] || ['idle', j.status];
-  if (j.status === 'done' && j.failed) [cls, label] = ['warn', 'Terminé avec erreurs'];
+  let cls = STATUS[j.status] || 'idle';
+  let label = STATUS[j.status] ? t(`jobs.status_${j.status}`) : j.status;
+  if (j.status === 'done' && j.failed) [cls, label] = ['warn', t('jobs.status_done_errors')];
+  const title = jobTitle(j);
   const el = h(`
     <div class="job">
       <div class="top">
         ${icon(KIND_ICONS[j.kind] || 'layers')}
-        <span class="title" title="${esc(j.title)}">${esc(j.title)}</span>
-        <span class="pill ${cls}">${label}</span>
-        ${active ? `<select class="select" title="Priorité">${PRIORITIES.map(([v, l]) =>
-          `<option value="${v}" ${v === j.priority ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
+        <span class="title" title="${esc(title)}">${esc(title)}</span>
+        <span class="pill ${cls}">${esc(label)}</span>
+        ${active ? `<select class="select" title="${esc(t('jobs.priority'))}">${PRIORITIES.map(v =>
+          `<option value="${v}" ${v === j.priority ? 'selected' : ''}>${esc(t(`jobs.priority_${v}`))}</option>`).join('')}</select>` : ''}
         <span class="actions"></span>
       </div>
       <div class="bar">
@@ -190,23 +194,23 @@ function card(j) {
       <div class="foot">${footText(j, processed)}</div>
     </div>`);
   const actions = el.querySelector('.actions');
-  const button = (ico, title, fn, extra = '') => {
-    const b = h(`<button class="icon-btn ${extra}" title="${title}">${icon(ico)}</button>`);
+  const button = (ico, key, fn, extra = '') => {
+    const b = h(`<button class="icon-btn ${extra}" title="${esc(t(key))}">${icon(ico)}</button>`);
     b.onclick = fn;
     actions.append(b);
   };
   // Images ou vidéos demandées dans une conversation : y revenir
   if (j.params?.conversation_id) {
-    button('chat', 'Ouvrir sa conversation', () => {
+    button('chat', 'jobs.open_conversation', () => {
       emit('view:show', 'chat');
       emit('chat:open', j.params.conversation_id);
     });
   }
-  if (j.status === 'paused') button('play', 'Reprendre', () => act(j, 'resume'));
-  else if (active) button('pause', 'Mettre en pause', () => act(j, 'pause'));
-  if (active) button('x', 'Annuler', () => cancel(j), 'danger');
-  if (!active && j.failed) button('retry', 'Relancer les unités en échec', () => act(j, 'retry'));
-  if (!active) button('trash', 'Retirer de la liste', () => act(j, 'delete'), 'danger');
+  if (j.status === 'paused') button('play', 'jobs.resume', () => act(j, 'resume'));
+  else if (active) button('pause', 'jobs.pause', () => act(j, 'pause'));
+  if (active) button('x', 'jobs.cancel', () => cancel(j), 'danger');
+  if (!active && j.failed) button('retry', 'jobs.retry_failed', () => act(j, 'retry'));
+  if (!active) button('trash', 'jobs.remove', () => act(j, 'delete'), 'danger');
   el.querySelector('select')?.addEventListener('change', async e => {
     try { await patch(`/jobs/${j.id}`, { priority: Number(e.target.value) }); } catch (err) { errorToast(err); }
   });
@@ -216,40 +220,40 @@ function card(j) {
 }
 
 function footText(j, processed) {
-  const parts = [`${processed}/${j.total} unité(s)`];
-  if (j.skipped) parts.push(`${j.skipped} ignorée(s)`);
-  if (j.failed) parts.push(`<span style="color:var(--err)">${j.failed} en échec</span>`);
+  const parts = [esc(t('jobs.units', { done: processed, n: j.total }))];
+  if (j.skipped) parts.push(esc(t('jobs.skipped', { n: j.skipped })));
+  if (j.failed) parts.push(`<span style="color:var(--err)">${esc(t('jobs.failed', { n: j.failed }))}</span>`);
   if (j.status === 'running' && j.started) {
     const elapsed = Date.now() / 1000 - j.started;
-    parts.push(`depuis ${duration(elapsed)}`);
+    parts.push(esc(t('jobs.since', { time: duration(elapsed) })));
     if (processed > 0 && processed < j.total) {
-      parts.push(`reste ~${duration(elapsed / processed * (j.total - processed))}`);
+      parts.push(esc(t('jobs.remaining', { time: duration(elapsed / processed * (j.total - processed)) })));
     }
     const remote = remoteText(j);
     if (remote) parts.push(remote);
   } else if (j.finished && j.started) {
-    parts.push(`en ${duration(j.finished - j.started)}`);
+    parts.push(esc(t('jobs.took', { time: duration(j.finished - j.started) })));
   }
   if (j.result?.indexed !== undefined && !ACTIVE.includes(j.status)) {
-    parts.push(`${j.result.indexed} indexé(s) · ${j.result.chunks || 0} passages`);
+    parts.push(esc(t('jobs.indexed', { n: j.result.indexed, chunks: j.result.chunks || 0 })));
   }
-  if (!ACTIVE.includes(j.status)) parts.push(`<span class="faint">${ago(j.finished || j.created)}</span>`);
+  if (!ACTIVE.includes(j.status)) parts.push(`<span class="faint">${esc(ago(j.finished || j.created))}</span>`);
   return parts.join(' · ');
 }
 
 function detailsBlock(job) {
   if (!hasDetails(job)) return null;
-  const d = h(`<details ${expanded.has(job.id) ? 'open' : ''}><summary>Détails</summary><div class="body"></div></details>`);
+  const d = h(`<details ${expanded.has(job.id) ? 'open' : ''}><summary>${esc(t('jobs.details'))}</summary><div class="body"></div></details>`);
   const body = d.querySelector('.body');
   const fill = async () => {
     const j = state.jobs.get(job.id) || job;          // données à jour, pas celles de la création
     const skippedTypes = Object.entries(j.result?.skipped_types || {});
     let html = '';
     if (j.error) html += `<p>${esc(j.error)}</p>`;
-    if (j.result?.message) html += `<p>${esc(j.result.message)}</p>`;
+    if (j.result?.message) html += `<p>${esc(tt(j.result.message))}</p>`;
     if (skippedTypes.length) {
-      html += `<p>Ignorés (pas de texte exploitable, ou type désactivé dans les réglages) : ${
-        skippedTypes.map(([ext, n]) => `${esc(ext)} ×${n}`).join(', ')}</p>`;
+      html += `<p>${esc(t('jobs.skipped_types', {
+        types: skippedTypes.map(([ext, n]) => `${ext} ×${n}`).join(', ') }))}</p>`;
     }
     body.innerHTML = html;
     if (j.failed) {
@@ -275,14 +279,14 @@ async function act(j, action) {
 }
 
 async function cancel(j) {
-  const ok = await confirmDanger('Annuler la tâche',
-    `« ${j.title} » : les unités pas encore traitées seront abandonnées. Ce qui est déjà fait est conservé.`, 'Annuler la tâche');
+  const ok = await confirmDanger(t('jobs.cancel_title'),
+    t('jobs.cancel_text', { title: jobTitle(j) }), t('jobs.cancel_title'));
   if (ok) act(j, 'cancel');
 }
 
 async function clearFinished() {
   try {
     const { removed } = await post('/jobs/clear_finished');
-    toast(removed ? `${removed} tâche(s) retirée(s).` : 'Rien à nettoyer.', 'ok');
+    toast(removed ? t('jobs.cleared', { n: removed }) : t('jobs.nothing_to_clear'), 'ok');
   } catch (e) { errorToast(e); }
 }

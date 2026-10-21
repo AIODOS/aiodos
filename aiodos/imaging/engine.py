@@ -46,6 +46,7 @@ import requests
 
 from aiodos import settings
 from aiodos.cluster.engine import NO_WINDOW, EngineError, Process
+from aiodos.i18n import t
 from aiodos.imaging import catalog, local_copies
 from aiodos.jobs import pacing
 from aiodos.jobs.registry import Interrupted
@@ -127,6 +128,7 @@ def _run(program: Path, *args) -> str:
                               encoding="utf-8", errors="replace", timeout=60,
                               creationflags=NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired) as exc:
+        # i18n: tel quel (journal : info() et devices() ne font que le noter)
         raise EngineError(f"stable-diffusion.cpp ne répond pas ({exc.__class__.__name__}).") from exc
     return (done.stdout or "") + (done.stderr or "")
 
@@ -208,9 +210,7 @@ def listen_port() -> int:
     ports = ", ".join(map(str, BROWSER_BLOCKED_PORTS))
     log.warning("Aucun des ports fermés aux navigateurs n'est libre ici (%s) : sd-server "
                 "n'est pas lancé", ports)
-    raise EngineError("Aucun port sûr n'est libre pour sd-server sur cette machine : "
-                      f"d'autres programmes occupent les ports {ports}, que les navigateurs "
-                      "ne peuvent pas joindre. Ferme-les, puis réessaie.")
+    raise EngineError(t("imaging.no_safe_port", ports=ports))
 
 
 def _free(port: int) -> bool:
@@ -327,8 +327,7 @@ def _owned(process, port: int) -> bool:
     if listening is None or mine is None:
         return True
     if listening - mine:
-        raise EngineError(f"Un autre programme écoute sur le port de sd-server ({port}) : "
-                          "lancement annulé.")
+        raise EngineError(t("imaging.port_taken", port=port))
     return bool(listening & mine)
 
 
@@ -354,9 +353,9 @@ def _still_alone(process) -> bool:
     try:
         if _owned(process, process.port):
             return True
-        problem = "il n'écoute plus sur son port"
+        problem = "il n'écoute plus sur son port"                   # i18n: tel quel (journal)
     except EngineError:
-        problem = "un autre programme écoute aussi sur son port"
+        problem = "un autre programme écoute aussi sur son port"    # i18n: tel quel (journal)
     log.warning("sd-server relancé (port %s) : %s", process.port, problem)
     return False
 
@@ -395,8 +394,7 @@ def acquire(model_id: str, stop=None, waiting=None) -> str:
         _stop_locked()
         found = info()
         if found is None:
-            raise EngineError("stable-diffusion.cpp n'est pas installé sur cette machine "
-                              "(réglage « Dossier de stable-diffusion.cpp »).")
+            raise EngineError(t("imaging.engine_missing"))
         # Un fichier que d'autres comptes peuvent modifier (ancien lien physique, modèle
         # déplacé depuis un dossier commun) : copié d'abord (une fois), sinon sd-server
         # chargerait ce qu'ils y auraient mis ; ModelError, et rien de lancé, si c'est

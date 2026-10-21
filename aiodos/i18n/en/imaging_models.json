@@ -1,0 +1,11 @@
+{
+  "about_z_image_turbo": "Tongyi-MAI (Alibaba), 6 billion parameters, 8 steps: fast, photorealistic, can write text in the image.",
+  "size_square": "Square · {width} × {height}",
+  "size_portrait": "Portrait · {width} × {height}",
+  "size_landscape": "Landscape · {width} × {height}",
+  "size_fast": "Fast · {width} × {height}",
+  "about_wan2_1": "Alibaba, text to video, 1.3 billion parameters, 480p at 16 frames per second: the video model that fits on an 8 GB card.",
+  "notice_minimax_h3": "The MiniMax H3 weights are published under the “MiniMax H3 Community License”, which excludes the European Union, the United Kingdom, South Korea and the United States: running the model there, or using its outputs, is not allowed without written consent from MiniMax. AIODOS distributes neither the weights nor their outputs: it downloads them from Hugging Face at your request. Installing and using them is your sole responsibility.",
+  "about_minimax_h3": "MiniMax, video with its soundtrack, 24 frames per second. Heavy: a Qwen3-VL-32B encoder, several minutes per video on an 8 GB card.",
+  "size_landscape_hd": "Landscape HD · {width} × {height}"
+}

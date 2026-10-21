@@ -134,7 +134,8 @@ def activate(store: Store, version: str, item: dict,
     """Chemin du programme livré à lancer : bin/<programme>, copié du paquet s'il n'y est
     pas déjà. Si la copie ne peut pas prendre sa place (l'ancien programme tourne encore,
     sous Windows), on le lance depuis le paquet. UpdateError si le fichier du paquet est
-    illisible ou altéré ; altéré, il est effacé : il sera téléchargé de nouveau."""
+    illisible ou altéré ; altéré, il est effacé : il sera téléchargé de nouveau. Ses
+    messages restent en français : ils ne vont qu'au journal (find, network/companion.py)."""
     target = store.root / ACTIVE / platforms.executable(program)
     if active(store, program).get("sha256") == item["sha256"] and _intact(target, item):
         return target
@@ -145,11 +146,13 @@ def activate(store: Store, version: str, item: dict,
         digest = _copy(source, temporary)
     except OSError as exc:
         _discard(temporary)
+        # i18n: tel quel (journal)
         raise UpdateError(f"Compagnon de la version {version} impossible à copier ({exc}).") \
             from exc
     if digest != item["sha256"]:
         _discard(temporary)
         _discard(source)
+        # i18n: tel quel (journal)
         raise UpdateError(f"Compagnon de la version {version} altéré : il sera téléchargé "
                           "de nouveau.")
     try:
@@ -160,6 +163,7 @@ def activate(store: Store, version: str, item: dict,
         try:
             make_executable(source)
         except OSError as again:
+            # i18n: tel quel (journal)
             raise UpdateError(f"Compagnon de la version {version} impossible à mettre en "
                               f"place ({again}).") from again
         log.info("Compagnon de la version %s lancé depuis son paquet (%s)", version, exc)

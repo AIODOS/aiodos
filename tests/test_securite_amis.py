@@ -30,6 +30,7 @@ from aiodos.network import crypto, envelope, group, pairing, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.node import vault
 from aiodos.updates import launcher
+from tests import i18n_js
 
 ME, MATE, LEA, NEW, OTHER = "e" * 32, "f" * 32, "a" * 32, "1" * 32, "2" * 32
 KEY = bytes(range(32))
@@ -376,7 +377,8 @@ def _run_views(tmp_path, script: str) -> dict:
         (js / "views" / name).write_bytes((static / "views" / name).read_bytes())
     for name, text in _STUBS.items():
         (js / name).write_text(text, encoding="utf-8")
-    (js / "essai.js").write_text(_DOM + script, encoding="utf-8")
+    prelude = i18n_js.install(js)                              # les textes, en français
+    (js / "essai.js").write_text(prelude + _DOM + script, encoding="utf-8")
     done = subprocess.run([NODE, str(js / "essai.js")], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=60)
     assert done.returncode == 0, done.stderr[:600]

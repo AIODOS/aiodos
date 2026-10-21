@@ -84,7 +84,7 @@ def _call(function, data: bytes) -> bytes:
         ok = crypt32.CryptUnprotectData(ctypes.byref(source), None, ctypes.byref(entropy),
                                         None, None, _UI_FORBIDDEN, ctypes.byref(out))
     if not ok:
-        raise Unreadable(f"DPAPI a refusé ({ctypes.GetLastError()})")
+        raise Unreadable(f"DPAPI a refusé ({ctypes.GetLastError()})")   # i18n: tel quel (journal)
     try:
         return ctypes.string_at(out.pbData, out.cbData)
     finally:
@@ -146,6 +146,7 @@ def unprotect(data) -> bytes:
     if known is not None:
         return known
     if not available():
+        # i18n: tel quel (Unreadable ne va qu'au journal : settings, peers)
         raise Unreadable("secret protégé par DPAPI sur une autre machine (Windows)")
     clear = _call("unprotect", data[len(MARK):])
     with _lock:
@@ -198,5 +199,5 @@ def unprotect_text(text: str) -> str:
     try:
         raw = base64.b64decode(text[len(TEXT_MARK):], validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise Unreadable("secret protégé abîmé") from exc
+        raise Unreadable("secret protégé abîmé") from exc   # i18n: tel quel (journal)
     return unprotect(MARK + raw).decode("utf-8")

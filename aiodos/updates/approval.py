@@ -35,6 +35,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from aiodos import paths
+from aiodos.i18n import t
 from aiodos.network import client, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.updates import manifest as manifests
@@ -48,9 +49,6 @@ TIMEOUT = 15
 MAX_SHOWN = 64                   # (machine, version) retenus
 MAX_TEXTS = 8                    # empreintes retenues par (machine, version) : deux suffisent
 MAX_PENDING = 32                 # versions en attente lues au plus par machine
-CONFLICT = ("Cette machine montre plusieurs textes différents sous ce numéro : c'est "
-            "anormal (machine compromise, ou clé de publication volée ?). N'approuve rien "
-            "avant de l'avoir vérifiée.")
 
 _shown_lock = threading.Lock()
 _shown = {}                      # (machine, version) -> {empreintes des textes montrés}
@@ -73,7 +71,7 @@ def create_key() -> dict:
     """Fait de cet appareil un appareil d'approbation (une seule fois)."""
     path = key_path()
     if path.exists():
-        raise UpdateError("Cet appareil a déjà sa clé d'approbation.")
+        raise UpdateError(t("approval.key_exists"))
     private = Ed25519PrivateKey.generate()
     path.parent.mkdir(parents=True, exist_ok=True)
     pem = private.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
@@ -100,7 +98,7 @@ def public_info() -> dict | None:
 # ------------------------------------------------------- machine qui a publié
 def _mine_only(sender):
     if sharing.level(sender) != sharing.MINE:
-        raise PeerError("Seules mes machines voient et approuvent les versions en attente.")
+        raise PeerError(t("approval.mine_only"))
 
 
 def serve_pending(manager, sender, payload):
@@ -118,13 +116,13 @@ def serve_approve(manager, sender, payload):
     except UpdateError:
         signed = None
     if not isinstance(signed, dict) or not isinstance(entry, dict):
-        raise PeerError("Version inconnue ici, ou approbation illisible.")
+        raise PeerError(t("approval.unknown_version"))
     others = [a for a in signed.get("approvals") or []
               if isinstance(a, dict) and a.get("key") != entry.get("key")]
     try:
         store.add_manifest(dict(signed, approvals=[entry] + others))   # tout revérifié
     except UpdateError as exc:
-        raise PeerError(f"Approbation refusée : {exc}") from exc
+        raise PeerError(t("approval.refused", error=exc)) from exc
     log.info("Version %s approuvée (appareil %s) : elle peut partir", version, entry.get("key"))
     return {"ok": True}
 
@@ -215,7 +213,8 @@ def pending_from_peers(my_id: str) -> list:
                 log.warning("« %s » montre plusieurs textes sous le numéro %s", peer["name"],
                             details["version"])
             found.append({**details, "node_id": peer["node_id"], "machine": peer["name"],
-                          "conflict": conflict, "warning": CONFLICT if conflict else ""})
+                          "conflict": conflict,
+                          "warning": t("approval.conflict") if conflict else ""})
     return found
 
 
@@ -229,31 +228,28 @@ def approve(my_id: str, node_id: str, version: str, shown: str | None = None) ->
     est redemandée ; si son texte n'est plus celui-là, rien n'est signé."""
     private = load_key()
     if private is None:
-        raise UpdateError("Cet appareil n'a pas de clé d'approbation.")
+        raise UpdateError(t("approval.no_key"))
     peer = peers.get(node_id)
     if not peer or sharing.level(node_id) != sharing.MINE:
-        raise UpdateError("Machine inconnue, ou qui n'est pas l'une des miennes.")
+        raise UpdateError(t("approval.unknown_machine"))
     with _shown_lock:
         seen = set(_shown.get((node_id, version)) or ())
         suspect = node_id in _suspect
     expected = shown or (next(iter(seen)) if len(seen) == 1 and not suspect else None)
     if not expected and (seen or suspect):
-        where = f"le numéro {version}" if len(seen) > 1 else "un même numéro"
-        raise UpdateError(f"« {peer['name']} » a montré plusieurs textes différents sous "
-                          f"{where} : on ne sait pas lequel tu as lu, rien n'est signé. C'est "
-                          "anormal (machine compromise, ou clé de publication volée ?) : "
-                          "vérifie cette machine avant d'approuver quoi que ce soit.")
+        if len(seen) > 1:
+            raise UpdateError(t("approval.several_texts_version", name=peer["name"],
+                                version=version))
+        raise UpdateError(t("approval.several_texts", name=peer["name"]))
     if not expected:
-        raise UpdateError("Affiche d'abord les versions en attente : on n'approuve que ce "
-                          "qu'on a vu.")
+        raise UpdateError(t("approval.show_first"))
     candidates = [signed for v, signed in _pending(my_id, peer)
                   if v == version and _details(version, signed) is not None]
     if not candidates:
-        raise UpdateError(f"La version {version} n'attend plus d'approbation chez « {peer['name']} ».")
+        raise UpdateError(t("approval.no_longer_waiting", version=version, name=peer["name"]))
     signed = next((s for s in candidates if digest(s) == expected), None)
     if signed is None:
-        raise UpdateError(f"La version {version} chez « {peer['name']} » n'est plus celle qui "
-                          "t'a été montrée : relis-la avant de l'approuver.")
+        raise UpdateError(t("approval.changed", version=version, name=peer["name"]))
     entry = manifests.approval_entry(signed["manifest"], private)    # ce texte-là, tel quel
     client.call(my_id, peer, "update/approve", {"version": version, "approval": entry},
                 timeout=TIMEOUT)

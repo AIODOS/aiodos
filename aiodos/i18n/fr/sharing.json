@@ -1,0 +1,4 @@
+{
+  "check_failed": "contrôle échoué",
+  "unknown_trust": "Niveau de confiance inconnu : {trust}"
+}

@@ -1,12 +1,13 @@
-// Démarrage de l'interface : vues, navigation, événements du nœud.
+// Démarrage de l'interface : textes, vues, navigation, événements du nœud.
 import { get, listen } from './api.js';
 import { $, $$, esc, debounce, count, acceptsText, dropRefused } from './dom.js';
+import { browserLanguage, lang, offline, setTexts, t, translatePage } from './i18n.js';
 import { hydrateIcons } from './icons.js';
 import { state, emit, on, prefs } from './state.js';
 import { toast } from './ui.js';
 import { mountChat } from './views/chat.js';
 import { mountLibrary } from './views/library.js';
-import { mountJobs, loadJobs } from './views/jobs.js';
+import { mountJobs, loadJobs, jobTitle } from './views/jobs.js';
 import { mountImages } from './views/images.js';
 import { mountNode, loadNode } from './views/node.js';
 import { mountNetwork, loadNetwork, answerPairRequest, answerIntroduction } from './views/network.js';
@@ -29,9 +30,19 @@ function show(view) {
   emit('view:shown', view);
 }
 
+// Les textes, dans la langue des Réglages, sinon celle du navigateur (avant toute vue)
+async function loadTexts() {
+  const prefer = navigator.languages?.length ? navigator.languages : [navigator.language || ''];
+  const answer = await get(`/i18n?prefer=${encodeURIComponent(prefer.join(','))}`);
+  setTexts(answer.lang, answer.texts);
+}
+
 async function loadSettings() {
   state.settings = await get('/settings');
   emit('settings:loaded');
+  // La langue changée ailleurs (une autre fenêtre, un autre appareil) : tous les textes suivent
+  const wanted = ['fr', 'en'].includes(state.settings.language) ? state.settings.language : browserLanguage();
+  if (wanted !== lang) location.reload();
 }
 
 let lastRemote = '';
@@ -62,25 +73,24 @@ function onJob(job) {
     emit('knowledge:changed');
   }
   if (!before && job.kind === 'reindex' && ACTIVE.includes(job.status)) {
-    toast('Nouveau modèle d\'embedding : réindexation des connaissances lancée (voir Tâches).', 'info', 6000);
+    toast(t('app.reindex_started'), 'info', 6000);
   }
   const finished = before && ACTIVE.includes(before) && !ACTIVE.includes(job.status);
   if (finished && job.kind === 'generate_images') {
     const n = job.result?.images ?? job.done;
-    const noun = job.params?.frames ? 'vidéo' : 'image';
     // Demandée dans une conversation : rien à dire si elle est sous les yeux
     const conv = job.params?.conversation_id;
     const seen = conv ? state.view === 'chat' && state.currentConversation?.id === conv
       : state.view === 'images';
     if (!seen && job.status !== 'cancelled') {
-      toast(`${job.title} : ${n} ${noun}${n > 1 ? 's' : ''} prête${n > 1 ? 's' : ''} `
-        + `(${conv ? 'dans sa conversation' : 'vue Images et vidéos'}).`,
-        job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
+      toast(t(job.params?.frames ? 'app.videos_ready' : 'app.images_ready', {
+        title: jobTitle(job), n, where: t(conv ? 'app.ready_in_conversation' : 'app.ready_in_images'),
+      }), job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
     }
   } else if (finished && job.kind !== 'index_conversation') {
     const kind = job.status === 'done' && !job.failed ? 'ok' : job.status === 'cancelled' ? 'info' : 'err';
-    const detail = job.result?.indexed !== undefined ? ` : ${job.result.indexed} élément(s) indexé(s)` : '';
-    toast(`${job.title}${detail}`, kind, 6000);
+    toast(job.result?.indexed !== undefined
+      ? t('app.job_indexed', { title: jobTitle(job), n: job.result.indexed }) : jobTitle(job), kind, 6000);
   }
 }
 
@@ -101,9 +111,9 @@ function onEvent(ev) {
     case 'pair_request': answerPairRequest(ev); break;      // quelle que soit la vue ouverte
     case 'group_request': answerIntroduction(ev); break;   // présentation (appairage par groupe)
     case 'pair_result':
-      toast(ev.outcome === 'paired'
-        ? `Machine appairée : « ${ev.name} »${ev.via ? `, présentée par « ${ev.via} »` : ''}`
-        : `Appairage avec « ${ev.name} » annulé.`, ev.outcome === 'paired' ? 'ok' : 'info', 6000);
+      toast(ev.outcome !== 'paired' ? t('app.pair_cancelled', { name: ev.name })
+        : ev.via ? t('app.paired_via', { name: ev.name, via: ev.via }) : t('app.paired', { name: ev.name }),
+      ev.outcome === 'paired' ? 'ok' : 'info', 6000);
       break;
     default: break;
   }
@@ -124,7 +134,9 @@ function keepDrops() {
 }
 
 async function boot() {
-  frenchSpacing();                          // avant les vues : tout ce qui s'ajoute est suivi
+  await loadTexts();
+  if (lang === 'fr') frenchSpacing();      // avant les vues : tout ce qui s'ajoute est suivi
+  translatePage();
   keepDrops();
   hydrateIcons();
   mountChat($('#view-chat'));
@@ -177,6 +189,6 @@ async function boot() {
 }
 
 boot().catch(err => {
-  document.body.innerHTML = `<div class="empty" style="margin-top:20vh">Impossible de joindre le nœud AIODOS.<br>
+  document.body.innerHTML = `<div class="empty" style="margin-top:20vh">${esc(offline())}<br>
     <span class="faint">${esc(err.message || err)}</span></div>`;
 });

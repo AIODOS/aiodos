@@ -1,0 +1,16 @@
+{
+  "built_here": "built in compagnon/target",
+  "built_in_base": "built in the original version",
+  "delivered": "delivered with version {version}",
+  "choice_failed": "aiodos-net companion: couldn't choose the program ({error}).",
+  "not_found": "aiodos-net companion not found: it comes with updates, from a paired machine that has it (or build it: see compagnon/README.md).",
+  "wont_launch": "The aiodos-net companion ({origin}) won't launch: {error}",
+  "exit_code": "exit code {code}",
+  "not_started": "The aiodos-net companion ({origin}) didn't start: {error}",
+  "stopped": "Companion stopped.",
+  "unreachable": "Companion unreachable ({error}).",
+  "reply_unreadable": "Unreadable reply from the companion.",
+  "too_old_for_tunnels": "This machine's aiodos-net companion is too old: it would open the tunnel to the lent graphics card to every program on the machine. Update AIODOS on this machine.",
+  "tunnel_unguarded": "On this system, the aiodos-net companion can't check which program connects to the tunnel to the lent graphics card: no model split across machines from this machine.",
+  "tunnel_not_kept": "This machine's aiodos-net companion didn't guard the tunnel: update AIODOS on this machine."
+}

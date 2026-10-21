@@ -28,6 +28,10 @@ MAX_MODELS = 300
 _DROP = object()                  # valeur abandonnée
 _UNSAFE = re.compile(r"[\x00-\x1f\x7f<>]")
 _ID = re.compile(r"[0-9a-f]{32}")  # identifiant de machine (même forme que peers.valid_id)
+# Un texte à traduire chez qui le lit (i18n.lazy) : la clé d'un catalogue, quelques paramètres
+_KEY = re.compile(r"[a-z][a-z0-9_]*(\.[a-z0-9_]+)+")
+_PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,39}")
+LAZY_PARAMS = 12
 # Hors ASCII : contrôles C1 (Cc), mise en forme invisible (Cf : U+202E, U+200B, U+2066…),
 # demi-codets isolés (Cs : illisibles en UTF-8, ils feraient échouer l'écriture en base) et
 # séparateurs de ligne ou de paragraphe (Zl, Zp)
@@ -86,6 +90,30 @@ def _optional(check):
 
 def _node_id(value):
     return value if isinstance(value, str) and _ID.fullmatch(value) else _DROP
+
+
+def _lazy(prefix: str):
+    """Un texte à traduire chez qui le lit, [clé, {paramètres}] (i18n.lazy) : une clé de la
+    forme de celles des catalogues, qui commence par `prefix` (seuls les textes que l'autre
+    machine a des raisons d'envoyer), LAZY_PARAMS paramètres au plus, textes (nettoyés,
+    coupés) ou nombres finis ; les autres paramètres sont abandonnés."""
+    def check(value):
+        if not isinstance(value, list) or len(value) != 2:
+            return _DROP
+        key, params = value
+        if not isinstance(key, str) or len(key) > 100 or not _KEY.fullmatch(key) \
+                or not key.startswith(prefix) or not isinstance(params, dict):
+            return _DROP
+        out = {}
+        for name, item in itertools.islice(params.items(), LAZY_PARAMS):
+            if not isinstance(name, str) or not _PARAM.fullmatch(name) or isinstance(item, bool):
+                continue
+            if isinstance(item, str):
+                out[name] = _visible(item[:300])
+            elif isinstance(item, (int, float)) and math.isfinite(item) and abs(item) <= BIG:
+                out[name] = item
+        return [key, out]
+    return check
 
 
 def _object(fields, required=()):
@@ -165,7 +193,10 @@ SCHEMA = _object({
                         "files": _mapping(_text(40), _items(_text(60), 32), 64)}),
     "consult": _object({"open": _integer(0, 10_000)}),          # remote_search.MAX_OPEN
     "load": _object({"chats": _integer(0, 1000), "units": _integer(0, 1000)}),
-    "sharing": _object({"enabled": _flag, "active": _flag, "detail": _text(300)}),
+    # L'état de son partage (activity.field) : detail, dans la langue de cette machine-là ;
+    # detail_t, le même à traduire ici (i18n.lazy ; une version d'avant n'en dit rien)
+    "sharing": _object({"enabled": _flag, "active": _flag, "detail": _text(300),
+                        "detail_t": _lazy("worker.")}),
 })
 
 
@@ -173,6 +204,13 @@ def clean(value) -> dict | None:
     """Le profil (ou les nouvelles d'un ping) réduit à ce qui a la forme attendue ; None
     s'il n'est même pas un objet."""
     cleaned = SCHEMA(value)
+    return None if cleaned is _DROP else cleaned
+
+
+def lazy(value, prefix: str) -> list | None:
+    """Un texte à traduire reçu d'une autre machine ([clé, {paramètres}], i18n.lazy), typé et
+    borné, sa clé commençant par `prefix` (_lazy) ; None sinon."""
+    cleaned = _lazy(prefix)(value)
     return None if cleaned is _DROP else cleaned
 
 

@@ -10,11 +10,13 @@ ne retarde ni les autres ni la réponse au-delà du délai. Ce qui revient est c
 (forme, longueurs, nombre), et les noms nettoyés : un passage d'ailleurs ne doit pas pouvoir
 se faire passer pour un de mes fichiers.
 """
+import contextvars
 import logging
 import math
 import re
 from concurrent.futures import ThreadPoolExecutor, wait
 
+from aiodos.i18n import t
 from aiodos.network import client, consult, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.node import identity
@@ -29,7 +31,7 @@ VIEW_GRACE = 10               # marge pour un réseau local muet puis Internet (
 MAX_DOCUMENT = 300
 MAX_LIBRARY = 120
 MAX_OPEN = 10_000             # nombre de bibliothèques ouvertes plausible, au-delà : profil faux
-_UNSAFE = re.compile(r"[\x00-\x1f\x7f\[\]«»\"<>]+")
+_UNSAFE = re.compile(r"[\x00-\x1f\x7f\[\]«»\"<>]+")       # i18n: tel quel (motif)
 
 
 def _open_for_me(peer) -> int:
@@ -72,7 +74,7 @@ def clean(reply, k: int) -> list:
     """Passages reçus, vérifiés : seuls ceux bien formés passent, k au plus."""
     items = reply.get("passages") if isinstance(reply, dict) else None
     if not isinstance(items, list):
-        raise PeerError("Réponse illisible.")
+        raise PeerError(t("consult.unreadable_reply"))
     out = []
     for item in items:
         if len(out) == k:
@@ -96,7 +98,7 @@ def clean(reply, k: int) -> list:
 def _ask(peer, question, k, timeout) -> dict:
     full = peers.get(peer["node_id"])
     if not full:
-        raise PeerError("Cette machine n'est plus appairée.")
+        raise PeerError(t("consult.not_paired"))
     reply = client.call(identity.node_id(), full, "library/search",
                         {"question": question, "k": k}, timeout=timeout)
     passages = clean(reply, k)
@@ -124,7 +126,10 @@ def search(question: str, only, k: int = PER_PEER, timeout: float = CHAT_TIMEOUT
     if not question or not found:
         return [], []
     pool = ThreadPoolExecutor(max_workers=min(8, len(found)), thread_name_prefix="aiodos-consult")
-    futures = {pool.submit(_ask, p, question, k, timeout): p for p in found}
+    # Chaque fil garde le contexte de l'appelant : ses erreurs sont dans la langue de la
+    # requête (celle de l'interface), comme le reste de la réponse
+    futures = {pool.submit(contextvars.copy_context().run, _ask, p, question, k, timeout): p
+               for p in found}
     done, _late = wait(futures, timeout=timeout + grace)
     pool.shutdown(wait=False, cancel_futures=True)
     passages, machines = [], []
@@ -133,7 +138,7 @@ def search(question: str, only, k: int = PER_PEER, timeout: float = CHAT_TIMEOUT
                   "friend": peer.get("trust") == sharing.FRIEND, "count": 0, "open": None,
                   "error": None}
         if future not in done:
-            status["error"] = "pas de réponse à temps"
+            status["error"] = t("consult.no_answer_in_time")
         elif future.exception() is not None:
             status["error"] = str(future.exception())[:300]
             log.info("Recherche chez « %s » : %s", status["name"], status["error"])

@@ -1,0 +1,18 @@
+{
+  "unreadable": "Unreadable introduction.",
+  "friends_only": "Only a friend's machine is introduced to my other machines.",
+  "pair_again": "“{name}” needs to be paired again.",
+  "unknown": "Unknown or expired introduction.",
+  "mine_only_introduce": "Only one of my machines can introduce other machines to me.",
+  "other_finishing": "Another introduction of this machine is finishing.",
+  "set_aside_here": "Machine set aside here.",
+  "too_many": "Too many introductions waiting, try again later.",
+  "expired": "This introduction has expired.",
+  "presenter_gone": "The machine that made the introduction is no longer paired.",
+  "declined_refused": "introduction by “{name}” declined",
+  "failed": "The introduction of “{name}” didn't go through: one of the machines no longer answers. It can be done again.",
+  "already_paired": "Machine already paired.",
+  "mine_only": "Only one of my machines can ask for this.",
+  "declined_removed_on": "removed on “{name}”",
+  "declined_removed_here": "removed here"
+}

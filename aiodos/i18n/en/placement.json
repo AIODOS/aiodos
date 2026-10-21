@@ -1,0 +1,6 @@
+{
+  "this_machine": "this machine",
+  "no_machine": "No machine can answer with “{model}” right now: neither this machine nor any of your online machines that lend it.",
+  "split": "split across my machines",
+  "other_machine": "other machine"
+}

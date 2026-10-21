@@ -1,6 +1,7 @@
 // Modèles de conversation vus par l'interface : chaque modèle une fois, avec le mode
 // automatique (« auto:<modèle> » : la machine qui répond se choisit au moment d'envoyer,
 // cf. network/placement.py) et les machines qui l'ont, pour en désigner une.
+import { locale, t } from '../i18n.js';
 import { state } from '../state.js';
 
 export const AUTO = 'auto:';
@@ -21,15 +22,15 @@ export function catalog() {
     } else if (m.group === 'local') {
       const e = entry(m.label);
       e.size = m.size;
-      e.machines.unshift({ id: m.id, label: 'Cette machine', local: true, size: m.size });
+      e.machines.unshift({ id: m.id, label: t('models.this_machine'), local: true, size: m.size });
     } else if (m.group === 'remote') {
       const e = entry(m.label);
       e.size ||= m.size;
-      e.machines.push({ id: m.id, label: m.trust === 'friend' ? `${m.peer} (ami)` : m.peer,
+      e.machines.push({ id: m.id, label: m.trust === 'friend' ? t('models.peer_friend', { name: m.peer }) : m.peer,
                         slow: m.fits_vram === false });
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, locale()));
 }
 
 /** Nom du modèle désigné par un identifiant : « auto:x », « peer:<machine>:x »,
@@ -47,16 +48,16 @@ export function modelName(id) {
  * here : préciser « cette machine » pour un modèle local (conversation en mode automatique).
  */
 export function modelLabel(id, here = false) {
-  if (id?.startsWith(AUTO)) return `${modelName(id)} · automatique`;
+  if (id?.startsWith(AUTO)) return t('models.label_auto', { name: modelName(id) });
   const m = state.models.find(x => x.id === id);
   if (m) {
     if (m.peer) return `${m.label} · ${m.peer}`;
-    if (m.group === 'cluster') return `${m.label} · réparti`;
-    return here && m.group === 'local' ? `${m.label} · cette machine` : m.label;
+    if (m.group === 'cluster') return t('models.label_split', { name: m.label });
+    return here && m.group === 'local' ? t('models.label_here', { name: m.label }) : m.label;
   }
-  if (id?.startsWith('peer:')) return `${modelName(id)} · autre machine`;
-  if (id?.startsWith(CLUSTER)) return `${modelName(id)} · réparti`;
-  return here && id && !id.startsWith('cloud:') ? `${id} · cette machine` : (id || '');
+  if (id?.startsWith('peer:')) return t('models.label_other', { name: modelName(id) });
+  if (id?.startsWith(CLUSTER)) return t('models.label_split', { name: modelName(id) });
+  return here && id && !id.startsWith('cloud:') ? t('models.label_here', { name: id }) : (id || '');
 }
 
 /** Identifiant à utiliser pour ce modèle quand on ne désigne pas de machine. */

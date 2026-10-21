@@ -1,0 +1,87 @@
+{
+  "route_lan": "local network",
+  "route_direct": "Internet, direct",
+  "route_relay": "Internet, through a relay",
+  "route_internet": "Internet",
+  "offline_seen": "offline · seen {ago}",
+  "never_seen": "never seen",
+  "online": "online",
+  "lends_power": "its power",
+  "power_paused": "power paused",
+  "lends_models": "its models",
+  "lends_gpu": "its graphics card",
+  "lends_nothing": "nothing",
+  "job_units": {
+    "one": "{title} ({n} unit)",
+    "other": "{title} ({n} units)"
+  },
+  "computing_for_you": {
+    "one": "computing {n} unit for you",
+    "other": "computing {n} units for you"
+  },
+  "answering_your_chat": "answering your conversation",
+  "you_compute": {
+    "one": "you're computing {n} unit for it",
+    "other": "you're computing {n} units for it"
+  },
+  "you_answer_its_chat": "you're answering its conversation",
+  "nothing_now": "nothing right now",
+  "received_units": {
+    "one": "{n} unit computed for you",
+    "other": "{n} units computed for you"
+  },
+  "received": "received {time}",
+  "given_units": {
+    "one": "{n} unit computed for it",
+    "other": "{n} units computed for it"
+  },
+  "given": "given {time}",
+  "chats_for_you": "{n} for you",
+  "chats_for_it": "{n} for it",
+  "refused_results": {
+    "one": "{n} result refused",
+    "other": "{n} results refused"
+  },
+  "failures": {
+    "one": "{n} failure",
+    "other": "{n} failures"
+  },
+  "trouble_title": "Results it returned to you that were refused (wrong or unreadable), and units it couldn't compute for you",
+  "chats_title": "Answers from its models to your conversations, and from yours to its own",
+  "chats": {
+    "one": "conversation: {list}",
+    "other": "conversations: {list}"
+  },
+  "nothing_yet": "nothing yet",
+  "online_of": "{online} online out of {total}",
+  "lending": {
+    "one": "{n} is lending its power",
+    "other": "{n} are lending their power"
+  },
+  "helping": {
+    "one": "{n} is working for you",
+    "other": "{n} are working for you"
+  },
+  "helped": "you're working for {n}",
+  "me_lending": "this machine is lending its own",
+  "me_not_lending": "this machine isn't lending right now",
+  "nudge": "Your machines and your friends have already helped you {n} times (conversations, computations), and this machine doesn't lend anything in return yet. To take part: turn on “Lend my models” or “Lend my computing power”. Those who take part go first when a machine is busy.",
+  "nudge_no_models": "Your machines and your friends have already helped you {n} times (conversations, computations), and this machine doesn't lend anything in return yet. To take part: install a model, then turn on “Lend my models” or “Lend my computing power”. Those who take part go first when a machine is busy.",
+  "introduced_by": "Introduced by “{name}”",
+  "introduced_by_removed": "Introduced by a machine since removed",
+  "friend": "friend",
+  "col_machine": "Machine",
+  "col_link": "Link",
+  "col_lends": "Lends",
+  "col_now": "Right now",
+  "col_exchanged": "Exchanged",
+  "title": "Connected machines",
+  "hint": "Live: who is online, who lends their computing power, and what each machine does for the other. Updated about every 15 seconds.",
+  "empty": "No paired machines: pair your machines below.",
+  "rail_no_peers": "No paired machines",
+  "rail_online": {
+    "one": "{n} machine online",
+    "other": "{n} machines online"
+  },
+  "rail_none_online": "No machines online"
+}

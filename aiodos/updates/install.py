@@ -22,6 +22,7 @@ import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
 
+from aiodos.i18n import t
 from aiodos.updates import manifest as manifests
 from aiodos.updates.manifest import UpdateError
 from aiodos.updates.store import MARKER, Store, sha256_of
@@ -35,6 +36,7 @@ _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)),
              *(f"LPT{i}" for i in range(10))}
 
 # Lancé dans le dossier de la version, avec un dossier de données jetable
+# i18n: tel quel (programme Python lancé à part)
 SMOKE = """
 import os, sys
 import aiodos
@@ -67,14 +69,14 @@ def install(store: Store, found: dict) -> Path:
     archive = store.file_path(wanted, item["name"])
     if not archive.is_file() or sha256_of(archive) != item["sha256"]:
         archive.unlink(missing_ok=True)
-        raise UpdateError("Archive absente ou altérée : elle sera téléchargée de nouveau.")
+        raise UpdateError(t("updates_install.archive_missing"))
     work = target.with_name(f".{wanted}-{secrets.token_hex(4)}")
     try:
         extract(archive, work)
         declared = declared_version(work)
         if declared != wanted:
-            raise UpdateError(f"Le code annonce la version {declared}, le manifeste la "
-                              f"{wanted} : refusée.")
+            raise UpdateError(t("updates_install.version_mismatch", declared=declared,
+                                wanted=wanted))
         smoke_test(work, wanted)
         (work / MARKER).write_text(json.dumps({"version": wanted, "sha256": item["sha256"],
                                                "at": time.time()}), encoding="utf-8")
@@ -106,23 +108,23 @@ def _check_python(found: dict):
     try:
         wanted = tuple(int(part) for part in str(needed).split(".")[:2])
     except ValueError as exc:
-        raise UpdateError(f"Version de Python demandée illisible : {needed!r}") from exc
+        raise UpdateError(t("updates_install.python_unreadable", needed=repr(needed))) from exc
     if sys.version_info[:2] < wanted:
-        raise UpdateError(f"Cette version demande Python {needed} ou plus récent "
-                          f"(ici {platform.python_version()}).")
+        raise UpdateError(t("updates_install.python_too_old", needed=needed,
+                            here=platform.python_version()))
 
 
 def _safe_parts(entry: zipfile.ZipInfo) -> tuple:
     name = entry.filename
     if "\\" in name or ":" in name or "\x00" in name or name.startswith("/"):
-        raise UpdateError(f"Chemin refusé dans l'archive : {name!r}")
+        raise UpdateError(t("updates_install.path_refused", name=repr(name)))
     parts = tuple(p for p in PurePosixPath(name).parts if p not in ("", "."))
     if not parts or ".." in parts:
-        raise UpdateError(f"Chemin refusé dans l'archive : {name!r}")
+        raise UpdateError(t("updates_install.path_refused", name=repr(name)))
     if any(p.split(".")[0].upper() in _RESERVED for p in parts):
-        raise UpdateError(f"Nom réservé par Windows dans l'archive : {name!r}")
+        raise UpdateError(t("updates_install.reserved_name", name=repr(name)))
     if stat.S_ISLNK(entry.external_attr >> 16):
-        raise UpdateError(f"Lien refusé dans l'archive : {name!r}")
+        raise UpdateError(t("updates_install.link_refused", name=repr(name)))
     return parts
 
 
@@ -130,7 +132,7 @@ def extract(archive: Path, dest: Path):
     """Archive du code d'une version : dépliée, puis le paquet aiodos doit y être."""
     unpack(archive, dest)
     if not (dest / "aiodos" / "__init__.py").is_file():
-        raise UpdateError("Archive sans le code d'AIODOS.")
+        raise UpdateError(t("updates_install.no_code"))
 
 
 def unpack(archive: Path, dest: Path):
@@ -142,9 +144,9 @@ def unpack(archive: Path, dest: Path):
         with zipfile.ZipFile(archive) as z:
             entries = z.infolist()
             if len(entries) > MAX_ENTRIES:
-                raise UpdateError("Archive refusée : trop de fichiers.")
+                raise UpdateError(t("updates_install.too_many_files"))
             if sum(e.file_size for e in entries) > MAX_TOTAL:
-                raise UpdateError("Archive refusée : trop volumineuse une fois décompressée.")
+                raise UpdateError(t("updates_install.too_large"))
             for entry in entries:
                 target = dest.joinpath(*_safe_parts(entry))
                 if entry.is_dir():
@@ -156,10 +158,10 @@ def unpack(archive: Path, dest: Path):
                     for block in iter(lambda: src.read(1024 * 1024), b""):
                         written += len(block)
                         if written > entry.file_size:
-                            raise UpdateError("Archive refusée : contenu plus long qu'annoncé.")
+                            raise UpdateError(t("updates_install.longer_than_announced"))
                         out.write(block)
     except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
-        raise UpdateError(f"Archive endommagée ({exc}).") from exc
+        raise UpdateError(t("updates_install.damaged", error=exc)) from exc
 
 
 def declared_version(folder: Path) -> str | None:
@@ -182,14 +184,14 @@ def smoke_test(folder: Path, expected: str):
                                   errors="replace", timeout=SMOKE_TIMEOUT,
                                   creationflags=_NO_WINDOW)
         except subprocess.TimeoutExpired as exc:
-            raise UpdateError("Le code de cette version met trop de temps à se charger.") from exc
+            raise UpdateError(t("updates_install.smoke_timeout")) from exc
         except OSError as exc:
-            raise UpdateError(f"Essai de la version impossible ({exc}).") from exc
+            raise UpdateError(t("updates_install.smoke_failed", error=exc)) from exc
     if done.returncode == 0 and f"version {expected}" in done.stdout:
         return
-    missing = re.search(r"No module named '([\w.]+)'", done.stderr)
+    missing = re.search(r"No module named '([\w.]+)'", done.stderr)    # i18n: tel quel (motif)
     if missing:
-        raise UpdateError(f"Cette version demande le paquet Python « "
-                          f"{missing.group(1).split('.')[0]} », absent de cette machine.")
+        raise UpdateError(t("updates_install.missing_package",
+                            package=missing.group(1).split(".")[0]))
     last = (done.stderr.strip() or done.stdout.strip() or "?").splitlines()[-1]
-    raise UpdateError(f"Le code de cette version ne se charge pas ici : {last[:200]}")
+    raise UpdateError(t("updates_install.does_not_load", error=last[:200]))

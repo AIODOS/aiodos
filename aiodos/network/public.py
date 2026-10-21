@@ -16,6 +16,7 @@ import json
 import logging
 
 from aiodos import __version__, settings
+from aiodos.i18n import t
 from aiodos.network.companion import CompanionError
 from aiodos.services import ollama
 
@@ -72,9 +73,8 @@ class Public:
                     self._sent = None      # le compagnon n'y est plus : redit au prochain tour
             self._error = None
         except CompanionError as exc:
-            if "Chemin inconnu" in str(exc):
-                self._error = ("Le compagnon Internet de cette version ne connaît pas encore le "
-                               "réseau public : il arrivera avec la prochaine mise à jour.")
+            if "Chemin inconnu" in str(exc):   # i18n: tel quel (réponse du compagnon, en Rust)
+                self._error = t("net.public_unsupported")
             else:
                 self._error = str(exc)
             log.info("Réseau public : %s", self._error)

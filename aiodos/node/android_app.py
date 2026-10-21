@@ -25,6 +25,8 @@ import secrets
 import threading
 from pathlib import Path
 
+from aiodos.i18n import language, t
+
 log = logging.getLogger("aiodos")
 
 APP_ENV = "AIODOS_ANDROID_APP"
@@ -124,10 +126,11 @@ def prepare(files_dir, native_dir, cache_dir):
     })
     chosen = Path(files_dir) / AUTOSTART_CHOSEN
     if not chosen.exists():
-        (Path(files_dir) / AUTOSTART).write_text(
+        # Deux fichiers-marques, lus pour leur présence seule (BootReceiver.java)
+        (Path(files_dir) / AUTOSTART).write_text(  # i18n: tel quel (contenu d'une marque)
             "Démarrer le nœud AIODOS avec le téléphone (appli AIODOS).\n", encoding="utf-8")
-        chosen.write_text("Démarrage avec le téléphone activé à la première ouverture.\n",
-                          encoding="utf-8")
+        chosen.write_text(  # i18n: tel quel (contenu d'une marque)
+            "Démarrage avec le téléphone activé à la première ouverture.\n", encoding="utf-8")
 
 
 def start(files_dir: str, native_dir: str, cache_dir: str) -> str:
@@ -144,7 +147,7 @@ def start(files_dir: str, native_dir: str, cache_dir: str) -> str:
         port = entry._free_port()
         token, show_key = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
         if not instance.acquire(port, show_key):
-            raise entry.NodeError("Un autre nœud AIODOS utilise déjà ces données.")
+            raise entry.NodeError(t("android.data_in_use"))
         node = entry._Node(args, port, token, show_key)
         try:
             url = node.start()
@@ -155,7 +158,21 @@ def start(files_dir: str, native_dir: str, cache_dir: str) -> str:
         _running.update(node=node, url=url)
         log.info("Nœud AIODOS de l'appli Android prêt")
         threading.Thread(target=_check_engine, daemon=True, name="aiodos-moteur").start()
+        language.on_change(lambda lang: tell_language())
+        tell_language()
         return url
+
+
+def tell_language():
+    """La notification et l'écran d'attente (Java) dans la langue choisie dans les Réglages :
+    « fr », « en », ou None pour celle du téléphone (Texts.java). Rien hors de l'appli."""
+    if not in_app():
+        return
+    try:
+        from java import jclass          # module de Chaquopy : seulement dans l'appli
+        jclass("fr.arkane.aiodos.Texts").choose(language.chosen())
+    except Exception as exc:  # noqa: BLE001 — la notification garde sa langue
+        log.warning("Langue de l'appli non transmise : %s", exc)
 
 
 def _check_engine():

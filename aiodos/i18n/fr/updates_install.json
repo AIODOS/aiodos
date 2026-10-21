@@ -1,0 +1,18 @@
+{
+  "archive_missing": "Archive absente ou altérée : elle sera téléchargée de nouveau.",
+  "version_mismatch": "Le code annonce la version {declared}, le manifeste la {wanted} : refusée.",
+  "python_unreadable": "Version de Python demandée illisible : {needed}",
+  "python_too_old": "Cette version demande Python {needed} ou plus récent (ici {here}).",
+  "path_refused": "Chemin refusé dans l'archive : {name}",
+  "reserved_name": "Nom réservé par Windows dans l'archive : {name}",
+  "link_refused": "Lien refusé dans l'archive : {name}",
+  "no_code": "Archive sans le code d'AIODOS.",
+  "too_many_files": "Archive refusée : trop de fichiers.",
+  "too_large": "Archive refusée : trop volumineuse une fois décompressée.",
+  "longer_than_announced": "Archive refusée : contenu plus long qu'annoncé.",
+  "damaged": "Archive endommagée ({error}).",
+  "smoke_timeout": "Le code de cette version met trop de temps à se charger.",
+  "smoke_failed": "Essai de la version impossible ({error}).",
+  "missing_package": "Cette version demande le paquet Python « {package} », absent de cette machine.",
+  "does_not_load": "Le code de cette version ne se charge pas ici : {error}"
+}

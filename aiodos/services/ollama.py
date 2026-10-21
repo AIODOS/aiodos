@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-from aiodos import settings
+from aiodos import i18n, settings
 from aiodos.llm import integrated
 
 _caps_cache = {}
@@ -269,7 +269,7 @@ def embed(texts, model=None, timeout=180) -> list:
             raise RuntimeError(_error_text(r))
         vectors.extend(r.json().get("embeddings") or [])
     if len(vectors) != len(texts):
-        raise RuntimeError("Ollama n'a pas renvoyé un vecteur par texte.")
+        raise RuntimeError(i18n.t("llm.ollama_vectors_mismatch"))
     return vectors
 
 

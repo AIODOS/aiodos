@@ -1,5 +1,8 @@
 // Accès à l'API du nœud. Le jeton arrive dans l'URL (?t=…) au lancement ; on le
 // garde pour la session de la fenêtre puis on l'efface de la barre d'adresse.
+// Chaque requête dit la langue de l'interface : le nœud répond dans la même (i18n.js).
+import { has, lang, t } from './i18n.js';
+
 const params = new URLSearchParams(location.search);
 let token = params.get('t');
 if (token) {
@@ -18,7 +21,8 @@ export class ApiError extends Error {
 }
 
 async function failure(res) {
-  let message = `Erreur ${res.status}`;
+  // Avant l'arrivée des textes (démarrage), le code HTTP seul
+  let message = has('ui.error_status') ? t('ui.error_status', { status: res.status }) : `HTTP ${res.status}`;
   let data = null;
   try {
     data = await res.json();
@@ -28,7 +32,7 @@ async function failure(res) {
 }
 
 export async function api(method, path, body) {
-  const headers = { 'X-Aiodos-Token': token };
+  const headers = { 'X-Aiodos-Token': token, 'Accept-Language': lang };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch('/api' + path, {
     method, headers, body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -50,7 +54,7 @@ export const del = path => api('DELETE', path);
 export function listen(onEvent, onState) {
   let source;
   const open = () => {
-    source = new EventSource('/api/events?t=' + encodeURIComponent(token));
+    source = new EventSource(`/api/events?t=${encodeURIComponent(token)}&lang=${lang}`);
     source.onopen = () => onState?.(true);
     source.onmessage = e => { try { onEvent(JSON.parse(e.data)); } catch { /* ignoré */ } };
     source.onerror = () => { onState?.(false); };
@@ -63,7 +67,7 @@ export function listen(onEvent, onState) {
 export async function streamChat(body, onEvent, signal) {
   const res = await fetch('/api/chat', {
     method: 'POST', signal,
-    headers: { 'X-Aiodos-Token': token, 'Content-Type': 'application/json' },
+    headers: { 'X-Aiodos-Token': token, 'Accept-Language': lang, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw await failure(res);

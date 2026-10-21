@@ -10,6 +10,10 @@ Les fichiers sont rangés dans data/images/models/ (réglage « images_models_di
 autre dossier, par exemple pour partager les modèles entre plusieurs copies d'AIODOS).
 Leur empreinte n'est recalculée que si leur taille ou leur date changent : le résultat
 est noté dans data/images/verified.json.
+
+Les textes d'un modèle (description, licence, formats) sont des clés des textes
+(i18n/*/imaging_models.json), écrites dans la langue en cours par about(), notice(),
+sizes() et durations() ; son nom (label) reste tel quel.
 """
 import hashlib
 import json
@@ -18,7 +22,8 @@ import os
 import threading
 from pathlib import Path
 
-from aiodos import paths, settings
+from aiodos import i18n, paths, settings
+from aiodos.i18n import t
 
 log = logging.getLogger("aiodos.images")
 
@@ -28,18 +33,17 @@ HF = "https://huggingface.co/{repo}/resolve/{commit}/{path}"
 FLAGS = {"diffusion": "--diffusion-model", "llm": "--llm", "vae": "--vae", "model": "--model",
          "t5xxl": "--t5xxl", "clip_l": "--clip_l", "audio_vae": "--audio-vae"}
 
-# Chaque modèle dit aussi ce qu'il sait faire : formats proposés (sizes), côtés en multiples
-# de « multiple » entre les bornes « side », pixels au plus ; pour une vidéo, la cadence
-# (fps) et les nombres d'images permis, « frame_step » × k + « frame_base » (durations :
-# ceux proposés)
+# Chaque modèle dit aussi ce qu'il sait faire : formats proposés (sizes : largeur, hauteur,
+# clé du libellé), côtés en multiples de « multiple » entre les bornes « side », pixels au
+# plus ; pour une vidéo, la cadence (fps) et les nombres d'images permis, « frame_step » × k
+# + « frame_base » (durations : ceux proposés, avec leur durée en secondes)
 
 MODELS = {
     # Licences vérifiées le 17/10/2026 : Apache-2.0 pour les trois fichiers
     "z-image-turbo": {
         "label": "Z-Image Turbo",
         "license": "Apache-2.0",
-        "about": "Tongyi-MAI (Alibaba), 6 milliards de paramètres, 8 pas : rapide, "
-                 "photoréaliste, sait écrire du texte dans l'image.",
+        "about": "imaging_models.about_z_image_turbo",
         "files": {
             "diffusion": {
                 "name": "z_image_turbo-Q4_K.gguf", "size": 3864250304,
@@ -62,16 +66,17 @@ MODELS = {
         },
         # Modèle distillé : 8 pas, sans guidage (la consigne négative n'a pas d'effet)
         "kind": "image", "steps": 8, "cfg": 1.0, "negative": False,
-        "sizes": [[1024, 1024, "Carré · 1024 × 1024"], [768, 1344, "Portrait · 768 × 1344"],
-                  [1344, 768, "Paysage · 1344 × 768"], [512, 512, "Rapide · 512 × 512"]],
+        "sizes": [[1024, 1024, "imaging_models.size_square"],
+                  [768, 1344, "imaging_models.size_portrait"],
+                  [1344, 768, "imaging_models.size_landscape"],
+                  [512, 512, "imaging_models.size_fast"]],
         "multiple": 64, "side": [256, 2048], "max_pixels": 1536 * 1536,
     },
     # Licences vérifiées le 17/10/2026 : Apache-2.0 pour les trois fichiers
     "wan2.1-t2v-1.3b": {
-        "label": "Wan 2.1 · vidéo",
+        "label": "Wan 2.1 · vidéo",          # i18n: tel quel (nom du modèle)
         "license": "Apache-2.0",
-        "about": "Alibaba, texte vers vidéo, 1,3 milliard de paramètres, 480p à 16 images "
-                 "par seconde : le modèle vidéo qui tient dans une carte de 8 Go.",
+        "about": "imaging_models.about_wan2_1",
         "files": {
             "diffusion": {
                 "name": "wan2.1_t2v_1.3B_fp16.safetensors", "size": 2838303560,
@@ -97,11 +102,12 @@ MODELS = {
         # négative habituelle de Wan, en chinois, quand l'utilisateur n'en donne pas
         "kind": "video", "steps": 20, "cfg": 6.0, "negative": True, "fps": 16,
         "flow_shift": 3.0, "sampler": "euler",
-        "sizes": [[832, 480, "Paysage · 832 × 480"], [480, 832, "Portrait · 480 × 832"],
-                  [624, 624, "Carré · 624 × 624"]],
+        "sizes": [[832, 480, "imaging_models.size_landscape"],
+                  [480, 832, "imaging_models.size_portrait"],
+                  [624, 624, "imaging_models.size_square"]],
         "multiple": 16, "side": [256, 1280], "max_pixels": 1024 * 576,
         "frame_step": 4, "frame_base": 1, "max_frames": 161, "default_frames": 33,
-        "durations": [[17, "1 s"], [33, "2 s"], [49, "3 s"], [81, "5 s"]],
+        "durations": [[17, 1], [33, 2], [49, 3], [81, 5]],
         "default_negative": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，"
                             "整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，"
                             "画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，"
@@ -113,16 +119,10 @@ MODELS = {
     # stable-diffusion.cpp (docs/minimax_h3.md), en version allégée pour une machine à 32 Go
     # de mémoire vive. Pas encore essayé ici (30 Go à télécharger).
     "minimax-h3": {
-        "label": "MiniMax H3 · vidéo et son",
+        "label": "MiniMax H3 · vidéo et son",          # i18n: tel quel (nom du modèle)
         "license": "MiniMax H3 Community License",
-        "notice": "Les poids MiniMax H3 sont publiés sous la « MiniMax H3 Community License », "
-                  "qui exclut l'Union européenne, le Royaume-Uni, la Corée du Sud et les "
-                  "États-Unis : y faire tourner le modèle, ou en utiliser les sorties, n'est "
-                  "pas autorisé sans accord écrit de MiniMax. AIODOS ne distribue ni les poids "
-                  "ni leurs sorties : il les télécharge depuis Hugging Face à ta demande. Les "
-                  "installer et les utiliser relève de ta seule responsabilité.",
-        "about": "MiniMax, vidéo avec sa bande son, 24 images par seconde. Lourd : un encodeur "
-                 "Qwen3-VL-32B, plusieurs minutes par vidéo sur une carte de 8 Go.",
+        "notice": "imaging_models.notice_minimax_h3",
+        "about": "imaging_models.about_minimax_h3",
         "files": {
             "diffusion": {
                 "name": "minimax_h3_fl2va_pruned-Q4_K_M.gguf", "size": 11420663904,
@@ -152,11 +152,13 @@ MODELS = {
         # Sans guidage (cfg 1, comme les exemples) ; bruit tiré sur le processeur (--rng cpu)
         "kind": "video", "steps": 20, "cfg": 1.0, "negative": False, "fps": 24,
         "server_args": ["--rng", "cpu"],
-        "sizes": [[864, 480, "Paysage · 864 × 480"], [480, 864, "Portrait · 480 × 864"],
-                  [640, 640, "Carré · 640 × 640"], [1344, 768, "Paysage HD · 1344 × 768"]],
+        "sizes": [[864, 480, "imaging_models.size_landscape"],
+                  [480, 864, "imaging_models.size_portrait"],
+                  [640, 640, "imaging_models.size_square"],
+                  [1344, 768, "imaging_models.size_landscape_hd"]],
         "multiple": 32, "side": [256, 1344], "max_pixels": 1344 * 768,
         "frame_step": 17, "frame_base": 5, "max_frames": 260, "default_frames": 56,
-        "durations": [[22, "0,9 s"], [56, "2,3 s"], [73, "3 s"], [124, "5,2 s"]],
+        "durations": [[22, 0.9], [56, 2.3], [73, 3], [124, 5.2]],
     },
 }
 
@@ -180,7 +182,7 @@ def folder() -> Path:
 def model(model_id: str) -> dict:
     found = MODELS.get(model_id)
     if found is None:
-        raise ModelError(f"Modèle d'images inconnu : {model_id}")
+        raise ModelError(t("imaging.unknown_model_id", model=model_id))
     return found
 
 
@@ -191,6 +193,41 @@ def total_size(model_id: str) -> int:
 def hashes(model_id: str) -> list:
     """Empreintes des fichiers du modèle : une machine qui les a toutes calcule pareil."""
     return sorted(f["sha256"] for f in model(model_id)["files"].values())
+
+
+# ------------------------------------------------------------ textes affichés
+def _text(value, **params):
+    """Un texte d'un modèle dans la langue en cours : une clé des textes (imaging_models.json),
+    traduite ; un texte tel quel sinon (modèle ajouté à la main, essais)."""
+    return t(value, **params) if i18n.exists(value) else value
+
+
+def about(model_id: str) -> str:
+    return _text(model(model_id)["about"])
+
+
+def notice(model_id: str) -> str | None:
+    """L'avertissement d'une licence restrictive, lu et accepté avant le téléchargement."""
+    found = model(model_id).get("notice")
+    return _text(found) if found else None
+
+
+def sizes(model_id: str) -> list:
+    """[[largeur, hauteur, libellé]] des formats proposés : « Carré · 1024 × 1024 »."""
+    return [[width, height, _text(label, width=width, height=height)]
+            for width, height, label in model(model_id)["sizes"]]
+
+
+def durations(model_id: str) -> list:
+    """[[nombre d'images, libellé]] des durées proposées d'une vidéo : « 2,3 s » (« 2.3 s »
+    en anglais). Un libellé déjà écrit reste tel quel."""
+    return [[frames, seconds if isinstance(seconds, str) else _seconds(seconds)]
+            for frames, seconds in model(model_id).get("durations") or []]
+
+
+def _seconds(value) -> str:
+    digits = 0 if float(value).is_integer() else 1
+    return t("format.seconds", n=i18n.number(value, digits))
 
 
 # ------------------------------------------------------------ vérification
@@ -308,8 +345,7 @@ def ready(model_id: str) -> bool:
 def files(model_id: str) -> dict:
     """{partie : chemin} d'un modèle complet et vérifié ; ModelError sinon."""
     if not ready(model_id):
-        raise ModelError(f"Le modèle « {model(model_id)['label']} » n'est pas complet sur "
-                         "cette machine.")
+        raise ModelError(t("imaging.model_incomplete", name=model(model_id)["label"]))
     return {part: folder() / spec["name"] for part, spec in model(model_id)["files"].items()}
 
 

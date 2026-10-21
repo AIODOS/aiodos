@@ -50,7 +50,8 @@ import stat
 import sys
 from pathlib import Path
 
-from aiodos import settings
+from aiodos import i18n, settings
+from aiodos.i18n import t
 from aiodos.imaging import catalog
 from aiodos.updates import private
 
@@ -141,7 +142,7 @@ def _private(path: Path) -> bool:
     except Exception:                           # OSError, ou appel système refusé
         return False
     if not others and _extended_acl(path):
-        others = ["liste de droits (ACL) du fichier"]
+        others = ["liste de droits (ACL) du fichier"]        # i18n: tel quel (journal)
     if others:
         log.info("%s est modifiable par d'autres comptes de ce PC (%s)", path, ", ".join(others))
     return not others
@@ -182,7 +183,7 @@ def _private_folder(folder: Path) -> bool:
     try:
         others = private.foreign_writers(folder)
     except Exception:
-        others = ["droits illisibles"]
+        others = ["droits illisibles"]                       # i18n: tel quel (journal)
     if others:
         _say_common(folder, ", ".join(others))
     return not others
@@ -205,8 +206,8 @@ def _discard(part: Path):
 
 def _readable_size(size: int) -> str:
     if size < 1e9:
-        return f"{max(1, round(size / 1e6))} Mo"
-    return f"{size / 1e9:.1f}".replace(".", ",") + " Go"
+        return t("format.size_mb", n=max(1, round(size / 1e6)))
+    return t("format.size_gb", n=i18n.number(size / 1e9, 1))
 
 
 class _Grown(Exception):
@@ -291,31 +292,22 @@ def detach(spec: dict, path: Path, stop=None) -> bool:
             return False
         found = digest.hexdigest()
     except _Grown:
-        found = "allongé pendant la copie"      # pas une empreinte : « à refaire »
+        found = "allongé pendant la copie"  # i18n: tel quel (pas une empreinte : « à refaire »)
     except OSError as exc:
         _discard(part)
         log.warning("%s : copie impossible (%s), sd-server n'est pas lancé", spec["name"], exc)
-        if _no_space(exc):
-            advice = "la place manque. Libère de la place sur le disque d'AIODOS, puis réessaie."
-        else:
-            advice = ("la copie a échoué. Réessaie dans un moment ; si cela dure, supprime ce "
-                      "fichier du dossier des modèles d'images, puis télécharge de nouveau le "
-                      "modèle (vue Images).")
-        raise catalog.ModelError(
-            f"Le fichier « {spec['name']} » ({_readable_size(spec['size'])}) est modifiable par "
-            f"d'autres comptes de ce PC : il doit être copié avant d'être chargé, et {advice}"
-        ) from None
+        message = "imaging.copy_no_space" if _no_space(exc) else "imaging.copy_failed"
+        raise catalog.ModelError(t(message, file=spec["name"],
+                                   size=_readable_size(spec["size"]))) from None
     if found != spec["sha256"]:
         _discard(part)
         catalog.record(path, found)             # « à refaire » dans la vue Images
-        raise catalog.ModelError(
-            f"Le fichier « {spec['name']} » a changé depuis sa vérification : d'autres "
-            "comptes de ce PC peuvent le modifier. Télécharge-le de nouveau (vue Images).")
+        raise catalog.ModelError(t("imaging.file_changed", file=spec["name"]))
     if not _private(part):
         # Les copies faites là restent ouvertes (droits par défaut d'un système Unix dont
         # le groupe a d'autres membres…) : la refaire à chaque lancement ne servirait à rien
         _discard(part)
-        _say_common(path.parent, "les fichiers qu'on y crée")
+        _say_common(path.parent, "les fichiers qu'on y crée")    # i18n: tel quel (journal)
         return False
     try:
         _replace_read_only(part, path)          # un lien est rompu, l'autre nom reste
@@ -323,12 +315,7 @@ def detach(spec: dict, path: Path, stop=None) -> bool:
         _discard(part)
         log.warning("%s : remplacement impossible (%s), sd-server n'est pas lancé",
                     spec["name"], exc)
-        raise catalog.ModelError(
-            f"Le fichier « {spec['name']} » est modifiable par d'autres comptes de ce PC, et "
-            "un autre programme le tient ouvert : il n'a pas pu être remplacé par sa copie "
-            "vérifiée. Ferme ce programme puis réessaie ; si cela dure, supprime ce fichier "
-            "du dossier des modèles d'images, puis télécharge de nouveau le modèle (vue "
-            "Images).") from None
+        raise catalog.ModelError(t("imaging.file_held_open", file=spec["name"])) from None
     catalog.record(path, found)
     log.info("%s : fichier modifiable par d'autres comptes remplacé par une copie vérifiée",
              spec["name"])

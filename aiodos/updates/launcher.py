@@ -36,7 +36,8 @@ import threading
 import time
 from pathlib import Path
 
-from aiodos import __version__, instance, paths
+from aiodos import __version__, i18n, instance, paths
+from aiodos.i18n import t
 from aiodos.updates import state
 from aiodos.updates import version as versions
 from aiodos.updates.store import Store
@@ -98,6 +99,12 @@ def friends_refused() -> str | None:
     elle traiterait l'ami comme une de mes machines. Version d'origine illisible : refusé
     aussi, par prudence. Sous Windows, rien à craindre : la clé de la paire est scellée
     (node/vault.py, DPAPI), et une 2.0.x ne peut rien en faire."""
+    refusal = friends_refusal()
+    return i18n.render(refusal) if refusal else None
+
+
+def friends_refusal() -> list | None:
+    """friends_refused, à traduire par qui le lira (i18n.lazy) : pour une autre machine."""
     if not supervised():
         return None
     from aiodos.node import vault
@@ -106,11 +113,9 @@ def friends_refused() -> str | None:
     base = base_version()
     if base is not None and not versions.newer(TRUST_SINCE, base) and knows_friends(base_dir()):
         return None
-    shown = f"AIODOS {base}" if base else "une version d'AIODOS illisible ici"
-    return (f"Ce nœud a été installé avec {shown}, qui ne connaît pas les amis : si elle "
-            "reprenait la main, elle traiterait un ami comme une de tes machines. Mets AIODOS "
-            "à jour sur ce nœud en le réinstallant depuis une version récente (installeur, "
-            "ou archive), puis appaire ton ami.")
+    if base:
+        return i18n.lazy("updates.friends_refused", version=base)
+    return i18n.lazy("updates.friends_refused_unreadable")
 
 
 def child_argv(argv: list) -> list:
@@ -164,7 +169,7 @@ def dispatch(argv: list, store: Store | None = None, base_version: str = __versi
         restarts += 1
         if restarts > MAX_RESTARTS:
             log.warning("Trop de redémarrages d'affilée : la version d'origine reprend la main")
-            _note_fallback(store, wanted, "trop de redémarrages d'affilée")
+            _note_fallback(store, wanted, t("updates.reason_too_many_restarts"))
             return None
 
 
@@ -195,7 +200,7 @@ def run(store: Store, wanted: str, trial: bool, argv: list):
         process = subprocess.Popen([sys.executable, "-m", "aiodos", *child_argv(argv)],
                                    cwd=folder, env=_child_env(ready, trial))
     except OSError as exc:
-        return _failed(store, wanted, trial, f"lancement impossible ({exc})")
+        return _failed(store, wanted, trial, t("updates.reason_launch_failed", error=exc))
     healthy = False
     try:
         while process.poll() is None:
@@ -208,8 +213,8 @@ def run(store: Store, wanted: str, trial: bool, argv: list):
             if time.monotonic() - started > START_TIMEOUT:
                 process.kill()
                 process.wait()
-                return _failed(store, wanted, trial, "pas prête après "
-                                                     f"{START_TIMEOUT} s")
+                return _failed(store, wanted, trial,
+                               t("updates.reason_not_ready", seconds=START_TIMEOUT))
             time.sleep(0.2)
         if not healthy and ready.exists():    # prête, puis fermée entre deux coups d'œil
             healthy = True
@@ -230,7 +235,7 @@ def run(store: Store, wanted: str, trial: bool, argv: list):
         return code
     if code == ALREADY_RUNNING:
         return code
-    return _failed(store, wanted, trial, f"arrêtée au démarrage (code {code})")
+    return _failed(store, wanted, trial, t("updates.reason_exit_code", code=code))
 
 
 def _count_attempt(data: dict, wanted: str):
@@ -261,7 +266,7 @@ def _failed(store: Store, wanted: str, trial: bool, reason: str):
             if pending.get("version") != wanted:
                 return
             if int(pending.get("attempts") or 0) >= MAX_ATTEMPTS:
-                state.refuse(data, wanted, f"Ne démarre pas sur cette machine ({reason}).")
+                state.refuse(data, wanted, t("updates.refused_start", reason=reason))
                 data["notice"] = {"kind": "rollback", "version": wanted, "reason": reason,
                                   "at": time.time()}
             else:

@@ -7,10 +7,23 @@ elle n'apparaît pas dans la liste des bibliothèques.
 import numpy as np
 
 from aiodos import db
+from aiodos.i18n import t
 from aiodos.knowledge import search
 
-DEFAULT_COLLECTION = "Général"
-CONV_COLLECTION = "💬 Conversations"
+CONV_COLLECTION = "💬 Conversations"         # le même nom dans les deux langues
+
+
+def default_collection() -> str:
+    """Nom de la bibliothèque créée au premier démarrage, dans la langue du nœud
+    (« Général », « General ») : un nom comme un autre ensuite, que l'utilisateur change."""
+    return t("library.default_name")
+
+
+def __getattr__(name):
+    """store.DEFAULT_COLLECTION, nom d'avant les deux langues : default_collection()."""
+    if name == "DEFAULT_COLLECTION":
+        return default_collection()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def ensure_defaults():
@@ -21,7 +34,7 @@ def ensure_defaults():
             "SELECT 1 FROM collections WHERE system=0 LIMIT 1").fetchone()
         if not has_library:
             c.execute("INSERT INTO collections(name, enabled, system, created) "
-                      "VALUES(?, 1, 0, ?)", (DEFAULT_COLLECTION, db.now()))
+                      "VALUES(?, 1, 0, ?)", (default_collection(), db.now()))
 
 
 # ----------------------------------------------------------------- collections
@@ -58,7 +71,7 @@ def collection_names() -> dict:
 def collection_name(collection_id) -> str:
     row = db.query_one("SELECT name FROM collections WHERE id=?", (collection_id,))
     if row is None:
-        raise ValueError("Bibliothèque introuvable.")
+        raise ValueError(t("library.not_found"))
     return row["name"]
 
 
@@ -73,9 +86,9 @@ def conversation_collection_id() -> int:
 def _check_name(name) -> str:
     name = (name or "").strip()
     if not name:
-        raise ValueError("Le nom ne peut pas être vide.")
+        raise ValueError(t("library.name_empty"))
     if db.query_one("SELECT 1 FROM collections WHERE name=?", (name,)):
-        raise ValueError(f"Une bibliothèque « {name} » existe déjà.")
+        raise ValueError(t("library.name_exists", name=name))
     return name
 
 
@@ -88,9 +101,9 @@ def create_collection(name) -> int:
 def _ensure_editable(collection_id):
     row = db.query_one("SELECT system FROM collections WHERE id=?", (collection_id,))
     if row is None:
-        raise ValueError("Bibliothèque introuvable.")
+        raise ValueError(t("library.not_found"))
     if row["system"]:
-        raise ValueError("La mémoire des conversations ne se modifie pas ici.")
+        raise ValueError(t("library.memory_not_editable"))
 
 
 def rename_collection(collection_id, name):
@@ -135,7 +148,7 @@ def set_scope(collection_id, scope: str):
     machines et mes amis (étape 2.5, network/sharing.py). Ce PC seulement la ferme aussi
     à la consultation (knowledge/visibility.py)."""
     if scope not in SCOPES:
-        raise ValueError(f"Portée inconnue : {scope!r}")
+        raise ValueError(t("library.unknown_scope", scope=repr(scope)))
     _ensure_editable(collection_id)
     local = 1 if scope == "local" else 0
     db.execute("UPDATE collections SET local_only=?, share_friends=?, "

@@ -8,6 +8,7 @@ import threading
 import numpy as np
 
 from aiodos import db
+from aiodos.i18n import t
 
 _lock = threading.Lock()
 _version = 0
@@ -167,8 +168,10 @@ def manifest_parts(libraries=True, conversations=False, per_collection=25, only=
 
 
 def manifest_text(parts) -> str:
+    """Le sommaire tel que le modèle le lit, dans la langue en cours (library_prompts.json)."""
     lines = []
     for _collection_id, name, total, shown in parts:
         more = f" … (+{total - len(shown)})" if total > len(shown) else ""
-        lines.append(f"• {name} ({total} éléments) : {', '.join(shown)}{more}")
+        lines.append(t("library_prompts.manifest_line", name=name, n=total,
+                       items=", ".join(shown), more=more))
     return "\n".join(lines)

@@ -16,6 +16,7 @@ import time
 import requests
 
 from aiodos.cluster import engine as programs
+from aiodos.i18n import t
 from aiodos.llm.messages import SAMPLING, for_template
 from aiodos.llm import download, engine, models as registry
 
@@ -47,7 +48,7 @@ def version():
 def _model(name) -> registry.Model:
     model = registry.find(name)
     if model is None:
-        raise RuntimeError(f"Le modèle « {name} » n'est pas sur cette machine (moteur intégré).")
+        raise RuntimeError(t("llm.model_missing", name=name))
     return model
 
 
@@ -87,10 +88,8 @@ def _post(model: registry.Model, path: str, body: dict, stream=False, timeout=(1
         if "failed to load" in text:
             registry.mark_incompatible(model, text)
             raise RuntimeError(
-                f"Le modèle « {model.name} » ne se charge pas dans le moteur intégré (format "
-                "propre à Ollama) : il n'est plus proposé. Installe sa version standard depuis "
-                "« Installer un modèle ».")
-        raise RuntimeError(f"Moteur intégré : {text}")
+                t("llm.model_incompatible", name=model.name))
+        raise RuntimeError(t("llm.engine_error", error=text))
     return response
 
 
@@ -158,7 +157,7 @@ def chat_stream(model, messages, think=None, stop=None, options=None, stats=Fals
             except ValueError:
                 continue
             if chunk.get("error"):
-                raise RuntimeError(f"Moteur intégré : {chunk['error']}")
+                raise RuntimeError(t("llm.engine_error", error=chunk["error"]))
             choice = (chunk.get("choices") or [{}])[0]
             delta = choice.get("delta") or {}
             if choice.get("finish_reason"):
@@ -180,7 +179,7 @@ def embed(texts, model=None, timeout=180) -> list:
     from aiodos import settings
     found = _model(model or settings.get("embed_model"))
     if not found.embedding:
-        raise RuntimeError(f"« {found.name} » n'est pas un modèle d'embedding.")
+        raise RuntimeError(t("llm.not_embedding", name=found.name))
     vectors = []
     for start in range(0, len(texts), BATCH):
         batch = list(texts[start:start + BATCH])
@@ -188,7 +187,7 @@ def embed(texts, model=None, timeout=180) -> list:
             data = sorted(response.json().get("data") or [], key=lambda d: d.get("index", 0))
         vectors.extend(_unit(d.get("embedding") or []) for d in data)
     if len(vectors) != len(texts):
-        raise RuntimeError("Le moteur intégré n'a pas renvoyé un vecteur par texte.")
+        raise RuntimeError(t("llm.vectors_mismatch"))
     return vectors
 
 
@@ -207,8 +206,7 @@ def vision_model(wanted: str | None) -> registry.Model:
     seeing = sorted((m for m in registry.available() if m.mmproj and not m.embedding),
                     key=lambda m: m.size)
     if not seeing:
-        raise RuntimeError("Aucun modèle de cette machine ne voit les images : installe un "
-                           "Qwen 3.5 depuis « Installer un modèle ».")
+        raise RuntimeError(t("llm.no_vision_model"))
     fitting = [m for m in seeing if m.size <= 8e9]
     return fitting[-1] if fitting else seeing[0]
 

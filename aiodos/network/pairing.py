@@ -37,6 +37,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from aiodos.i18n import t
 from aiodos.network import (client, connections, crypto, envelope, group, invitations,
                             peers, sharing)
 from aiodos.network.client import PeerError
@@ -56,6 +57,7 @@ SPOILED = "spoiled"        # chez celle qui répond : révélation fausse, gard�
 READY = "ready"            # code calculé : affiché, en attente des réponses
 
 # Ce que répond une version sans engagement (2.0.1 et avant) à une demande sans clé
+# i18n: tel quel (réponse d'une version d'avant, reconnue mot pour mot)
 OLD_INCOMPLETE = "Demande d'appairage incomplète."
 
 
@@ -64,15 +66,12 @@ class PairingRefused(PeerError):
 
 
 def _outdated_there(name: str) -> str:
-    return (f"« {name} » a une version d'AIODOS trop ancienne pour l'appairage protégé : "
-            f"mets AIODOS à jour sur « {name} », puis recommence.")
+    return t("pairing.outdated_there", name=name)
 
 
 def _outdated_here(name: str) -> str:
     """Pour une machine plus ancienne qui lance l'appairage : c'est elle qui lit ce refus."""
-    return (f"« {name} » refuse l'appairage : cette machine-ci a une version d'AIODOS trop "
-            "ancienne pour l'appairage protégé. Mets AIODOS à jour sur cette machine, puis "
-            "recommence.")
+    return t("pairing.outdated_here", name=name)
 
 
 @dataclass
@@ -119,14 +118,14 @@ def _bytes(value, size: int) -> bytes:
     try:
         raw = envelope.b64d(value)
     except (TypeError, ValueError, AttributeError) as exc:
-        raise PeerError("Demande d'appairage illisible.") from exc
+        raise PeerError(t("pairing.unreadable")) from exc
     if len(raw) != size:
-        raise PeerError("Demande d'appairage illisible.")
+        raise PeerError(t("pairing.unreadable"))
     return raw
 
 
 def _name(payload: dict) -> str:
-    return str(payload.get("name") or "Machine sans nom")[:60]
+    return str(payload.get("name") or t("pairing.unnamed"))[:60]
 
 
 class Pairing:
@@ -172,13 +171,12 @@ class Pairing:
         info = client.hello(address, port)
         found = info.get("node_id")
         if found == self.m.node_id:
-            raise PeerError("C'est cette machine-ci.")
+            raise PeerError(t("pairing.this_machine"))
         if not peers.valid_id(found):
-            raise PeerError("Cette machine ne donne pas un identifiant valable.")
+            raise PeerError(t("pairing.invalid_id"))
         if node_id is not None and found != node_id:
-            raise PairingRefused("La machine qui répond à cette adresse n'est pas celle de la "
-                                 "liste : appairage arrêté. Recommence depuis la liste.")
-        return self._initiate(found, str(info.get("name") or "Machine sans nom")[:60],
+            raise PairingRefused(t("pairing.not_the_listed_one"))
+        return self._initiate(found, str(info.get("name") or t("pairing.unnamed"))[:60],
                               lambda payload: client.pair_start(address, port, payload),
                               address, int(port))
 
@@ -187,7 +185,7 @@ class Pairing:
         (invitations.target : node_id, name, net_id, hints, secret)."""
         way = {"node_id": target["node_id"], "net_id": target["net_id"]}
         return self._initiate(
-            target["node_id"], str(target.get("name") or "Machine sans nom")[:60],
+            target["node_id"], str(target.get("name") or t("pairing.unnamed"))[:60],
             lambda payload: client.pair_start_via(way, dict(payload,
                                                             invitation=target["secret"])),
             None, 0, net_id=target["net_id"], hints=target["hints"], secret=target["secret"])
@@ -204,8 +202,7 @@ class Pairing:
         with self._lock:
             self._purge()
             if node_id in self._pending:
-                raise PairingRefused(f"Un appairage est déjà en cours avec « {name} » : "
-                                     "termine-le, ou attends 3 minutes, puis recommence.")
+                raise PairingRefused(t("pairing.already_running", name=name))
             self._pending[node_id] = pending
         done = False
         try:
@@ -219,8 +216,7 @@ class Pairing:
                     raise PairingRefused(_outdated_there(name)) from exc
                 raise
             if not isinstance(reply, dict) or reply.get("node_id") != node_id:
-                raise PairingRefused("La machine jointe n'est pas celle qui a été choisie : "
-                                     "appairage arrêté.")
+                raise PairingRefused(t("pairing.not_the_chosen_one"))
             if reply.get("pairing") != PROTOCOL:
                 raise PairingRefused(_outdated_there(name))
             try:
@@ -229,12 +225,12 @@ class Pairing:
                 key, code = crypto.transcript_secrets(private, (me, public, nonce),
                                                       (node_id, their_pub, their_nonce))
             except (PeerError, ValueError) as exc:
-                raise PeerError("Réponse d'appairage illisible.") from exc
+                raise PeerError(t("pairing.reply_unreadable")) from exc
             send({"pairing": PROTOCOL, "step": "reveal", "node_id": me,
                   "pub": envelope.b64e(public), "nonce": envelope.b64e(nonce)})
             with self._lock:
                 if self._pending.get(node_id) is not pending:
-                    raise PeerError("Appairage interrompu : recommence.")
+                    raise PeerError(t("pairing.interrupted"))
                 pending.name = str(reply.get("name") or name)[:60]
                 pending.key, pending.code, pending.stage = key, code, READY
             done = True
@@ -255,13 +251,12 @@ class Pairing:
         invitation en cours, avec son secret (aux deux étapes)."""
         invitation = invitations.admit(net_key, payload.get("invitation"))
         if invitation is None or invitation["node_id"] != str(payload.get("node_id")):
-            raise PeerError("Appairage par Internet refusé : aucune invitation en cours pour "
-                            "cette machine.")
+            raise PeerError(t("pairing.no_invitation"))
         return self.incoming(payload, None, invitation)
 
     def incoming(self, payload: dict, address: str | None, invitation: dict | None = None) -> dict:
         if not isinstance(payload, dict):
-            raise PeerError("Demande d'appairage illisible.")
+            raise PeerError(t("pairing.unreadable"))
         if payload.get("pairing") != PROTOCOL:
             # Version sans engagement (ou d'une autre génération) : refus clair, jamais
             # l'ancien échange
@@ -269,12 +264,12 @@ class Pairing:
             raise PairingRefused(_outdated_there(self.m.name()) if newer
                                  else _outdated_here(self.m.name()))
         if payload.get("step") not in ("commit", "reveal"):
-            raise PeerError("Demande d'appairage illisible.")
+            raise PeerError(t("pairing.unreadable"))
         node_id = str(payload.get("node_id") or "")
         if not peers.valid_id(node_id):
-            raise PeerError("Identifiant de machine illisible.")
+            raise PeerError(t("pairing.id_unreadable"))
         if node_id == self.m.node_id:
-            raise PeerError("Une machine ne s'appaire pas avec elle-même.")
+            raise PeerError(t("pairing.with_itself"))
         if payload["step"] == "commit":
             return self._committed(node_id, payload, address, invitation)
         return self._revealed(node_id, payload, address, invitation)
@@ -286,9 +281,9 @@ class Pairing:
         try:
             port = int(payload.get("port"))
         except (TypeError, ValueError) as exc:
-            raise PeerError("Demande d'appairage illisible.") from exc
+            raise PeerError(t("pairing.unreadable")) from exc
         if not 0 < port < 65536:
-            raise PeerError("Demande d'appairage illisible.")
+            raise PeerError(t("pairing.unreadable"))
         private, public = crypto.new_exchange()
         nonce = crypto.new_nonce()
         pending = Pending(node_id, _name(payload), address, port, RESPONDER, b"", "",
@@ -301,12 +296,10 @@ class Pairing:
         with self._lock:
             self._purge()
             if node_id in self._pending:      # jamais remplacée, quelle qu'en soit l'étape
-                raise PeerError(f"« {here} » a déjà un appairage en cours avec cette machine : "
-                                "termine-le, ou attends 3 minutes, puis recommence.")
+                raise PeerError(t("pairing.already_running_there", name=here))
             waiting = sum(1 for p in self._pending.values() if p.role == RESPONDER)
             if waiting >= MAX_PENDING or len(self._starts) >= MAX_STARTS:
-                raise PeerError(f"Trop de demandes d'appairage en cours sur « {here} », "
-                                "réessaie dans quelques minutes.")
+                raise PeerError(t("pairing.too_many", name=here))
             self._pending[node_id] = pending
             self._starts.append(time.time())
         return {"pairing": PROTOCOL, "node_id": self.m.node_id, "name": here,
@@ -322,8 +315,7 @@ class Pairing:
             pending = self._pending.get(node_id)
             if (pending is None or pending.role != RESPONDER or pending.stage != COMMITTED
                     or not self._same_caller(pending, address, invitation)):
-                raise PeerError("Aucune demande d'appairage en attente de sa clé pour cette "
-                                "machine : recommence.")
+                raise PeerError(t("pairing.no_commitment"))
             ok = crypto.commitment_ok(pending.commit, node_id, self.m.node_id, their_pub,
                                       their_nonce)
             secrets_ = None
@@ -339,8 +331,7 @@ class Pairing:
                 # Gardée jusqu'à expiration : une révélation fausse ne libère pas la place
                 # (sinon un intermédiaire essaierait sans fin de nouvelles clés)
                 pending.stage = SPOILED
-                raise PeerError("Appairage refusé : la clé révélée ne correspond pas à "
-                                "l'engagement reçu.")
+                raise PeerError(t("pairing.commitment_mismatch"))
             pending.key, pending.code = secrets_
             pending.stage = READY
             shown = self._shown(pending)
@@ -368,14 +359,13 @@ class Pairing:
         """ref : l'identifiant de la demande que l'utilisateur a vue (l'interface le donne
         toujours) ; replace : il a choisi de remplacer la clé d'une machine déjà appairée."""
         if trust not in sharing.LEVELS:
-            raise PeerError(f"Niveau de confiance inconnu : {trust!r}")
+            raise PeerError(t("sharing.unknown_trust", trust=repr(trust)))
         pending = self.get(node_id)
         if pending is None or pending.stage != READY:
-            raise PeerError("Cette demande d'appairage a expiré.")
+            raise PeerError(t("pairing.expired"))
         if ref is not None and not secrets.compare_digest(str(ref).encode(),
                                                           pending.ref.encode()):
-            raise PeerError("Cette demande d'appairage a changé depuis qu'elle t'a été "
-                            "montrée : vérifie le nouveau code avant de répondre.")
+            raise PeerError(t("pairing.changed"))
         if accept:
             refused = group.friends_refused(trust)    # un ami, sur une origine qui les ignore
             if refused:
@@ -384,8 +374,7 @@ class Pairing:
             # (présentation de groupe), et accepter remplacerait alors sa clé
             pending.known = _known(node_id) or pending.known
         if accept and pending.known and not replace:
-            raise PeerError(f"« {pending.known} » est déjà appairée avec cette machine : "
-                            "accepter remplacerait sa clé. Confirme le remplacement, ou refuse.")
+            raise PeerError(t("pairing.already_paired", name=pending.known))
         pending.trust = trust
         pending.replace = bool(replace)
         pending.local_ok = bool(accept)
@@ -403,7 +392,7 @@ class Pairing:
     def remote_answer(self, node_id, accept: bool) -> dict:
         pending = self.get(node_id)
         if pending is None or pending.stage != READY:
-            raise PeerError("Aucune demande d'appairage en cours avec cette machine.")
+            raise PeerError(t("pairing.none_running"))
         pending.remote_ok = bool(accept)
         local = pending.local_ok
         self._settle(pending)

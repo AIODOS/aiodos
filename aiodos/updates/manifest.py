@@ -40,6 +40,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
+from aiodos.i18n import t
 from aiodos.updates import keys, platforms, version
 
 FORMAT = 1
@@ -54,7 +55,6 @@ MAX_TEXT = 256 * 1024              # un manifeste fait quelques Ko
 MAX_APPROVALS = 8                  # gardées et retransmises, une par appareil
 MAX_SCAN = 32                      # approbations examinées au plus (vérification bornée)
 APPROVAL_CONTEXT = b"aiodos-approbation\n"
-NOT_APPROVED = "Version pas encore approuvée sur l'appareil d'approbation : ignorée."
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _KEY_ID = re.compile(r"[0-9a-f]{16}")
@@ -224,26 +224,26 @@ def verify(signed, trusted: dict | None = None, approvers: dict | None = None) -
     trusted = keys.TRUSTED_KEYS if trusted is None else trusted
     approvers = declared_approvers() if approvers is None else approvers
     if not isinstance(signed, dict):
-        raise UpdateError("Manifeste illisible.")
+        raise UpdateError(t("updates_package.unreadable"))
     text, kid, signature = signed.get("manifest"), signed.get("key"), signed.get("signature")
     if not all(isinstance(x, str) for x in (text, kid, signature)):
-        raise UpdateError("Manifeste illisible.")
+        raise UpdateError(t("updates_package.unreadable"))
     if len(text) > MAX_TEXT:
-        raise UpdateError("Manifeste démesuré : version ignorée.")
+        raise UpdateError(t("updates_package.too_large"))
     public = trusted.get(kid)
     if not public:
-        raise UpdateError("Version signée par une clé inconnue : ignorée.")
+        raise UpdateError(t("updates_package.unknown_key"))
     try:
         Ed25519PublicKey.from_public_bytes(_b64(public)).verify(_b64(signature),
                                                                 text.encode("utf-8"))
     except (InvalidSignature, ValueError, binascii.Error, UnicodeEncodeError) as exc:
-        raise UpdateError("Signature invalide : version ignorée.") from exc
+        raise UpdateError(t("updates_package.bad_signature")) from exc
     if approvers and not approved(signed, approvers):
-        raise UpdateError(NOT_APPROVED)
+        raise UpdateError(t("updates_package.not_approved"))
     try:
         manifest = json.loads(text)
     except ValueError as exc:
-        raise UpdateError("Manifeste illisible.") from exc
+        raise UpdateError(t("updates_package.unreadable")) from exc
     check(manifest)
     return manifest
 
@@ -252,25 +252,25 @@ def check(manifest):
     """Ce qu'un manifeste doit contenir (les fichiers deviennent des chemins : noms sûrs)."""
     if not isinstance(manifest, dict) or manifest.get("format") != FORMAT \
             or manifest.get("app") != APP:
-        raise UpdateError("Manifeste d'un format inconnu.")
+        raise UpdateError(t("updates_package.unknown_format"))
     if not version.valid(manifest.get("version")):
-        raise UpdateError("Numéro de version illisible dans le manifeste.")
+        raise UpdateError(t("updates_package.bad_version"))
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
-        raise UpdateError("Manifeste sans fichier.")
+        raise UpdateError(t("updates_package.no_files"))
     names = set()
     for item in files:
         if not isinstance(item, dict) or not isinstance(item.get("name"), str) \
                 or not _NAME.fullmatch(item["name"]) or item["name"] in names:
-            raise UpdateError("Nom de fichier refusé dans le manifeste.")
+            raise UpdateError(t("updates_package.bad_file_name"))
         size = item.get("size")
         if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_FILE:
-            raise UpdateError("Taille de fichier refusée dans le manifeste.")
+            raise UpdateError(t("updates_package.bad_file_size"))
         if not isinstance(item.get("sha256"), str) or not _SHA256.fullmatch(item["sha256"]):
-            raise UpdateError("Empreinte de fichier refusée dans le manifeste.")
+            raise UpdateError(t("updates_package.bad_file_digest"))
         names.add(item["name"])
     if sum(1 for item in files if item.get("kind") == SOURCE) != 1:
-        raise UpdateError("Le manifeste doit contenir une archive du code, et une seule.")
+        raise UpdateError(t("updates_package.one_source"))
 
 
 def source(manifest: dict) -> dict:

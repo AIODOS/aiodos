@@ -26,14 +26,13 @@ from urllib.parse import urlsplit
 
 import webview
 
-from aiodos import instance, paths, settings
+from aiodos import i18n, instance, paths, settings
+from aiodos.i18n import t
 from aiodos.render import plain_mail
 from aiodos.ui import tray
 
 log = logging.getLogger("aiodos.window")
 
-HIDDEN_NOTICE = ("AIODOS continue en arrière-plan. Clic sur l'icône pour rouvrir la "
-                 "fenêtre, clic droit pour quitter.")
 _open = []                         # fenêtres ouvertes (cf. close)
 # window : la fenêtre principale ; origin : (schéma, hôte:port) de l'interface du nœud,
 # connue une fois le nœud démarré ; guarded : ses navigations passent par la garde
@@ -311,7 +310,7 @@ def _keep_running(form):
         sender.Hide()
         if not _state["noticed"]:
             _state["noticed"] = True
-            icon.notify(HIDDEN_NOTICE)
+            icon.notify(t("window.hidden_notice"))
     form.FormClosing += closing
 
 
@@ -337,15 +336,17 @@ def _on_shown(window):
 
 
 def waiting_page(problem: str | None = None) -> str:
-    """L'écran d'attente : le logo, « AIODOS démarre… », ou ce qui l'a empêché."""
+    """L'écran d'attente : le logo, « AIODOS démarre… », ou ce qui l'a empêché, dans la
+    langue du nœud (le réglage, sinon celle de Windows)."""
     try:
         logo = base64.b64encode((paths.ASSETS_DIR / "logo_128.png").read_bytes()).decode()
         image = f'<img src="data:image/png;base64,{logo}" alt="">'
     except OSError:
         image = ""
-    text = (f'<p class="err">{html.escape(problem)}</p><p>Détails : {html.escape(str(paths.log_path()))}</p>'
-            if problem else '<p>AIODOS démarre<span class="dots"></span></p>')
-    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
+    details = html.escape(t("window.details", path=paths.log_path()))
+    text = (f'<p class="err">{html.escape(problem)}</p><p>{details}</p>'
+            if problem else f'<p>{html.escape(t("window.starting"))}<span class="dots"></span></p>')
+    return f"""<!doctype html><html lang="{i18n.current()}"><head><meta charset="utf-8"><style>
 html, body {{ margin: 0; height: 100%; background: #080c1a; color: #e8ecfb;
   font: 15px "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; }}
 main {{ text-align: center; max-width: 520px; padding: 24px; }}
@@ -383,7 +384,7 @@ def run(start, on_closed, quit_on_error: bool = False, hidden: bool = False):
             if quit_on_error:
                 close()
             else:
-                window.load_html(waiting_page(f"AIODOS n'a pas pu démarrer : {exc}"))
+                window.load_html(waiting_page(t("window.start_failed", error=exc)))
             return
         guard_new_windows()
         _state["origin"] = _origin(url)           # la fenêtre ne quitte plus cette adresse

@@ -1,38 +1,41 @@
-// Petits utilitaires DOM et de mise en forme.
+// Petits utilitaires DOM et de mise en forme (dans la langue de l'interface, i18n.js).
+import { decimal, locale, number, t } from './i18n.js';
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 export function h(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
+  const template = document.createElement('template');
+  template.innerHTML = html.trim();
+  return template.content.firstElementChild;
 }
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ESCAPES[c]);
 
+const UNITS = ['b', 'kb', 'mb', 'gb', 'tb'];
+
 export function bytes(n) {
-  if (!n) return '0 o';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  if (!n) return t('format.size_b', { n: 0 });
+  const i = Math.min(UNITS.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   const v = n / 1024 ** i;
-  return `${v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`.replace('.', ',');
+  return t(`format.size_${UNITS[i]}`, { n: v >= 10 || i === 0 ? Math.round(v) : number(v, 1) });
 }
 
 export function ago(ts) {
   const s = Math.max(0, Date.now() / 1000 - ts);
-  if (s < 60) return "à l'instant";
-  if (s < 3600) return `il y a ${Math.floor(s / 60)} min`;
-  if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`;
-  if (s < 86400 * 7) return `il y a ${Math.floor(s / 86400)} j`;
-  return new Date(ts * 1000).toLocaleDateString('fr-FR');
+  if (s < 60) return t('format.just_now');
+  if (s < 3600) return t('format.minutes_ago', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('format.hours_ago', { n: Math.floor(s / 3600) });
+  if (s < 86400 * 7) return t('format.days_ago', { n: Math.floor(s / 86400) });
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 export function duration(seconds) {
   const s = Math.max(0, Math.round(seconds));
-  if (s < 60) return `${s} s`;
-  if (s < 3600) return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}`;
-  return `${Math.floor(s / 3600)} h ${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}`;
+  if (s < 60) return t('format.seconds', { n: s });
+  if (s < 3600) return t('format.minutes_seconds', { m: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') });
+  return t('format.hours_minutes', { h: Math.floor(s / 3600), m: String(Math.floor(s % 3600 / 60)).padStart(2, '0') });
 }
 
 // Un nombre venu d'une autre machine (son profil) : un nombre fini, sinon null. Une
@@ -49,12 +52,12 @@ export const count = list => (Array.isArray(list) ? list.length : 0);
 export function powerText(profile) {
   const p = (profile?.power && typeof profile.power === 'object') ? profile.power : {};
   const plugged = p.plugged ?? profile?.on_ac_power;
-  const parts = [plugged == null ? (p.mobile ? 'Charge inconnue' : '—')
-    : plugged ? (p.mobile ? 'En charge' : 'Sur secteur') : 'Sur batterie'];
+  const parts = [plugged == null ? (p.mobile ? t('format.charge_unknown') : '—')
+    : plugged ? t(p.mobile ? 'format.charging' : 'format.on_ac') : t('format.on_battery')];
   const level = finite(p.level);
   const temperature = finite(p.temperature);
-  if (level != null) parts.push(`batterie ${Math.round(level)} %`);
-  if (temperature != null) parts.push(`${esc(String(temperature).replace('.', ','))} °C`);
+  if (level != null) parts.push(t('format.battery_level', { n: Math.round(level) }));
+  if (temperature != null) parts.push(esc(t('format.celsius', { n: decimal(temperature) })));
   return parts.join(' · ');
 }
 
@@ -103,6 +106,6 @@ export function dropRefused(types, intoTyping) {
 }
 
 export function debounce(fn, ms = 200) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }

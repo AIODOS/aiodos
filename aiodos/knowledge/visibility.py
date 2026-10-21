@@ -20,6 +20,7 @@ avant le classement (search.search_in), puis chaque passage trouvé est revérif
 requête à part avant de sortir (still_open).
 """
 from aiodos import db
+from aiodos.i18n import t
 from aiodos.knowledge import search as vector_search
 
 NOBODY, MINE, FRIENDS, EVERYONE = "none", "mine", "friends", "everyone"
@@ -35,9 +36,9 @@ _CLOSED = """EXISTS (SELECT 1 FROM closed_parts p WHERE p.collection_id = e.coll
 def _editable(collection_id):
     row = db.query_one("SELECT system, local_only FROM collections WHERE id=?", (collection_id,))
     if row is None:
-        raise ValueError("Bibliothèque introuvable.")
+        raise ValueError(t("library.not_found"))
     if row["system"]:
-        raise ValueError("La mémoire des conversations n'est jamais consultable.")
+        raise ValueError(t("opening.memory_never_open"))
     return row
 
 
@@ -45,14 +46,12 @@ def _editable(collection_id):
 def set_open_to(collection_id, level: str):
     """Qui peut chercher dans cette bibliothèque : NOBODY, MINE ou FRIENDS."""
     if level == EVERYONE:
-        raise ValueError("« Tout le monde » viendra avec la phase 3 (machines inconnues) : "
-                         "pas encore.")
+        raise ValueError(t("opening.everyone_not_yet"))
     if level not in LEVELS:
-        raise ValueError(f"Réglage de consultation inconnu : {level!r}")
+        raise ValueError(t("opening.unknown_level", level=repr(level)))
     row = _editable(collection_id)
     if row["local_only"] and level != NOBODY:
-        raise ValueError("Cette bibliothèque est gardée sur ce PC : elle n'est jamais "
-                         "consultable. Retire d'abord le cadenas.")
+        raise ValueError(t("opening.local_only"))
     db.execute("UPDATE collections SET open_to=? WHERE id=?", (level, collection_id))
 
 
@@ -64,7 +63,7 @@ def _path(path, folder: bool) -> str:
     if folder:
         path = path.rstrip("/")
     if not path.strip():
-        raise ValueError("Chemin vide.")
+        raise ValueError(t("opening.empty_path"))
     return path
 
 
@@ -82,7 +81,7 @@ def close(collection_id, path, folder: bool):
         found = db.query_one("SELECT 1 FROM entries WHERE collection_id=? AND source=? LIMIT 1",
                              (collection_id, path))
     if not found:
-        raise ValueError(f"« {path} » n'est pas dans cette bibliothèque : rien à fermer.")
+        raise ValueError(t("opening.path_not_found", path=path))
     db.execute("INSERT OR IGNORE INTO closed_parts(collection_id, path, folder, created) "
                "VALUES(?, ?, ?, ?)", (collection_id, path, 1 if folder else 0, db.now()))
 

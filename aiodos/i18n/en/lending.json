@@ -1,0 +1,11 @@
+{
+  "chat_invalid": "Conversation empty or too long.",
+  "message_invalid": "Invalid conversation message.",
+  "not_lending": "“{name}” doesn't lend its models for conversations (“Lend my models” setting on that machine).",
+  "phone_for_friends": "“{name}” is a phone: it only lends to its friends while charging and on Wi-Fi.",
+  "ollama_down": "Ollama isn't answering on “{name}”.",
+  "model_gone": "The model “{model}” is no longer installed on “{name}”.",
+  "busy": "“{name}” has been answering other conversations for a long time: try again in a moment.",
+  "unpaired": "This machine is no longer paired: choose another model.",
+  "unreachable": "“{name}” is unreachable for now (no address on the local network, no Internet key)."
+}

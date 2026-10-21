@@ -3,13 +3,15 @@ modèle complet), mes machines en ligne qui l'ont et prêtent leur puissance, et
 prêtent leur carte pour les images (leur profil ne les montre qu'alors), si je les y
 autorise (réglage images_from_friends)."""
 from aiodos import settings
+from aiodos.i18n import t
 from aiodos.jobs.kinds import images as kind
 from aiodos.network import peers, sharing
 
 
 def helpers(friends: bool | None = None) -> dict:
     """{modèle : [machines en ligne qui l'ont et peuvent le calculer pour moi]} ; un ami est
-    suivi de « (ami) ». friends : None, selon le réglage images_from_friends."""
+    suivi de « (ami) », dans la langue en cours. friends : None, selon le réglage
+    images_from_friends."""
     if friends is None:
         friends = bool(settings.get("images_from_friends"))
     found = {}
@@ -21,7 +23,8 @@ def helpers(friends: bool | None = None) -> dict:
         if not images.get("engine") or not images.get("shares"):
             continue
         for model_id in images.get("models") or []:
-            found.setdefault(model_id, []).append(peer["name"] if mine else f"{peer['name']} (ami)")
+            found.setdefault(model_id, []).append(
+                peer["name"] if mine else t("imaging.friend_name", name=peer["name"]))
     return found
 
 

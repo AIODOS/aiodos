@@ -10,6 +10,7 @@ après une coupure, et l'empreinte vérifiée avant de garder le fichier, comme 
 Hugging Face. La machine qui transmet n'a pas à être de confiance : seule compte
 l'empreinte épinglée dans le catalogue.
 """
+from aiodos.i18n import t
 from aiodos.imaging import catalog
 from aiodos.network import client, envelope, peers, route, sharing
 from aiodos.network.client import PeerError
@@ -30,15 +31,15 @@ def _held(sha256: str):
 
 def serve_file(manager, sender, payload):
     if sharing.level(sender) != sharing.MINE:
-        raise PeerError("Les modèles ne se copient qu'entre mes machines.")
+        raise PeerError(t("imaging.copy_mine_only"))
     path, spec = _held(str(payload.get("sha256") or ""))
     if path is None:
-        raise PeerError("Fichier de modèle indisponible sur cette machine.")
+        raise PeerError(t("imaging.file_unavailable"))
     try:
         offset = max(0, int(payload.get("offset") or 0))
         size = min(CHUNK, max(1, int(payload.get("size") or CHUNK)))
     except (TypeError, ValueError) as exc:
-        raise PeerError("Demande illisible.") from exc
+        raise PeerError(t("imaging.bad_request")) from exc
     with open(path, "rb") as f:
         f.seek(offset)
         data = f.read(size)
@@ -66,7 +67,7 @@ class Source:
     def __init__(self, node_id: str):
         self.peer = peers.get(node_id)
         if self.peer is None or sharing.level(node_id) != sharing.MINE:
-            raise PeerError("Cette machine n'est pas une des miennes.")
+            raise PeerError(t("imaging.not_mine"))
         self.name = self.peer["name"]
         self.chunk = CHUNK if route.lan_first(self.peer) else INTERNET_CHUNK
 

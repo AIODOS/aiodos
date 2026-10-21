@@ -15,6 +15,7 @@ import time
 
 import requests
 
+from aiodos.i18n import t
 from aiodos.imaging import catalog, local_copies, share
 from aiodos.network.client import PeerError
 
@@ -65,7 +66,7 @@ def start(model_id: str, changed=None, source: str | None = None) -> dict:
     with _lock:
         if _state["running"]:
             if _state["model"] != model_id:
-                raise DownloadError("Un autre modèle se télécharge déjà.")
+                raise DownloadError(t("imaging.download_busy"))
             return _snapshot()
         _stop.clear()
         _state.update(model=model_id, running=True, base=0, current=0, file=None, error=None,
@@ -97,7 +98,7 @@ def _run(model_id: str, changed, machine=None, where=None):
         log.info("Modèle d'images %s téléchargé", model_id)
     except Cancelled:
         with _lock:
-            _state["error"] = "Téléchargement arrêté."
+            _state["error"] = t("imaging.download_stopped")
     except Exception as exc:
         log.warning("Téléchargement de %s impossible : %s", model_id, exc)
         with _lock:
@@ -143,7 +144,8 @@ def _fetch(spec: dict, folder, machine=None, cache_file=None):
             break
         except (requests.RequestException, PeerError, OSError) as exc:
             if attempt == ATTEMPTS - 1:
-                raise DownloadError(f"{spec['name']} : téléchargement coupé ({exc})") from exc
+                raise DownloadError(t("imaging.download_cut", file=spec["name"],
+                                      error=exc)) from exc
             log.info("%s : coupure (%s), reprise dans %s s", spec["name"], exc, RETRY_S)
             if _stop.wait(RETRY_S):
                 raise Cancelled() from exc
@@ -152,8 +154,7 @@ def _fetch(spec: dict, folder, machine=None, cache_file=None):
         raise Cancelled()
     if part.stat().st_size != spec["size"] or digest != spec["sha256"]:
         part.unlink(missing_ok=True)
-        raise DownloadError(f"{spec['name']} : fichier reçu différent de celui attendu "
-                            "(taille ou empreinte).")
+        raise DownloadError(t("imaging.download_mismatch", file=spec["name"]))
     os.replace(part, target)
     catalog.record(target, spec["sha256"], cache_file)
     _advance(spec["size"])
@@ -174,7 +175,7 @@ def _resume_from(machine, spec: dict, part):
                 raise Cancelled()
             data = machine.read(spec, offset + received)[:spec["size"] - offset - received]
             if not data:
-                raise PeerError("transfert interrompu par l'autre machine")
+                raise PeerError(t("imaging.transfer_cut"))
             out.write(data)
             received += len(data)
             with _lock:
@@ -195,7 +196,8 @@ def _resume(spec: dict, part):
         elif reply.status_code == 416 and offset == spec["size"]:
             return                                # déjà complet
         elif reply.status_code not in (200, 206):
-            raise DownloadError(f"{spec['name']} : le serveur répond {reply.status_code}.")
+            raise DownloadError(t("imaging.server_status", file=spec["name"],
+                                  status=reply.status_code))
         with _lock:
             _state["current"] = offset
         began, received = time.monotonic(), 0
@@ -209,4 +211,4 @@ def _resume(spec: dict, part):
                     _state["current"] = offset + received
                     _state["rate"] = received / max(0.001, time.monotonic() - began)
         if offset + received < spec["size"]:
-            raise requests.ConnectionError("réponse incomplète")
+            raise requests.ConnectionError(t("imaging.incomplete_reply"))

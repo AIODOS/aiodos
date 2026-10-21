@@ -1,7 +1,7 @@
 // Typographie française : une espace insécable avant « : ; ? ! » et à l'intérieur des
 // guillemets, pour qu'aucun signe ne commence seul une ligne (sur un téléphone surtout).
 // Textes de l'interface seulement : messages, code et champs restent tels quels, pour que
-// le copier-coller rende exactement ce qui a été écrit.
+// le copier-coller rende exactement ce qui a été écrit. Interface en français seulement (app.js).
 const SKIP = 'pre, code, textarea, input, .md, .bubble, .mono, .config';
 const BEFORE = / ([:;?!»])/g;
 const AFTER = /« /g;
@@ -9,7 +9,7 @@ const AFTER = /« /g;
 function fixText(node) {
   const text = node.data;
   if (!text.includes(' ')) return;
-  const fixed = text.replace(BEFORE, ' $1').replace(AFTER, '« ');
+  const fixed = text.replace(BEFORE, ' $1').replace(AFTER, '« ');   // i18n: tel quel (typographie)
   if (fixed !== text) node.data = fixed;
 }
 

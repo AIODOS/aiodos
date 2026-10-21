@@ -1,6 +1,7 @@
 // Réglages : formulaire construit à partir d'une description des champs.
 import { put } from '../api.js';
 import { $, h, esc } from '../dom.js';
+import { browserLanguage, lang, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
@@ -9,116 +10,105 @@ import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
 
+// Titres, libellés, aides et choix sont des clés de textes (i18n/*/settings.json), traduites
+// à l'affichage. Le choix d'une liste : [valeur, clé de son libellé].
 const SECTIONS = [
-  { title: 'Conversation', icon: 'chat', fields: [
-    { key: 'default_model', label: 'Modèle par défaut', type: 'model' },
-    { key: 'auto_route_friends', label: 'Mode automatique : faire aussi répondre les machines de mes amis', type: 'switch',
-      help: 'Sinon, seules cette machine et tes machines répondent d\'office ; celles de tes amis restent au choix, '
-        + 'à côté du modèle. Chez un ami, ta conversation passe par sa machine le temps de la réponse, avec les seuls '
-        + 'extraits des bibliothèques partagées avec tes amis.' },
-    { key: 'think', label: 'Laisser les modèles réfléchir avant de répondre', type: 'switch',
-      help: 'Qwen3 et compagnie : de meilleures réponses, mais plus lentes à démarrer.' },
-    { key: 'system_prompt', label: 'Consignes générales données à l\'IA', type: 'textarea' },
+  { title: 'settings.language', icon: 'globe', fields: [
+    { key: 'language', type: 'select', options: languageOptions, help: 'settings.language_help' },
   ] },
-  { title: 'Connaissances', icon: 'book', fields: [
-    { key: 'knowledge_enabled', label: 'Utiliser les bibliothèques par défaut', type: 'switch' },
-    { key: 'conversations_enabled', label: 'Mémoire entre les conversations', type: 'switch',
-      help: 'L\'IA peut s\'appuyer sur tes autres conversations. Désactive-la pour des échanges isolés.' },
-    { key: 'peer_libraries_enabled', label: 'Chercher aussi chez mes machines et mes amis', type: 'switch',
-      help: 'Dans les bibliothèques qu\'ils t\'ouvrent (option « Chez les autres » de la conversation) : ta question '
-        + 'part chez eux, avec ton accord pour tes amis, et seuls les passages trouvés reviennent.' },
-    { key: 'embed_model', label: 'Modèle d\'embedding', type: 'text',
-      help: 'embeddinggemma conseillé (à installer : ollama pull embeddinggemma). Changer de modèle relance '
-        + 'automatiquement la réindexation des bibliothèques et de la mémoire (voir Tâches).' },
-    { key: 'rag_min_score', label: 'Seuil de pertinence des extraits (0 à 1)', type: 'number',
-      min: 0, max: 1, step: 0.01,
-      help: 'Plus haut : moins d\'extraits mais mieux ciblés. Chaque modèle a son échelle : 0,40 pour '
-        + 'embeddinggemma, 0,45 pour bge-m3, 0,70 pour nomic-embed-text. Revient à la valeur conseillée '
-        + 'quand tu changes de modèle.' },
+  { title: 'settings.section_conversation', icon: 'chat', fields: [
+    { key: 'default_model', label: 'settings.default_model', type: 'model' },
+    { key: 'auto_route_friends', label: 'settings.auto_route_friends', type: 'switch',
+      help: 'settings.auto_route_friends_help' },
+    { key: 'think', label: 'settings.think', type: 'switch', help: 'settings.think_help' },
+    { key: 'system_prompt', label: 'settings.system_prompt', type: 'textarea' },
   ] },
-  { title: 'Recherche web', icon: 'globe', fields: [
-    { key: 'web_search_enabled', label: 'Recherche web activée par défaut', type: 'switch',
-      help: 'AIODOS cherche quand ta question le demande (« cherche… », actualités, météo…). Une validation '
-        + 'est demandée avant d\'envoyer une requête, ou une fois pour la session.' },
-    { key: 'web_results', label: 'Pages lues par recherche', type: 'number', min: 1, max: 8 },
+  { title: 'settings.section_knowledge', icon: 'book', fields: [
+    { key: 'knowledge_enabled', label: 'settings.knowledge_enabled', type: 'switch' },
+    { key: 'conversations_enabled', label: 'settings.conversations_enabled', type: 'switch',
+      help: 'settings.conversations_enabled_help' },
+    { key: 'peer_libraries_enabled', label: 'settings.peer_libraries_enabled', type: 'switch',
+      help: 'settings.peer_libraries_enabled_help' },
+    { key: 'embed_model', label: 'settings.embed_model', type: 'text', help: 'settings.embed_model_help' },
+    { key: 'rag_min_score', label: 'settings.rag_min_score', type: 'number',
+      min: 0, max: 1, step: 0.01, help: 'settings.rag_min_score_help' },
   ] },
-  { title: 'Cloud', icon: 'cloud', fields: [
-    { key: 'cloud_confirm', label: 'Demander une validation avant chaque envoi vers le cloud', type: 'switch',
-      help: 'Recommandé : rien ne quitte ta machine sans ton accord.' },
-    { key: 'mistral_key', label: 'Clé API Mistral', type: 'secret' },
-    { key: 'mistral_cloud_model', label: 'Modèle Mistral', type: 'text' },
-    { key: 'qwen_key', label: 'Clé API Qwen (DashScope)', type: 'secret' },
-    { key: 'qwen_cloud_model', label: 'Modèle Qwen', type: 'text' },
+  { title: 'settings.section_web', icon: 'globe', fields: [
+    { key: 'web_search_enabled', label: 'settings.web_search_enabled', type: 'switch',
+      help: 'settings.web_search_enabled_help' },
+    { key: 'web_results', label: 'settings.web_results', type: 'number', min: 1, max: 8 },
   ] },
-  { title: 'Images, audio et vidéo', icon: 'image', fields: [
-    { key: 'media_vision', label: 'Lire les images (texte + description)', type: 'switch' },
-    { key: 'media_vision_mode', label: 'Ce qu\'on garde des images', type: 'select', options: [
-      ['both', 'Texte + description'], ['ocr', 'Texte seulement (OCR)'], ['describe', 'Description seulement']] },
-    { key: 'vision_model', label: 'Modèle de vision', type: 'text' },
-    { key: 'media_transcribe', label: 'Transcrire l\'audio et la vidéo (Whisper)', type: 'switch' },
-    { key: 'whisper_model', label: 'Modèle Whisper', type: 'select', options: [
-      ['tiny', 'tiny (rapide)'], ['base', 'base'], ['small', 'small (recommandé)'],
-      ['medium', 'medium'], ['large-v3', 'large-v3 (précis, lent)']] },
+  { title: 'settings.section_cloud', icon: 'cloud', fields: [
+    { key: 'cloud_confirm', label: 'settings.cloud_confirm', type: 'switch', help: 'settings.cloud_confirm_help' },
+    { key: 'mistral_key', label: 'settings.mistral_key', type: 'secret' },
+    { key: 'mistral_cloud_model', label: 'settings.mistral_cloud_model', type: 'text' },
+    { key: 'qwen_key', label: 'settings.qwen_key', type: 'secret' },
+    { key: 'qwen_cloud_model', label: 'settings.qwen_cloud_model', type: 'text' },
   ] },
-  { title: 'Internet (compagnon aiodos-net)', icon: 'globe', fields: [
-    { key: 'internet_relays', label: 'Relais', type: 'list',
-      help: '« n0 » : relais publics de n0, par défaut. Ajoute l\'adresse https://… de ton propre relais, ou de celui '
-        + 'd\'un ami (guide : docs/relais.md), avec ou sans « n0 ». « none » : aucun relais, connexion directe seulement.' },
-    { key: 'internet_directory', label: 'Annuaires', type: 'list',
-      help: '« n0-dns » : DNS de n0 ; « dht » : DHT Mainline de BitTorrent, sans serveur ; « none » : aucun '
-        + '(les machines se joignent par les adresses échangées à l\'appairage).' },
-    { key: 'internet_portmap', label: 'Ouvrir un port sur la box automatiquement (UPnP, PCP)', type: 'switch',
-      help: 'Facilite les connexions directes, sans relais. Sans effet si la box ne le permet pas.' },
-    { key: 'p2p_route', label: 'Chemin vers mes machines', type: 'select', options: [
-      ['auto', 'Réseau local s\'il répond, Internet sinon'], ['lan', 'Réseau local seulement'],
-      ['internet', 'Internet seulement (pour l\'essayer)']] },
-    { key: 'internet_max_blob_mb', label: 'Taille maximale d\'un fichier confié par Internet (Mo)', type: 'number',
-      min: 1, max: 512, help: 'Au-delà, le fichier reste aux machines du réseau local.' },
+  { title: 'settings.section_media', icon: 'image', fields: [
+    { key: 'media_vision', label: 'settings.media_vision', type: 'switch' },
+    { key: 'media_vision_mode', label: 'settings.media_vision_mode', type: 'select', options: [
+      ['both', 'settings.vision_mode_both'], ['ocr', 'settings.vision_mode_ocr'],
+      ['describe', 'settings.vision_mode_describe']] },
+    { key: 'vision_model', label: 'settings.vision_model', type: 'text' },
+    { key: 'media_transcribe', label: 'settings.media_transcribe', type: 'switch' },
+    { key: 'whisper_model', label: 'settings.whisper_model', type: 'select', options: [
+      ['tiny', 'settings.whisper_tiny'], ['base', 'settings.whisper_base'],
+      ['small', 'settings.whisper_small'], ['medium', 'settings.whisper_medium'],
+      ['large-v3', 'settings.whisper_large_v3']] },
   ] },
-  { title: 'Gros modèles répartis (llama.cpp)', icon: 'network', fields: [
-    { key: 'llamacpp_dir', label: 'Dossier de llama.cpp', type: 'folder',
-      help: 'Le dossier qui contient llama-server et ggml-rpc-server, de la même version sur toutes '
-        + 'tes machines. Vide : celui livré avec les mises à jour. Le réglage « Prêter ma carte graphique » est '
-        + 'dans la vue « Cette machine ».' },
-    { key: 'lend_gpu_device', label: 'Carte prêtée', type: 'text',
-      help: 'Vide : la carte qui a le plus de mémoire libre. Sinon son nom (« Vulkan1 », « CUDA0 »), '
-        + 'ou « CPU » pour prêter la mémoire vive (bien plus lent).' },
+  { title: 'settings.section_internet', icon: 'globe', fields: [
+    { key: 'internet_relays', label: 'settings.internet_relays', type: 'list',
+      help: 'settings.internet_relays_help' },
+    { key: 'internet_directory', label: 'settings.internet_directory', type: 'list',
+      help: 'settings.internet_directory_help' },
+    { key: 'internet_portmap', label: 'settings.internet_portmap', type: 'switch',
+      help: 'settings.internet_portmap_help' },
+    { key: 'p2p_route', label: 'settings.p2p_route', type: 'select', options: [
+      ['auto', 'settings.route_auto'], ['lan', 'settings.route_lan'], ['internet', 'settings.route_internet']] },
+    { key: 'internet_max_blob_mb', label: 'settings.internet_max_blob_mb', type: 'number',
+      min: 1, max: 512, help: 'settings.internet_max_blob_mb_help' },
   ] },
-  { title: 'Images (stable-diffusion.cpp)', icon: 'image', fields: [
-    { key: 'sdcpp_dir', label: 'Dossier de stable-diffusion.cpp', type: 'folder',
-      help: 'Le dossier qui contient sd-server. Vide : data/engines/stable-diffusion.cpp (il sera bientôt '
-        + 'livré avec les mises à jour, comme llama.cpp).' },
-    { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'folder',
-      help: 'Vide : data/images/models. Les modèles se téléchargent depuis la vue Images.' },
-    { key: 'images_other_dirs', label: 'Autres dossiers de modèles sur ce PC', type: 'textarea',
-      help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
-        + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
-        + 'téléchargé, sans prendre de place en plus sur le même disque.' },
-    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'folder',
-      help: 'Vide : Images\\AIODOS (le dossier Images de Windows) pour AIODOS installé. Les images déjà créées '
-        + 'restent où elles sont et s’affichent toujours.' },
-    { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
-      help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
-        + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },
-    { key: 'images_device', label: 'Carte qui calcule les images', type: 'text',
-      help: 'Vide : la meilleure carte graphique (jamais celle intégrée au processeur s\'il y en a une autre). '
-        + 'Sinon son nom (« Vulkan1 », « CUDA0 »), ou « CPU ».' },
+  { title: 'settings.section_cluster', icon: 'network', fields: [
+    { key: 'llamacpp_dir', label: 'settings.llamacpp_dir', type: 'folder', help: 'settings.llamacpp_dir_help' },
+    { key: 'lend_gpu_device', label: 'settings.lend_gpu_device', type: 'text',
+      help: 'settings.lend_gpu_device_help' },
   ] },
-  { title: 'Mises à jour', icon: 'retry', fields: [
-    { key: 'auto_update', label: 'Installer automatiquement les nouvelles versions', type: 'switch',
-      help: 'Seules les versions signées par l\'auteur d\'AIODOS sont acceptées. Elles arrivent par tes '
-        + 'machines appairées, s\'installent à côté de la version actuelle, et AIODOS redémarre dessus quand '
-        + 'la machine est libre. Si la nouvelle version ne démarre pas, la précédente reprend la main.' },
+  { title: 'settings.section_images', icon: 'image', fields: [
+    { key: 'sdcpp_dir', label: 'settings.sdcpp_dir', type: 'folder', help: 'settings.sdcpp_dir_help' },
+    { key: 'images_models_dir', label: 'settings.images_models_dir', type: 'folder',
+      help: 'settings.images_models_dir_help' },
+    { key: 'images_other_dirs', label: 'settings.images_other_dirs', type: 'textarea',
+      help: 'settings.images_other_dirs_help' },
+    { key: 'images_out_dir', label: 'settings.images_out_dir', type: 'folder',
+      help: 'settings.images_out_dir_help' },
+    { key: 'images_from_friends', label: 'settings.images_from_friends', type: 'switch',
+      help: 'settings.images_from_friends_help' },
+    { key: 'images_device', label: 'settings.images_device', type: 'text', help: 'settings.images_device_help' },
+  ] },
+  { title: 'settings.section_updates', icon: 'retry', fields: [
+    { key: 'auto_update', label: 'settings.auto_update', type: 'switch', help: 'settings.auto_update_help' },
     { type: 'updates' },
     { type: 'approval' },
   ] },
-  { title: 'Autres outils', icon: 'plug', fields: [
+  { title: 'settings.section_other_tools', icon: 'plug', fields: [
     { type: 'gateway' },
   ] },
-  { title: 'Avancé', icon: 'settings', fields: [
-    { key: 'ollama_url', label: 'Adresse d\'Ollama', type: 'text' },
+  { title: 'settings.section_advanced', icon: 'settings', fields: [
+    { key: 'ollama_url', label: 'settings.ollama_url', type: 'text' },
   ] },
 ];
+
+/** Les choix de la langue, déjà traduits. « Automatique » dit entre parenthèses celle qu'il
+ *  donne ici : celle du navigateur, comme l'interface sans réglage (GET /api/i18n). */
+function languageOptions() {
+  const auto = t(`settings.language_${browserLanguage()}`);
+  return [['auto', `${t('settings.language_auto')} (${auto})`],
+    ['fr', t('settings.language_fr')], ['en', t('settings.language_en')]];
+}
+
+/** La langue que l'interface prendrait avec ce réglage. */
+const shownLanguage = setting => (setting === 'fr' || setting === 'en' ? setting : browserLanguage());
 
 let root;
 let draft = {};
@@ -126,8 +116,8 @@ let draft = {};
 export function mountSettings(container) {
   root = h(`
     <div class="page"><div class="page-inner">
-      <div class="page-head"><div><h1>Réglages</h1>
-        <div class="sub">Enregistrés sur cette machine. Les clés API ne sont jamais réaffichées en clair.</div></div></div>
+      <div class="page-head"><div><h1>${esc(t('settings.title'))}</h1>
+        <div class="sub">${esc(t('settings.intro'))}</div></div></div>
       <div class="settings" id="settings-form"></div>
     </div></div>`);
   container.append(root);
@@ -147,15 +137,15 @@ export function mountSettings(container) {
   });
 }
 
-function field(f) {
+function field(f, section) {
   const s = state.settings;
   if (f.type === 'updates') return `<div id="updates-status">${updatesStatus()}</div>`;
   if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
   if (f.type === 'approval') return '<div id="approval-box"></div>';
   const id = `set-${f.key}`;
-  const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
+  const help = f.help ? `<div class="help">${esc(t(f.help))}</div>` : '';
   if (f.type === 'switch') {
-    return `<div class="setting-row"><div class="txt"><b>${esc(f.label)}</b>${f.help ? `<small>${esc(f.help)}</small>` : ''}</div>
+    return `<div class="setting-row"><div class="txt"><b>${esc(t(f.label))}</b>${f.help ? `<small>${esc(t(f.help))}</small>` : ''}</div>
       <label class="switch"><input type="checkbox" id="${id}" data-key="${f.key}" ${s[f.key] ? 'checked' : ''}><span></span></label></div>`;
   }
   let control;
@@ -163,18 +153,21 @@ function field(f) {
     control = `<textarea class="textarea" id="${id}" data-key="${f.key}" rows="4">${esc(s[f.key])}</textarea>`;
   } else if (f.type === 'select' || f.type === 'model') {
     const current = f.type === 'model' ? asDefault(s[f.key]) : s[f.key];
-    const options = f.type === 'model' ? modelOptions(current) : f.options;
-    control = `<select class="select" id="${id}" data-key="${f.key}">${options.map(([v, l]) =>
+    const options = f.type === 'model' ? modelOptions(current) : choices(f);
+    // Seul champ de sa section, sans libellé (la langue) : le titre de la section le nomme
+    const named = f.label ? '' : ` aria-label="${esc(t(section.title))}"`;
+    control = `<select class="select" id="${id}" data-key="${f.key}"${named}>${options.map(([v, l]) =>
       `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   } else if (f.type === 'secret') {
-    const placeholder = s[`${f.key}_set`] ? `Clé enregistrée (${s[`${f.key}_hint`] || '••••'}) — laisser vide pour la garder` : 'Aucune clé';
+    const placeholder = s[`${f.key}_set`]
+      ? t('settings.secret_saved', { hint: s[`${f.key}_hint`] || '••••' }) : t('settings.secret_none');
     control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
       autocomplete="off" placeholder="${esc(placeholder)}">${s[`${f.key}_set`]
-        ? `<button class="btn" data-clear="${f.key}" type="button">Effacer</button>` : ''}</div>`;
+        ? `<button class="btn" data-clear="${f.key}" type="button">${esc(t('settings.clear'))}</button>` : ''}</div>`;
   } else if (f.type === 'folder') {       // un dossier : tapé, ou choisi dans la fenêtre d'AIODOS
     control = `<div class="folder-field"><input class="input" type="text" id="${id}" data-key="${f.key}"
       value="${esc(s[f.key])}">${window.pywebview?.api?.pick_folder
-        ? `<button class="btn" type="button" data-pick="${id}">${icon('folder')}Choisir…</button>` : ''}</div>`;
+        ? `<button class="btn" type="button" data-pick="${id}">${icon('folder')}${esc(t('settings.choose'))}</button>` : ''}</div>`;
   } else if (f.type === 'list') {         // une liste : les valeurs séparées par des virgules
     control = `<input class="input" type="text" id="${id}" data-key="${f.key}" data-list="1"
       value="${esc((s[f.key] || []).join(', '))}">`;
@@ -183,7 +176,15 @@ function field(f) {
     const limits = f.type === 'number' ? `min="${f.min}" max="${f.max}" step="${f.step || 1}"` : '';
     control = `<input class="input" type="${type}" ${limits} id="${id}" data-key="${f.key}" value="${esc(s[f.key])}">`;
   }
-  return `<div class="field"><label for="${id}">${esc(f.label)}</label>${control}${help}</div>`;
+  const label = f.label ? `<label for="${id}">${esc(t(f.label))}</label>` : '';
+  return `<div class="field">${label}${control}${help}</div>`;
+}
+
+/** Les choix d'une liste, traduits : ceux de la description, ou ceux que rend sa fonction
+ *  (la langue). */
+function choices(f) {
+  if (typeof f.options === 'function') return f.options();
+  return f.options.map(([value, key]) => [value, t(key)]);
 }
 
 /** Modèles proposés par défaut : chacun une fois, en mode automatique (la machine qui
@@ -199,12 +200,12 @@ function render() {
   draft = {};
   const form = $('#settings-form', root);
   form.innerHTML = SECTIONS.map(sec => `
-    <div class="card"><h2>${icon(sec.icon)}${esc(sec.title)}</h2>${sec.fields.map(field).join('')}</div>`).join('') +
+    <div class="card"><h2>${icon(sec.icon)}${esc(t(sec.title))}</h2>${sec.fields.map(f => field(f, sec)).join('')}</div>`).join('') +
     // N'apparaît qu'avec des modifications à enregistrer : toujours affichée, elle cachait
     // le réglage du dessous en faisant défiler la page
-    `<div class="save-bar" hidden><div class="save-box"><span>Modifications non enregistrées</span>
-      <button class="btn ghost sm" id="settings-cancel">Annuler</button>
-      <button class="btn primary sm" id="settings-save">${icon('check')}Enregistrer</button></div></div>`;
+    `<div class="save-bar" hidden><div class="save-box"><span>${esc(t('settings.unsaved'))}</span>
+      <button class="btn ghost sm" id="settings-cancel">${esc(t('ui.cancel'))}</button>
+      <button class="btn primary sm" id="settings-save">${icon('check')}${esc(t('settings.save'))}</button></div></div>`;
   const bar = $('.save-bar', form);
   form.querySelectorAll('[data-key]').forEach(input => {
     const key = input.dataset.key;
@@ -238,12 +239,15 @@ function render() {
 }
 
 async function save() {
-  if (!Object.keys(draft).length) { toast('Aucune modification.'); return; }
+  if (!Object.keys(draft).length) { toast(t('settings.no_changes')); return; }
+  // Une autre langue : tous les textes de l'interface changent, elle se recharge
+  const reload = 'language' in draft && shownLanguage(draft.language) !== lang;
   try {
     state.settings = await put('/settings', draft);
+    if (reload) { location.reload(); return; }
     emit('settings:loaded');
     emit('models:reload');
-    toast('Réglages enregistrés.', 'ok');
+    toast(t('settings.saved'), 'ok');
     render();
   } catch (e) { errorToast(e); }
 }

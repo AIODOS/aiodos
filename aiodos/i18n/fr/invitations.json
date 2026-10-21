@@ -1,0 +1,16 @@
+{
+  "not_a_code": "Ce n'est pas un code d'invitation AIODOS.",
+  "unreadable": "Code illisible : a-t-il été copié en entier ?",
+  "other_version": "Code d'une autre version d'AIODOS : mettez-vous à jour tous les deux.",
+  "incomplete": "Code incomplet : a-t-il été copié en entier ?",
+  "internet_first": "Active d'abord la connexion par Internet (carte « Internet ») : l'invitation passe par le compagnon aiodos-net.",
+  "is_a_reply": "C'est une réponse : elle se colle sur la machine qui a invité.",
+  "from_here": "Cette invitation vient de cette machine-ci.",
+  "expired_ask": "Invitation périmée : demandes-en une nouvelle.",
+  "used": "Cette invitation a déjà servi.",
+  "is_an_invitation": "C'est une invitation : elle se colle sur la machine de l'ami.",
+  "mismatch": "Cette réponse ne correspond pas à cette invitation.",
+  "expired_create": "Invitation périmée : crées-en une nouvelle.",
+  "reply_from_here": "Cette réponse vient de cette machine-ci.",
+  "unreachable": "« {name} » injoignable par Internet : {error}"
+}

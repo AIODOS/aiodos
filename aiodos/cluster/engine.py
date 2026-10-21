@@ -33,6 +33,7 @@ import requests
 
 from aiodos import logfiles, paths, settings
 from aiodos.cluster import delivery
+from aiodos.i18n import t
 from aiodos.updates import engines
 from aiodos.node import children
 
@@ -103,7 +104,8 @@ def _run(program: Path, *args, timeout=30) -> str:
                               encoding="utf-8", errors="replace", timeout=timeout,
                               creationflags=NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise EngineError(f"llama.cpp ne répond pas ({exc.__class__.__name__}).") from exc
+        raise EngineError(t("cluster.llama_not_responding",
+                            error=exc.__class__.__name__)) from exc
     return (done.stdout or "") + (done.stderr or "")
 
 
@@ -144,6 +146,7 @@ def lent_device(devices: list) -> dict | None:
     if not wanted:
         return best_device(devices)
     if wanted.upper() == "CPU":
+        # i18n: tel quel (« label » part dans le profil et la réponse du prêt, jamais affiché)
         return {"name": "CPU", "label": "processeur", "total_mib": 0, "free_mib": _free_ram_mib()}
     return next((d for d in devices if d["name"] == wanted), None)
 
@@ -241,7 +244,8 @@ class Process:
                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                 env={**os.environ, **(self.env or {})}, creationflags=NO_WINDOW)
         except OSError as exc:
-            raise EngineError(f"{self.program.name} ne démarre pas : {exc}") from exc
+            raise EngineError(t("cluster.program_start_failed", program=self.program.name,
+                                error=exc)) from exc
         with _live_lock:
             _live.add(self.log_path)
         self._journal = logfiles.capture(self.process.stdout, self.log_path, ENGINE_LOG_BYTES)
@@ -260,23 +264,23 @@ class Process:
                 waiting(int(noted - began))
             process = self.process            # None : arrêté entre-temps (groupe défait)
             if process is None:
-                raise EngineError("Chargement interrompu.")
+                raise EngineError(t("cluster.loading_interrupted"))
             if process.poll() is not None:
-                raise EngineError(f"{self.program.name} s'est arrêté : {self.tail()}")
+                raise EngineError(t("cluster.program_stopped", program=self.program.name,
+                                    log=self.tail()))
             if stop is not None and stop.is_set():
                 self.stop()
-                raise EngineError("Chargement interrompu.")
+                raise EngineError(t("cluster.loading_interrupted"))
             if _listening(self.port) and (ready is None or ready()):
                 if (self.env or {}).get(KEY_VARIABLE) and not requires_key(self.port):
                     self.stop()
-                    raise EngineError(
-                        f"{self.program.name} n'exige pas sa clé ({KEY_VARIABLE}) : cette "
-                        "version de llama.cpp ne la lit pas, il serait ouvert à tout programme "
-                        "de cette machine. Il est arrêté : mets le moteur à jour.")
+                    raise EngineError(t("cluster.key_not_required", program=self.program.name,
+                                        variable=KEY_VARIABLE))
                 return self
             time.sleep(0.25)
         self.stop()
-        raise EngineError(f"{self.program.name} ne répond pas après {int(timeout)} s.")
+        raise EngineError(t("cluster.program_timeout", program=self.program.name,
+                            seconds=int(timeout)))
 
     @property
     def alive(self) -> bool:
@@ -289,7 +293,7 @@ class Process:
         try:
             text = self.log_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
-            return "journal illisible"
+            return t("cluster.log_unreadable")
         return " | ".join(line.strip() for line in text.splitlines()[-lines:] if line.strip())
 
     def stop(self):

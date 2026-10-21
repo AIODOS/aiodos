@@ -28,6 +28,8 @@ import asyncio
 import json
 import re
 
+from aiodos import i18n
+from aiodos.i18n import t
 from aiodos.network import connections, peers, work
 
 BASE = "/p2p/v1/"
@@ -47,7 +49,9 @@ _FROM = re.compile(rb'"from"\s*:\s*"([^"\\]{1,64})"')
 
 
 def _mib(size: int) -> str:
-    return f"{size / 1024 ** 2:.0f} Mio" if size >= 1024 ** 2 else f"{size // 1024} Kio"
+    if size >= 1024 ** 2:
+        return t("p2p.size_mib", n=i18n.number(size / 1024 ** 2))
+    return t("p2p.size_kib", n=size // 1024)
 
 
 def _declared(scope) -> int | None:
@@ -160,12 +164,12 @@ class BodyLimit:
         ceiling = self._ceiling(action)
         declared = _declared(scope)
         if declared is not None and declared > ceiling:
-            return await _refuse(send, f"Requête trop volumineuse ({_mib(ceiling)} au plus).")
+            return await _refuse(send, t("p2p.request_too_big", limit=_mib(ceiling)))
         # Au-delà d'OPEN_BODY, la limite dépend de la machine qui envoie : décidée dès que
         # le début de l'enveloppe est lu (ou dès qu'on dépasse OPEN_BODY sans taille annoncée)
         decided = ceiling <= OPEN_BODY
         limit = ceiling if decided else OPEN_BODY
-        refusal = f"Requête trop volumineuse ({_mib(limit)} au plus)."
+        refusal = t("p2p.request_too_big", limit=_mib(limit))
         slot = None                      # (tours, machine) : un gros corps en cours de lecture
         try:
             chunks, total = [], 0
@@ -188,9 +192,7 @@ class BodyLimit:
                         huge = limit > SEALED_BODY and (declared is None or declared > SEALED_BODY)
                         pool = self.huge if huge else self.big
                         if not await pool.acquire(sender, SLOT_WAIT):
-                            return await _answer(send, 503, "Machine occupée à recevoir "
-                                                 "d'autres gros messages : réessaie dans un "
-                                                 "instant.")
+                            return await _answer(send, 503, t("p2p.busy_receiving"))
                         slot = (pool, sender)
                 if total > limit:
                     return await _refuse(send, refusal)
@@ -227,15 +229,12 @@ class BodyLimit:
         sender = found.group(1).decode("utf-8", "replace") if found else ""
         known = await asyncio.to_thread(peers.transport, sender) if sender else None
         if known is None:
-            return OPEN_BODY, (f"Machine non appairée : requête trop volumineuse "
-                               f"({_mib(OPEN_BODY)} au plus)."), sender
+            return OPEN_BODY, t("p2p.unpaired_too_big", limit=_mib(OPEN_BODY)), sender
         if not _same_path(scope, known):
             # L'identifiant d'une de mes machines, depuis une autre adresse : un appareil
             # qui le lit dans ses balises, ou cette machine qui vient de changer d'adresse
-            return OPEN_BODY, (f"Requête trop volumineuse ({_mib(OPEN_BODY)} au plus) : "
-                               "cette machine n'est pas encore reconnue à cette adresse. "
-                               "Réessaie dans quelques secondes."), sender
+            return OPEN_BODY, t("p2p.unknown_address_too_big", limit=_mib(OPEN_BODY)), sender
         limit = min(ceiling, SEALED_BODY)
         if ceiling > SEALED_BODY:
             limit = min(ceiling, max(limit, await asyncio.to_thread(work.result_limit, sender)))
-        return limit, f"Requête trop volumineuse ({_mib(limit)} au plus).", sender
+        return limit, t("p2p.request_too_big", limit=_mib(limit)), sender

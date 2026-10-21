@@ -29,6 +29,7 @@ rafale de conversations (un outil branché sur la passerelle) attend son tour ic
 d'occuper chez l'autre machine toutes les places de son compagnon et de son serveur (les
 suivantes y étaient refusées, et ses nouvelles, ses baux de travail, ne passaient plus).
 """
+import contextvars
 import http.client
 import re
 import threading
@@ -38,6 +39,8 @@ import unicodedata
 import requests
 import urllib3
 
+from aiodos import i18n
+from aiodos.i18n import t
 from aiodos.network import envelope, route
 from aiodos.network.crypto import SealError
 
@@ -95,11 +98,6 @@ STREAMS_PER_PEER = 16
 STREAM_WAIT = 540
 TURN_POLL = 0.25               # s : l'arrêt (stop) est regardé pendant l'attente
 
-TOO_SLOW = "L'autre machine répond trop lentement : demande abandonnée."
-STILL_BUSY = ("L'autre machine n'a toujours pas fini de répondre à une demande précédente, "
-              "abandonnée : rien de plus ne lui est demandé pour l'instant.")
-UNREADABLE = "Réponse illisible de l'autre machine."
-
 # La réponse scellée d'une machine appairée (envelope.wrap_reply, sérialisée par FastAPI)
 _BOX = re.compile(rb'\s*\{\s*"box"\s*:\s*"([A-Za-z0-9+/]*={0,2})"\s*\}\s*')
 # Ce qui coupe une lecture en cours (connexion fermée, délai de lecture dépassé, réponse tronquée)
@@ -113,6 +111,14 @@ _turns = {}                    # machine -> places de ses réponses en flux (STR
 
 class PeerError(Exception):
     """Machine injoignable, ou qui refuse la demande (avec un message lisible)."""
+
+
+class TooSlow(PeerError):
+    """L'autre machine n'a pas répondu avant l'échéance de l'appel : demande abandonnée
+    (reconnue à sa classe, et non à son message, qui suit la langue)."""
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or t("p2p.too_slow"))
 
 
 def error_detail(response) -> str:
@@ -132,8 +138,8 @@ def limit_for(action: str) -> int:
 # --------------------------------------------------------------- lecture bornée
 def _size(size: int) -> str:
     if size >= 1024 ** 2:
-        return f"{size / 1024 ** 2:.1f} Mio".replace(".", ",")
-    return f"{max(1, size // 1024)} Kio"
+        return t("p2p.size_mib", n=i18n.number(size / 1024 ** 2, 1))
+    return t("p2p.size_kib", n=max(1, size // 1024))
 
 
 def _readable(text: str, size: int) -> str:
@@ -144,9 +150,15 @@ def _readable(text: str, size: int) -> str:
 
 
 def _too_big(limit: int, action: str | None, announced: int | None = None) -> str:
-    what = f" à « {action} »" if action else ""
-    seen = f"{_size(announced)}, " if announced else ""
-    return f"Réponse trop volumineuse{what} ({seen}{_size(limit)} au plus) : refusée."
+    most = _size(limit)
+    if action and announced:
+        return t("p2p.reply_too_big_action_size", action=action, size=_size(announced),
+                 limit=most)
+    if action:
+        return t("p2p.reply_too_big_action", action=action, limit=most)
+    if announced:
+        return t("p2p.reply_too_big_size", size=_size(announced), limit=most)
+    return t("p2p.reply_too_big", limit=most)
 
 
 def _plain(response):
@@ -154,8 +166,7 @@ def _plain(response):
     n'en envoie jamais, et quelques Kio de gzip peuvent en devenir des Gio."""
     encoding = (response.headers.get("Content-Encoding") or "").strip().lower()
     if encoding not in ("", "identity"):
-        raise PeerError(f"Réponse compressée ({_readable(encoding, 30)}) inattendue d'une "
-                        "autre machine : refusée.")
+        raise PeerError(t("p2p.compressed", encoding=_readable(encoding, 30)))
 
 
 def _reader(response):
@@ -183,9 +194,9 @@ def _read(response, limit: int, deadline: float, action: str | None = None) -> b
             if len(data) > limit:
                 raise PeerError(_too_big(limit, action))
             if time.monotonic() > deadline:
-                raise PeerError(TOO_SLOW)
+                raise TooSlow()
     except _CUT as exc:
-        raise PeerError(f"Connexion coupée ({exc.__class__.__name__}).") from exc
+        raise PeerError(t("p2p.cut", error=exc.__class__.__name__)) from exc
     return bytes(data)
 
 
@@ -204,7 +215,7 @@ def _refusal(response, deadline: float) -> PeerError:
     try:
         data = _read(response, ERROR_REPLY, deadline)
     except PeerError:
-        return PeerError(f"Refus de l'autre machine (HTTP {response.status_code}).")
+        return PeerError(t("p2p.refused_http", status=response.status_code))
     return PeerError(_detail(data, response.status_code))
 
 
@@ -216,17 +227,17 @@ def _loaded(response):
     try:
         return response.json()
     except ValueError as exc:
-        raise PeerError(UNREADABLE) from exc
+        raise PeerError(t("p2p.unreadable_reply")) from exc
 
 
 def _small_json(data: bytes):
     """Un objet JSON qui n'a pas la forme stricte attendue : analysé seulement s'il est petit."""
     if len(data) > SMALL_JSON:
-        raise PeerError(UNREADABLE)
+        raise PeerError(t("p2p.unreadable_reply"))
     try:
         return envelope.parse_json(data)
     except (ValueError, RecursionError) as exc:
-        raise PeerError(UNREADABLE) from exc
+        raise PeerError(t("p2p.unreadable_reply")) from exc
 
 
 def _box(response, limit: int, deadline: float, action: str) -> dict:
@@ -242,7 +253,7 @@ def _box(response, limit: int, deadline: float, action: str) -> dict:
             return {"box": found.group(1).decode("ascii")}
         reply = _small_json(data)
     if not isinstance(reply, dict) or not isinstance(reply.get("box"), str):
-        raise PeerError(UNREADABLE)
+        raise PeerError(t("p2p.unreadable_reply"))
     return reply
 
 
@@ -255,7 +266,7 @@ def _public(response, deadline: float) -> dict:
             raise _refusal(response, deadline)
         reply = _small_json(_read(response, PUBLIC_REPLY, deadline))
     if not isinstance(reply, dict):
-        raise PeerError(UNREADABLE)
+        raise PeerError(t("p2p.unreadable_reply"))
     return reply
 
 
@@ -281,8 +292,7 @@ def _lines(response):
             start = end + 1
         del pending[:start]
         if len(pending) > MAX_FRAME:
-            raise PeerError(f"Morceau de réponse trop volumineux ({_size(MAX_FRAME)} au plus) : "
-                            "réponse interrompue.")
+            raise PeerError(t("p2p.frame_too_big", limit=_size(MAX_FRAME)))
     if pending:
         yield bytes(pending)
 
@@ -325,7 +335,7 @@ class _Watch:
                 self._response = response
                 return response
         _close(response)
-        raise PeerError(TOO_SLOW)
+        raise TooSlow()
 
     def expire(self):
         with self._lock:
@@ -350,7 +360,7 @@ def _within(destination, deadline: float, work):
             else:
                 del _lingering[other]
         if destination in _lingering:
-            raise PeerError(STILL_BUSY)
+            raise PeerError(t("p2p.still_busy"))
     watch = _Watch()
     box = {}
     finished = threading.Event()
@@ -363,14 +373,17 @@ def _within(destination, deadline: float, work):
         finally:
             finished.set()
 
-    thread = threading.Thread(target=run, daemon=True, name="aiodos-appel")
+    # Dans le contexte de l'appelant : ses messages d'erreur sont dans la langue de la
+    # requête en cours (i18n), pas seulement dans celle du nœud
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(run,), daemon=True,
+                              name="aiodos-appel")
     thread.start()
     if not finished.wait(max(0.0, deadline - time.monotonic())):
         watch.expire()
         if not finished.wait(GRACE):
             with _lock:
                 _lingering.setdefault(destination, []).append(thread)
-        raise PeerError(TOO_SLOW)
+        raise TooSlow()
     if "error" in box:
         raise box.pop("error")
     return box["value"]
@@ -395,7 +408,7 @@ def _plan(peer: dict, timeout, pairing: bool) -> list:
     chemin attend derrière)]. `timeout` : délai de lecture, ou (connexion, lecture)."""
     paths = route.paths_for(peer, pairing=pairing)
     if not paths:
-        raise PeerError("Aucun chemin vers cette machine (ni réseau local, ni Internet).")
+        raise PeerError(t("p2p.no_path"))
     read = timeout[1] if isinstance(timeout, tuple) else timeout
     plan = []
     for i, way in enumerate(paths):
@@ -441,12 +454,13 @@ def _attempt(peer: dict, plan: list, path: str, payload: dict, stream: bool):
                 route.lan_failed(peer.get("node_id"))
             if fallback and not sent:
                 continue
-            raise PeerError(f"Machine injoignable par {way.label} "
-                            f"({exc.__class__.__name__}).") from exc
+            raise PeerError(t("p2p.unreachable_lan" if way.kind == "lan"
+                              else "p2p.unreachable_internet",
+                              error=exc.__class__.__name__)) from exc
         if way.kind == "lan":
             route.lan_ok(peer.get("node_id"))
         return response
-    raise PeerError("Machine injoignable.")
+    raise PeerError(t("p2p.unreachable"))
 
 
 def _send(peer: dict, path: str, payload: dict, timeout, stream=True, pairing=False,
@@ -484,7 +498,7 @@ def _post(url: str, payload: dict, timeout) -> dict:
         try:
             response = requests.post(url, json=payload, timeout=timeout, stream=True)
         except requests.RequestException as exc:
-            raise PeerError(f"Machine injoignable ({exc.__class__.__name__}).") from exc
+            raise PeerError(t("p2p.unreachable_error", error=exc.__class__.__name__)) from exc
         response = watch.holds(response)
         try:
             return _public(response, deadline)
@@ -499,7 +513,7 @@ def hello(address, port, timeout=4) -> dict:
     """Présentation publique d'un nœud (sans secret)."""
     info = _post(f"http://{address}:{port}/p2p/v1/hello", {}, timeout)
     if info.get("protocol") != envelope.PROTOCOL:
-        raise PeerError("Version d'AIODOS incompatible sur cette machine.")
+        raise PeerError(t("p2p.incompatible"))
     return info
 
 
@@ -516,8 +530,7 @@ def pair_start_via(peer: dict, payload: dict, timeout=TIMEOUT) -> dict:
 def _key(peer: dict) -> bytes:
     """La clé de la paire ; illisible ici (node/vault.py) : il faut appairer de nouveau."""
     if not peer.get("key"):
-        raise PeerError(f"Clé de « {peer.get('name') or peer['node_id']} » illisible sur cette "
-                        "machine : appaire-la de nouveau.")
+        raise PeerError(t("p2p.key_unreadable", name=peer.get("name") or peer["node_id"]))
     return peer["key"]
 
 
@@ -535,7 +548,7 @@ def call(my_id, peer: dict, action: str, payload: dict, key: bytes = None,
     try:
         return envelope.unwrap_reply(key, action, peer["node_id"], my_id, env["ts"], reply)
     except SealError as exc:
-        raise PeerError(f"Réponse refusée : {exc}") from exc
+        raise PeerError(t("p2p.reply_refused", error=exc)) from exc
 
 
 def _turn(node_id, stop):
@@ -549,8 +562,8 @@ def _turn(node_id, stop):
         if stop is not None and stop.is_set():
             return None
         if time.monotonic() >= deadline:
-            raise PeerError(f"Déjà {STREAMS_PER_PEER} conversations en cours avec cette machine "
-                            f"depuis {STREAM_WAIT // 60} min : réessaie plus tard.")
+            raise PeerError(t("p2p.streams_busy", count=STREAMS_PER_PEER,
+                              minutes=STREAM_WAIT // 60))
     return places
 
 
@@ -581,16 +594,16 @@ def stream(my_id, peer: dict, action: str, payload: dict, stop=None, connect_tim
                                                   env["ts"], seq, line.decode("ascii", "replace"))
                     seq += 1
                     if not isinstance(frame, dict):
-                        raise PeerError("Morceau de réponse illisible.")
+                        raise PeerError(t("p2p.frame_unreadable"))
                     if frame.get("end"):
                         return
                     if frame.get("error"):
                         raise PeerError(_readable(str(frame["error"]), DETAIL))
                     yield frame
             except _CUT as exc:
-                raise PeerError(f"Connexion coupée ({exc.__class__.__name__}).") from exc
+                raise PeerError(t("p2p.cut", error=exc.__class__.__name__)) from exc
             except SealError as exc:
-                raise PeerError(f"Réponse altérée : {exc}") from exc
-        raise PeerError("Réponse interrompue avant la fin.")
+                raise PeerError(t("p2p.reply_altered", error=exc)) from exc
+        raise PeerError(t("p2p.reply_interrupted"))
     finally:
         places.release()

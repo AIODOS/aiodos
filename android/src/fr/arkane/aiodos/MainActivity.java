@@ -35,7 +35,8 @@ import java.util.Set;
  *
  * Le nœud tourne dans l'appli elle-même (NodeService, Python par Chaquopy) : l'ouvrir le
  * démarre au besoin, la fermer le laisse tourner en arrière-plan, avec sa notification.
- * Rien d'autre à installer (avant : Termux, docs/android.md).
+ * Rien d'autre à installer (avant : Termux, docs/android.md). Ses textes : res/values*,
+ * dans la langue choisie dans les Réglages d'AIODOS, sinon celle du téléphone (Texts).
  */
 public class MainActivity extends Activity {
     private static final int NOTIFICATIONS = 1;
@@ -80,7 +81,7 @@ public class MainActivity extends Activity {
                     return false;                     // l'interface du nœud, ici
                 }
                 if (!opensOutside(uri)) {                // ni le web ni un courriel : rien
-                    tell("Lien non ouvert : ce n'est ni une page web ni un courriel.");
+                    tell(Texts.get(MainActivity.this, R.string.link_refused));
                     return true;
                 }
                 if ("mailto".equalsIgnoreCase(uri.getScheme())) {
@@ -91,7 +92,7 @@ public class MainActivity extends Activity {
                 try {
                     startActivity(intent);
                 } catch (ActivityNotFoundException e) {
-                    tell("Aucune appli de ce téléphone n'ouvre ce lien.");
+                    tell(Texts.get(MainActivity.this, R.string.link_no_app));
                 }
                 return true;
             }
@@ -124,7 +125,7 @@ public class MainActivity extends Activity {
         status.setVisibility(View.VISIBLE);
         web.setVisibility(View.GONE);
         status.setOnClickListener(null);
-        status.setText("Démarrage d'AIODOS…");
+        status.setText(Texts.get(this, R.string.startup));
         NodeService.start(this);
         since = SystemClock.elapsedRealtime();
         handler.post(this::poll);
@@ -139,17 +140,14 @@ public class MainActivity extends Activity {
             return;
         }
         if (NodeService.error != null) {
-            problem("AIODOS n'a pas démarré : " + NodeService.error);
+            problem(Texts.get(this, R.string.node_failed, NodeService.error));
             return;
         }
         long waited = SystemClock.elapsedRealtime() - since;
         if (waited > TOO_LONG) {           // on continue d'attendre : il peut encore venir
-            status.setText("AIODOS met plus de 3 minutes à démarrer. Il s'affichera ici dès "
-                + "qu'il sera prêt ; sinon, « Arrêter » dans sa notification, puis rouvre "
-                + "l'appli.");
+            status.setText(Texts.get(this, R.string.startup_too_long));
         } else if (waited > SLOW) {
-            status.setText("Démarrage d'AIODOS…\n\nÀ la première ouverture, l'appli met en "
-                + "place Python et ses bibliothèques : jusqu'à une minute.");
+            status.setText(Texts.get(this, R.string.startup_first));
         }
         handler.postDelayed(this::poll, 250);
     }
@@ -221,7 +219,7 @@ public class MainActivity extends Activity {
     private void problem(String text) {
         web.setVisibility(View.GONE);
         status.setVisibility(View.VISIBLE);
-        status.setText(text + "\n\nToucher pour redémarrer AIODOS.");
+        status.setText(Texts.get(this, R.string.tap_to_restart, text));
         status.setOnClickListener(v -> Relaunch.app(this));
     }
 

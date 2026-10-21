@@ -31,6 +31,7 @@ from collections import deque
 from urllib.parse import urlsplit
 
 from aiodos import db, settings
+from aiodos.i18n import t
 from aiodos.jobs import pacing
 from aiodos.knowledge import visibility
 from aiodos.network import sharing
@@ -125,9 +126,9 @@ def _passage(hit) -> dict:
 def _question(payload) -> str:
     question = (payload or {}).get("question")
     if not isinstance(question, str) or not question.strip():
-        raise PeerError("Question vide.")
+        raise PeerError(t("consult.empty_question"))
     if len(question) > MAX_QUESTION:
-        raise PeerError(f"Question trop longue ({MAX_QUESTION} caractères au plus).")
+        raise PeerError(t("consult.question_too_long", max=MAX_QUESTION))
     return question.strip()
 
 
@@ -141,25 +142,26 @@ def _wanted(payload) -> int:
 
 # ---------------------------------------------------------------- recherche
 def search(manager, sender, payload):
-    """Action scellée « library/search » : {question, k} → {passages, open}."""
+    """Action scellée « library/search » : {question, k} → {passages, open}.
+
+    Les refus partent en texte, dans la langue de cette machine (la demande d'une autre
+    machine n'en indique aucune), et le journal (vue Réseau) les garde de même."""
     question, k = _question(payload), _wanted(payload)
     # La limite d'abord : elle compte toute recherche reçue, et borne ainsi ce qui est noté
     wait, note = LIMITER.take(sender)
     if wait:
         if note:
-            log(sender, refused=f"plus de {LIMITER.limit} recherches par minute")
-        raise PeerError(f"« {manager.name()} » limite les recherches à {LIMITER.limit} par "
-                        f"minute : réessaie dans {math.ceil(wait)} s.")
+            log(sender, refused=t("consult.refused_rate", limit=LIMITER.limit))
+        raise PeerError(t("consult.rate_limited", name=manager.name(), limit=LIMITER.limit,
+                          wait=math.ceil(wait)))
     aside = sharing.set_aside_reason(sender)
     if aside:
-        log(sender, refused="machine mise de côté")
-        raise PeerError(f"« {manager.name()} » ne te laisse plus chercher dans ses "
-                        f"bibliothèques : {aside}.")
+        log(sender, refused=t("consult.refused_aside"))
+        raise PeerError(t("consult.set_aside", name=manager.name(), reason=aside))
     from aiodos.network import worker
     if not worker.welcomes(sender):
-        log(sender, refused="téléphone hors charge ou hors Wi-Fi")
-        raise PeerError(f"« {manager.name()} » est un téléphone : il ne cherche pour ses amis "
-                        "qu'en charge et en Wi-Fi.")
+        log(sender, refused=t("consult.refused_phone"))
+        raise PeerError(t("consult.phone", name=manager.name()))
     levels = levels_for(sender)
     opened = visibility.open_collections(levels)
     if not opened:                        # rien d'ouvert : la question n'est même pas lue
@@ -168,17 +170,14 @@ def search(manager, sender, payload):
     # Une conversation ici passe d'abord, et les recherches des autres restent peu
     # nombreuses à la fois : refus tout de suite, plutôt qu'une file qui bloque le fil
     if pacing.chatting():
-        raise PeerError(f"« {manager.name()} » répond à une conversation : réessaie dans un "
-                        "instant.")
+        raise PeerError(t("consult.chatting", name=manager.name()))
     if not _busy.acquire(blocking=False):
-        raise PeerError(f"« {manager.name()} » est occupée à d'autres recherches : réessaie "
-                        "dans un instant.")
+        raise PeerError(t("consult.busy", name=manager.name()))
     try:
         try:
             vector = ollama.embed([question], timeout=EMBED_TIMEOUT)[0]
         except Exception as exc:
-            raise PeerError(f"« {manager.name()} » ne peut pas chercher pour l'instant : "
-                            "Ollama n'y répond pas à temps.") from exc
+            raise PeerError(t("consult.no_ollama", name=manager.name())) from exc
         threshold = float(settings.get("rag_min_score") or 0)
         hits = [h for h in visibility.search(vector, k, levels) if h["score"] >= threshold]
     finally:

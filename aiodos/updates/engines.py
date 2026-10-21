@@ -90,21 +90,23 @@ def find(engine: str, store: Store | None = None) -> Path | None:
 
 
 def unpacked(engine: str, store: Store, version: str, item: dict) -> Path:
-    """L'archive du paquet, dépliée dans data/engines/<moteur>/<empreinte>/."""
+    """L'archive du paquet, dépliée dans data/engines/<moteur>/<empreinte>/. Ses messages
+    restent en français : ils ne vont qu'au journal (find)."""
     base = root(engine)
     target = base / item["sha256"][:16]
     if complete(target, engine):
         return target
     archive = store.package_path(version, item)
     if sha256_of(archive) != item["sha256"]:
-        raise UpdateError("archive altérée dans le paquet")
-    work = base / f".{item['sha256'][:16]}-en-cours"
+        raise UpdateError("archive altérée dans le paquet")         # i18n: tel quel (journal)
+    work = base / f".{item['sha256'][:16]}-en-cours"           # i18n: tel quel (nom de dossier)
     shutil.rmtree(work, ignore_errors=True)
     install.unpack(archive, work)
     found = work if complete(work, engine) else next(
         (d for d in work.iterdir() if d.is_dir() and complete(d, engine)), None)
     if found is None:
         shutil.rmtree(work, ignore_errors=True)
+        # i18n: tel quel (journal)
         raise UpdateError(f"{', '.join(PROGRAMS[engine])} absent(s) de l'archive")
     shutil.rmtree(target, ignore_errors=True)
     os.replace(found, target)

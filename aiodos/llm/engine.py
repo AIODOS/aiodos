@@ -25,6 +25,7 @@ import requests
 
 from aiodos import paths
 from aiodos.cluster import engine as programs
+from aiodos.i18n import t
 from aiodos.llm import models as registry
 
 log = logging.getLogger("aiodos.llm")
@@ -77,8 +78,7 @@ class Router:
             self._stop()
             folder = programs.folder()
             if folder is None:
-                raise EngineUnavailable("llama.cpp est introuvable sur cette machine : le moteur "
-                                        "intégré ne peut pas démarrer.")
+                raise EngineUnavailable(t("llm.llama_missing"))
             ini = paths.data_dir() / "llm" / "modeles.ini"
             ini.parent.mkdir(parents=True, exist_ok=True)
             ini.write_text(text, encoding="utf-8")
@@ -92,7 +92,7 @@ class Router:
             try:
                 process.start(START_TIMEOUT, ready=lambda: programs.loaded(port))
             except programs.EngineError as exc:
-                raise EngineUnavailable(f"Le moteur intégré ne démarre pas : {exc}") from exc
+                raise EngineUnavailable(t("llm.engine_start_failed", error=exc)) from exc
             self.process, self._signature = process, signature
             log.info("Moteur intégré prêt : %d modèle(s), port %d", len(models), port)
             return f"http://127.0.0.1:{port}"

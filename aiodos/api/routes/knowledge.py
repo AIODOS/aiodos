@@ -5,6 +5,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.jobs.models import NORMAL
 from aiodos.knowledge import store, visibility
@@ -144,7 +145,7 @@ async def consult(body: ConsultIn):
     part chez celles que la vue annonçait (body.machines), seuls les passages reviennent."""
     question = body.question.strip()
     if not question:
-        raise HTTPException(400, "Question vide.")
+        raise HTTPException(400, t("consult.empty_question"))
     passages, machines = await asyncio.to_thread(
         remote_search.search, question, body.machines, VIEW_PER_PEER,
         remote_search.VIEW_TIMEOUT, remote_search.VIEW_GRACE)
@@ -175,7 +176,7 @@ async def _launch(request: Request, kind: str, params: dict, priority: int):
 @router.post("/index")
 async def index_paths(body: IndexPathsIn, request: Request):
     if not body.paths:
-        raise HTTPException(400, "Aucun chemin fourni.")
+        raise HTTPException(400, t("index.no_paths"))
     return await _launch(request, "index_paths",
                          {"paths": body.paths, "collection_id": body.collection_id},
                          body.priority)
@@ -185,6 +186,6 @@ async def index_paths(body: IndexPathsIn, request: Request):
 async def index_urls(body: IndexUrlsIn, request: Request):
     urls = [u.strip() for u in body.urls if u.strip().startswith(("http://", "https://"))]
     if not urls:
-        raise HTTPException(400, "Aucune URL valide (http:// ou https://).")
+        raise HTTPException(400, t("index.no_valid_urls"))
     return await _launch(request, "index_urls",
                          {"urls": urls, "collection_id": body.collection_id}, body.priority)

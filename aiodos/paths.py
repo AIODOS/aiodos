@@ -13,6 +13,8 @@ import os
 import stat
 from pathlib import Path
 
+from aiodos.i18n import t
+
 log = logging.getLogger("aiodos")
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -65,7 +67,7 @@ def _close_to_others(path: Path, quiet=False) -> bool:
         if mode & 0o077:
             os.chmod(path, mode & ~0o077)
             if stat.S_IMODE(os.stat(path).st_mode) & 0o077:
-                raise PermissionError("le disque ne garde pas les droits Unix")
+                raise PermissionError("le disque ne garde pas les droits Unix")  # i18n: tel quel (journal)
         return True
     except OSError as exc:
         if not quiet:
@@ -95,10 +97,10 @@ def _close_entry(entry: Path) -> str | None:
     if not target.st_mode & 0o077:
         return None
     if stat.S_ISDIR(target.st_mode):
-        return " (dossier lié, laissé tel quel)"
+        return " " + t("paths.linked_folder")
     if not _mine(target):
-        return " (lien vers le fichier d'un autre compte)"
-    return None if _close_to_others(entry, quiet=True) else " (lien)"
+        return " " + t("paths.foreign_link")
+    return None if _close_to_others(entry, quiet=True) else " " + t("paths.link")
 
 
 def keep_private() -> list[str]:
@@ -119,7 +121,7 @@ def keep_private() -> list[str]:
     folder = _data_path()
     _make_dir(folder, parents=True)
     _closed.add(folder)                          # data_dir() ne le refera pas
-    left = [] if _close_to_others(folder, quiet=True) else [f"{folder} (le dossier)"]
+    left = [] if _close_to_others(folder, quiet=True) else [f"{folder} {t('paths.the_folder')}"]
     for parent in (folder, folder / "logs"):
         try:
             entries = sorted(parent.iterdir())
@@ -199,6 +201,11 @@ def installed_data_dir() -> Path | None:
 def _data_path() -> Path:
     return Path(os.environ.get("AIODOS_DATA_DIR") or os.environ.get("COEUR_DATA_DIR")
                 or installed_data_dir() or (APP_ROOT / "data"))
+
+
+def data_path() -> Path:
+    """Le dossier des données, sans le créer ni le fermer aux autres (cf. data_dir)."""
+    return _data_path()
 
 
 def data_dir() -> Path:

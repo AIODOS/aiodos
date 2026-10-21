@@ -25,6 +25,7 @@ import secrets
 import time
 
 from aiodos import db
+from aiodos.i18n import t
 from aiodos.network import netinfo
 
 PREFIX = "AIODOS1-"
@@ -49,23 +50,24 @@ def decode(code) -> dict:
     """Le contenu d'un code d'invitation ou de réponse, vérifié."""
     text = re.sub(r"\s+", "", str(code or ""))          # collé avec des retours à la ligne
     if not text.startswith(PREFIX):
-        raise InvitationError("Ce n'est pas un code d'invitation AIODOS.")
+        raise InvitationError(t("invitations.not_a_code"))
     body = text[len(PREFIX):]
     try:
         data = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("utf-8"))
     except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
-        raise InvitationError("Code illisible : a-t-il été copié en entier ?") from exc
+        raise InvitationError(t("invitations.unreadable")) from exc
     if not isinstance(data, dict) or data.get("v") != 1 or data.get("k") not in ("invite", "reply"):
-        raise InvitationError("Code d'une autre version d'AIODOS : mettez-vous à jour tous les deux.")
+        raise InvitationError(t("invitations.other_version"))
     net = netinfo.clean({"id": data.get("net"), "relays": data.get("r"), "addrs": data.get("a")})
     secret, node_id = str(data.get("s") or ""), str(data.get("id") or "")
     if net is None or not _HEX32.match(secret) or not _HEX32.match(node_id):
-        raise InvitationError("Code incomplet : a-t-il été copié en entier ?")
+        raise InvitationError(t("invitations.incomplete"))
     try:
         expires = float(data.get("x") or 0)
     except (TypeError, ValueError):
         expires = 0.0
-    return {"kind": data["k"], "node_id": node_id, "name": str(data.get("n") or "Machine sans nom")[:60],
+    return {"kind": data["k"], "node_id": node_id,
+            "name": str(data.get("n") or t("pairing.unnamed"))[:60],
             "net": net, "secret": secret, "expires": expires}
 
 
@@ -73,8 +75,7 @@ def _mine() -> dict:
     """Clé Internet de cette machine et de quoi la joindre (compagnon en marche)."""
     net = netinfo.clean(netinfo.mine())
     if net is None:
-        raise InvitationError("Active d'abord la connexion par Internet (carte « Internet ») : "
-                              "l'invitation passe par le compagnon aiodos-net.")
+        raise InvitationError(t("invitations.internet_first"))
     return net
 
 
@@ -105,15 +106,15 @@ def accept(manager, code) -> dict:
     la réponse à renvoyer. {reply, name : celui de l'invitant}."""
     found = decode(code)
     if found["kind"] != "invite":
-        raise InvitationError("C'est une réponse : elle se colle sur la machine qui a invité.")
+        raise InvitationError(t("invitations.is_a_reply"))
     if found["node_id"] == manager.node_id:
-        raise InvitationError("Cette invitation vient de cette machine-ci.")
+        raise InvitationError(t("invitations.from_here"))
     if found["expires"] < time.time():
-        raise InvitationError("Invitation périmée : demandes-en une nouvelle.")
+        raise InvitationError(t("invitations.expired_ask"))
     net = _mine()
     row = db.query_one("SELECT role, used FROM invitations WHERE secret=?", (found["secret"],))
     if row is not None and (row["role"] != RECEIVED or row["used"]):
-        raise InvitationError("Cette invitation a déjà servi.")
+        raise InvitationError(t("invitations.used"))
     if row is None:
         db.execute("INSERT INTO invitations(secret, role, created, expires, node_id, name, "
                    "net_id, net_addrs) VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
@@ -128,16 +129,16 @@ def answered(manager, invitation_id: int, code) -> dict:
     appairer (cf. target, Pairing.start_remote)."""
     found = decode(code)
     if found["kind"] != "reply":
-        raise InvitationError("C'est une invitation : elle se colle sur la machine de l'ami.")
+        raise InvitationError(t("invitations.is_an_invitation"))
     row = db.query_one("SELECT * FROM invitations WHERE id=? AND role=?", (invitation_id, SENT))
     if row is None or row["secret"] != found["secret"]:
-        raise InvitationError("Cette réponse ne correspond pas à cette invitation.")
+        raise InvitationError(t("invitations.mismatch"))
     if row["used"]:
-        raise InvitationError("Cette invitation a déjà servi.")
+        raise InvitationError(t("invitations.used"))
     if row["expires"] < time.time():
-        raise InvitationError("Invitation périmée : crées-en une nouvelle.")
+        raise InvitationError(t("invitations.expired_create"))
     if found["node_id"] == manager.node_id:
-        raise InvitationError("Cette réponse vient de cette machine-ci.")
+        raise InvitationError(t("invitations.reply_from_here"))
     db.execute("UPDATE invitations SET node_id=?, name=?, net_id=?, net_addrs=? WHERE id=?",
                (found["node_id"], found["name"], found["net"]["id"], _hints(found["net"]),
                 invitation_id))

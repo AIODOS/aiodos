@@ -152,7 +152,7 @@ def _sysfs(root: Path) -> dict | None:
         plugged = True
     elif "Discharging" in statuses or online:      # chargeurs connus, tous débranchés
         plugged = False
-    elif "Full" in statuses or "Not charging" in statuses:
+    elif "Full" in statuses or "Not charging" in statuses:   # i18n: tel quel (sysfs)
         plugged = True
     elif not statuses:
         plugged = True                             # pas de batterie : machine de bureau

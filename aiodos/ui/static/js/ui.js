@@ -1,5 +1,6 @@
 // Notifications, fenêtres de dialogue et menus contextuels.
 import { h, esc } from './dom.js';
+import { t } from './i18n.js';
 import { icon } from './icons.js';
 
 export function toast(message, kind = 'info', ms = 3800) {
@@ -40,8 +41,8 @@ export function modal(opts) {
           ${choices}
           ${opts.check ? `<label class="check"><input type="checkbox"> ${esc(opts.check)}</label>` : ''}
           <div class="buttons">
-            ${opts.cancel === null ? '' : `<button class="btn ghost" data-act="no">${esc(opts.cancel || 'Annuler')}</button>`}
-            <button class="btn ${opts.danger ? 'danger' : 'primary'}" data-act="yes">${esc(opts.confirm || 'OK')}</button>
+            ${opts.cancel === null ? '' : `<button class="btn ghost" data-act="no">${esc(opts.cancel || t('ui.cancel'))}</button>`}
+            <button class="btn ${opts.danger ? 'danger' : 'primary'}" data-act="yes">${esc(opts.confirm || t('ui.ok'))}</button>
           </div>
         </div>
       </div>`);
@@ -83,11 +84,11 @@ export function modal(opts) {
 }
 
 export async function ask(title, label, value = '', placeholder = '') {
-  const r = await modal({ title, text: label, input: value, placeholder, confirm: 'Valider' });
+  const r = await modal({ title, text: label, input: value, placeholder, confirm: t('ui.validate') });
   return r.ok ? r.value.trim() : null;
 }
 
-export async function confirmDanger(title, text, confirm = 'Supprimer') {
+export async function confirmDanger(title, text, confirm = t('ui.delete')) {
   return (await modal({ title, text, confirm, danger: true, iconName: 'warn' })).ok;
 }
 

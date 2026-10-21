@@ -1,0 +1,18 @@
+{
+  "unreadable": "Présentation illisible.",
+  "friends_only": "Seule la machine d'un ami se présente à mes autres machines.",
+  "pair_again": "« {name} » est à appairer de nouveau.",
+  "unknown": "Présentation inconnue ou expirée.",
+  "mine_only_introduce": "Seule une de mes machines me présente d'autres machines.",
+  "other_finishing": "Une autre présentation de cette machine se termine.",
+  "set_aside_here": "Machine mise de côté ici.",
+  "too_many": "Trop de présentations en attente, réessaie plus tard.",
+  "expired": "Cette présentation a expiré.",
+  "presenter_gone": "La machine qui présentait n'est plus appairée.",
+  "declined_refused": "présentation de « {name} » refusée",
+  "failed": "La présentation de « {name} » n'a pas abouti : une des machines ne répond plus. Elle pourra être refaite.",
+  "already_paired": "Machine déjà appairée.",
+  "mine_only": "Seule une de mes machines le demande.",
+  "declined_removed_on": "retirée sur « {name} »",
+  "declined_removed_here": "retirée ici"
+}

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from aiodos import db, settings
+from aiodos import db, i18n, settings
 from aiodos.api.server import create_app
 from aiodos.imaging import catalog, download, engine, gallery, generate
 from aiodos.jobs import kinds, queue, registry  # noqa: F401  (enregistre les tâches)
@@ -106,7 +106,9 @@ def test_each_image_is_a_unit_with_its_own_seed(tiny_model):
     assert [u.payload["seed"] for u in units] == [kind.SEED_SPACE - 1, 0, 1]
     assert [u.payload["index"] for u in units] == [0, 1, 2]
     assert {u.resource for u in units} == {"gpu"} and {u.task for u in units} == {"generate_image"}
-    assert title == "Images : « Un phare sous l'orage » ×3" and info["batch"] == params["batch"]
+    # Le titre part traduisible (i18n.lazy), écrit dans la langue de qui le lit
+    assert i18n.render(title) == "Images : « Un phare sous l'orage » ×3"
+    assert info["batch"] == params["batch"]
 
 
 # ------------------------------------------------------------- fichiers
@@ -754,13 +756,13 @@ def test_a_video_request_follows_the_rules_of_its_model(tiny_video):
             kind.normalize({"model": "video", "prompt": "x", **wrong})
     title, units, _ = kind.split_generate(kind.normalize(
         {"model": "video", "prompt": "un renard", "count": 2}))
-    assert title.startswith("Vidéos : ") and {u.payload["frames"] for u in units} == {33}
+    assert i18n.render(title).startswith("Vidéos : ")
+    assert {u.payload["frames"] for u in units} == {33}
     # H3 : 17 k + 5 images, côtés en multiples de 32
-    h3 = catalog.MODELS["minimax-h3"]
     assert kind.normalize({"model": "minimax-h3", "prompt": "x"})["frames"] == 56
     with pytest.raises(ValueError, match="17 × k"):
         kind.normalize({"model": "minimax-h3", "prompt": "x", "frames": 57})
-    assert h3["notice"] and "Union européenne" in h3["notice"]
+    assert "Union européenne" in catalog.notice("minimax-h3")       # imaging_models.json
 
 
 def test_a_video_is_made_checked_and_kept(tiny_video, fake_sd):

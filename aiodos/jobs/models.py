@@ -3,7 +3,7 @@
 # Priorités (plus petit = plus prioritaire). L'interactif (le chat) ne passe
 # pas par la file : il est servi tout de suite et met en pause les ressources GPU.
 URGENT, NORMAL, BACKGROUND = 1, 2, 3
-PRIORITY_LABELS = {URGENT: "Urgent", NORMAL: "Normal", BACKGROUND: "De fond"}
+PRIORITIES = (URGENT, NORMAL, BACKGROUND)      # libellés : i18n/*/jobs.json, priority_1…3
 
 QUEUED, RUNNING, DONE, FAILED = "queued", "running", "done", "failed"
 CANCELLED, PAUSED, SKIPPED = "cancelled", "paused", "skipped"

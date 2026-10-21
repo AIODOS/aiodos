@@ -1,18 +1,23 @@
 // Machines connectées, en direct, à la façon de la liste des pairs d'un client BitTorrent :
 // qui est en ligne et par quel chemin, qui prête sa puissance, ce que chacune fait pour
 // l'autre en ce moment, et ce qui a été échangé (network/activity.py). En tête de la vue
-// Réseau ; et dans la barre du bas, le nombre de machines en ligne.
+// Réseau ; et dans la barre du bas, le nombre de machines en ligne. Les textes (t, tt) sont
+// du texte brut : échappés (esc) en entier, paramètres compris, avant d'entrer dans le HTML.
 import { $, esc, ago, duration } from '../dom.js';
+import { t, tt, locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 
-const ROUTES = { lan: 'réseau local', direct: 'Internet, en direct', relay: 'Internet, par un relais',
-  internet: 'Internet' };
+const ROUTES = { lan: 'connected.route_lan', direct: 'connected.route_direct',
+  relay: 'connected.route_relay', internet: 'connected.route_internet' };
 
-const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 const sum = items => (items || []).reduce((n, item) => n + (item.units || 0), 0);
 // Prête sa puissance en ce moment ; d'un ami, on sait seulement si c'est activé
 const lendsNow = sharing => !!sharing && ('active' in sharing ? sharing.active : sharing.enabled);
+// Pourquoi une machine ne prête pas en ce moment (« En pause : ce PC est sur batterie. »),
+// écrit chez elle : dans la langue de l'interface s'il est venu traduisible (detail_t), sinon
+// tel qu'elle l'a écrit (une version précédente, ou un texte inconnu ici)
+const pauseDetail = sharing => tt(sharing.detail_t, sharing.detail || '');
 
 function busy(peer) {
   const live = peer.live || {};
@@ -20,10 +25,12 @@ function busy(peer) {
 }
 
 function link(peer) {
-  if (!peer.online) return peer.last_seen ? `hors ligne · vue ${ago(peer.last_seen)}` : 'jamais vue';
+  if (!peer.online) {
+    return esc(peer.last_seen ? t('connected.offline_seen', { ago: ago(peer.last_seen) }) : t('connected.never_seen'));
+  }
   const live = peer.live || {};
   const rtt = live.rtt_ms ?? live.internet_rtt_ms;
-  return `${ROUTES[live.route] || 'en ligne'}${rtt != null ? ` · ${Math.round(rtt)} ms` : ''}`;
+  return `${esc(t(ROUTES[live.route] || 'connected.online'))}${rtt != null ? ` · ${Math.round(rtt)} ms` : ''}`;
 }
 
 // Ce qu'elle prête : sa puissance (l'état du moment pour mes machines), ses modèles, sa carte
@@ -34,15 +41,15 @@ function lends(peer) {
   if (sharing ? sharing.enabled : p.images?.shares) {
     if (sharing && 'active' in sharing) {
       pills.push(sharing.active
-        ? '<span class="pill ok">sa puissance</span>'
-        : `<span class="pill warn" title="${esc(sharing.detail)}">puissance en pause</span>`);
+        ? `<span class="pill ok">${esc(t('connected.lends_power'))}</span>`
+        : `<span class="pill warn" title="${esc(pauseDetail(sharing))}">${esc(t('connected.power_paused'))}</span>`);
     } else {
-      pills.push('<span class="pill">sa puissance</span>');
+      pills.push(`<span class="pill">${esc(t('connected.lends_power'))}</span>`);
     }
   }
-  if (p.lends_models) pills.push('<span class="pill">ses modèles</span>');
-  if (p.cluster?.lends) pills.push('<span class="pill">sa carte graphique</span>');
-  return pills.length ? pills.join('') : '<span class="faint">rien</span>';
+  if (p.lends_models) pills.push(`<span class="pill">${esc(t('connected.lends_models'))}</span>`);
+  if (p.cluster?.lends) pills.push(`<span class="pill">${esc(t('connected.lends_gpu'))}</span>`);
+  return pills.length ? pills.join('') : `<span class="faint">${esc(t('connected.lends_nothing'))}</span>`;
 }
 
 // En ce moment, dans les deux sens
@@ -51,17 +58,25 @@ function now(peer) {
   const items = [];
   const forMe = sum(live.for_me);
   if (forMe) {
-    const what = live.for_me.map(j => `${j.title} (${plural(j.units, 'unité')})`).join(', ');
-    items.push(`<span class="live-in" title="${esc(what)}">${icon('bolt')}calcule ${plural(forMe, 'unité')} pour toi</span>`);
+    // Le titre d'un de mes travaux : traduit s'il est venu traduisible (title_t, cf. jobs.js)
+    const what = live.for_me.map(j => t('connected.job_units', { title: tt(j.title_t, j.title), n: j.units }))
+      .join(', ');
+    items.push(`<span class="live-in" title="${esc(what)}">${icon('bolt')}${esc(t('connected.computing_for_you',
+      { n: forMe }))}</span>`);
   }
-  if (live.chats_for_me) items.push(`<span class="live-in">${icon('chat')}répond à ta conversation</span>`);
+  if (live.chats_for_me) {
+    items.push(`<span class="live-in">${icon('chat')}${esc(t('connected.answering_your_chat'))}</span>`);
+  }
   const forIt = live.for_it || [];
   if (forIt.length) {
-    items.push(`<span class="live-out" title="${esc(forIt.join(', '))}">${icon('cpu')}tu calcules
-      ${plural(forIt.length, 'unité')} pour elle</span>`);
+    items.push(`<span class="live-out" title="${esc(forIt.join(', '))}">${icon('cpu')}${esc(t('connected.you_compute',
+      { n: forIt.length }))}</span>`);
   }
-  if (live.chats_for_it) items.push(`<span class="live-out">${icon('chat')}tu réponds à sa conversation</span>`);
-  return items.length ? items.join('') : `<span class="faint">${peer.online ? 'rien en ce moment' : '—'}</span>`;
+  if (live.chats_for_it) {
+    items.push(`<span class="live-out">${icon('chat')}${esc(t('connected.you_answer_its_chat'))}</span>`);
+  }
+  return items.length ? items.join('')
+    : `<span class="faint">${peer.online ? esc(t('connected.nothing_now')) : '—'}</span>`;
 }
 
 // Échangé depuis l'appairage, dans chaque sens : le temps de calcul des tâches, puis les
@@ -69,28 +84,30 @@ function now(peer) {
 function exchanged(peer) {
   const compute = [];
   if (peer.received_s) {
-    compute.push(`<span title="${plural(peer.received_units, 'unité')} calculée(s) pour toi">reçu ${duration(peer.received_s)}</span>`);
+    compute.push(`<span title="${esc(t('connected.received_units', { n: peer.received_units }))}">${
+      esc(t('connected.received', { time: duration(peer.received_s) }))}</span>`);
   }
   if (peer.given_s) {
-    compute.push(`<span title="${plural(peer.given_units, 'unité')} calculée(s) pour elle">donné ${duration(peer.given_s)}</span>`);
+    compute.push(`<span title="${esc(t('connected.given_units', { n: peer.given_units }))}">${
+      esc(t('connected.given', { time: duration(peer.given_s) }))}</span>`);
   }
   const chats = [];
-  if (peer.received_chats) chats.push(`${peer.received_chats} pour toi`);
-  if (peer.given_chats) chats.push(`${peer.given_chats} pour elle`);
+  if (peer.received_chats) chats.push(t('connected.chats_for_you', { n: peer.received_chats }));
+  if (peer.given_chats) chats.push(t('connected.chats_for_it', { n: peer.given_chats }));
   const lines = [];
   if (compute.length) lines.push(compute.join(' · '));
   // Fiabilité : ses résultats refusés (faux ou illisibles), les unités qu'elle n'a pas pu calculer
   const trouble = [];
-  if (peer.refused_units) trouble.push(`${plural(peer.refused_units, 'résultat')} refusé${peer.refused_units > 1 ? 's' : ''}`);
-  if (peer.failed_units) trouble.push(`${plural(peer.failed_units, 'échec')}`);
+  if (peer.refused_units) trouble.push(t('connected.refused_results', { n: peer.refused_units }));
+  if (peer.failed_units) trouble.push(t('connected.failures', { n: peer.failed_units }));
   if (trouble.length) {
-    lines.push(`<span class="live-trouble" title="Résultats qu'elle t'a rendus et qui ont été refusés (faux ou illisibles), et unités qu'elle n'a pas pu calculer pour toi">${trouble.join(' · ')}</span>`);
+    lines.push(`<span class="live-trouble" title="${esc(t('connected.trouble_title'))}">${esc(trouble.join(' · '))}</span>`);
   }
   if (chats.length) {
-    lines.push(`<span title="Réponses de ses modèles à tes conversations, et des tiens aux siennes">${
-      peer.received_chats + peer.given_chats > 1 ? 'conversations' : 'conversation'} : ${chats.join(' · ')}</span>`);
+    lines.push(`<span title="${esc(t('connected.chats_title'))}">${esc(t('connected.chats',
+      { n: (peer.received_chats || 0) + (peer.given_chats || 0), list: chats.join(' · ') }))}</span>`);
   }
-  return lines.length ? lines.join('<br>') : '<span class="faint">rien encore</span>';
+  return lines.length ? lines.join('<br>') : `<span class="faint">${esc(t('connected.nothing_yet'))}</span>`;
 }
 
 function summary(net) {
@@ -100,15 +117,14 @@ function summary(net) {
   const helped = online.filter(p => (p.live?.for_it || []).length || p.live?.chats_for_it).length;
   const lending = online.filter(p => lendsNow(p.live?.sharing)).length;
   const me = net.sharing;
-  const chips = [`<span class="pill ${online.length ? 'ok' : 'idle'}">${online.length} en ligne sur ${peers.length}</span>`];
-  if (lending) {
-    chips.push(`<span class="pill ok">${lending} ${lending > 1 ? 'prêtent leur' : 'prête sa'} puissance</span>`);
-  }
-  if (helping) chips.push(`<span class="pill run">${helping} travaille${helping > 1 ? 'nt' : ''} pour toi</span>`);
-  if (helped) chips.push(`<span class="pill run">tu travailles pour ${helped}</span>`);
+  const chips = [`<span class="pill ${online.length ? 'ok' : 'idle'}">${esc(t('connected.online_of',
+    { online: online.length, total: peers.length }))}</span>`];
+  if (lending) chips.push(`<span class="pill ok">${esc(t('connected.lending', { n: lending }))}</span>`);
+  if (helping) chips.push(`<span class="pill run">${esc(t('connected.helping', { n: helping }))}</span>`);
+  if (helped) chips.push(`<span class="pill run">${esc(t('connected.helped', { n: helped }))}</span>`);
   if (me) {
-    chips.push(me.active ? '<span class="pill">cette machine prête la sienne</span>'
-      : `<span class="pill idle" title="${esc(me.detail || '')}">cette machine ne prête pas en ce moment</span>`);
+    chips.push(me.active ? `<span class="pill">${esc(t('connected.me_lending'))}</span>`
+      : `<span class="pill idle" title="${esc(pauseDetail(me))}">${esc(t('connected.me_not_lending'))}</span>`);
   }
   return chips.join('');
 }
@@ -121,11 +137,9 @@ function nudge(net) {
   const s = state.settings || {};
   const hasModels = (state.models || []).some(m => m.group === 'local');
   if (received < 3 || given > 0 || s.share_enabled || (s.lend_models && hasModels)) return '';
-  return `<div class="banner info live-nudge">${icon('bolt')}<div>Tes machines et tes amis t'ont déjà rendu
-    ${received} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour
-    participer : ${hasModels ? '' : 'installe un modèle, puis '}active « Prêter mes modèles » ou
-    « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.</div>
-    <button class="btn sm" data-go-node>Cette machine</button></div>`;
+  return `<div class="banner info live-nudge">${icon('bolt')}<div>${esc(t(hasModels ? 'connected.nudge'
+    : 'connected.nudge_no_models', { n: received }))}</div>
+    <button class="btn sm" data-go-node>${esc(t('nav.node'))}</button></div>`;
 }
 
 /** La carte « Machines connectées », en tête de la vue Réseau. */
@@ -133,31 +147,31 @@ function nudge(net) {
 function introduced(peer, net) {
   if (!peer.introduced_by) return '';
   const by = net.peers.find(p => p.node_id === peer.introduced_by);
-  return ` title="${esc(`Présentée par ${by ? `« ${by.name} »` : 'une machine retirée depuis'}`)}"`;
+  return ` title="${esc(by ? t('connected.introduced_by', { name: by.name }) : t('connected.introduced_by_removed'))}"`;
 }
 
 export function renderConnected(box, net) {
   box.hidden = !net.enabled;
   if (!net.enabled) return;
   const order = [...net.peers].sort((a, b) => (b.online - a.online) || (busy(b) - busy(a))
-    || a.name.localeCompare(b.name, 'fr'));
+    || a.name.localeCompare(b.name, locale()));
   const rows = order.map(peer => `
     <tr class="${peer.online ? '' : 'off'}">
       <td class="live-name"><span class="dot ${peer.online ? 'on' : ''}"></span><b${introduced(peer, net)}>${esc(peer.name)}</b>
-        ${peer.trust === 'friend' ? '<span class="pill">ami</span>' : ''}</td>
+        ${peer.trust === 'friend' ? `<span class="pill">${esc(t('connected.friend'))}</span>` : ''}</td>
       <td class="faint">${link(peer)}</td>
       <td><div class="caps">${lends(peer)}</div></td>
       <td class="live-now">${now(peer)}</td>
       <td class="faint">${exchanged(peer)}</td>
     </tr>`).join('');
+  const columns = ['connected.col_machine', 'connected.col_link', 'connected.col_lends', 'connected.col_now',
+    'connected.col_exchanged'].map(key => `<th>${esc(t(key))}</th>`).join('');
   box.innerHTML = `
-    <h2>${icon('bolt')}Machines connectées</h2>
-    <p class="hint">En direct : qui est en ligne, qui prête sa puissance, et ce que chaque machine fait pour
-      l'autre. Nouvelles toutes les 15 secondes environ.</p>
+    <h2>${icon('bolt')}${esc(t('connected.title'))}</h2>
+    <p class="hint">${esc(t('connected.hint'))}</p>
     ${net.peers.length ? `${nudge(net)}<div class="live-summary">${summary(net)}</div>
-      <table class="live"><thead><tr><th>Machine</th><th>Liaison</th><th>Prête</th><th>En ce moment</th>
-        <th>Échangé</th></tr></thead><tbody>${rows}</tbody></table>`
-      : '<div class="empty" style="padding:14px">Aucune machine appairée : appaire tes machines plus bas.</div>'}`;
+      <table class="live"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty" style="padding:14px">${esc(t('connected.empty'))}</div>`}`;
   box.querySelector('[data-go-node]')?.addEventListener('click', () => emit('view:show', 'node'));
 }
 
@@ -177,9 +191,9 @@ export function mountRailStatus() {
     dot.hidden = !online.length;
     if (!peers) return;
     const helping = online.filter(p => sum(p.live?.for_me) || p.live?.chats_for_me).length;
-    status.innerHTML = !peers.length ? 'Aucune machine appairée'
-      : `<span class="dot ${online.length ? 'on' : ''}"></span>${plural(online.length, 'machine')} en ligne`
-        + (helping ? ` <span class="work">${icon('bolt')}${helping} travaille${helping > 1 ? 'nt' : ''} pour toi</span>` : '');
-    status.title = online.map(p => p.name).join(', ') || 'Aucune machine en ligne';
+    status.innerHTML = !peers.length ? esc(t('connected.rail_no_peers'))
+      : `<span class="dot ${online.length ? 'on' : ''}"></span>${esc(t('connected.rail_online', { n: online.length }))}`
+        + (helping ? ` <span class="work">${icon('bolt')}${esc(t('connected.helping', { n: helping }))}</span>` : '');
+    status.title = online.map(p => p.name).join(', ') || t('connected.rail_none_online');
   });
 }

@@ -1,0 +1,8 @@
+{
+  "this_machine": "Cette machine",
+  "peer_friend": "{name} (ami)",
+  "label_auto": "{name} · automatique",
+  "label_split": "{name} · réparti",
+  "label_here": "{name} · cette machine",
+  "label_other": "{name} · autre machine"
+}

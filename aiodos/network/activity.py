@@ -24,14 +24,19 @@ _chats = {"for": Counter(),  # conversations d'une machine servies par mes modè
 
 
 def field(manager, sender) -> dict:
-    """{"sharing": …} à joindre aux nouvelles de cette machine (ping, profil)."""
+    """{"sharing": …} à joindre aux nouvelles de cette machine (ping, profil). Sa raison :
+    detail, dans la langue de cette machine (pour une version d'avant), et detail_t, la même
+    à traduire chez celle qui la lit (i18n.lazy, worker.sharing_state)."""
     enabled = bool(settings.get("share_enabled"))
     if sharing.level(sender) != sharing.MINE:
         return {"sharing": {"enabled": enabled}}
     worker = getattr(manager, "worker", None)
     state = getattr(worker, "state", None) or {}
-    return {"sharing": {"enabled": enabled, "active": bool(state.get("active")),
-                        "detail": str(state.get("detail") or "")}}
+    found = {"enabled": enabled, "active": bool(state.get("active")),
+             "detail": str(state.get("detail") or "")}
+    if isinstance(state.get("detail_t"), list):
+        found["detail_t"] = state["detail_t"]
+    return {"sharing": found}
 
 
 def note(node_id: str, reply: dict, rtt_ms: float | None = None):

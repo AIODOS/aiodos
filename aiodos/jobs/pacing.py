@@ -24,7 +24,7 @@ import os
 import threading
 import time
 
-from aiodos import settings
+from aiodos import i18n, settings
 from aiodos.jobs.registry import Interrupted
 from aiodos.node import power
 from aiodos.services import ollama
@@ -38,8 +38,9 @@ POLL = 0.25                  # attente d'une fin de conversation : vérification
 PAUSE_POLL = 5               # « pause » : le secteur est-il revenu ?
 EMBED_BATCH = 16             # comme services.ollama.embed
 
+# detail : la clé de son explication (i18n/*/jobs.json), traduite par describe()
 AC = {"mode": "ac", "on_battery": False, "slots": None, "duty": 1.0, "threads": None,
-      "detail": "Sur secteur : le travail de fond avance à pleine vitesse, en priorité basse."}
+      "detail": "jobs.pacing_ac"}
 
 _lock = threading.Lock()
 _state = {"at": 0.0, "regime": AC}
@@ -70,14 +71,13 @@ def _regime(mode: str, supply: dict) -> dict:
         return AC
     if mode == "normal":
         return {**AC, "mode": "normal", "on_battery": True,
-                "detail": "Sur batterie : le travail de fond avance à pleine vitesse (réglage)."}
+                "detail": "jobs.pacing_normal"}
     if mode == "pause":
         return {**AC, "mode": "pause", "on_battery": True, "slots": dict.fromkeys(BATTERY_SLOTS, 0),
-                "detail": "Sur batterie : le travail de fond attend le retour du secteur."}
+                "detail": "jobs.pacing_pause"}
     return {"mode": "eco", "on_battery": True, "slots": dict(BATTERY_SLOTS),
             "duty": BATTERY_DUTY, "threads": eco_threads(),
-            "detail": "Sur batterie : travail de fond ménagé (une unité à la fois par "
-                      "ressource, pauses entre les lots, moins de fils de calcul)."}
+            "detail": "jobs.pacing_eco"}
 
 
 def refresh(force: bool = False) -> dict:
@@ -253,4 +253,4 @@ def shutdown():
 def describe() -> dict:
     regime = current()
     return {"mode": regime["mode"], "on_battery": regime["on_battery"],
-            "detail": regime["detail"], "chatting": chatting()}
+            "detail": i18n.t(regime["detail"]), "chatting": chatting()}

@@ -30,6 +30,7 @@ from pathlib import Path
 import requests
 
 from aiodos.cluster import engine, plan, weights
+from aiodos.i18n import t
 from aiodos.llm.messages import SAMPLING, for_template  # noqa: F401  (aussi cluster.group.for_template)
 from aiodos.network import client, peers, route, sharing
 from aiodos.network.client import PeerError
@@ -49,8 +50,7 @@ CONTEXT = 8192
 TUNNEL_CONNECTIONS = 4
 WATCH_EVERY = 1               # s : llama-server arrêté → tunnels fermés
 GUARDED = "guarded"           # dit aux machines qui prêtent que le tunnel est gardé (helper.lend)
-NOT_ON_PHONE = ("Sur le téléphone, AIODOS n'emprunte pas de carte graphique : il ne peut pas "
-                "vérifier quel programme se connecte au tunnel vers la carte prêtée.")
+NOT_ON_PHONE = "cluster.not_on_phone"   # clé du texte, traduit à l'usage (t)
 NO_PROXY = {"http": None, "https": None}
 
 _lock = threading.Lock()
@@ -94,6 +94,7 @@ def _guard_problem() -> str | None:
     """Pourquoi cette machine ne peut pas ouvrir de tunnel gardé vers une carte prêtée."""
     companion = route.companion()
     if companion is None or not companion.running:
+        # i18n: tel quel (raison écrite au journal seulement, cf. _note_unavailable)
         return ("le compagnon aiodos-net ne tourne pas (réglage « Relier mes machines par "
                 "Internet »)")
     return companion.tunnel_guard_problem()
@@ -172,15 +173,13 @@ class Group:
             self.status = text
             report(text)
         if android_app.in_app():
-            raise RuntimeError(NOT_ON_PHONE)
+            raise RuntimeError(t(NOT_ON_PHONE))
         found = engine.info(max_age=0)
         if not found:
-            raise RuntimeError("llama.cpp n'est pas installé sur cette machine "
-                               "(réglage « Dossier de llama.cpp »).")
+            raise RuntimeError(t("cluster.llama_not_installed"))
         companion = route.companion()
         if companion is None or not companion.running:
-            raise RuntimeError("Le compagnon aiodos-net ne tourne pas : il relie les machines "
-                               "du groupe (réglage « Relier mes machines par Internet »).")
+            raise RuntimeError(t("cluster.companion_not_running"))
         problem = companion.tunnel_guard_problem()    # avant de demander la moindre carte
         if problem:
             raise RuntimeError(problem)
@@ -190,14 +189,13 @@ class Group:
         cut = plan.make(head["size"], head["layers"], engine.best_device(found["devices"]),
                         helpers)
         if not cut:
-            raise RuntimeError("Aucune de mes machines ne prête sa carte graphique en ce "
-                               "moment (réglage « Prêter ma carte graphique » chez elles).")
+            raise RuntimeError(t("cluster.no_lender"))
         try:
             for helper in cut["helpers"]:
                 if stop is not None and stop.is_set():
-                    raise RuntimeError("Mise en place du modèle réparti interrompue.")
+                    raise RuntimeError(t("cluster.setup_interrupted"))
                 peer = peers.get(helper["node_id"])
-                progress(f"Demande de la carte graphique de « {peer['name']} »…")
+                progress(t("cluster.asking_card", name=peer["name"]))
                 reply = client.call(identity.node_id(), peer, "cluster/lend",
                                     {"version": found["version"], "model": self.name,
                                      "tunnel": GUARDED},
@@ -207,7 +205,7 @@ class Group:
             # Les tunnels juste avant llama-server, réservés à lui seul (cf. _spawned)
             for loan in self.loans:
                 if stop is not None and stop.is_set():
-                    raise RuntimeError("Mise en place du modèle réparti interrompue.")
+                    raise RuntimeError(t("cluster.setup_interrupted"))
                 loan[2] = companion.open_tunnel(loan[0]["net_id"], loan[1],
                                                 max_connections=TUNNEL_CONNECTIONS)
             # Des nouvelles dès maintenant : un premier chargement dure souvent plus que les
@@ -216,14 +214,13 @@ class Group:
             threading.Thread(target=self._keep, daemon=True,
                              name=f"aiodos-groupe-{self.name}").start()
             machines = len(self.loans) + 1
-            progress(f"Chargement de {self.name} sur {machines} machines : la première fois, "
-                     "les poids traversent le réseau, puis chaque machine les garde…")
+            progress(t("cluster.loading_on", model=self.name, machines=machines))
             self.server = engine.llama_server(
                 Path(found["folder"]), path, [port for _, _, port in self.loans],
                 cut["devices"], cut["split"], self.api_key, CONTEXT, cut["layers"])
             self.server.start(timeout=LOAD_TIMEOUT, ready=lambda: engine.loaded(self.server.port),
                               stop=stop, waiting=lambda seconds: progress(
-                                  f"Chargement du modèle réparti… {seconds} s"),
+                                  t("cluster.loading_wait", seconds=seconds)),
                               spawned=lambda pid: self._spawned(companion, pid))
         except Exception:
             self.close()
@@ -241,8 +238,7 @@ class Group:
             try:
                 companion.set_tunnel_owner(port, pid)
             except CompanionError as exc:
-                raise RuntimeError("Le compagnon aiodos-net ne réserve pas le tunnel à "
-                                   f"llama-server : {exc}") from exc
+                raise RuntimeError(t("cluster.tunnel_not_reserved", error=exc)) from exc
         threading.Thread(target=self._watch_server, args=(self.server,), daemon=True,
                          name=f"aiodos-groupe-{self.name}-serveur").start()
 
@@ -329,7 +325,7 @@ class Group:
             with requests.post(url, json=body, headers=headers, stream=True,
                                timeout=(10, 900), proxies=NO_PROXY) as r:
                 if r.status_code >= 400:
-                    raise RuntimeError(f"llama-server : {r.text[:300]}")
+                    raise RuntimeError(t("cluster.server_error", error=r.text[:300]))
                 r.encoding = "utf-8"          # flux sans encodage déclaré : pas de Latin-1
                 for line in r.iter_lines(decode_unicode=True):
                     if stop is not None and stop.is_set():
@@ -360,8 +356,7 @@ class Group:
         except requests.RequestException as exc:
             _forget(self)
             self.close()
-            raise RuntimeError("Le modèle réparti ne répond plus : une machine du groupe est "
-                               "peut-être partie. Réessaie, il sera remonté.") from exc
+            raise RuntimeError(t("cluster.not_responding")) from exc
         finally:
             self.last_used = time.monotonic()
 
@@ -382,7 +377,7 @@ def _group(name: str, retry: bool = True, stop=None, progress=None) -> Group:
     said = None
     while not group.lock.acquire(timeout=1):
         if stop is not None and stop.is_set():
-            raise RuntimeError("Mise en place du modèle réparti interrompue.")
+            raise RuntimeError(t("cluster.setup_interrupted"))
         if progress is not None and group.status and group.status != said:
             said = group.status
             progress(said)
@@ -398,7 +393,7 @@ def _group(name: str, retry: bool = True, stop=None, progress=None) -> Group:
             group.close()
             if retry:
                 return _group(name, retry=False, stop=stop, progress=progress)
-            raise RuntimeError("Le modèle réparti ne démarre pas : réessaie plus tard.")
+            raise RuntimeError(t("cluster.wont_start"))
     finally:
         group.lock.release()
     return group
@@ -414,7 +409,7 @@ def prepare(model, changed=None) -> dict:
     après une réponse. → {"state": "preparing" | "ready" | "error", "status", "error"}."""
     name = parse(model)
     if not name:
-        raise RuntimeError("Modèle réparti inconnu.")
+        raise RuntimeError(t("cluster.unknown_model"))
     with _lock:
         if _usable(_groups.get(name)):
             return {"state": "ready", "status": None, "error": None}
@@ -463,7 +458,7 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
     aussitôt."""
     name = parse(model)
     if not name:
-        raise RuntimeError("Modèle réparti inconnu.")
+        raise RuntimeError(t("cluster.unknown_model"))
     news, result = queue.Queue(), {}
 
     def prepare():

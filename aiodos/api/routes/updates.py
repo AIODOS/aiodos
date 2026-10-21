@@ -5,6 +5,7 @@ machine en montre un autre sous le même numéro."""
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from aiodos.i18n import t
 from aiodos.network.client import PeerError
 from aiodos.node import identity
 from aiodos.updates import approval
@@ -29,7 +30,7 @@ def check(request: Request):
 @router.post("/updates/restart")
 def restart_now(request: Request):
     if not request.app.state.updates.restart_now():
-        raise HTTPException(409, "Aucune nouvelle version prête à démarrer.")
+        raise HTTPException(409, t("updates.nothing_to_restart"))
     return {"ok": True}
 
 

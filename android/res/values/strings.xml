@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Les textes de l'appli : un fichier par fonctionnalité (notification.xml, startup.xml,
+     links.xml), en anglais ici, la langue de repli, et en français dans values-fr (Texts.java). -->
 <resources>
-    <string name="app_name">AIODOS</string>
+    <string name="app_name" translatable="false">AIODOS</string>
 </resources>

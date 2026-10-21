@@ -1,20 +1,21 @@
 // Téléphone (écran étroit) : « Plus » dans la barre du bas pour les vues moins courantes ; le
 // bouton Retour d'Android ; la barre cachée tant que le clavier est ouvert.
 import { $ } from './dom.js';
+import { t } from './i18n.js';
 import { state, on, emit } from './state.js';
 import { menu } from './ui.js';
 
-const MORE = [['library', 'Bibliothèques'], ['node', 'Cette machine'], ['settings', 'Réglages']];
+const MORE = ['library', 'node', 'settings'];        // libellés : nav.json, comme la barre
 const phone = matchMedia('(max-width: 760px)');
 let listShown = false;          // liste des conversations ouverte par-dessus
 let leaving = false;            // retour demandé par l'interface, pas par le bouton Retour
 
 export function mountMobile() {
   const more = $('#rail-more');
-  more.onclick = () => menu(more, MORE.map(([view, label]) => (
-    { label, icon: view, action: () => emit('view:show', view) })));
+  more.onclick = () => menu(more, MORE.map(view => (
+    { label: t(`nav.${view}`), icon: view, action: () => emit('view:show', view) })));
   on('view:shown', view => {
-    more.classList.toggle('active', MORE.some(([v]) => v === view));
+    more.classList.toggle('active', MORE.includes(view));
     sync();
   });
   on('chat:list-shown', shown => { listShown = shown; sync(); });

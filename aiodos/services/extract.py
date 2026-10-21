@@ -25,6 +25,7 @@ import time
 import zipfile
 from pathlib import Path
 
+from aiodos.i18n import t
 from aiodos.services import archives
 
 TEXT_EXT = {
@@ -138,25 +139,22 @@ def why_unread(path) -> str | None:
         return None
     try:
         if p.stat().st_size > MAX_TEXT_BYTES:
-            return (f"fichier de plus de {MAX_TEXT_BYTES // (1024 * 1024)} Mo : il n'est "
-                    "pas lu")
+            return t("extract.file_too_big", size=MAX_TEXT_BYTES // (1024 * 1024))
     except OSError:
         return None
     if p.suffix.lower() in archives.ZIP_DOCUMENTS:
         reason = archives.refusal(p)
         if reason is not None:
-            return f"document non lu : {reason}"
+            return t("extract.archive_refused", reason=reason)
     if p.suffix.lower() in MARKUP_EXT:
         try:
             text = _markup_text(p)
         except OSError:
             return None
         if text is None:
-            return (f"document de plus de {MAX_MARKUP_BYTES // (1024 * 1024)} Mo : HTML et "
-                    "RTF s'analysent en entier, il n'est pas lu")
+            return t("extract.markup_too_big", size=MAX_MARKUP_BYTES // (1024 * 1024))
         if p.suffix.lower() == ".rtf" and _rtf_too_deep(text):
-            return (f"RTF aux groupes imbriqués sur plus de {MAX_RTF_DEPTH} niveaux : il "
-                    "n'est pas lu")
+            return t("extract.rtf_too_deep", depth=MAX_RTF_DEPTH)
     return None
 
 
@@ -201,11 +199,14 @@ def _extract_document(p: Path, pace=None):
             for row in table.rows:
                 parts.append(" | ".join(cell.text for cell in row.cells))
         return "\n".join(parts)
+    # Les en-têtes de diapositive et de feuille font partie du texte extrait : le même sur
+    # chaque machine, quelle que soit sa langue (un ami rend exactement ce découpage,
+    # index.sample_embedded)
     if ext == ".pptx":
         from pptx import Presentation
         parts = []
         for number, slide in enumerate(paced(Presentation(str(p)).slides, pace), 1):
-            parts.append(f"# Diapositive {number}")
+            parts.append(f"# Diapositive {number}")         # i18n: tel quel (texte extrait)
             for shape in slide.shapes:
                 if shape.has_text_frame:
                     parts.append(shape.text_frame.text)
@@ -215,7 +216,7 @@ def _extract_document(p: Path, pace=None):
         wb = openpyxl.load_workbook(str(p), read_only=True, data_only=True)
         parts = []
         for ws in paced(wb.worksheets, pace):
-            parts.append(f"# Feuille : {ws.title}")
+            parts.append(f"# Feuille : {ws.title}")          # i18n: tel quel (texte extrait)
             # Les dimensions annoncées par la feuille ne comptent pas : openpyxl comblerait
             # jusqu'à elles chaque ligne et les lignes manquantes (A1:XFD1048576 dans un
             # fichier de quelques Ko : des milliards de cases vides parcourues)

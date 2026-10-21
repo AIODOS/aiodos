@@ -1,0 +1,18 @@
+{
+  "unreadable": "Manifeste illisible.",
+  "too_large": "Manifeste démesuré : version ignorée.",
+  "unknown_key": "Version signée par une clé inconnue : ignorée.",
+  "bad_signature": "Signature invalide : version ignorée.",
+  "not_approved": "Version pas encore approuvée sur l'appareil d'approbation : ignorée.",
+  "unknown_format": "Manifeste d'un format inconnu.",
+  "bad_version": "Numéro de version illisible dans le manifeste.",
+  "no_files": "Manifeste sans fichier.",
+  "bad_file_name": "Nom de fichier refusé dans le manifeste.",
+  "bad_file_size": "Taille de fichier refusée dans le manifeste.",
+  "bad_file_digest": "Empreinte de fichier refusée dans le manifeste.",
+  "one_source": "Le manifeste doit contenir une archive du code, et une seule.",
+  "version_unreadable": "Numéro de version illisible : {version}",
+  "unknown_file": "Fichier inconnu dans les paquets de cette machine.",
+  "missing_file": "Fichier absent des paquets de cette machine.",
+  "bad_download": "Fichier reçu incomplet ou altéré : il sera téléchargé de nouveau."
+}

@@ -1,0 +1,14 @@
+{
+  "discovery_port_taken": "Another program holds the announcement port: this node announces itself to your machines, but doesn't see theirs.",
+  "discovery_unavailable": "Automatic discovery unavailable ({error}). Adding by address still works.",
+  "port_unavailable": "Port {port} is unavailable: the network couldn't start.",
+  "port_held_by_node": "Another AIODOS node (“{name}”) is running on this device and holds port {port}: stop it (the old Termux node on a phone: restarting the phone is enough). Meanwhile, this node uses port {spare}.",
+  "port_taken": "Port {port} is taken by another program: this node uses port {spare}, which it announces to your machines.",
+  "own_address": "That's the address of this very machine.",
+  "local_network": "local network",
+  "public_unsupported": "This version's Internet companion doesn't know the public network yet: it will come with the next update.",
+  "public_needs_internet": "First turn on “Internet”: the public network goes through it.",
+  "cannot_reach": "Can't reach {address}: {error}",
+  "machine_not_found": "Machine not found on the network.",
+  "paired_not_found": "Paired machine not found."
+}

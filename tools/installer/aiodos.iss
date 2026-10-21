@@ -37,7 +37,7 @@ AppVersion={#AppVersion}
 AppVerName=AIODOS {#AppVersion}
 AppPublisher=22ème Arkane
 AppPublisherURL=https://github.com/AIODOS/aiodos
-AppComments=Atelier d'IA local, réparti entre tes machines
+AppComments={cm:AppComments}
 DefaultDirName={autopf}\AIODOS
 DisableDirPage=yes
 UsePreviousAppDir=no
@@ -61,8 +61,9 @@ RestartApplications=no
 ShowLanguageDialog=no
 
 [Languages]
-Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
+; La langue de Windows choisit ; ni française ni anglaise : la première, l'anglais
 Name: "en"; MessagesFile: "compiler:Default.isl"
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 
 [CustomMessages]
 fr.OllamaTask=Télécharger et installer Ollama, le moteur des conversations (depuis ollama.com, environ 1 Go)
@@ -79,6 +80,10 @@ fr.DeleteData=Supprimer aussi tes données AIODOS (conversations, bibliothèques
 en.DeleteData=Also delete your AIODOS data (conversations, libraries, settings, images, downloaded models)?
 fr.AppComment=AIODOS, l'atelier d'IA local
 en.AppComment=AIODOS, the local AI workshop
+fr.AppComments=Atelier d'IA local, réparti entre tes machines
+en.AppComments=Local AI workshop, shared across your machines
+fr.BackgroundShortcut=AIODOS, en arrière-plan
+en.BackgroundShortcut=AIODOS, in the background
 fr.OutsideProfile=AIODOS s'installe dans ton dossier personnel (%1). Le dossier demandé, %2, est hors de ton profil : les autres comptes de ce PC pourraient y modifier le programme qu'AIODOS lance. Relance l'installeur sans choisir de dossier.
 en.OutsideProfile=AIODOS installs in your personal folder (%1). The requested folder, %2, is outside your profile: other accounts on this PC could modify the program AIODOS runs. Run the installer again without choosing a folder.
 fr.OldFolder=Une ancienne installation d'AIODOS se trouvait dans %1. Elle n'est plus utilisée : AIODOS est maintenant installé dans %2 (tes données ne changent pas de place). Le démarrage avec Windows, s'il était activé, lance maintenant cette nouvelle installation. Tu peux supprimer l'ancien dossier.
@@ -174,7 +179,7 @@ begin
   if Pos(Lowercase(AddBackslash(PreviousDir)), Lowercase(ShortcutTarget(Link))) <> 1 then
     exit;
   try
-    CreateShellLink(Link, 'AIODOS, en arrière-plan', ExpandConstant('{app}\runtime\pythonw.exe'),
+    CreateShellLink(Link, CustomMessage('BackgroundShortcut'), ExpandConstant('{app}\runtime\pythonw.exe'),
       '-m aiodos --background', ExpandConstant('{app}\app'),
       ExpandConstant('{app}\app\assets\{#Icon}'), 0, 7);
   except

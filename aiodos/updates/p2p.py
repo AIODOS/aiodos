@@ -23,6 +23,7 @@ lu sans rien supposer de sa forme (offered_by, held_by).
 import threading
 import time
 
+from aiodos.i18n import t
 from aiodos.network import client, envelope
 from aiodos.network.client import PeerError
 from aiodos.updates import approval
@@ -36,8 +37,7 @@ TIMEOUT = 60                     # délai de lecture d'un appel (client.call)
 CALL_LIMIT = 150                 # durée totale d'un appel, réponse comprise
 MIN_RATE = 32 * 1024             # octets par seconde, en moyenne sur un fichier
 FILE_MARGIN = 120                # secondes accordées en plus à chaque fichier
-TOO_SLOW = ("L'autre machine transmet trop lentement : transfert abandonné, il reprendra "
-            "plus tard.")
+TOO_SLOW = "updates_transfer.too_slow"     # la clé de son texte (i18n), traduit à l'usage
 
 _lock = threading.Lock()
 _stuck = {}                      # machine -> fil d'un appel resté sans réponse
@@ -55,7 +55,7 @@ def serve_manifest(manager, sender, payload):
     except UpdateError:
         held = []
     if not held:
-        raise PeerError("Version indisponible sur cette machine.")
+        raise PeerError(t("updates_transfer.not_here"))
     # Réduite à sa forme canonique : elle a pu être gardée telle quelle par une version
     # plus ancienne, avec ce que la machine qui l'a transmise y avait ajouté
     return {"signed": manifests.canonical(store.signed(wanted))}
@@ -66,7 +66,7 @@ def serve_chunk(manager, sender, payload):
         offset = max(0, int(payload.get("offset") or 0))
         size = min(CHUNK, max(1, int(payload.get("size") or CHUNK)))
     except (TypeError, ValueError) as exc:
-        raise PeerError("Demande illisible.") from exc
+        raise PeerError(t("updates_transfer.bad_request")) from exc
     try:
         data = _store().read_chunk(str(payload.get("version") or ""),
                                    str(payload.get("name") or ""), offset, size)
@@ -116,8 +116,7 @@ def _call(my_id: str, peer: dict, action: str, payload: dict,
     with _lock:
         waiting = _stuck.get(node)
         if waiting is not None and waiting.is_alive():
-            raise UpdateError("L'autre machine n'a toujours pas répondu à la demande "
-                              "précédente.")
+            raise UpdateError(t("updates_transfer.still_waiting"))
         _stuck.pop(node, None)
     box = {}
 
@@ -132,12 +131,12 @@ def _call(my_id: str, peer: dict, action: str, payload: dict,
     if worker.is_alive():
         with _lock:
             _stuck[node] = worker
-        raise UpdateError(TOO_SLOW)
+        raise UpdateError(t(TOO_SLOW))
     if "error" in box:
         raise box["error"]
     reply = box.get("reply")
     if not isinstance(reply, dict):
-        raise UpdateError("Réponse illisible de l'autre machine.")
+        raise UpdateError(t("updates_transfer.bad_reply"))
     return reply
 
 
@@ -145,7 +144,7 @@ def _manifest(my_id: str, peer: dict, wanted: str, store: Store) -> dict:
     reply = _call(my_id, peer, "update/manifest", {"version": wanted})
     found = manifests.verify(reply.get("signed"))
     if found["version"] != wanted:
-        raise UpdateError("La machine a envoyé une autre version que celle annoncée.")
+        raise UpdateError(t("updates_transfer.other_version"))
     store.add_manifest(reply["signed"])
     return found
 
@@ -180,16 +179,16 @@ def _download(my_id: str, peer: dict, wanted: str, item: dict, store: Store, pro
         while received < item["size"]:
             left = deadline - time.monotonic()
             if left <= 0:
-                raise UpdateError(TOO_SLOW)
+                raise UpdateError(t(TOO_SLOW))
             expected = min(CHUNK, item["size"] - received)
             data = _chunk_bytes(_call(my_id, peer, "update/chunk",
                                       {"version": wanted, "name": item["name"],
                                        "offset": received, "size": CHUNK},
                                       limit=min(CALL_LIMIT, left)))
             if not data:
-                raise UpdateError("Transfert interrompu par l'autre machine.")
+                raise UpdateError(t("updates_transfer.interrupted"))
             if len(data) != expected:
-                raise UpdateError("Morceau de taille inattendue : transfert interrompu.")
+                raise UpdateError(t("updates_transfer.bad_chunk"))
             out.write(data)
             received += len(data)
             if progress:
@@ -218,6 +217,6 @@ def fetch_file(my_id: str, peer: dict, wanted: str, kind: str, store: Store,
         found = _manifest(my_id, peer, wanted, store)
     item = next((f for f in found["files"] if f.get("kind") == kind), None)
     if item is None:
-        raise UpdateError(f"La version {wanted} ne livre pas de fichier « {kind} ».")
+        raise UpdateError(t("updates_transfer.no_such_file", version=wanted, kind=kind))
     _download(my_id, peer, wanted, item, store, progress)
     return item

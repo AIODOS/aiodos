@@ -55,8 +55,9 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from aiodos import db
-from aiodos.network import client, crypto, envelope, netinfo, peers, route, sharing
+from aiodos import db, i18n
+from aiodos.i18n import t
+from aiodos.network import client, crypto, envelope, netinfo, peers, profile, route, sharing
 from aiodos.network.client import PeerError
 from aiodos.updates import launcher
 
@@ -120,9 +121,9 @@ def _ip(value) -> str | None:
 
 def _read_card(raw) -> dict:
     if not isinstance(raw, dict) or not peers.valid_id(raw.get("node_id")):
-        raise PeerError("Présentation illisible.")
+        raise PeerError(t("group.unreadable"))
     address, port = _ip(raw.get("address")), raw.get("port")
-    return {"node_id": raw["node_id"], "name": str(raw.get("name") or "Machine sans nom")[:60],
+    return {"node_id": raw["node_id"], "name": str(raw.get("name") or t("pairing.unnamed"))[:60],
             "address": address,
             "port": port if address and isinstance(port, int) and 0 < port < 65536 else None,
             "net": netinfo.clean(raw.get("net"))}
@@ -131,7 +132,7 @@ def _read_card(raw) -> dict:
 def _intro(payload) -> str:
     intro = str((payload or {}).get("intro") or "")
     if not intro or len(intro) > 64:
-        raise PeerError("Présentation illisible.")
+        raise PeerError(t("group.unreadable"))
     return intro
 
 
@@ -140,9 +141,9 @@ def _pub(value) -> bytes:
     try:
         pub = envelope.b64d(value)
     except (TypeError, ValueError, AttributeError) as exc:
-        raise PeerError("Présentation illisible.") from exc
+        raise PeerError(t("group.unreadable")) from exc
     if len(pub) != 32:
-        raise PeerError("Présentation illisible.")
+        raise PeerError(t("group.unreadable"))
     return pub
 
 
@@ -150,7 +151,7 @@ def _pair_secrets(private, pub: bytes, me: str, other: str):
     try:
         return crypto.pair_secrets(private, pub, me, other)
     except ValueError as exc:                    # clé faible (secret commun nul)
-        raise PeerError("Présentation illisible.") from exc
+        raise PeerError(t("group.unreadable")) from exc
 
 
 def friends_refused(trust) -> str | None:
@@ -223,9 +224,9 @@ class Group:
         → {"introduced", "asked", "known", "unreachable", "refused"} : des noms."""
         friend = peers.get(friend_id)
         if not friend or friend.get("trust") != sharing.FRIEND or friend.get("set_aside_at"):
-            raise PeerError("Seule la machine d'un ami se présente à mes autres machines.")
+            raise PeerError(t("group.friends_only"))
         if not friend.get("key"):
-            raise PeerError(f"« {friend['name']} » est à appairer de nouveau.")
+            raise PeerError(t("group.pair_again", name=friend["name"]))
         report = {"introduced": [], "asked": [], "known": [], "unreachable": [], "refused": []}
         with self._presenting[friend_id]:
             for listed in peers.list_peers():
@@ -318,7 +319,7 @@ class Group:
             self._purge()
             sent = self._sent.get(intro)
             if not sent or sent["friend"] != sender:
-                raise PeerError("Présentation inconnue ou expirée.")
+                raise PeerError(t("group.unknown"))
         done = False
         if payload.get("accept") and payload.get("pub"):
             done = self._finish(intro, payload["pub"])
@@ -335,11 +336,11 @@ class Group:
     def introduced(self, sender: str, payload: dict) -> dict:
         """« group/introduce » : une de mes machines me présente la machine d'un ami."""
         if peers.trust_of(sender) != sharing.MINE:
-            raise PeerError("Seule une de mes machines me présente d'autres machines.")
+            raise PeerError(t("group.mine_only_introduce"))
         intro = _intro(payload)
         found = _read_card(payload.get("machine"))
         if found["node_id"] == self.m.node_id:
-            raise PeerError("Présentation illisible.")
+            raise PeerError(t("group.unreadable"))
         if peers.trust_of(found["node_id"]):
             return {"known": True}
         if declined(found["node_id"]):
@@ -368,10 +369,10 @@ class Group:
             self._purge()
             waiting = self._waiting.get(intro)
             if waiting is None or waiting.presenter != sender:
-                raise PeerError("Présentation inconnue ou expirée.")
+                raise PeerError(t("group.unknown"))
             machine = waiting.card["node_id"]
             if machine in self._storing:
-                raise PeerError("Une autre présentation de cette machine se termine.")
+                raise PeerError(t("group.other_finishing"))
             del self._waiting[intro]
             self._storing.add(machine)
         found = waiting.card
@@ -393,14 +394,14 @@ class Group:
         même personne. Acceptée d'office pour un groupe accepté une fois pour toutes."""
         presenter = peers.get(sender)
         if presenter is None:
-            raise PeerError("Machine non appairée.")
+            raise PeerError(t("p2p.not_paired"))
         if presenter.get("set_aside_at"):
-            raise PeerError("Machine mise de côté ici.")
+            raise PeerError(t("group.set_aside_here"))
         intro = _intro(payload)
         found = _read_card(payload.get("machine"))
         machine = found["node_id"]
         if machine == self.m.node_id:
-            raise PeerError("Présentation illisible.")
+            raise PeerError(t("group.unreadable"))
         if peers.trust_of(machine):
             return {"known": True}
         if declined(machine):
@@ -421,7 +422,7 @@ class Group:
                 self._storing.add(machine)
             elif (len(self._offers) >= MAX_OFFERS
                   or sum(o.presenter == sender for o in self._offers.values()) >= MAX_OFFERS_EACH):
-                raise PeerError("Trop de présentations en attente, réessaie plus tard.")
+                raise PeerError(t("group.too_many"))
             else:
                 self._offers[intro] = offer
         if not auto:
@@ -452,7 +453,7 @@ class Group:
             if reserved:
                 self._storing.add(machine)
         if offer is None:
-            raise PeerError("Cette présentation a expiré.")
+            raise PeerError(t("group.expired"))
         try:
             return self._answer(offer, accept, always, reserved)
         finally:
@@ -465,7 +466,7 @@ class Group:
         presenter = peers.get(offer.presenter)
         if presenter is None:
             self.m.changed()
-            raise PeerError("La machine qui présentait n'est plus appairée.")
+            raise PeerError(t("group.presenter_gone"))
         # Version d'origine qui ignore les amis (proposed l'a déjà dit, sauf changement
         # entre-temps) : l'acceptation est refusée et dite, sans rien garder ni refuser pour
         # de bon (décliner empêcherait la présentation de revenir une fois ce nœud réinstallé)
@@ -473,7 +474,7 @@ class Group:
         if refused:
             accept = always = False
         elif not accept:
-            decline(machine, f"présentation de « {presenter['name']} » refusée")
+            decline(machine, t("group.declined_refused", name=presenter["name"]))
         elif always:
             set_group_ok(offer.presenter, True)
         taken = None
@@ -495,8 +496,7 @@ class Group:
         if taken and not done:
             self._drop(machine)
             self.m.changed()
-            raise PeerError(f"La présentation de « {offer.card['name']} » n'a pas abouti : "
-                            "une des machines ne répond plus. Elle pourra être refaite.")
+            raise PeerError(t("group.failed", name=offer.card["name"]))
         self.m.changed()
         if refused:
             raise PeerError(refused)
@@ -564,7 +564,7 @@ class Group:
         if refused:
             raise PeerError(refused)
         if peers.trust_of(found["node_id"]):
-            raise PeerError("Machine déjà appairée.")
+            raise PeerError(t("group.already_paired"))
         peers.save(found["node_id"], found["name"], key, found.get("address"),
                    found.get("port") or 0, trust)
         set_introduced_by(found["node_id"], presenter)
@@ -645,7 +645,7 @@ def _friend_of(sender: str, payload: dict) -> str:
     """La machine d'ami visée par un retrait ou une mise de côté venus d'une de mes
     machines ; jamais une de mes machines."""
     if peers.trust_of(sender) != sharing.MINE:
-        raise PeerError("Seule une de mes machines le demande.")
+        raise PeerError(t("group.mine_only"))
     node_id = str((payload or {}).get("node_id") or "")
     if peers.trust_of(node_id) != sharing.FRIEND:
         return ""
@@ -657,17 +657,21 @@ def removed(manager, sender, payload) -> dict:
     revient pas par une présentation."""
     node_id = _friend_of(sender, payload)
     if node_id:
-        decline(node_id, f"retirée sur « {_name(sender)} »")
+        decline(node_id, t("group.declined_removed_on", name=_name(sender)))
         manager.remove_now(node_id)
     return {"ok": True}
 
 
 def set_aside(manager, sender, payload) -> dict:
     """« group/set_aside » : un résultat faux ne dépend pas de la machine à qui il a été
-    rendu : mise de côté ici aussi."""
+    rendu : mise de côté ici aussi. La raison, écrite dans la langue de l'autre machine
+    (reason), est traduite ici quand elle vient avec sa clé (reason_t, i18n.lazy : un refus
+    du contrôle par échantillon, network/work.py)."""
     node_id = _friend_of(sender, payload)
     if node_id:
-        peers.set_aside(node_id, str(payload.get("reason") or "contrôle échoué")[:300])
+        told = i18n.render(profile.lazy(payload.get("reason_t"), "work."))
+        peers.set_aside(node_id, (told or str(payload.get("reason")
+                                              or t("sharing.check_failed")))[:300])
         manager.changed()
     return {"ok": True}
 
@@ -676,7 +680,7 @@ def group_accepted(manager, sender, payload) -> dict:
     """« group/ok » : « toujours accepter ce groupe », dit sur une autre de mes machines,
     vaut ici pour les machines d'ami déjà connues."""
     if peers.trust_of(sender) != sharing.MINE:
-        raise PeerError("Seule une de mes machines le demande.")
+        raise PeerError(t("group.mine_only"))
     ids = (payload or {}).get("node_ids")
     for node_id in (ids if isinstance(ids, list) else [])[:8]:
         if peers.trust_of(str(node_id)) == sharing.FRIEND:

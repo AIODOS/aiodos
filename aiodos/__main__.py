@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 from aiodos import __version__, instance, logfiles, paths
+from aiodos.i18n import t
 from aiodos.updates import launcher, restart
 
 log = logging.getLogger("aiodos")
@@ -123,7 +124,7 @@ class _BoundedLog(logging.handlers.RotatingFileHandler):
                     self.stream = self._open()
                 except OSError:
                     return                       # emit se tait jusqu'au prochain essai
-            if first:
+            if first:                            # i18n: tel quel (journal)
                 self._note(f"Rotation du journal impossible ({exc}) : nouvel essai chaque "
                            f"minute, et jusque-là les lignes au-delà du double de sa taille "
                            f"normale sont perdues.")
@@ -219,7 +220,7 @@ class _Repeats(logging.Filter):
                 if len(self.seen) > 1000:
                     self.seen.clear()
                 self.seen[key] = [now, 1, 0]
-                if entry is not None and entry[2] > 1:
+                if entry is not None and entry[2] > 1:      # i18n: tel quel (journal)
                     record.msg = (f"{str(record.msg).rstrip()} "
                                   f"(et {entry[2] - 1} fois de plus, non écrites)")
                 return True
@@ -229,6 +230,7 @@ class _Repeats(logging.Filter):
             entry[2] += 1
             if entry[2] > 1:
                 return False
+        # i18n: tel quel (journal)
         record.msg = f"{str(record.msg).rstrip()} (répétée : plus écrite pendant une minute)"
         record.exc_info, record.exc_text, record.stack_info = None, None, None
         return True
@@ -322,37 +324,26 @@ def _windows_app_id():
 
 def parser() -> argparse.ArgumentParser:
     """Les options de la ligne de commande (l'appli Android part de leurs valeurs par
-    défaut, node/android_app.py)."""
-    parser = argparse.ArgumentParser(prog="aiodos", description="AIODOS — nœud local")
-    parser.add_argument("--headless", action="store_true", help="nœud seul, sans fenêtre")
-    parser.add_argument("--background", action="store_true",
-                        help="sans ouvrir la fenêtre : l'icône près de l'horloge la rouvre "
-                             "(démarrage avec Windows, node/autostart.py)")
-    parser.add_argument("--port", type=int, default=0, help="port local (défaut : libre)")
-    network = parser.add_argument_group("réseau local (tests, machines de calcul)")
-    network.add_argument("--network", action="store_true",
-                         help="active le réseau quel que soit le réglage")
-    network.add_argument("--p2p-host", default=None,
-                         help="interface d'écoute entre nœuds (défaut : 0.0.0.0)")
-    network.add_argument("--p2p-port", type=int, default=None, help="port entre nœuds")
-    network.add_argument("--no-discovery", action="store_true",
-                         help="pas d'annonces UDP (ajout par adresse uniquement)")
-    network.add_argument("--internet", action="store_true",
-                         help="lance le compagnon aiodos-net (Internet) quel que soit le réglage")
-    network.add_argument("--internet-local", action="store_true",
-                         help="compagnon en essai local : ni relais, ni annuaire, ni box (tests)")
+    défaut, node/android_app.py). Leurs aides, dans la langue du nœud (i18n/*/cli.json)."""
+    parser = argparse.ArgumentParser(prog="aiodos", description=t("cli.description"))
+    parser.add_argument("--headless", action="store_true", help=t("cli.headless"))
+    parser.add_argument("--background", action="store_true", help=t("cli.background"))
+    parser.add_argument("--port", type=int, default=0, help=t("cli.port"))
+    network = parser.add_argument_group(t("cli.group_network"))
+    network.add_argument("--network", action="store_true", help=t("cli.network"))
+    network.add_argument("--p2p-host", default=None, help=t("cli.p2p_host"))
+    network.add_argument("--p2p-port", type=int, default=None, help=t("cli.p2p_port"))
+    network.add_argument("--no-discovery", action="store_true", help=t("cli.no_discovery"))
+    network.add_argument("--internet", action="store_true", help=t("cli.internet"))
+    network.add_argument("--internet-local", action="store_true", help=t("cli.internet_local"))
     network.add_argument("--internet-relay-only", metavar="URL", default=None,
-                         help="compagnon en essai par ce relais seulement, jamais en direct, "
-                              "sans annuaire ni box (tests)")
-    parser.add_argument("--slots", default="", metavar="RESSOURCE=N,…",
-                        help="unités simultanées sur ce nœud, ex. « embed=1,gpu=0 »")
-    parser.add_argument("--no-migrate", action="store_true",
-                        help="ne pas importer les données de la v1 (tests)")
-    parser.add_argument("--data-dir", default=None,
-                        help="dossier de données (plusieurs nœuds sur une même machine)")
-    parser.add_argument("--ui-file", default=None, metavar="FICHIER",
-                        help="écrit l'adresse de l'interface, jeton compris, dans ce fichier "
-                             "lisible par soi seul, effacé à l'arrêt (application Android)")
+                         help=t("cli.internet_relay_only"))
+    parser.add_argument("--slots", default="", metavar=t("cli.slots_metavar"),
+                        help=t("cli.slots"))
+    parser.add_argument("--no-migrate", action="store_true", help=t("cli.no_migrate"))
+    parser.add_argument("--data-dir", default=None, help=t("cli.data_dir"))
+    parser.add_argument("--ui-file", default=None, metavar=t("cli.ui_file_metavar"),
+                        help=t("cli.ui_file"))
     return parser
 
 
@@ -454,7 +445,7 @@ class _Node:
             self._go_on()
             if not self.server.started:
                 self.server.should_exit = True     # il démarrerait sinon derrière l'erreur
-                raise NodeError("Le nœud AIODOS n'a pas pu démarrer (voir data/logs).")
+                raise NodeError(t("cli.node_failed"))
             launcher.confirm_when_healthy(self.alive)
             _protect_secrets_later(self.alive)
             url = f"http://127.0.0.1:{port}/?t={self.token}"
@@ -475,7 +466,7 @@ class _Node:
         if self.cancelled.is_set():
             if self.server is not None:
                 self.server.should_exit = True
-            raise StartCancelled("Démarrage abandonné : la fenêtre a été fermée.")
+            raise StartCancelled(t("cli.start_cancelled"))
 
     def alive(self) -> bool:
         return (self.thread is not None and self.thread.is_alive()
@@ -526,7 +517,7 @@ def _serve(args) -> int:
             return launcher.ALREADY_RUNNING
         # Déjà ouvert, fenêtre peut-être cachée dans la zone de notification : elle revient
         if args.headless or not instance.wake_running():
-            _alert("AIODOS est déjà ouvert sur cette machine.")
+            _alert(t("cli.already_open"))
         return launcher.ALREADY_RUNNING
 
     node = _Node(args, port, token, show_key)
@@ -537,7 +528,7 @@ def _serve(args) -> int:
             except NodeError as exc:
                 _alert(str(exc))
                 return 1
-            print(f"Nœud AIODOS prêt : {url}", flush=True)
+            print(t("cli.ready", url=url), flush=True)
             _stop_on_signals()
             try:
                 while node.alive() and not restart.requested():
@@ -566,5 +557,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as exc:          # lancé sans console (pythonw) : on montre l'erreur
         log.exception("Arrêt inattendu")
-        _alert(f"AIODOS s'est arrêté : {exc}\n\nDétails dans data/logs/aiodos.log")
+        _alert(t("cli.stopped", error=exc))
         sys.exit(1)

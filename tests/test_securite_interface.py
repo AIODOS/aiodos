@@ -35,6 +35,7 @@ from aiodos.api import security
 from aiodos.api.server import create_app
 from aiodos.knowledge import store
 from aiodos.ui import window
+from tests import i18n_js
 
 TOKEN = "jeton-de-test"
 AUTH = {"X-Aiodos-Token": TOKEN}
@@ -281,8 +282,10 @@ def test_a_token_with_accents_is_refused_without_crashing(client):
 # ---------------------------------------------------------- interface (Node.js)
 def _run_dom(tmp_path, body: str):
     (tmp_path / "dom.mjs").write_bytes((paths.STATIC_DIR / "js" / "dom.js").read_bytes())
+    prelude = i18n_js.install(tmp_path)                        # les textes, en français
+    (tmp_path / "package.json").write_text('{"type": "module"}', encoding="utf-8")
     (tmp_path / "essai.mjs").write_text(
-        "import * as dom from './dom.mjs';\n" + body, encoding="utf-8")
+        prelude + "import * as dom from './dom.mjs';\n" + body, encoding="utf-8")
     done = subprocess.run([NODE, str(tmp_path / "essai.mjs")], capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
     assert done.returncode == 0, done.stderr[:400]
@@ -365,7 +368,8 @@ def test_a_web_source_is_a_link_only_to_the_web():
     link = sources.index('<a class="source"')
     assert "if (s.type === 'web' && linkKind(s.url) === 'web') {" in sources[:link]
     assert sources.count("<a ") == 1
-    assert 'class="source link-off" title="Lien désactivé : ${esc(s.url)}"' in sources
+    assert "class=\"source link-off\" title=\"${esc(t('render.link_off', { url: s.url }))}\"" \
+        in sources
 
 
 # --------------------------------------------------------------------- fenêtre native

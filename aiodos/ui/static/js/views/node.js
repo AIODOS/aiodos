@@ -1,13 +1,16 @@
 // Cette machine : profil du nœud, modèles, préférences de partage de puissance.
 import { get, post, put } from '../api.js';
 import { $, h, esc, bytes, duration, powerText } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { ask, toast, errorToast } from '../ui.js';
 import { loadNetwork } from './network.js';
 import { chooseModel, here, integrated } from './model-install.js';
 
-const CAPS = { vision: 'vision', thinking: 'réflexion', tools: 'outils', embedding: 'embeddings' };
+// Capacités affichées (libellés : clés traduites à l'affichage)
+const CAPS = { vision: 'node.cap_vision', thinking: 'node.cap_thinking', tools: 'node.cap_tools',
+  embedding: 'node.cap_embedding' };
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
 let root;
 let shareMobile = null;            // préférences dessinées pour un téléphone ?
@@ -18,9 +21,8 @@ export function mountNode(container) {
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>Cette machine</h1>
-          <div class="sub">Ce que ce nœud peut offrir. Ce profil est envoyé à tes machines appairées
-          pour que chaque unité de travail parte là où elle peut tourner.</div></div>
+        <div><h1>${esc(t('node.title'))}</h1>
+          <div class="sub">${esc(t('node.intro'))}</div></div>
       </div>
       <div class="grid-2">
         <div class="card" id="node-machine"></div>
@@ -55,16 +57,14 @@ function leftOpen(list) {
   if (!items.length) return '';
   const shown = items.slice(0, 5).map(x => `<span class="mono">${esc(x)}</span>`).join(', ');
   return `<div class="banner warn" style="margin-top:10px">${icon('warn')}
-    ${items.length} élément(s) des données d'AIODOS restent lisibles par d'autres comptes de
-    cette machine (disque sans droits Unix, ou fichier d'un autre compte) : ${shown}${
-    items.length > 5 ? ' …' : ''}. Déplace le dossier de données sur un disque qui garde les
-    droits, ou corrige-les à la main.</div>`;
+    ${esc(t('node.left_open', { n: items.length }))} ${shown}${
+    items.length > 5 ? ' …' : ''}. ${esc(t('node.left_open_fix'))}</div>`;
 }
 
 function gauge(used, total, label) {
   const pct = total ? Math.round(100 * used / total) : 0;
   return `<div class="gauge">${label}<div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-    <small>${bytes(used)} / ${bytes(total)} · ${pct} %</small></div>`;
+    <small>${bytes(used)} / ${bytes(total)} · ${esc(t('node.percent', { n: pct }))}</small></div>`;
 }
 
 function render() {
@@ -73,47 +73,46 @@ function render() {
   const mem = n.memory;
   const gpus = n.gpus.length
     ? n.gpus.map(g => gauge(g.vram_used, g.vram_total,
-        `${esc(g.name)} <span class="faint">· utilisation ${g.utilization} %</span>`)).join('')
-    : '<span class="muted">Aucun GPU NVIDIA détecté</span>';
-  const idle = n.idle_seconds == null ? (n.power?.mobile ? 'Non mesurable sur un téléphone' : '—')
-    : n.idle_seconds < 60 ? 'En cours d\'utilisation' : `Inactive depuis ${duration(n.idle_seconds)}`;
+        `${esc(g.name)} <span class="faint">· ${esc(t('node.gpu_use', { n: g.utilization }))}</span>`)).join('')
+    : `<span class="muted">${esc(t('node.no_gpu'))}</span>`;
+  const idle = n.idle_seconds == null ? (n.power?.mobile ? t('node.idle_phone') : '—')
+    : n.idle_seconds < 60 ? t('node.in_use') : t('node.idle_for', { time: duration(n.idle_seconds) });
   const power = powerText(n);
   $('#node-machine', root).innerHTML = `
     <h2>${icon('node')}${esc(n.name)}
-      <button class="icon-btn" id="rename-node" title="Renommer ce nœud">${icon('edit')}</button></h2>
-    <p class="hint">Nœud <span class="mono">${esc(n.node_id.slice(0, 12))}</span> · AIODOS ${esc(n.version)}</p>
+      <button class="icon-btn" id="rename-node" title="${esc(t('node.rename_title'))}">${icon('edit')}</button></h2>
+    <p class="hint">${esc(t('node.node'))} <span class="mono">${esc(n.node_id.slice(0, 12))}</span> · AIODOS ${esc(n.version)}</p>
     <dl class="facts">
-      <dt>Système</dt><dd>${esc(n.os)}</dd>
-      <dt>Processeur</dt><dd>${esc(n.cpu.name)} <span class="faint">· ${n.cpu.threads} threads</span></dd>
-      <dt>Mémoire</dt><dd>${gauge(mem.total - mem.available, mem.total, '')}</dd>
+      <dt>${esc(t('node.system'))}</dt><dd>${esc(n.os)}</dd>
+      <dt>${esc(t('node.processor'))}</dt><dd>${esc(n.cpu.name)} <span class="faint">· ${n.cpu.threads} threads</span></dd>
+      <dt>${esc(t('node.memory'))}</dt><dd>${gauge(mem.total - mem.available, mem.total, '')}</dd>
       <dt>GPU</dt><dd>${gpus}</dd>
-      <dt>Alimentation</dt><dd>${power}</dd>
-      <dt>Activité</dt><dd>${idle}</dd>
-      <dt>${integrated() ? 'Moteur' : 'Ollama'}</dt><dd>${n.ollama.version
-        ? (integrated() ? `${esc(n.ollama.version)} (intégré)` : `version ${esc(n.ollama.version)}`)
-        : '<span style="color:var(--err)">ne répond pas</span>'}</dd>
+      <dt>${esc(t('node.power'))}</dt><dd>${power}</dd>
+      <dt>${esc(t('node.activity'))}</dt><dd>${esc(idle)}</dd>
+      <dt>${integrated() ? esc(t('node.engine')) : 'Ollama'}</dt><dd>${n.ollama.version
+        ? (integrated() ? esc(t('node.engine_version', { version: n.ollama.version }))
+          : `version ${esc(n.ollama.version)}`)
+        : `<span style="color:var(--err)">${esc(t('node.not_responding'))}</span>`}</dd>
     </dl>${leftOpen(n.left_open)}`;
   $('#rename-node', root).onclick = renameNode;
 
   const vram = Math.max(0, ...n.gpus.map(g => g.vram_total));
   const rows = n.ollama.models.map(m => `
     <tr>
-      <td><b>${esc(m.name)}</b>${m.loaded ? ' <span class="pill run">chargé</span>' : ''}</td>
+      <td><b>${esc(m.name)}</b>${m.loaded ? ` <span class="pill run">${esc(t('node.loaded'))}</span>` : ''}</td>
       <td class="muted">${esc(m.parameters || '')}</td>
       <td>${bytes(m.size)}</td>
-      <td><div class="caps">${(m.caps || []).filter(c => CAPS[c]).map(c => `<span class="pill">${CAPS[c]}</span>`).join('')}</div></td>
+      <td><div class="caps">${(m.caps || []).filter(c => CAPS[c]).map(c => `<span class="pill">${esc(t(CAPS[c]))}</span>`).join('')}</div></td>
       <td>${!vram ? '<span class="faint">—</span>' : m.fits_vram
-        ? '<span class="pill ok">tient en VRAM</span>'
-        : '<span class="pill warn">trop gros : processeur (lent)</span>'}</td>
+        ? `<span class="pill ok">${esc(t('node.fits_vram'))}</span>`
+        : `<span class="pill warn">${esc(t('node.too_big'))}</span>`}</td>
     </tr>`).join('');
   $('#node-models', root).innerHTML = `
-    <h2>${icon('layers')}Modèles installés</h2>
-    <p class="hint">Un modèle qui dépasse la VRAM tourne en partie sur le processeur, beaucoup plus lentement.
-      Une de tes machines qui a la mémoire nécessaire peut alors répondre à sa place, ou plusieurs peuvent
-      se le partager.</p>
-    ${rows ? `<table class="models"><thead><tr><th>Modèle</th><th>Paramètres</th><th>Disque</th><th>Capacités</th><th>VRAM</th></tr></thead>
-      <tbody>${rows}</tbody></table>` : `<div class="empty">Aucun modèle sur ${here()}${integrated() ? '' : ' (ou Ollama ne répond pas)'}.</div>`}
-    <button class="btn sm" data-install>${icon('plus')}Installer un modèle</button>`;
+    <h2>${icon('layers')}${esc(t('node.models_title'))}</h2>
+    <p class="hint">${esc(t('node.models_hint'))}</p>
+    ${rows ? `<table class="models"><thead><tr><th>${esc(t('node.col_model'))}</th><th>${esc(t('node.col_parameters'))}</th><th>${esc(t('node.col_disk'))}</th><th>${esc(t('node.col_capabilities'))}</th><th>VRAM</th></tr></thead>
+      <tbody>${rows}</tbody></table>` : `<div class="empty">${esc(t(integrated() ? 'node.no_models' : 'node.no_models_ollama', { here: here() }))}</div>`}
+    <button class="btn sm" data-install>${icon('plus')}${esc(t('model_install.title'))}</button>`;
   $('#node-models', root).querySelector('[data-install]').onclick = chooseModel;
 
   renderNetworkSummary();
@@ -138,24 +137,17 @@ function renderBackground() {
   const box = root && $('#node-background', root);
   if (!box || !state.settings) return;
   const mode = state.settings.battery_mode || 'eco';
-  const options = [['eco', 'Ménager la batterie (conseillé)'], ['pause', 'Attendre le secteur'],
-    ['normal', 'Pleine vitesse']];
+  const options = [['eco', t('node.battery_eco')], ['pause', t('node.battery_pause')],
+    ['normal', t('node.full_speed')]];
   trayRow = windowsWindow();
   box.innerHTML = `
-    <h2>${icon('cpu')}Travail de fond</h2>
+    <h2>${icon('cpu')}${esc(t('node.background_title'))}</h2>
     <div id="background-status"></div>
-    <p class="hint">Indexations et calculs pour tes machines passent après toi : priorité basse, toujours
-      (et sous Windows, mode efficacité du processeur). Pendant une conversation sur cette machine, le calcul
-      sur la carte graphique attend la fin de la réponse.</p>
-    <div class="setting-row"><div class="txt"><b>Sur batterie</b><small>Ménager : une unité à la fois par
-      ressource (carte graphique, processeur…), moins de fils de calcul, et des pauses (calcul la moitié du
-      temps). Attendre : rien ne tourne en fond avant le retour du secteur. Les conversations restent servies
-      dans tous les cas.</small></div>
+    <p class="hint">${esc(t('node.background_hint'))}</p>
+    <div class="setting-row"><div class="txt"><b>${esc(t('node.battery_title'))}</b><small>${esc(t('node.battery_help'))}</small></div>
       <select class="select wide" id="battery-mode">${options.map(([v, l]) =>
-        `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-    ${windowsWindow() ? shareRow('close_to_tray', 'Garder AIODOS ouvert quand je ferme la fenêtre',
-      "Il reste dans la zone de notification, près de l'horloge : le nœud continue de servir tes machines "
-      + "et d'avancer le travail de fond. Clic sur l'icône pour rouvrir, clic droit pour quitter.") : ''}
+        `<option value="${v}" ${v === mode ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    ${windowsWindow() ? shareRow('close_to_tray', t('node.close_to_tray'), t('node.close_to_tray_help')) : ''}
     <div id="autostart-row"></div>`;
   $('#battery-mode', box).onchange = e => save({ battery_mode: e.target.value });
   box.querySelectorAll('input[data-key]').forEach(input => {
@@ -178,19 +170,14 @@ function renderAutostart() {
   if (!autostart?.supported) { box.innerHTML = ''; return; }
   const phone = autostart.device === 'android';
   box.innerHTML = `<div class="setting-row"><div class="txt">
-      <b>${phone ? 'Démarrer avec le téléphone' : 'Démarrer avec Windows, en arrière-plan'}</b>
-      <small>${phone
-        ? "Le nœud démarre quand le téléphone s'allume, sans ouvrir l'appli AIODOS : il tourne en "
-          + "arrière-plan, avec sa notification (Android l'exige)."
-        : "À l'ouverture de ta session, AIODOS démarre sans ouvrir sa fenêtre : le nœud sert tes machines "
-          + "et avance le travail de fond ; l'icône près de l'horloge rouvre la fenêtre."}</small></div>
+      <b>${esc(t(phone ? 'node.autostart_phone' : 'node.autostart_windows'))}</b>
+      <small>${esc(t(phone ? 'node.autostart_phone_help' : 'node.autostart_windows_help'))}</small></div>
     <label class="switch"><input type="checkbox" id="autostart-toggle" ${autostart.enabled ? 'checked' : ''}>
       <span></span></label></div>`;
   $('#autostart-toggle', box).onchange = async e => {
     try {
       autostart = await post('/node/autostart', { enabled: e.target.checked });
-      toast(autostart.enabled ? 'AIODOS démarrera avec cet appareil, en arrière-plan.'
-        : 'AIODOS ne démarrera plus avec cet appareil.', 'ok', 5000);
+      toast(t(autostart.enabled ? 'node.autostart_on' : 'node.autostart_off'), 'ok', 5000);
     } catch (err) {
       e.target.checked = !e.target.checked;
       errorToast(err);
@@ -209,10 +196,10 @@ function renderBackgroundStatus() {
   const p = state.executor?.pacing;
   if (!p) { box.innerHTML = ''; return; }
   const [cls, label, detail] = p.chatting
-    ? ['warn', 'Conversation en cours', 'Le calcul sur la carte graphique attend la fin de la réponse.']
-    : p.mode === 'pause' ? ['warn', 'En pause', p.detail]
-      : p.mode === 'eco' ? ['ok', 'Ménagé', p.detail] : ['ok', 'Pleine vitesse', p.detail];
-  box.innerHTML = `<div class="share-status"><span class="pill ${cls}">${label}</span>
+    ? ['warn', t('node.status_chatting'), t('node.status_chatting_detail')]
+    : p.mode === 'pause' ? ['warn', t('node.paused'), p.detail]
+      : p.mode === 'eco' ? ['ok', t('node.status_eco'), p.detail] : ['ok', t('node.full_speed'), p.detail];
+  box.innerHTML = `<div class="share-status"><span class="pill ${cls}">${esc(label)}</span>
     <span class="muted">${esc(detail)}</span></div>`;
 }
 
@@ -222,22 +209,23 @@ function renderNetworkSummary() {
   const net = state.network;
   const peers = net?.peers || [];
   const online = peers.filter(p => p.online).length;
-  const summary = !net?.enabled ? 'Désactivé'
-    : peers.length ? `${peers.length} machine(s) appairée(s), ${online} en ligne`
-      : 'Activé, aucune machine appairée pour l\'instant';
+  const summary = !net?.enabled ? t('node.off')
+    : peers.length ? t('node.peers_summary', { n: peers.length, online })
+      : t('node.no_peers_yet');
   box.innerHTML = `
-    <h2>${icon('network')}Réseau local</h2>
+    <h2>${icon('network')}${esc(t('node.network_title'))}</h2>
     <div class="setting-row" style="border:0;padding:0">
-      <div class="txt"><b>${summary}</b>
-        <small>Découverte des autres nœuds, appairage par code, échanges chiffrés.</small></div>
-      <button class="btn sm" id="go-network">${icon('network')}Ouvrir</button>
+      <div class="txt"><b>${esc(summary)}</b>
+        <small>${esc(t('node.network_help'))}</small></div>
+      <button class="btn sm" id="go-network">${icon('network')}${esc(t('node.open'))}</button>
     </div>`;
   $('#go-network', box).onclick = () => emit('view:show', 'network');
 }
 
+// title et text : du texte brut (t()), échappé ici
 function shareRow(key, title, text) {
   const on = !!state.settings?.[key];
-  return `<div class="setting-row"><div class="txt"><b>${title}</b><small>${text}</small></div>
+  return `<div class="setting-row"><div class="txt"><b>${esc(title)}</b><small>${esc(text)}</small></div>
     <label class="switch"><input type="checkbox" data-key="${key}" ${on ? 'checked' : ''}><span></span></label></div>`;
 }
 
@@ -247,20 +235,21 @@ function renderShareStatus() {
   if (!box) return;
   const net = state.network;
   if (!net?.enabled) {
-    box.innerHTML = `<div class="phase-note">${icon('info')}<div>Le réseau local est désactivé : ce PC ne
-      prête rien et ne confie rien. <a href="#" id="share-go-network">Activer le réseau</a></div></div>`;
+    box.innerHTML = `<div class="phase-note">${icon('info')}<div>${esc(t('node.network_off'))}
+      <a href="#" id="share-go-network">${esc(t('node.network_enable'))}</a></div></div>`;
     $('#share-go-network', box).onclick = e => { e.preventDefault(); emit('view:show', 'network'); };
     return;
   }
   const sharing = net.sharing;
   if (!sharing) { box.innerHTML = ''; return; }
   const working = state.executor?.remote || sharing.working || [];
-  const [cls, label] = working.length ? ['run', 'Calcule pour tes machines']
-    : sharing.active ? ['ok', 'Prêt'] : sharing.state === 'off' ? ['idle', 'Désactivé'] : ['warn', 'En pause'];
+  const [cls, label] = working.length ? ['run', t('node.share_working')]
+    : sharing.active ? ['ok', t('node.share_ready')] : sharing.state === 'off' ? ['idle', t('node.off')]
+      : ['warn', t('node.paused')];
   box.innerHTML = `
-    <div class="share-status"><span class="pill ${cls}">${label}</span><span class="muted">${esc(sharing.detail)}</span></div>
+    <div class="share-status"><span class="pill ${cls}">${esc(label)}</span><span class="muted">${esc(sharing.detail)}</span></div>
     ${working.map(w => `<div class="remote-item">${icon(RESOURCE_ICONS[w.resource] || 'cpu')}
-      <span>Pour « ${esc(w.peer_name)} » : <span class="mono">${esc(w.label)}</span></span></div>`).join('')}`;
+      <span>${esc(t('node.working_for', { name: w.peer_name }))} <span class="mono">${esc(w.label)}</span></span></div>`).join('')}`;
 }
 
 function renderShare() {
@@ -269,36 +258,35 @@ function renderShare() {
   const s = state.settings;
   // Téléphone : pas d'inactivité mesurable ; en charge, assez chargé, pas trop chaud
   const mobile = shareMobile = !!state.node?.power?.mobile;
-  const device = mobile ? 'ce téléphone' : 'ce PC';
+  const device = t(mobile ? 'node.this_phone' : 'node.this_pc');
   const idleRows = `
-    ${shareRow('share_when_idle', "Seulement quand je n'utilise pas ce PC", "Comme un économiseur d'écran : le travail s'arrête dès que tu reviens. Désactivé, ce PC prête aussi pendant que tu l'utilises : en priorité basse, jamais sur batterie, la carte graphique la moitié du temps au plus, et tes conversations passent devant.")}
-    <div class="setting-row"><div class="txt"><b>Délai d'inactivité</b><small>Sans clavier ni souris pendant ce temps, ce PC est considéré comme libre : le prêt n'est plus retenu (avec le réglage ci-dessus, il ne commence qu'à ce moment).</small></div>
+    ${shareRow('share_when_idle', t('node.when_idle'), t('node.when_idle_help'))}
+    <div class="setting-row"><div class="txt"><b>${esc(t('node.idle_delay'))}</b><small>${esc(t('node.idle_delay_help'))}</small></div>
       <select class="select short" data-num="idle_minutes">${[2, 5, 10, 15, 30, 60].map(m =>
         `<option value="${m}" ${m === s.idle_minutes ? 'selected' : ''}>${m} min</option>`).join('')}</select></div>`;
   const phoneRows = `
-    <div class="setting-row"><div class="txt"><b>Batterie minimale</b><small>Pour commencer à calculer (ensuite, pause 5 % plus bas) : en dessous, le téléphone se recharge d'abord.</small></div>
+    <div class="setting-row"><div class="txt"><b>${esc(t('node.min_battery'))}</b><small>${esc(t('node.min_battery_help'))}</small></div>
       <select class="select short" data-num="share_min_battery">${[50, 60, 70, 80, 90].map(p =>
-        `<option value="${p}" ${p === s.share_min_battery ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>
-    <div class="setting-row"><div class="txt"><b>Température maximale de la batterie</b><small>Au-delà, pause jusqu'à ce qu'elle ait perdu 3 °C.</small></div>
-      <select class="select short" data-num="share_max_temp">${[35, 38, 40, 42].map(t =>
-        `<option value="${t}" ${t === s.share_max_temp ? 'selected' : ''}>${t} °C</option>`).join('')}</select></div>`;
+        `<option value="${p}" ${p === s.share_min_battery ? 'selected' : ''}>${esc(t('node.percent', { n: p }))}</option>`).join('')}</select></div>
+    <div class="setting-row"><div class="txt"><b>${esc(t('node.max_temp'))}</b><small>${esc(t('node.max_temp_help'))}</small></div>
+      <select class="select short" data-num="share_max_temp">${[35, 38, 40, 42].map(deg =>
+        `<option value="${deg}" ${deg === s.share_max_temp ? 'selected' : ''}>${esc(t('format.celsius', { n: deg }))}</option>`).join('')}</select></div>`;
   box.innerHTML = `
-    <h2>${icon('bolt')}Partage de puissance</h2>
+    <h2>${icon('bolt')}${esc(t('node.share_title'))}</h2>
     <div id="share-status"></div>
-    ${shareRow('offload_enabled', 'Me faire aider par mes autres machines', `Les unités de tes tâches peuvent être calculées sur tes machines appairées, sauf les bibliothèques gardées sur ${device}. Les résultats sont enregistrés ici.`)}
-    ${shareRow('share_enabled', 'Prêter ma puissance à mes autres machines', `${mobile ? 'Ce téléphone' : 'Ce PC'} calcule pour elles sans rien garder : les fichiers reçus sont effacés aussitôt.`)}
-    ${shareRow('lend_models', 'Prêter mes modèles pour leurs conversations', `Elles pourront faire répondre leurs conversations par les modèles de ${device}. Le texte passe ici, chiffré, le temps de la réponse, sans être enregistré ; ton travail de fond se met en pause pendant ce temps.`)}
-    ${mobile ? '' : shareRow('lend_gpu', 'Prêter ma carte graphique pour les gros modèles', "Un modèle trop gros pour une seule machine est découpé entre mes machines : celle-ci en garde une tranche le temps d'une conversation, par un tunnel chiffré du compagnon. Seulement pour mes machines, jamais pour un ami ; il faut llama.cpp de la même version des deux côtés.")}
-    ${mobile ? '' : shareRow('lend_images_friends', 'Prêter ma carte graphique à mes amis pour les images', "Quand ce PC prête sa puissance, il peut aussi calculer les images et les vidéos de tes amis qui le lui demandent. Leur description et le résultat passent ici le temps du calcul, sans être gardés.")}
+    ${shareRow('offload_enabled', t('node.offload'), t('node.offload_help', { device }))}
+    ${shareRow('share_enabled', t('node.share'), t(mobile ? 'node.share_help_phone' : 'node.share_help_pc'))}
+    ${shareRow('lend_models', t('node.lend_models'), t('node.lend_models_help', { device }))}
+    ${mobile ? '' : shareRow('lend_gpu', t('node.lend_gpu'), t('node.lend_gpu_help'))}
+    ${mobile ? '' : shareRow('lend_images_friends', t('node.lend_images'), t('node.lend_images_help'))}
     ${mobile ? '' : idleRows}
-    ${shareRow('share_on_ac_only', mobile ? 'Seulement en charge' : 'Seulement sur secteur',
-      mobile ? "Jamais sur batterie. L'inactivité d'un téléphone n'est pas mesurable : c'est la charge qui compte." : 'Jamais sur batterie.')}
+    ${shareRow('share_on_ac_only', t(mobile ? 'node.ac_only_phone' : 'node.ac_only_pc'),
+      t(mobile ? 'node.ac_only_phone_help' : 'node.ac_only_pc_help'))}
     ${mobile ? phoneRows : ''}
-    <div class="setting-row"><div class="txt"><b>${mobile ? 'Calcul prêté au maximum' : 'GPU prêté au maximum'}</b><small>${mobile
-      ? 'En dessous de 100 %, ce téléphone fait des pauses entre deux unités : il chauffe moins.'
-      : 'Part du temps de la carte graphique : en dessous de 100 %, ce PC fait des pauses entre deux unités.'}</small></div>
+    <div class="setting-row"><div class="txt"><b>${esc(t(mobile ? 'node.max_share_phone' : 'node.max_share_pc'))}</b><small>${esc(t(mobile
+      ? 'node.max_share_phone_help' : 'node.max_share_pc_help'))}</small></div>
       <select class="select short" data-num="share_max_gpu">${[25, 50, 75, 100].map(p =>
-        `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${p} %</option>`).join('')}</select></div>`;
+        `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${esc(t('node.percent', { n: p }))}</option>`).join('')}</select></div>`;
   box.querySelectorAll('input[data-key]').forEach(input => {
     input.onchange = () => save({ [input.dataset.key]: input.checked });
   });
@@ -317,9 +305,9 @@ async function save(values) {
 }
 
 async function renameNode() {
-  const name = await ask('Nom de ce nœud', 'Le nom qui identifiera cette machine sur ton réseau :', state.node.name);
+  const name = await ask(t('node.rename_ask_title'), t('node.rename_ask_text'), state.node.name);
   if (!name) return;
   await save({ node_name: name });
-  toast('Nœud renommé.', 'ok');
+  toast(t('node.renamed'), 'ok');
   loadNode();
 }

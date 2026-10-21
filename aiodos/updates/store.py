@@ -23,6 +23,7 @@ import shutil
 from pathlib import Path
 
 from aiodos import paths
+from aiodos.i18n import t
 from aiodos.updates import manifest as manifests
 from aiodos.updates import version as versions
 from aiodos.updates.manifest import UpdateError
@@ -64,7 +65,7 @@ class Store:
     # ------------------------------------------------------------ emplacements
     def _dir(self, name: str, version: str | None = None) -> Path:
         if version is not None and not versions.valid(version):
-            raise UpdateError(f"Numéro de version illisible : {version!r}")
+            raise UpdateError(t("updates_package.version_unreadable", version=repr(version)))
         folder = self.root / name
         return folder / version if version is not None else folder
 
@@ -160,7 +161,7 @@ class Store:
         """Fichier d'un paquet, seulement s'il figure dans son manifeste vérifié."""
         found = self.manifest(version, trusted)
         if found is None or name not in {f["name"] for f in found["files"]}:
-            raise UpdateError("Fichier inconnu dans les paquets de cette machine.")
+            raise UpdateError(t("updates_package.unknown_file"))
         return self._dir("packages", version) / name
 
     def package_path(self, version: str, item: dict) -> Path:
@@ -211,7 +212,7 @@ class Store:
         """Un morceau d'un fichier nommé dans le manifeste vérifié, et présent en entier."""
         item = next((f for f in self.held(version) if f["name"] == name), None)
         if item is None:
-            raise UpdateError("Fichier absent des paquets de cette machine.")
+            raise UpdateError(t("updates_package.missing_file"))
         with open(self.package_path(version, item), "rb") as f:
             f.seek(max(0, offset))
             return f.read(max(0, size))
@@ -249,7 +250,7 @@ class Store:
         part = self.partial(version, item["name"], source)
         if part.stat().st_size != item["size"] or sha256_of(part) != item["sha256"]:
             part.unlink(missing_ok=True)
-            raise UpdateError("Fichier reçu incomplet ou altéré : il sera téléchargé de nouveau.")
+            raise UpdateError(t("updates_package.bad_download"))
         target = self._dir("packages", version) / item["name"]
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(part, target)

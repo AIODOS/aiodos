@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from aiodos import paths
+from aiodos.i18n import t
 from aiodos.node import android, android_app
 from aiodos.updates import launcher
 
@@ -68,12 +69,13 @@ def set_enabled(enabled: bool) -> dict:
     flag = _android_flag()
     if flag is not None:
         if enabled:
+            # i18n: tel quel (fichier témoin : seule son existence compte, jamais affiché)
             flag.write_text("Démarrer le nœud AIODOS avec le téléphone (appli AIODOS).\n",
                             encoding="utf-8")
         else:
             flag.unlink(missing_ok=True)
         return state()
-    raise OSError("Démarrer avec l'appareil : seulement sous Windows et sur Android.")
+    raise OSError(t("node.autostart_unsupported"))
 
 
 def command() -> tuple:
@@ -97,12 +99,14 @@ def _windows_shortcut(target: Path):
     script = (f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut({_ps(target)}); "
               f"$s.TargetPath = {_ps(exe)}; $s.Arguments = {_ps(arguments)}; "
               f"$s.WorkingDirectory = {_ps(folder)}; $s.IconLocation = {_ps(icon)}; "
-              "$s.Description = 'AIODOS, en arrière-plan'; $s.WindowStyle = 7; $s.Save()")
+              f"$s.Description = {_ps(t('node.autostart_shortcut_description'))}; "
+              "$s.WindowStyle = 7; $s.Save()")
     try:
         done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                               capture_output=True, text=True, timeout=30,
                               creationflags=_NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise OSError(f"raccourci de démarrage impossible : {exc}") from exc
+        raise OSError(t("node.autostart_shortcut_failed", error=exc)) from exc
     if done.returncode != 0 or not target.is_file():
-        raise OSError(f"raccourci de démarrage impossible : {(done.stderr or '').strip()[:300]}")
+        raise OSError(t("node.autostart_shortcut_failed",
+                        error=(done.stderr or "").strip()[:300]))

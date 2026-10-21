@@ -1,0 +1,8 @@
+{
+  "hidden_notice": "AIODOS continue en arrière-plan. Clic sur l'icône pour rouvrir la fenêtre, clic droit pour quitter.",
+  "starting": "AIODOS démarre",
+  "details": "Détails : {path}",
+  "start_failed": "AIODOS n'a pas pu démarrer : {error}",
+  "tray_open": "Ouvrir AIODOS",
+  "tray_quit": "Quitter AIODOS"
+}

@@ -14,6 +14,7 @@ toutes les machines à la fois.
 import json
 import math
 
+from aiodos.i18n import t
 from aiodos.network import activity, client, peers
 from aiodos.network.client import PeerError
 from aiodos.node import identity
@@ -107,10 +108,9 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
     node_id, name = parse(model)
     peer = peers.get(node_id)
     if not peer:
-        raise PeerError("Cette machine n'est plus appairée : choisis un autre modèle.")
+        raise PeerError(t("lending.unpaired"))
     if not (peer.get("address") or peer.get("net_id")):
-        raise PeerError(f"« {peer['name']} » est injoignable pour l'instant (ni adresse sur "
-                        "le réseau local, ni clé Internet).")
+        raise PeerError(t("lending.unreachable", name=peer["name"]))
     payload = {"model": name, "messages": messages, "think": bool(think)}
     if options:
         payload["options"] = options

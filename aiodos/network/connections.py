@@ -178,7 +178,7 @@ class GuardedH11(H11Protocol):
             # Entre deux requêtes : les en-têtes de la suivante (sans rien reçu, le maintien
             # de la connexion d'uvicorn la ferme déjà au bout de quelques secondes)
             if now - self._waiting_since > HEADER_S:
-                return self._close("en-têtes trop lents")
+                return self._close("en-têtes trop lents")     # i18n: tel quel (journal)
         elif cycle.more_body and not self._local:
             if self._body_cycle is not cycle:
                 self._body_cycle, self._body_start, self._body_active = cycle, self._bytes, 0.0
@@ -186,6 +186,7 @@ class GuardedH11(H11Protocol):
                 self._body_active += WATCH_EVERY
                 rate = (self._bytes - self._body_start) / self._body_active
                 if self._body_active > BODY_GRACE and rate < MIN_RATE:
+                    # i18n: tel quel (journal)
                     return self._close("corps envoyé au goutte-à-goutte")
         self._watch_handle = self.loop.call_later(WATCH_EVERY, self._watch)
 

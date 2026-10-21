@@ -1,0 +1,20 @@
+{
+  "reindex_started": "New embedding model: reindexing of your knowledge has started (see Tasks).",
+  "images_ready": {
+    "one": "{title}: {n} image ready ({where}).",
+    "other": "{title}: {n} images ready ({where})."
+  },
+  "videos_ready": {
+    "one": "{title}: {n} video ready ({where}).",
+    "other": "{title}: {n} videos ready ({where})."
+  },
+  "ready_in_conversation": "in its conversation",
+  "ready_in_images": "Images and videos view",
+  "job_indexed": {
+    "one": "{title}: {n} item indexed",
+    "other": "{title}: {n} items indexed"
+  },
+  "paired": "Machine paired: “{name}”",
+  "paired_via": "Machine paired: “{name}”, introduced by “{via}”",
+  "pair_cancelled": "Pairing with “{name}” cancelled."
+}

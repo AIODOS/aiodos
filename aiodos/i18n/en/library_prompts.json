@@ -1,0 +1,6 @@
+{
+  "manifest_line": {
+    "one": "• {name} ({n} item): {items}{more}",
+    "other": "• {name} ({n} items): {items}{more}"
+  }
+}

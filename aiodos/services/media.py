@@ -12,25 +12,22 @@ import time
 from pathlib import Path
 
 from aiodos import settings
+from aiodos.i18n import t
 from aiodos.node import children, priority
 from aiodos.services import ollama
 
-_PROMPTS = {
-    "ocr": ("Transcris fidèlement et intégralement TOUT le texte visible dans "
-            "cette image, sans rien ajouter. S'il n'y a aucun texte, réponds "
-            "exactement : (aucun texte)."),
-    "describe": "Décris en détail, en français, le contenu visuel de cette image.",
-    "both": ("En français : 1) transcris tout le texte visible dans l'image ; "
-             "2) puis décris brièvement son contenu visuel."),
-}
+# Consignes au modèle de vision, selon ce qu'on garde des images (media_prompts.json), dans
+# la langue du nœud qui calcule : la description vient en français ou en anglais
+_PROMPTS = {"ocr": "media_prompts.ocr", "describe": "media_prompts.describe",
+            "both": "media_prompts.both"}
 
 
 def vision_extract(path, model: str, mode: str = "both") -> str:
     with open(path, "rb") as f:
         image = base64.b64encode(f.read()).decode()
-    text = ollama.generate_with_images(model, _PROMPTS.get(mode, _PROMPTS["both"]),
+    text = ollama.generate_with_images(model, t(_PROMPTS.get(mode, _PROMPTS["both"])),
                                        [image])
-    return f"[Image : {path.name}]\n{text}" if text else ""
+    return f"{t('media.image_header', name=path.name)}\n{text}" if text else ""
 
 
 WHISPER_THREADS = 4               # fils de calcul de faster-whisper par défaut (cpu_threads=0)
@@ -68,8 +65,7 @@ def whisper_model(name) -> str:
     text = name if isinstance(name, str) else ""
     if text not in WHISPER_MODELS:
         shown = str(name)[:60] if name is not None else ""
-        raise TranscriptionError(f"Modèle Whisper inconnu : « {shown} » (attendu : tiny, "
-                                 "base, small, medium, large-v3…).")
+        raise TranscriptionError(t("media.unknown_whisper_model", name=shown))
     return text
 
 
@@ -180,15 +176,15 @@ class _Child:
             except queue.Empty:
                 waited += 0.5
                 if waited > REPLY_S:
-                    raise TranscriptionError("Le programme de transcription ne répond plus.")
+                    raise TranscriptionError(t("media.child_not_answering"))
         if line is None:
-            raise TranscriptionError("Le programme de transcription s'est arrêté en route.")
+            raise TranscriptionError(t("media.child_stopped"))
         try:
             reply = json.loads(line)
         except ValueError:
             reply = None
         if not isinstance(reply, dict) or reply.get("id") != rid:
-            raise TranscriptionError("Réponse inattendue du programme de transcription.")
+            raise TranscriptionError(t("media.child_unexpected"))
         return reply
 
     def close(self):
@@ -287,13 +283,11 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
             raise
         _child.last = time.monotonic()
         if reply.get("missing"):           # modèle absent, téléchargement non permis
-            raise WhisperMissing(
-                f"Modèle Whisper « {model_name} » absent de cette machine : elle ne "
-                "télécharge d'elle-même que celui de son réglage. Pour qu'elle le "
-                f"télécharge, choisis « {model_name} » dans ses réglages (Images, audio et "
-                "vidéo : Transcrire l'audio et la vidéo, Modèle Whisper).")
+            raise WhisperMissing(t("media.whisper_missing", model=model_name))
         if "error" in reply:               # il attend la demande suivante : on le garde
-            raise TranscriptionError(f"Transcription impossible : {reply['error']}")
+            raise TranscriptionError(t("media.transcription_failed", error=reply["error"]))
         text = "\n".join(lines)
-    return f"[Transcription de {path.name} · langue : {language}]\n{text}" if text else ""
+    if not text:
+        return ""
+    return f"{t('media.transcription_header', name=path.name, language=language)}\n{text}"
 

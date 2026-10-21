@@ -10,6 +10,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from aiodos import db, paths, settings
+from aiodos.i18n import t
 from aiodos.knowledge import store
 
 log = logging.getLogger("aiodos.migration")
@@ -80,7 +81,7 @@ def migrate(source: Path) -> dict:
             conv_id = c.execute(
                 "INSERT INTO conversations(title, folder_id, model, created, updated) "
                 "VALUES(?, ?, ?, ?, ?)",
-                (session.get("title") or "Conversation importée", folder_ids.get(folder),
+                (session.get("title") or t("legacy.imported_conversation"), folder_ids.get(folder),
                  session.get("model") or None, created, created)).lastrowid
             for m in session["messages"]:
                 c.execute("INSERT INTO messages(conversation_id, role, content, model, "
@@ -94,7 +95,7 @@ def migrate(source: Path) -> dict:
     collections = _read(source / "knowledge" / "collections.json", {})
     groups = OrderedDict()
     for chunk in _read(source / "knowledge" / "chunks.json", []):
-        collection = chunk.get("collection") or "Général"
+        collection = chunk.get("collection") or "Général"     # i18n: tel quel (nom de la v1)
         if collection == _V1_CONV_COLLECTION or not chunk.get("embedding"):
             continue
         source_name = (chunk.get("source") or "?").replace("\\", "/")

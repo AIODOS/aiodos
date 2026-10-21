@@ -22,6 +22,8 @@ import re
 import struct
 from pathlib import Path, PurePath
 
+from aiodos.i18n import t
+
 MODEL_LAYER = "application/vnd.ollama.image.model"
 DEFAULT_REGISTRY = "registry.ollama.ai"
 # Règles de nom d'Ollama : chaque partie commence par une lettre, un chiffre ou « _ »,
@@ -51,7 +53,7 @@ def models_dir() -> Path:
 
 
 def _unreadable(model) -> WeightsError:
-    return WeightsError(f"Nom de modèle illisible : {str(model)[:120]!r}")
+    return WeightsError(t("cluster.model_name_unreadable", name=repr(str(model)[:120])))
 
 
 def manifest_path(model: str, root: Path | None = None) -> Path:
@@ -114,7 +116,7 @@ def blob_path(digest, root: Path | None = None) -> Path:
     manifeste la donne ; WeightsError si ce n'est pas « sha256: » et 64 chiffres
     hexadécimaux (« sha256:..\\..\\autre-fichier » sortirait du dossier)."""
     if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
-        raise WeightsError("Empreinte de fichier illisible dans le manifeste d'Ollama.")
+        raise WeightsError(t("cluster.digest_unreadable"))
     return (root or models_dir()) / "blobs" / digest.replace(":", "-")
 
 
@@ -128,13 +130,13 @@ def gguf_path(model: str, root: Path | None = None) -> Path:
                        if isinstance(layer, dict) and layer.get("mediaType") == MODEL_LAYER),
                       None)
     except (OSError, ValueError, AttributeError, TypeError) as exc:
-        raise WeightsError(f"Modèle « {model} » introuvable dans Ollama.") from exc
+        raise WeightsError(t("cluster.not_in_ollama", name=model)) from exc
     try:
         path = blob_path(digest, root)
     except WeightsError:
-        raise WeightsError(f"Le modèle « {model} » n'a pas de fichier de poids lisible.") from None
+        raise WeightsError(t("cluster.no_weights_file", name=model)) from None
     if not path.is_file():
-        raise WeightsError(f"Fichier de poids absent pour « {model} ».")
+        raise WeightsError(t("cluster.weights_missing", name=model))
     return path
 
 
@@ -143,7 +145,7 @@ def _read(f, fmt):
     size = struct.calcsize(fmt)
     data = f.read(size)
     if len(data) != size:
-        raise WeightsError("En-tête GGUF tronqué.")
+        raise WeightsError(t("cluster.gguf_truncated"))
     return struct.unpack(fmt, data)[0]
 
 
@@ -167,7 +169,7 @@ def _value(f, kind):
             for _ in range(count):
                 _value(f, inner)
         return count
-    raise WeightsError(f"Type GGUF inconnu : {kind}")
+    raise WeightsError(t("cluster.gguf_unknown_type", kind=kind))
 
 
 def header(path) -> dict:
@@ -177,10 +179,10 @@ def header(path) -> dict:
     meta = {}
     with path.open("rb") as f:
         if f.read(4) != b"GGUF":
-            raise WeightsError("Ce fichier n'est pas au format GGUF.")
+            raise WeightsError(t("cluster.not_gguf"))
         version, _tensors, keys = _read(f, "<I"), _read(f, "<Q"), _read(f, "<Q")
         if version < 2 or keys > MAX_KEYS:
-            raise WeightsError("En-tête GGUF illisible.")
+            raise WeightsError(t("cluster.gguf_unreadable"))
         for _ in range(keys):
             key = _string(f)
             meta[key] = _value(f, _read(f, "<I"))

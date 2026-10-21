@@ -19,8 +19,9 @@ from pathlib import Path
 
 import numpy as np
 
-from aiodos import db, paths, settings
+from aiodos import db, i18n, paths, settings
 from aiodos.chat import conversations
+from aiodos.i18n import t
 from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import BACKGROUND, QUEUED
 from aiodos.jobs.registry import (TASKS, Interrupted, SampleMismatch, TaskSpec, UnitSpec,
@@ -54,7 +55,7 @@ _RESOURCE = {"text": "embed", "document": "embed", "unknown": "embed",
 # ----------------------------------------------------------- fichiers/dossiers
 def _plan_file(path: Path, collection_id, source, kind, skipped: Counter):
     family = extract.classify(path)
-    ext = path.suffix.lower() or "(sans extension)"
+    ext = path.suffix.lower() or t("index.no_extension")
     ignored = (family == "binary"
                or (family == "image" and not settings.get("media_vision"))
                or (family == "media" and not settings.get("media_transcribe"))
@@ -209,25 +210,29 @@ def split_index_paths(params):
             if unit:
                 units.append(unit)
     target = store.collection_name(collection_id)
+    # Le titre, traduit pour qui le lit (i18n.lazy, cf. jobs/queue.py)
     if len(paths) == 1 and folders:
-        title = f"Indexer le dossier « {folders[0].name} » → {target}"
+        title = i18n.lazy("index.job_index_folder", name=folders[0].name, target=target)
     else:
-        title = f"Indexer {len(paths)} élément(s) → {target}"
+        title = i18n.lazy("index.job_index_items", n=len(paths), target=target)
     info = {"skipped": sum(skipped.values()), "skipped_types": dict(skipped)}
     if not units:
-        info["message"] = "Aucun fichier exploitable dans la sélection."
+        info["message"] = t("index.no_usable_file")
     return title, units, info
 
 
 def index_options() -> dict:
     """Réglages du propriétaire, figés au moment du calcul : une machine qui
-    calcule pour une autre applique ceux de l'autre, pas les siens."""
+    calcule pour une autre applique ceux de l'autre, pas les siens. Sa langue aussi
+    (lang) : description d'une image et en-têtes des passages, dans la sienne ; une
+    version précédente l'ignore."""
     vision = None
     if settings.get("media_vision"):
         vision = {"model": settings.get("vision_model"),
                   "mode": settings.get("media_vision_mode")}
     return {"embed_model": settings.get("embed_model"), "vision": vision,
-            "whisper": settings.get("whisper_model") if settings.get("media_transcribe") else None}
+            "whisper": settings.get("whisper_model") if settings.get("media_transcribe") else None,
+            "lang": i18n.current()}
 
 
 def requires_index(unit, options) -> dict:
@@ -252,9 +257,15 @@ def _embed(pieces, options, stop) -> dict:
 
 
 def compute_index_file(payload, file, options, stop=None):
+    with i18n.using(options.get("lang")):          # la langue du propriétaire
+        return _compute_index_file(payload, file, options, stop)
+
+
+def _compute_index_file(payload, file, options, stop):
     path = Path(file)
     if not path.exists():
-        raise FileNotFoundError(f"Fichier introuvable : {payload.get('path') or payload['source']}")
+        raise FileNotFoundError(t("index.file_not_found",
+                                  path=payload.get("path") or payload["source"]))
     vision = transcribe = None
     pace = lambda seconds: pacing.step(seconds, stop)       # entre deux pages, deux segments
     if options.get("vision"):
@@ -275,8 +286,8 @@ def compute_index_file(payload, file, options, stop=None):
 def _nothing_in(path) -> dict:
     """Unité sautée faute de texte, avec la raison quand c'est une limite d'AIODOS (archive
     refusée, fichier trop gros : extract.why_unread) plutôt que le fichier qui est vide."""
-    return {"skipped": True, "ext": path.suffix.lower() or "(sans extension)",
-            "reason": extract.why_unread(path) or "aucun texte exploitable"}
+    return {"skipped": True, "ext": path.suffix.lower() or t("index.no_extension"),
+            "reason": extract.why_unread(path) or t("index.no_usable_text")}
 
 
 def assimilate_index_file(payload, output):
@@ -295,7 +306,7 @@ def _skipped(output) -> dict:
     l'unité, qui restait prise jusqu'au redémarrage, et une longue chaîne était gardée telle
     quelle à chaque unité (relecture finale du 21/10/2026)."""
     return {"skipped": True, "ext": str(output.get("ext") or "?")[:40],
-            "reason": str(output.get("reason") or "aucun texte exploitable")[:500]}
+            "reason": str(output.get("reason") or t("index.no_usable_text"))[:500]}
 
 
 SAMPLE_MIN = 0.999     # cosinus minimal d'un passage recalculé ici (0,9999 mesuré PC/S9)
@@ -353,7 +364,7 @@ def _differs(output, reason, excuse):
     moi."""
     if excuse is None:
         raise SampleMismatch(reason)
-    output[REFUSED] = f"{reason} ; {excuse}, l'unité sera calculée sur mes machines"
+    output[REFUSED] = t("index.refused_recompute", reason=reason, excuse=excuse)
 
 
 def _excuse(path, stamp, before, after):
@@ -362,12 +373,11 @@ def _excuse(path, stamp, before, after):
     document modifié pendant le calcul : relecture du 21/10/2026), ou pendant ma relecture ;
     l'unité ne porte pas de repère (créée par une version d'avant) ; c'est un document."""
     if not (isinstance(stamp, list) and len(stamp) == 2):
-        return ("unité créée par une version d'AIODOS d'avant le 21/10/2026, impossible de "
-                "savoir si le fichier a changé depuis")
+        return t("index.excuse_old_unit")
     if not (before == after == stamp):
-        return "le fichier a changé depuis qu'il lui a été confié"
+        return t("index.excuse_file_changed")
     if extract.classify(path) == "document":
-        return "son lecteur de documents diffère peut-être du mien"
+        return t("index.excuse_reader")
     return None
 
 
@@ -379,14 +389,14 @@ def _sample_vectors(pieces, vectors, options):
     picks = random.sample(range(len(pieces)), min(SAMPLE_COUNT, len(pieces)))
     mine = ollama.embed([pieces[i] for i in picks], model=options["embed_model"])
     if len(mine) != len(picks):
-        raise RuntimeError("Ollama n'a pas rendu autant de vecteurs que de passages")
+        raise RuntimeError(t("index.vector_count_mismatch"))
     for i, vector in zip(picks, mine):
         here = np.asarray(vector, dtype=np.float32)
         theirs = np.asarray(vectors[i], dtype=np.float32)
         cosine = float(np.dot(here, theirs) / (np.linalg.norm(here) * np.linalg.norm(theirs)))
         if not cosine >= SAMPLE_MIN:
-            raise SampleMismatch(f"passage {i + 1} recalculé ici : similarité {cosine:.4f}, "
-                                 f"au moins {SAMPLE_MIN} attendu")
+            raise SampleMismatch(t("index.sample_mismatch", number=i + 1,
+                                   similarity=f"{cosine:.4f}", minimum=SAMPLE_MIN))
 
 
 def sample_embedded(payload, output, options):
@@ -407,25 +417,20 @@ def sample_embedded(payload, output, options):
     Une autre exception (Ollama injoignable ici) : vérification impossible pour l'instant."""
     output.pop(REFUSED, None)
     if not checkable_here(payload):
-        output[REFUSED] = ("texte calculé par un ami pour une image, un son, une vidéo, une "
-                           "page web ou un format que cette machine ne sait pas relire : "
-                           "impossible à vérifier ici, l'unité sera calculée sur mes machines")
+        output[REFUSED] = t("index.refused_uncheckable")
         return
     path = Path(payload["path"])
     before = _stamp(path)
     try:
         local_text = extract.extract_text(path) or ""
     except Exception as exc:          # noqa: BLE001  (PDF chiffré, abîmé…)
-        output[REFUSED] = (f"document illisible ici ({exc.__class__.__name__}) : impossible "
-                           "de vérifier le résultat d'un ami, l'unité sera calculée sur mes "
-                           "machines")
+        output[REFUSED] = t("index.refused_unreadable", error=exc.__class__.__name__)
         return
     excuse = _excuse(path, payload.get("stamp"), before, _stamp(path))
     expected = chunking.chunk_text(local_text)
     if output.get("skipped"):
         if expected:
-            _differs(output, "document ignoré par l'ami alors qu'il a du texte relu ici",
-                     excuse)
+            _differs(output, t("index.skipped_by_friend"), excuse)
         else:
             # Refaite ici, pas complétée : rien de ce que l'ami y a joint ne reste
             output.clear()
@@ -433,10 +438,9 @@ def sample_embedded(payload, output, options):
         return
     pieces = output["pieces"]
     if pieces != expected:
-        reason = ("un passage rendu ne figure pas dans le document relu ici"
+        reason = (t("index.passage_not_in_document")
                   if not _all_from_document(pieces, local_text) else
-                  "passages découpés autrement qu'ici (morceaux choisis, oublis ou "
-                  "répétitions)")
+                  t("index.passages_cut_differently"))
         _differs(output, reason, excuse)
         return
     _sample_vectors(pieces, output["vectors"], options)
@@ -459,18 +463,16 @@ def check_embedded(payload, output):
         return
     pieces, vectors = output.get("pieces"), output.get("vectors")
     if not isinstance(pieces, list) or not pieces or not all(isinstance(p, str) for p in pieces):
-        raise ValueError("passages absents ou invalides")
+        raise ValueError(t("index.invalid_passages"))
     if any(len(p) > MAX_PIECE for p in pieces):
-        raise ValueError(f"passage de plus de {MAX_PIECE} caractères : le découpage n'en "
-                         "fait pas d'aussi longs")
+        raise ValueError(t("index.passage_too_long", max=MAX_PIECE))
     if not isinstance(vectors, np.ndarray) or vectors.ndim != 2 or len(vectors) != len(pieces):
-        raise ValueError("vecteurs absents ou en nombre différent des passages")
+        raise ValueError(t("index.invalid_vector_count"))
     if not np.isfinite(vectors).all() or (np.linalg.norm(vectors, axis=1) < 1e-6).any():
-        raise ValueError("vecteurs invalides (valeurs nulles ou non finies)")
+        raise ValueError(t("index.invalid_vectors"))
     dim = store.embedding_dim(payload["collection_id"])
     if dim and vectors.shape[1] != dim:
-        raise ValueError(f"vecteurs de dimension {vectors.shape[1]} au lieu de {dim} "
-                         "(modèle d'embedding différent ?)")
+        raise ValueError(t("index.wrong_dimension", got=vectors.shape[1], expected=dim))
 
 
 register_portable("index_file", compute_index_file, assimilate_index_file, file_key="path",
@@ -507,7 +509,7 @@ def split_index_urls(params):
                       "net", {"url": u, "collection_id": params["collection_id"]})
              for u in urls]
     target = store.collection_name(params["collection_id"])
-    return f"Lire {len(units)} page(s) web → {target}", units, {}
+    return i18n.lazy("index.job_read_pages", n=len(units), target=target), units, {}
 
 
 def _read_page(url, options, stop, public_only):
@@ -516,7 +518,7 @@ def _read_page(url, options, stop, public_only):
     except web.FetchStopped as exc:
         raise Interrupted() from exc
     if not text.strip():
-        return {"skipped": True, "ext": "url", "reason": "page vide, ou pas du texte"}
+        return {"skipped": True, "ext": "url", "reason": t("index.empty_page")}
     output = _embed(chunking.chunk_text(f"{title}\n\n{text}"), options, stop)
     output["title"] = title
     return output
@@ -572,7 +574,7 @@ def split_index_conversation(params):
     row = db.query_one("SELECT title FROM conversations WHERE id=?",
                        (params["conversation_id"],))
     title = row["title"] if row else f"#{params['conversation_id']}"
-    return (f"Mémoriser la conversation « {title} »",
+    return (i18n.lazy("index.job_memorize", title=title),
             [UnitSpec("index_conversation", "embed", dict(params))], {})
 
 
@@ -592,10 +594,10 @@ def run_index_conversation(payload):
     conv = db.query_one("SELECT title FROM conversations WHERE id=?", (conv_id,))
     if conv is None:
         store.remove_by_origin(collection_id, str(conv_id))     # mémoire orpheline
-        return {"skipped": True, "ext": "conversation", "reason": "supprimée"}
+        return {"skipped": True, "ext": "conversation", "reason": t("index.conversation_deleted")}
     entry = store.entry_by_origin(collection_id, str(conv_id))
     if rebuild and entry is None:
-        return {"skipped": True, "ext": "conversation", "reason": "mémoire vidée"}
+        return {"skipped": True, "ext": "conversation", "reason": t("index.memory_cleared")}
     known = store.message_chunks(entry["id"]) if entry and not rebuild else {}
     messages = db.query("SELECT id, role, content, sources, created FROM messages "
                         "WHERE conversation_id=? ORDER BY id", (conv_id,))
@@ -606,8 +608,10 @@ def run_index_conversation(payload):
             continue          # appuyée sur des passages d'autres machines : pas en mémoire
         if m["role"] == "assistant" and conversations.is_error(m):
             continue          # une erreur, pas une réponse
-        who = "Utilisateur" if m["role"] == "user" else "Assistant"
-        texts = chunking.chunk_text(f"{who} : {m['content']}")[:999]
+        # « Utilisateur : … » ou « User: … », selon la langue du nœud : changée, elle fait
+        # refaire les passages de la conversation à sa mise à jour suivante (ils diffèrent)
+        said = "index.memory_user" if m["role"] == "user" else "index.memory_assistant"
+        texts = chunking.chunk_text(t(said, text=m["content"]))[:999]
         if not texts:
             continue
         kept.add(m["id"])
@@ -627,7 +631,8 @@ def run_index_conversation(payload):
     with db.transaction() as c:           # revérifié d'un seul geste avec l'écriture
         if c.execute("SELECT 1 FROM conversations WHERE id=?", (conv_id,)).fetchone() is None:
             store.remove_by_origin(collection_id, str(conv_id))
-            return {"skipped": True, "ext": "conversation", "reason": "supprimée"}
+            return {"skipped": True, "ext": "conversation",
+                    "reason": t("index.conversation_deleted")}
         now = {r["id"]: r["content"] for r in c.execute(
             "SELECT id, content FROM messages WHERE conversation_id=?", (conv_id,))}
         still = [(idx, text, vec) for (idx, text), vec in zip(pieces, vectors)

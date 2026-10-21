@@ -25,7 +25,8 @@ import json
 import logging
 from pathlib import Path
 
-from aiodos import db, settings
+from aiodos import db, i18n, settings
+from aiodos.i18n import t
 from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import NORMAL, PAUSED, QUEUED, RUNNING
 from aiodos.jobs.registry import UnitSpec, register_job_kind, task
@@ -109,7 +110,7 @@ def split_reindex(params):
             units.append(UnitSpec("reindex_entry", "embed",
                                   {"entry_id": row["id"], "source": row["source"],
                                    "path": _reread_path(row)}))
-    return (f"Réindexer les connaissances avec {params['model']}", units,
+    return (i18n.lazy("index.job_reindex", model=params["model"]), units,
             {"model": params["model"]})
 
 
@@ -128,11 +129,11 @@ def run_reindex_entry(payload):
     """Recalcule les vecteurs d'une entrée avec le modèle d'embedding actuel."""
     stored = store.chunk_texts(payload["entry_id"])
     if not stored:
-        return {"skipped": True, "reason": "retirée entre-temps"}
+        return {"skipped": True, "reason": t("index.entry_removed")}
     fresh = _read(payload.get("path"))
     pieces = fresh or stored
     if not store.replace_chunks(payload["entry_id"], list(zip(pieces, pacing.embed(pieces)))):
-        return {"skipped": True, "reason": "retirée entre-temps"}
+        return {"skipped": True, "reason": t("index.entry_removed")}
     return {"chunks": len(pieces), "reread": bool(fresh)}
 
 
@@ -154,9 +155,9 @@ def finalize_reindex(job_id, params, units):
     reread = sum(bool(u["result"].get("reread")) for u in done)
     return {"indexed": len(done),
             "chunks": sum(u["result"].get("chunks", 0) for u in done),
-            "message": f"Modèle : {params['model']}. {len(done) - conversations} élément(s) "
-                       f"de bibliothèque recalculé(s), dont {reread} relu(s) depuis leur "
-                       f"fichier ; {conversations} conversation(s) remémorisée(s)."}
+            "message": t("index.reindex_summary", model=params["model"],
+                         items=len(done) - conversations, reread=reread,
+                         conversations=conversations)}
 
 
 register_job_kind("reindex", split_reindex, finalize_reindex)

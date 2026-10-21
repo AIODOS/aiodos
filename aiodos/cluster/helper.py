@@ -37,6 +37,7 @@ from pathlib import Path
 
 from aiodos import paths, settings
 from aiodos.cluster import engine
+from aiodos.i18n import t
 from aiodos.network import peers, route, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.companion import SERVICE_HOLD, SERVICE_USAGE
@@ -102,8 +103,7 @@ def trim_cache(cap: int | None = None) -> int:
 def _companion():
     companion = route.companion()
     if companion is None or not companion.running:
-        raise PeerError("Le compagnon aiodos-net ne tourne pas sur cette machine "
-                        "(réglage « Relier mes machines par Internet »).")
+        raise PeerError(t("cluster.companion_not_running_here"))
     return companion
 
 
@@ -119,46 +119,40 @@ def _publish():
 
 def lend(manager, sender, payload):
     if not settings.get("lend_gpu"):
-        raise PeerError(f"« {manager.name()} » ne prête pas sa carte graphique (réglage "
-                        "« Prêter ma carte graphique pour les gros modèles »).")
+        raise PeerError(t("cluster.lend_off", name=manager.name()))
     if sharing.level(sender) != sharing.MINE:
-        raise PeerError("Seules mes machines peuvent emprunter cette carte graphique.")
+        raise PeerError(t("cluster.mine_only"))
     if android_app.in_app():
         # ggml-rpc-server n'a ni mot de passe ni chiffrement : sur un téléphone, n'importe
         # quelle appli joindrait son port de 127.0.0.1
-        raise PeerError(f"« {manager.name()} » est un téléphone : il ne prête pas sa "
-                        "puissance aux gros modèles répartis.")
+        raise PeerError(t("cluster.phone_does_not_lend", name=manager.name()))
     peer = peers.get(sender) or {}
     if payload.get("tunnel") != GUARDED:
-        raise PeerError(f"Mets AIODOS à jour sur « {peer.get('name') or 'ta machine'} » : sa "
-                        "version ouvrirait le tunnel vers cette carte graphique à tous les "
-                        "programmes de la machine.")
+        raise PeerError(t("cluster.update_borrower",
+                          name=peer.get("name") or t("cluster.your_machine")))
     if not peer.get("net_id"):
-        raise PeerError("Clé Internet de ta machine inconnue ici : il faut le compagnon "
-                        "aiodos-net des deux côtés.")
+        raise PeerError(t("cluster.net_key_unknown"))
     found = engine.info(max_age=0)                 # mémoire libre de maintenant
     if not found:
-        raise PeerError(f"llama.cpp n'est pas installé sur « {manager.name()} ».")
+        raise PeerError(t("cluster.llama_missing_on", name=manager.name()))
     if payload.get("version") != found["version"]:
-        raise PeerError(f"Versions de llama.cpp différentes : {found['version']} sur "
-                        f"« {manager.name()} », {payload.get('version')} chez toi.")
+        raise PeerError(t("cluster.versions_differ", version=found["version"],
+                          name=manager.name(), yours=payload.get("version")))
     device = engine.lent_device(found["devices"])
     if not device:
-        raise PeerError(f"Aucune carte graphique à prêter sur « {manager.name()} ».")
+        raise PeerError(t("cluster.no_card_on", name=manager.name()))
     companion = _companion()
     if not (companion.supports(SERVICE_USAGE) and companion.supports(SERVICE_HOLD)):
         # Indispensable, vérifié avant tout lancement : sans lui, le serveur RPC servirait
         # n'importe quel programme de cette machine
-        raise PeerError(f"Le compagnon aiodos-net de « {manager.name()} » est trop ancien pour "
-                        f"prêter sa carte, ou ne peut pas la garder sur ce système : mets AIODOS "
-                        f"à jour sur « {manager.name()} ».")
+        raise PeerError(t("cluster.companion_too_old", name=manager.name()))
     trim_cache()                                   # le cache ne grossit pas sans fin
     _sweeper["trimmed"] = time.monotonic()
     process = engine.rpc_server(Path(found["folder"]), device["name"], cache_dir())
     try:
         process.start(timeout=START_TIMEOUT)
     except engine.EngineError as exc:
-        raise PeerError(f"Serveur RPC impossible sur « {manager.name()} » : {exc}") from exc
+        raise PeerError(t("cluster.rpc_failed", name=manager.name(), error=exc)) from exc
     name = f"rpc-{secrets.token_hex(6)}"
     with _lock:
         _loans[name] = {"owner": sender, "net_id": peer["net_id"], "process": process,
@@ -168,7 +162,7 @@ def lend(manager, sender, payload):
         _publish()
     except Exception as exc:
         _end(name)
-        raise PeerError(f"Le compagnon refuse d'ouvrir la carte : {exc}") from exc
+        raise PeerError(t("cluster.companion_refused", error=exc)) from exc
     with _lock:
         if name in _loans:
             _loans[name]["published"] = True       # désormais tenu (cf. _unguarded)
@@ -246,10 +240,11 @@ def _unguarded(loan, usage) -> str | None:
     if not loan.get("published"):
         return None
     if usage is None:
-        return "le compagnon ne connaît plus ce prêt (relancé ?)"
+        return "le compagnon ne connaît plus ce prêt (relancé ?)"   # i18n: tel quel (journal)
     if usage.get("held") is not True:
-        return "le compagnon ne tient pas ce serveur (trop ancien ?)"
+        return "le compagnon ne tient pas ce serveur (trop ancien ?)"   # i18n: tel quel (journal)
     if usage.get("blocked"):
+        # i18n: tel quel (journal)
         return f"le compagnon a vu un autre programme de cette machine : {usage['blocked']}"
     return None
 
@@ -271,8 +266,9 @@ def _guard_state():
     les serveurs, aucun prêt ne continue ; flux None si l'état est illisible un instant."""
     companion = route.companion()
     if companion is None or not companion.running:
-        return None, "le compagnon aiodos-net ne tourne plus"
+        return None, "le compagnon aiodos-net ne tourne plus"   # i18n: tel quel (journal)
     if not companion.supports(SERVICE_HOLD):
+        # i18n: tel quel (journal)
         return None, "le compagnon aiodos-net ne sait plus tenir les serveurs (remplacé ?)"
     try:
         return companion.service_usage(), None

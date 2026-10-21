@@ -180,9 +180,11 @@ def _hold_problem() -> str | None:
     dit ses flux (SERVICE_USAGE), n'importe quel programme de cette machine y serait servi."""
     companion = route.companion()
     if companion is None or not companion.running:
+        # i18n: tel quel (raison écrite au journal seulement, cf. _note_not_lent)
         return ("le compagnon aiodos-net ne tourne pas (réglage « Relier mes machines par "
                 "Internet »)")
     if not (companion.supports(SERVICE_USAGE) and companion.supports(SERVICE_HOLD)):
+        # i18n: tel quel (journal)
         return ("le compagnon aiodos-net est trop ancien pour tenir le serveur prêté, ou ne "
                 "peut pas lire la table des connexions de ce système : mets AIODOS à jour")
     return None

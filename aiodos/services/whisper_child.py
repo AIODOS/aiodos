@@ -51,6 +51,7 @@ def _locate(name, download: bool) -> str:
     `download` le permet)."""
     import faster_whisper
     if not isinstance(name, str) or name not in faster_whisper.available_models():
+        # i18n: tel quel (programme à part, sans les textes d'AIODOS ; media.py vérifie avant)
         raise ValueError(f"modèle Whisper inconnu : « {str(name)[:60]} »")
     try:
         return faster_whisper.download_model(name, local_files_only=not download)
@@ -100,6 +101,7 @@ def serve(read, send):
                     break
             send({"id": rid, "end": True})
         except _Missing:
+            # i18n: tel quel (programme à part ; media.py dit lui-même ce qui manque, missing)
             send({"id": rid, "error": "modèle absent de cette machine", "missing": True})
         except Exception as exc:
             send({"id": rid, "error": f"{exc.__class__.__name__} : {exc}"[:500]})

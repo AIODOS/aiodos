@@ -1,0 +1,20 @@
+{
+  "size_b": "{n} o",
+  "size_kb": "{n} Ko",
+  "size_mb": "{n} Mo",
+  "size_gb": "{n} Go",
+  "size_tb": "{n} To",
+  "just_now": "à l'instant",
+  "minutes_ago": "il y a {n} min",
+  "hours_ago": "il y a {n} h",
+  "days_ago": "il y a {n} j",
+  "seconds": "{n} s",
+  "minutes_seconds": "{m} min {s}",
+  "hours_minutes": "{h} h {m}",
+  "charge_unknown": "Charge inconnue",
+  "charging": "En charge",
+  "on_ac": "Sur secteur",
+  "on_battery": "Sur batterie",
+  "battery_level": "batterie {n} %",
+  "celsius": "{n} °C"
+}

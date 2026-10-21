@@ -1,0 +1,16 @@
+{
+  "not_in_catalog": "“{name}” is not one of the models the built-in engine can download.",
+  "downloading": "downloading {file}",
+  "hf_status": "Hugging Face returned {status} for {file}.",
+  "download_interrupted": "Download interrupted ({error}): it will resume where it left off.",
+  "checksum_mismatch": "{file} does not match the expected checksum: deleted, to be downloaded again.",
+  "llama_missing": "llama.cpp was not found on this machine: the built-in engine cannot start.",
+  "engine_start_failed": "The built-in engine could not start: {error}",
+  "model_missing": "The model “{name}” is not on this machine (built-in engine).",
+  "model_incompatible": "The model “{name}” cannot be loaded by the built-in engine (Ollama's own format): it is no longer offered. Install its standard version from “Install a model”.",
+  "engine_error": "Built-in engine: {error}",
+  "not_embedding": "“{name}” is not an embedding model.",
+  "vectors_mismatch": "The built-in engine did not return one vector per text.",
+  "no_vision_model": "No model on this machine can see images: install a Qwen 3.5 from “Install a model”.",
+  "ollama_vectors_mismatch": "Ollama did not return one vector per text."
+}

@@ -8,7 +8,7 @@ La file survit aux redémarrages : « lancé le soir, récupéré le matin ».
 """
 import json
 
-from aiodos import db
+from aiodos import db, i18n
 from aiodos.jobs import registry
 from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, NORMAL,
                                PAUSED, QUEUED, RUNNING, SKIPPED)
@@ -17,6 +17,9 @@ from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, NORMAL,
 def create_job(kind, params, priority=NORMAL, owner_node="local") -> int:
     spec = registry.JOB_KINDS[kind]
     title, units, info = spec.split(params)
+    if isinstance(title, list):        # i18n.lazy : traduit dans la langue de qui le lit
+        info = dict(info, _title=title)
+        title = i18n.render(title)
     now = db.now()
     status = QUEUED if units else DONE
     with db.transaction() as c:
@@ -153,7 +156,7 @@ def finalize_job(job_id):
         result.update(spec.finalize(job_id, json.loads(job["params"]), units) or {})
     status, error = job["status"], None
     if job["failed"] and not job["done"] and status == DONE:
-        status, error = FAILED, "Toutes les unités ont échoué."
+        status, error = FAILED, i18n.t("jobs.all_units_failed")
     db.execute("UPDATE jobs SET result=?, status=?, error=? WHERE id=?",
                (json.dumps(result, ensure_ascii=False), status, error, job_id))
 
@@ -215,6 +218,12 @@ def _summary(row, remote) -> dict:
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
     job["remote"] = remote.get(job["id"], {})       # {machine: unités qu'elle calcule}
+    # Le titre, écrit à la création dans la langue d'alors (title), et sa clé (title_t) :
+    # l'interface le traduit dans la sienne (jobs.js, jobTitle)
+    lazy_title = job["result"].pop("_title", None)
+    if lazy_title:
+        job["title_t"] = lazy_title
+        job["title"] = i18n.render(lazy_title) or job["title"]
     return job
 
 

@@ -1,0 +1,18 @@
+{
+  "unreadable": "Unreadable manifest.",
+  "too_large": "Oversized manifest: version ignored.",
+  "unknown_key": "Version signed by an unknown key: ignored.",
+  "bad_signature": "Invalid signature: version ignored.",
+  "not_approved": "Version not approved yet on the approval device: ignored.",
+  "unknown_format": "Manifest in an unknown format.",
+  "bad_version": "Unreadable version number in the manifest.",
+  "no_files": "Manifest with no files.",
+  "bad_file_name": "File name refused in the manifest.",
+  "bad_file_size": "File size refused in the manifest.",
+  "bad_file_digest": "File fingerprint refused in the manifest.",
+  "one_source": "The manifest must contain one code archive, and only one.",
+  "version_unreadable": "Unreadable version number: {version}",
+  "unknown_file": "Unknown file in this machine's packages.",
+  "missing_file": "File missing from this machine's packages.",
+  "bad_download": "Received file incomplete or corrupted: it will be downloaded again."
+}

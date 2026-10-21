@@ -1,0 +1,16 @@
+{
+  "not_in_catalog": "« {name} » ne fait pas partie des modèles que le moteur intégré sait télécharger.",
+  "downloading": "téléchargement de {file}",
+  "hf_status": "Hugging Face répond {status} pour {file}.",
+  "download_interrupted": "Téléchargement interrompu ({error}) : il reprendra là où il s'est arrêté.",
+  "checksum_mismatch": "{file} ne correspond pas à l'empreinte attendue : supprimé, à retélécharger.",
+  "llama_missing": "llama.cpp est introuvable sur cette machine : le moteur intégré ne peut pas démarrer.",
+  "engine_start_failed": "Le moteur intégré ne démarre pas : {error}",
+  "model_missing": "Le modèle « {name} » n'est pas sur cette machine (moteur intégré).",
+  "model_incompatible": "Le modèle « {name} » ne se charge pas dans le moteur intégré (format propre à Ollama) : il n'est plus proposé. Installe sa version standard depuis « Installer un modèle ».",
+  "engine_error": "Moteur intégré : {error}",
+  "not_embedding": "« {name} » n'est pas un modèle d'embedding.",
+  "vectors_mismatch": "Le moteur intégré n'a pas renvoyé un vecteur par texte.",
+  "no_vision_model": "Aucun modèle de cette machine ne voit les images : installe un Qwen 3.5 depuis « Installer un modèle ».",
+  "ollama_vectors_mismatch": "Ollama n'a pas renvoyé un vecteur par texte."
+}

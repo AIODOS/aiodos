@@ -2,21 +2,27 @@
 // consultation (opening.js) et recherche chez les autres (consult.js).
 import { get, post, patch, del, pickFiles, pickFolder } from '../api.js';
 import { $, h, esc, debounce } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, prefs, emit } from '../state.js';
 import { ask, confirmDanger, menu, modal, toast, errorToast } from '../ui.js';
 import { mountConsult, refreshConsult } from './consult.js';
+import { jobTitle } from './jobs.js';
 import { closedControls, openBadge, openingMenu, setClosed } from './opening.js';
 
-const KIND_FILTERS = [['all', 'Tout'], ['file', 'Fichiers'], ['folder', 'Dossiers'], ['url', 'Web']];
+const KIND_FILTERS = [['all', 'library.filter_all'], ['file', 'library.filter_file'],
+  ['folder', 'library.filter_folder'], ['url', 'library.filter_url']];
 const IMAGE = /\.(jpe?g|png|gif|bmp|tiff?|webp|heic)$/i;
 const MEDIA = /\.(mp3|wav|flac|aac|ogg|m4a|opus|mp4|mov|avi|mkv|webm|wmv|flv)$/i;
+// La bibliothèque affichée, retenue d'une ouverture à l'autre (une préférence, pas une clé
+// de texte de library.json)
+const SELECTED = 'library.selected';          // i18n: tel quel (nom d'une préférence)
 
 let root;
 let collections = [];
 let memory = null;
 let entries = [];
-let selected = prefs.get('library.selected', null);
+let selected = prefs.get(SELECTED, null);
 let kindFilter = 'all';
 let shownCollection = null;          // bibliothèque dont le contenu est affiché
 const openDirs = new Set();
@@ -25,12 +31,10 @@ export function mountLibrary(container) {
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>Bibliothèques</h1>
-          <div class="sub">Tes documents, dossiers et pages web, indexés pour que l'IA s'en serve. Tout est enregistré
-          sur ce PC ; seul le calcul peut être confié à tes machines appairées, et une bibliothèque peut leur être
-          ouverte à la recherche (menu ⋯).</div></div>
+        <div><h1>${esc(t('library.title'))}</h1>
+          <div class="sub">${esc(t('library.intro'))}</div></div>
         <div class="grow"></div>
-        <button class="btn" id="lib-new">${icon('plus')}Nouvelle bibliothèque</button>
+        <button class="btn" id="lib-new">${icon('plus')}${esc(t('library.new'))}</button>
       </div>
       <div class="library">
         <div>
@@ -81,18 +85,18 @@ function renderCollections() {
     const item = h(`
       <div class="coll ${c.id === selected ? 'active' : ''} ${c.enabled ? '' : 'disabled'}">
         ${icon('library')}
-        <div class="name"><b>${esc(c.name)}</b><small>${c.entries} élément(s) · ${c.chunks} passages</small></div>
-        ${c.local_only ? `<span class="local-only" title="Gardée sur ce PC : jamais confiée à une autre machine">${icon('lock')}</span>` : ''}
-        ${c.share_friends && !c.local_only ? `<span class="local-only" title="Partagée avec tes amis : leurs machines peuvent la calculer, sous des noms de fichiers neutres">${icon('globe')}</span>` : ''}
+        <div class="name"><b>${esc(c.name)}</b><small>${esc(t('library.entries', { n: c.entries }))} · ${esc(t('library.chunks_total', { n: c.chunks }))}</small></div>
+        ${c.local_only ? `<span class="local-only" title="${esc(t('library.local_only_hint'))}">${icon('lock')}</span>` : ''}
+        ${c.share_friends && !c.local_only ? `<span class="local-only" title="${esc(t('library.shared_hint'))}">${icon('globe')}</span>` : ''}
         ${openBadge(c)}
-        <label class="switch" title="${c.enabled ? 'Utilisée dans les réponses' : 'Ignorée dans les réponses'}">
+        <label class="switch" title="${esc(t(c.enabled ? 'library.used' : 'library.ignored'))}">
           <input type="checkbox" ${c.enabled ? 'checked' : ''}><span></span></label>
-        <button class="icon-btn" title="Options">${icon('more')}</button>
+        <button class="icon-btn" title="${esc(t('library.options'))}">${icon('more')}</button>
       </div>`);
     item.onclick = e => {
       if (e.target.closest('.switch, .icon-btn')) return;
       selected = c.id;
-      prefs.set('library.selected', selected);
+      prefs.set(SELECTED, selected);
       renderCollections();
       renderContent();
     };
@@ -103,62 +107,58 @@ function renderCollections() {
       e.stopPropagation();
       const scope = c.scope || (c.local_only ? 'local' : 'mine');
       menu(e.currentTarget, [
-        { label: 'Renommer', icon: 'edit', action: () => renameCollection(c) },
+        { label: t('library.rename'), icon: 'edit', action: () => renameCollection(c) },
         'sep',
-        { title: 'Calcul de cette bibliothèque' },
+        { title: t('library.compute_title') },
         ...SCOPES.filter(s => s.value !== scope).map(s => ({
-          label: s.from?.[scope] || s.label, icon: s.icon, action: () => setScope(c, s.value) })),
+          label: t(s.from?.[scope] || s.label), icon: s.icon, action: () => setScope(c, s.value) })),
         'sep',
         ...openingMenu(c),
         'sep',
-        { label: 'Supprimer', icon: 'trash', danger: true, action: () => deleteCollection(c) },
+        { label: t('library.delete'), icon: 'trash', danger: true, action: () => deleteCollection(c) },
       ]);
     };
     list.append(item);
   }
-  if (!collections.length) list.append(h('<div class="empty">Aucune bibliothèque.</div>'));
+  if (!collections.length) list.append(h(`<div class="empty">${esc(t('library.none'))}</div>`));
 }
 
 async function createCollection() {
-  const name = await ask('Nouvelle bibliothèque', 'Nom :', '', 'ex. 2024, Sécurité, Projet X');
+  const name = await ask(t('library.new'), t('library.name_label'), '', t('library.name_placeholder'));
   if (!name) return;
   try {
     const { id } = await post('/collections', { name });
     selected = id;
-    prefs.set('library.selected', id);
+    prefs.set(SELECTED, id);
     load();
   } catch (e) { errorToast(e); }
 }
 
-// Où le calcul d'une bibliothèque peut partir (network/sharing.py, knowledge/store.set_scope)
+// Où le calcul d'une bibliothèque peut partir (network/sharing.py, knowledge/store.set_scope).
+// Libellés et messages : clés de library.json, traduites à l'affichage
 const SCOPES = [
-  { value: 'local', label: 'Garder sur ce PC uniquement', icon: 'lock',
-    done: name => `« ${name} » reste sur ce PC : ses fichiers ne seront jamais envoyés à une autre machine, `
-      + 'et aucune n\'y cherchera.' },
-  { value: 'mine', label: 'Calculer aussi sur mes machines', icon: 'network',
-    from: { friends: 'Ne plus partager avec mes amis' },
-    done: name => `Le calcul de « ${name} » peut être confié à tes machines, pas à celles de tes amis.` },
-  { value: 'friends', label: 'Partager aussi avec mes amis', icon: 'globe',
-    done: name => `Le calcul de « ${name} » peut aussi être confié à tes amis, sous des noms de fichiers `
-      + 'neutres ; ce qu\'ils calculent est vérifié par échantillon.' },
+  { value: 'local', label: 'library.scope_local', icon: 'lock', done: 'library.scope_local_done' },
+  { value: 'mine', label: 'library.scope_mine', icon: 'network',
+    from: { friends: 'library.scope_mine_from_friends' }, done: 'library.scope_mine_done' },
+  { value: 'friends', label: 'library.scope_friends', icon: 'globe', done: 'library.scope_friends_done' },
 ];
 
 async function setScope(c, scope) {
   try {
     await patch(`/collections/${c.id}`, { scope });
-    toast(SCOPES.find(s => s.value === scope).done(c.name), 'ok', 7000);
+    toast(t(SCOPES.find(s => s.value === scope).done, { name: c.name }), 'ok', 7000);
   } catch (e) { errorToast(e); }
 }
 
 async function renameCollection(c) {
-  const name = await ask('Renommer la bibliothèque', 'Nouveau nom :', c.name);
+  const name = await ask(t('library.rename_title'), t('library.new_name_label'), c.name);
   if (!name || name === c.name) return;
   try { await patch(`/collections/${c.id}`, { name }); } catch (e) { errorToast(e); }
 }
 
 async function deleteCollection(c) {
-  const ok = await confirmDanger('Supprimer la bibliothèque',
-    `« ${c.name} » et tout son contenu indexé (${c.entries} élément(s)) seront supprimés. Tes fichiers d'origine ne sont pas touchés.`);
+  const ok = await confirmDanger(t('library.delete_title'),
+    t('library.delete_text', { name: c.name, n: c.entries }));
   if (!ok) return;
   try { await del(`/collections/${c.id}`); } catch (e) { errorToast(e); }
 }
@@ -169,23 +169,23 @@ function renderContent() {
   const c = collections.find(x => x.id === selected);
   shownCollection = c ? c.id : null;
   if (!c) {
-    box.innerHTML = `<div class="empty">${icon('library')}<div>Crée une bibliothèque pour commencer.</div></div>`;
+    box.innerHTML = `<div class="empty">${icon('library')}<div>${esc(t('library.create_first'))}</div></div>`;
     return;
   }
   box.innerHTML = `
     <div class="toolbar">
       <h2 style="margin:0;flex:1" id="lib-title">${esc(c.name)}</h2>
-      <button class="btn sm" data-add="files">${icon('file')}Fichiers</button>
-      <button class="btn sm" data-add="folder">${icon('folder')}Dossier</button>
-      <button class="btn sm" data-add="urls">${icon('globe')}Pages web</button>
+      <button class="btn sm" data-add="files">${icon('file')}${esc(t('library.add_files'))}</button>
+      <button class="btn sm" data-add="folder">${icon('folder')}${esc(t('library.add_folder'))}</button>
+      <button class="btn sm" data-add="urls">${icon('globe')}${esc(t('library.add_urls'))}</button>
     </div>
     <div class="job-strip" id="job-strip"></div>
     <div class="toolbar">
       <div class="segmented">${KIND_FILTERS.map(([k, label]) =>
-        `<button data-kind="${k}" class="${k === kindFilter ? 'on' : ''}">${label}</button>`).join('')}</div>
+        `<button data-kind="${k}" class="${k === kindFilter ? 'on' : ''}">${esc(t(label))}</button>`).join('')}</div>
       <div style="flex:1"></div>
-      <button class="btn ghost sm" data-tree="open">Tout déplier</button>
-      <button class="btn ghost sm" data-tree="close">Tout replier</button>
+      <button class="btn ghost sm" data-tree="open">${esc(t('library.expand_all'))}</button>
+      <button class="btn ghost sm" data-tree="close">${esc(t('library.collapse_all'))}</button>
     </div>
     <div class="ktree" id="ktree"></div>`;
   box.querySelectorAll('[data-add]').forEach(b => { b.onclick = () => add(b.dataset.add); });
@@ -242,8 +242,8 @@ function renderTree() {
   const top = tree();
   box.innerHTML = '';
   if (!countFiles(top)) {
-    box.innerHTML = `<div class="empty">${icon('folder-plus')}<div>Rien ici pour l'instant.<br>
-      Ajoute des fichiers, un dossier entier ou des pages web : PDF, Word, Excel, code, images, audio…</div></div>`;
+    box.innerHTML = `<div class="empty">${icon('folder-plus')}<div>${esc(t('library.tree_empty'))}<br>
+      ${esc(t('library.tree_empty_hint'))}</div></div>`;
     return;
   }
   box.append(renderNode(top));
@@ -266,7 +266,7 @@ function renderNode(node) {
         ${icon('chev-right', 'chev')}${icon('folder', 'kind-dir')}
         <span class="label">${esc(name)}</span><span class="faint">${countFiles(dir)}</span>
         ${closedControls(c, dir.path, true)}
-        <button class="icon-btn danger" data-act="remove" title="Retirer ce dossier de la bibliothèque">${icon('trash')}</button>
+        <button class="icon-btn danger" data-act="remove" title="${esc(t('library.remove_folder_hint'))}">${icon('trash')}</button>
       </div>`);
     row.onclick = e => {
       if (e.target.closest('.icon-btn')) return;
@@ -286,9 +286,9 @@ function renderNode(node) {
     const row = h(`
       <div class="k-row" title="${esc(entry.origin || entry.source)}">
         <span style="width:14px"></span>${fileIcon(entry)}
-        <span class="label">${esc(name)}</span><span class="faint">${entry.chunks} passage(s)</span>
+        <span class="label">${esc(name)}</span><span class="faint">${esc(t('library.entry_passages', { n: entry.chunks }))}</span>
         ${closedControls(c, entry.source, false)}
-        <button class="icon-btn danger" data-act="remove" title="Retirer de la bibliothèque">${icon('trash')}</button>
+        <button class="icon-btn danger" data-act="remove" title="${esc(t('library.remove_entry_hint'))}">${icon('trash')}</button>
       </div>`);
     row.querySelector('[data-act="remove"]').onclick = () => removeEntry(entry);
     bindClosed(row, entry.source, false);
@@ -302,8 +302,8 @@ async function removeEntry(entry) {
 }
 
 async function removeFolder(path, count) {
-  const ok = await confirmDanger('Retirer le dossier',
-    `Les ${count} élément(s) de « ${path} » seront retirés de la bibliothèque (tes fichiers ne sont pas touchés).`, 'Retirer');
+  const ok = await confirmDanger(t('library.remove_folder_title'),
+    t('library.remove_folder_text', { n: count, path }), t('library.remove'));
   if (!ok) return;
   try { await post('/entries/remove_prefix', { collection_id: selected, prefix: path }); } catch (e) { errorToast(e); }
 }
@@ -317,29 +317,29 @@ async function add(kind) {
 }
 
 async function manualPaths() {
-  const r = await modal({ title: 'Chemins à indexer', iconName: 'folder',
-    text: 'Colle un chemin complet par ligne (fichier ou dossier).',
-    textarea: '', placeholder: 'C:\\Users\\moi\\Documents\\Projet', confirm: 'Indexer' });
+  const r = await modal({ title: t('library.paths_title'), iconName: 'folder',
+    text: t('library.paths_text'),
+    textarea: '', placeholder: t('library.paths_placeholder'), confirm: t('library.index') });
   if (r.ok) launch(r.value.split('\n').map(s => s.trim()).filter(Boolean));
 }
 
 async function launch(paths) {
   try {
     await post('/index', { paths, collection_id: selected });
-    toast('Indexation lancée : la progression s\'affiche ici et dans Tâches.', 'ok');
+    toast(t('library.index_started'), 'ok');
   } catch (e) { errorToast(e); }
 }
 
 async function addUrls() {
-  const r = await modal({ title: 'Ajouter des pages web', iconName: 'globe',
-    text: 'Une adresse par ligne. Les pages sont téléchargées puis analysées.',
-    textarea: '', placeholder: 'https://…', confirm: 'Ajouter' });
+  const r = await modal({ title: t('library.urls_title'), iconName: 'globe',
+    text: t('library.urls_text'),
+    textarea: '', placeholder: 'https://…', confirm: t('library.add') });
   if (!r.ok) return;
   const urls = r.value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!urls.length) return;
   try {
     await post('/index_urls', { urls, collection_id: selected });
-    toast('Lecture des pages lancée.', 'ok');
+    toast(t('library.urls_started'), 'ok');
   } catch (e) { errorToast(e); }
 }
 
@@ -355,11 +355,11 @@ function renderJobStrip() {
     const pct = j.total ? Math.round(100 * processed / j.total) : 0;
     const mini = h(`
       <div class="mini">
-        <div class="top"><span>${esc(j.title)}</span><span class="muted">${processed}/${j.total} · ${pct} %</span></div>
+        <div class="top"><span>${esc(jobTitle(j))}</span><span class="muted">${esc(t('library.job_progress', { done: processed, total: j.total, pct }))}</span></div>
         <div class="bar"><i class="fill" style="width:${pct}%"></i></div>
       </div>`);
     mini.style.cursor = 'pointer';
-    mini.title = 'Voir dans Tâches';
+    mini.title = t('library.see_in_tasks');
     mini.onclick = () => emit('view:show', 'jobs');
     strip.append(mini);
   }
@@ -370,17 +370,17 @@ function renderMemory() {
   const card = $('#memory-card', root);
   if (!card) return;
   const enabled = !!state.settings?.conversations_enabled;
+  const counts = memory
+    ? `${t('library.memory_entries', { n: memory.entries })} · ${t('library.chunks_total', { n: memory.chunks })}` : '';
   card.innerHTML = `
-    <h2>${icon('memory')}Mémoire des conversations</h2>
-    <p class="hint">${enabled
-      ? "Active : l'IA peut s'appuyer sur tes autres conversations."
-      : "Désactivée : chaque conversation reste isolée."}</p>
-    <div class="muted" style="font-size:13px;margin-bottom:12px">${memory ? `${memory.entries} conversation(s) mémorisée(s) · ${memory.chunks} passages` : ''}</div>
-    <button class="btn sm danger" id="memory-clear" ${memory?.chunks ? '' : 'disabled'}>${icon('trash')}Vider la mémoire</button>`;
+    <h2>${icon('memory')}${esc(t('library.memory_title'))}</h2>
+    <p class="hint">${esc(t(enabled ? 'library.memory_on' : 'library.memory_off'))}</p>
+    <div class="muted" style="font-size:13px;margin-bottom:12px">${esc(counts)}</div>
+    <button class="btn sm danger" id="memory-clear" ${memory?.chunks ? '' : 'disabled'}>${icon('trash')}${esc(t('library.memory_clear'))}</button>`;
   card.querySelector('#memory-clear').onclick = async () => {
-    const ok = await confirmDanger('Vider la mémoire',
-      'La mémoire inter-conversations sera effacée. Les conversations elles-mêmes sont conservées.', 'Vider');
+    const ok = await confirmDanger(t('library.memory_clear'),
+      t('library.memory_clear_text'), t('library.memory_clear_confirm'));
     if (!ok) return;
-    try { await post('/memory/clear'); toast('Mémoire vidée.', 'ok'); } catch (e) { errorToast(e); }
+    try { await post('/memory/clear'); toast(t('library.memory_cleared'), 'ok'); } catch (e) { errorToast(e); }
   };
 }

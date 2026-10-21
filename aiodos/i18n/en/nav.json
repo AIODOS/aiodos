@@ -1,0 +1,13 @@
+{
+  "main": "Main navigation",
+  "chat": "Chats",
+  "chat_title": "Conversations",
+  "library": "Libraries",
+  "images": "Images",
+  "images_title": "Images and videos",
+  "jobs": "Tasks",
+  "node": "This machine",
+  "network": "Network",
+  "settings": "Settings",
+  "more": "More"
+}

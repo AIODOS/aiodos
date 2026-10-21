@@ -1,0 +1,42 @@
+{
+  "no_extension": "(sans extension)",
+  "job_index_folder": "Indexer le dossier « {name} » → {target}",
+  "job_index_items": {
+    "one": "Indexer {n} élément → {target}",
+    "other": "Indexer {n} éléments → {target}"
+  },
+  "no_usable_file": "Aucun fichier exploitable dans la sélection.",
+  "file_not_found": "Fichier introuvable : {path}",
+  "no_usable_text": "aucun texte exploitable",
+  "refused_recompute": "{reason} ; {excuse}, l'unité sera calculée sur mes machines",
+  "excuse_old_unit": "unité créée par une version d'AIODOS d'avant le 21/10/2026, impossible de savoir si le fichier a changé depuis",
+  "excuse_file_changed": "le fichier a changé depuis qu'il lui a été confié",
+  "excuse_reader": "son lecteur de documents diffère peut-être du mien",
+  "vector_count_mismatch": "Ollama n'a pas rendu autant de vecteurs que de passages",
+  "sample_mismatch": "passage {number} recalculé ici : similarité {similarity}, au moins {minimum} attendu",
+  "refused_uncheckable": "texte calculé par un ami pour une image, un son, une vidéo, une page web ou un format que cette machine ne sait pas relire : impossible à vérifier ici, l'unité sera calculée sur mes machines",
+  "refused_unreadable": "document illisible ici ({error}) : impossible de vérifier le résultat d'un ami, l'unité sera calculée sur mes machines",
+  "skipped_by_friend": "document ignoré par l'ami alors qu'il a du texte relu ici",
+  "passage_not_in_document": "un passage rendu ne figure pas dans le document relu ici",
+  "passages_cut_differently": "passages découpés autrement qu'ici (morceaux choisis, oublis ou répétitions)",
+  "invalid_passages": "passages absents ou invalides",
+  "passage_too_long": "passage de plus de {max} caractères : le découpage n'en fait pas d'aussi longs",
+  "invalid_vector_count": "vecteurs absents ou en nombre différent des passages",
+  "invalid_vectors": "vecteurs invalides (valeurs nulles ou non finies)",
+  "wrong_dimension": "vecteurs de dimension {got} au lieu de {expected} (modèle d'embedding différent ?)",
+  "job_read_pages": {
+    "one": "Lire {n} page web → {target}",
+    "other": "Lire {n} pages web → {target}"
+  },
+  "empty_page": "page vide, ou pas du texte",
+  "job_memorize": "Mémoriser la conversation « {title} »",
+  "conversation_deleted": "supprimée",
+  "memory_cleared": "mémoire vidée",
+  "memory_user": "Utilisateur : {text}",
+  "memory_assistant": "Assistant : {text}",
+  "job_reindex": "Réindexer les connaissances avec {model}",
+  "entry_removed": "retirée entre-temps",
+  "reindex_summary": "Modèle : {model}. {items} élément(s) de bibliothèque recalculé(s), dont {reread} relu(s) depuis leur fichier ; {conversations} conversation(s) remémorisée(s).",
+  "no_paths": "Aucun chemin fourni.",
+  "no_valid_urls": "Aucune URL valide (http:// ou https://)."
+}

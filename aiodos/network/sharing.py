@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 
 from aiodos import db, settings
+from aiodos.i18n import t
 from aiodos.network import peers
 
 MINE = "mine"
@@ -53,7 +54,7 @@ def set_aside_reason(node_id) -> str | None:
     """Pourquoi cette machine est mise de côté, ou None si elle ne l'est pas."""
     row = db.query_one("SELECT set_aside_reason FROM peers WHERE node_id=? "
                        "AND set_aside_at IS NOT NULL", (node_id,))
-    return (row["set_aside_reason"] or "contrôle échoué") if row else None
+    return (row["set_aside_reason"] or t("sharing.check_failed")) if row else None
 
 
 # --------------------------------------------------------- ce qui part chez un ami

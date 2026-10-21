@@ -1,0 +1,5 @@
+{
+  "ocr": "Transcris fidèlement et intégralement TOUT le texte visible dans cette image, sans rien ajouter. S'il n'y a aucun texte, réponds exactement : (aucun texte).",
+  "describe": "Décris en détail, en français, le contenu visuel de cette image.",
+  "both": "En français : 1) transcris tout le texte visible dans l'image ; 2) puis décris brièvement son contenu visuel."
+}

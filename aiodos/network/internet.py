@@ -15,7 +15,7 @@ import time
 from aiodos import settings
 from aiodos.network import client, invitations, netinfo, peers, route
 from aiodos.network.client import PeerError
-from aiodos.network.companion import Companion, CompanionError
+from aiodos.network.companion import Companion, CompanionError, shown
 
 log = logging.getLogger("aiodos.net")
 
@@ -207,6 +207,8 @@ class Internet:
             "error": companion.error if companion else None,
             "id": companion.id if companion else None,
             "program": companion.origin if running else None,    # d'où vient le programme
+            # ... à montrer dans la langue de l'interface (tt(program_t, program))
+            "program_t": shown(companion.origin) if running else None,
             "route": route.mode(),
             "relays": [r.get("url") for r in status.get("home_relays") or []
                        if r.get("connected")],

@@ -1,0 +1,11 @@
+{
+  "too_slow": "The other machine is sending too slowly: transfer dropped, it will resume later.",
+  "not_here": "Version not available on this machine.",
+  "bad_request": "Unreadable request.",
+  "still_waiting": "The other machine still hasn't answered the previous request.",
+  "bad_reply": "Unreadable reply from the other machine.",
+  "other_version": "The machine sent a different version from the one announced.",
+  "interrupted": "Transfer interrupted by the other machine.",
+  "bad_chunk": "Chunk of unexpected size: transfer interrupted.",
+  "no_such_file": "Version {version} does not deliver a “{kind}” file."
+}

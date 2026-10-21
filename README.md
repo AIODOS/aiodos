@@ -1,5 +1,7 @@
 # AIODOS
 
+*English version: [README.en.md](README.en.md).*
+
 > *AI* + *hodos*, « le chemin » en grec, celui de « méthode » et de « synode » (faire
 > route ensemble) : **la voie de l'IA, faite ensemble**. Le projet s'appelait Cœur IA
 > jusqu'au 16/10/2026 ; ses données sont reprises telles quelles.
@@ -11,6 +13,10 @@ indépendantes, que tes PC appairés se partagent sur le réseau local.
 
 > **Local par défaut, distribué à la demande.** Rien ne quitte la machine sans
 > action explicite : le web et le cloud sont optionnels et validés avant chaque envoi.
+
+AIODOS parle français et anglais : il suit la langue du système (navigateur, Windows,
+Android), l'anglais quand celle-ci n'est ni l'une ni l'autre, et se change dans Réglages →
+Langue.
 
 ## Où en est le projet
 
@@ -268,6 +274,8 @@ aiodos/
 ├── __main__.py        lancement : nœud (FastAPI) + fenêtre native (pywebview / WebView2)
 ├── db.py              base SQLite unique (WAL, transactions)
 ├── settings.py        réglages (les clés API ne sortent jamais en clair)
+├── i18n/              textes en français et en anglais : un fichier par fonctionnalité et
+│                      par langue (fr/*.json, en/*.json), langue de chaque requête
 ├── render.py          Markdown → HTML sûr, coloration Pygments
 ├── llm/               moteur intégré : llama.cpp en mode routeur (engine.py), modèles
 │                      d'AIODOS et d'Ollama (models.py), catalogue et téléchargement
@@ -325,9 +333,10 @@ aiodos/
 │                      appareil (approval.py), moteurs livrés (engines.py) — docs/mises-a-jour.md
 ├── api/               API locale + flux d'événements (SSE)
 └── ui/                fenêtre native, icône de la zone de notification (tray.py),
-                       interface web (HTML/CSS/JS, sans compilation)
+                       interface web (HTML/CSS/JS, sans compilation ; js/i18n.js : ses textes)
 compagnon/             aiodos-net : compagnon Internet en Rust (Iroh), cf. son README
-android/               l'appli Android : projet Gradle (Chaquopy), Java, paquets Python
+android/               l'appli Android : projet Gradle (Chaquopy), Java, paquets Python ;
+                       ses textes dans res/values (anglais) et res/values-fr
 tests/                 tests automatisés (pytest)
 tools/                 publication des versions (moteurs joints : engine_release.py),
                        appli Android (build_android.py, android_wheels.py, android_deps.py),
@@ -336,6 +345,15 @@ tools/                 publication des versions (moteurs joints : engine_release
 docs/                  notes de mesures et de choix techniques, téléphone Android
 legacy/                v1 (juin 2026, PyQt6), conservée et toujours lançable
 ```
+
+## Traductions
+
+Chaque texte visible est dans `aiodos/i18n/<langue>/<fonctionnalité>.json`, sous les mêmes
+clés en français (`fr`, la langue de départ) et en anglais (`en`) : l'interface les reçoit
+de son nœud (`GET /api/i18n`), le nœud répond à chaque requête dans la langue de
+l'interface (`Accept-Language`), et l'appli Android a les siens dans `android/res/values*`.
+Les tests (`tests/test_i18n*.py`) vérifient que chaque texte existe dans les deux langues et
+qu'aucun ne reste écrit en dur dans le code. Les documents de `docs/` restent en français.
 
 ## Sécurité
 

@@ -8,7 +8,7 @@ import logging
 import os
 import socket
 
-from aiodos import db
+from aiodos import db, i18n
 from aiodos.node import android, vault
 
 log = logging.getLogger("aiodos")
@@ -27,14 +27,13 @@ RAG_THRESHOLDS = {
 }
 
 DEFAULTS = {
+    # --- Langue des textes (i18n/) : « auto » (celle du système), « fr » ou « en » ---
+    "language": "auto",
     # --- Conversation ---
     "default_model": "qwen3.5:9b",
     "think": True,                    # laisser les modèles « réfléchir » (Qwen3…)
-    "system_prompt": (
-        "Tu es AIODOS, un assistant local qui aide à coder, à réfléchir et à "
-        "travailler. Réponds en français, de façon claire et structurée. "
-        "Quand tu écris du code, utilise des blocs markdown avec le nom du langage."
-    ),
+    # Vide : les consignes par défaut, dans la langue en cours (i18n/*/settings.json)
+    "system_prompt": "",
     "ollama_url": "http://127.0.0.1:11434",
     # Moteur des modèles (services/ollama.py) : « auto » = le moteur intégré (llama.cpp) dès
     # qu'il est là, sinon Ollama ; « integrated » ; « ollama » (décision du 20/10/2026)
@@ -130,7 +129,7 @@ def machine_name() -> str:
     « localhost », le modèle du téléphone."""
     name = socket.gethostname()
     if name == "localhost" and android.is_android():
-        return android.model() or "Téléphone Android"
+        return android.model() or i18n.t("settings.android_phone")
     return name
 
 
@@ -160,6 +159,8 @@ FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend
 def default(key):
     if key in FOR_MY_MACHINES and os.environ.get("AIODOS_QUIET") == "1":
         return False
+    if key == "system_prompt":
+        return i18n.t("settings.default_system_prompt")
     return DEFAULTS.get(key)
 
 
@@ -218,6 +219,8 @@ def set_many(values: dict):
         for key, value in values.items():
             if key not in DEFAULTS:
                 continue
+            if key == "language" and value not in ("auto", *i18n.LANGUAGES):
+                continue                  # une langue qu'AIODOS ne parle pas : rien ne change
             if key in SECRET_KEYS:
                 if value is None:
                     value = ""
@@ -229,6 +232,8 @@ def set_many(values: dict):
                 "INSERT INTO settings(key, value) VALUES(?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, json.dumps(value, ensure_ascii=False)))
+    if "language" in values:
+        i18n.language.changed()
 
 
 def protect_secrets() -> int:

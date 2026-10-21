@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'écran d'attente de l'appli (MainActivity.java), en français. -->
+<resources>
+    <string name="startup">Démarrage d\'AIODOS…</string>
+    <string name="startup_first">Démarrage d\'AIODOS…\n\nÀ la première ouverture, l\'appli met en place Python et ses bibliothèques : jusqu\'à une minute.</string>
+    <string name="startup_too_long">AIODOS met plus de 3 minutes à démarrer. Il s\'affichera ici dès qu\'il sera prêt ; sinon, « Arrêter » dans sa notification, puis rouvre l\'appli.</string>
+    <string name="tap_to_restart">%1$s\n\nToucher pour redémarrer AIODOS.</string>
+</resources>

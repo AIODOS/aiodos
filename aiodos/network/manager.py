@@ -14,6 +14,7 @@ import time
 import uvicorn
 
 from aiodos import settings
+from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.network import (activity, client, consult, invitations, peers, placement, profile,
                             route, sharing)
@@ -151,10 +152,9 @@ class NetworkManager:
                 await discovery.start()
                 self._discovery = discovery
                 if not discovery.listening and not self.error:
-                    self.error = ("Un autre programme garde le port des annonces : ce nœud "
-                                  "s'annonce à tes machines, mais ne voit pas les leurs.")
+                    self.error = t("net.discovery_port_taken")
             except OSError as exc:
-                self.error = f"Découverte automatique indisponible ({exc}). Ajout par adresse possible."
+                self.error = t("net.discovery_unavailable", error=exc)
         elif not self.local and self._discovery is not None:
             await self._discovery.stop()
             self._discovery = None
@@ -171,8 +171,7 @@ class NetworkManager:
         if self._failed() and not self.port_override:
             await self._fall_back(app, host)
         if self._failed():
-            self.error = (f"Le port {self.p2p_port} est indisponible : le réseau n'a pas pu "
-                          "démarrer.")
+            self.error = t("net.port_unavailable", port=self.p2p_port)
             log.warning(self.error)
             self._server_task = None
             return
@@ -235,13 +234,10 @@ class NetworkManager:
             self.spare_port = None
             return
         if other:
-            self.error = (f"Un autre nœud AIODOS (« {other.get('name') or '?'} ») tourne sur "
-                          f"cet appareil et garde le port {wanted} : arrête-le (l'ancien nœud "
-                          f"de Termux sur un téléphone : redémarrer le téléphone suffit). En "
-                          f"attendant, ce nœud passe par le port {port}.")
+            self.error = t("net.port_held_by_node", name=other.get("name") or "?", port=wanted,
+                           spare=port)
         else:
-            self.error = (f"Le port {wanted} est pris par un autre programme : ce nœud passe "
-                          f"par le port {port}, qu'il annonce à tes machines.")
+            self.error = t("net.port_taken", port=wanted, spare=port)
         log.warning(self.error)
 
     async def _stop(self):
@@ -325,7 +321,7 @@ class NetworkManager:
         port = int(port or settings.get("p2p_port"))
         info = await asyncio.to_thread(client.hello, host, port)
         if info["node_id"] == self.node_id:
-            raise PeerError("C'est l'adresse de cette machine-ci.")
+            raise PeerError(t("net.own_address"))
         self.visible[info["node_id"]] = {"node_id": info["node_id"], "name": info["name"],
                                          "address": host, "port": port, "last_seen": time.time(),
                                          "manual": True}

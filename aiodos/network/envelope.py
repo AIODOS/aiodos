@@ -18,6 +18,7 @@ import math
 import threading
 import time
 
+from aiodos.i18n import t
 from aiodos.network import crypto
 from aiodos.network.crypto import SealError
 
@@ -60,9 +61,9 @@ def _opened(data: bytes):
     try:
         return parse_json(data)
     except NotFinite as exc:
-        raise SealError(f"Nombre non fini ({exc}) : message refusé.") from exc
+        raise SealError(t("p2p.not_finite", value=exc)) from exc
     except (ValueError, RecursionError) as exc:
-        raise SealError("Contenu illisible : message refusé.") from exc
+        raise SealError(t("p2p.content_unreadable")) from exc
 
 
 def _finite(value):
@@ -107,7 +108,7 @@ def unwrap_reply(key: bytes, action: str, sender: str, recipient: str, ts: float
     try:
         box = b64d(reply["box"])
     except (KeyError, TypeError, AttributeError, ValueError) as exc:
-        raise SealError("Réponse incomplète.") from exc
+        raise SealError(t("p2p.reply_incomplete")) from exc
     return _opened(crypto.open_sealed(key, box, _aad("rep", action, sender, recipient, ts)))
 
 
@@ -126,7 +127,7 @@ def unwrap_frame(key: bytes, action: str, sender: str, recipient: str, ts: float
     try:
         box = b64d(line.strip())
     except (binascii.Error, ValueError) as exc:
-        raise SealError("Morceau de réponse illisible.") from exc
+        raise SealError(t("p2p.frame_unreadable")) from exc
     return _opened(crypto.open_sealed(key, box, _frame_aad(action, sender, recipient, ts, seq)))
 
 
@@ -144,7 +145,7 @@ class ReplayGuard:
                 if now - at > 2 * MAX_SKEW:
                     del self._seen[key]
             if (sender, nonce) in self._seen:
-                raise SealError("Message rejoué.")
+                raise SealError(t("p2p.replayed"))
             self._seen[(sender, nonce)] = now
 
 
@@ -155,14 +156,14 @@ def unwrap(key: bytes, action: str, recipient: str, envelope: dict,
         sender = envelope["from"]
         box = b64d(envelope["box"])
     except (KeyError, TypeError, AttributeError, ValueError) as exc:
-        raise SealError("Enveloppe incomplète.") from exc
+        raise SealError(t("p2p.envelope_incomplete")) from exc
     # Un horodatage NaN passerait le contrôle d'écart (toute comparaison avec NaN est fausse)
     if not math.isfinite(ts):
-        raise SealError("Enveloppe incomplète.")
+        raise SealError(t("p2p.envelope_incomplete"))
     if envelope.get("to") != recipient:
-        raise SealError("Message destiné à un autre nœud.")
+        raise SealError(t("p2p.wrong_recipient"))
     if abs(time.time() - ts) > MAX_SKEW:
-        raise SealError("Horloges trop décalées entre les deux machines.")
+        raise SealError(t("p2p.clock_skew"))
     data = crypto.open_sealed(key, box, _aad("req", action, sender, recipient, ts))
     guard.check(sender, box[:crypto.NONCE])
     return _opened(data)

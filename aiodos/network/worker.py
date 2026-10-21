@@ -44,6 +44,7 @@ n'apprend rien de cette machine par un échec : ni ses chemins, ni le nom de son
 son disque plein (_reason).
 """
 import asyncio
+import contextvars
 import hashlib
 import importlib.util
 import json
@@ -55,7 +56,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aiodos import __version__, paths, settings
+from aiodos import __version__, i18n, paths, settings
+from aiodos.i18n import t
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
@@ -84,12 +86,22 @@ class _NoRoom(Exception):
 class _BadOrder(RuntimeError):
     """L'ordre reçu, ou son fichier, ne tient pas (tâche inconnue, taille annoncée, morceau
     trop long, empreinte) : refusé avant tout calcul. Son message ne dit rien de cette
-    machine : il part tel quel chez le propriétaire, ami compris (_reason)."""
+    machine : il part tel quel chez le propriétaire, ami compris (_reason), avec sa clé pour
+    qu'il le lise dans sa langue (lazy, cf. _told)."""
+
+    def __init__(self, key: str, **params):
+        super().__init__(t(key, **params))
+        self.lazy = i18n.lazy(key, **params)
 
 
 class _TooBig(Exception):
     """Le résultat dépasse ce que son propriétaire acceptera (« result_max » de l'ordre,
-    network/body_limit.py chez lui) : l'envoyer ne servirait à rien."""
+    network/body_limit.py chez lui) : l'envoyer ne servirait à rien. `size` et `limit` :
+    les deux tailles, écrites (_mib)."""
+
+    def __init__(self, size: str, limit: str):
+        super().__init__(t("worker.size_limit", size=size, limit=limit))
+        self.sizes = {"size": size, "limit": limit}
 
 
 CHECK_EVERY = 2          # surveillance des conditions de partage (secondes)
@@ -123,47 +135,49 @@ _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
              *(f"LPT{i}" for i in range(1, 10))}
 
 
+def _state(active: bool, state: str, key: str, **params) -> dict:
+    """Un état du partage, et son explication : rendue dans la langue du nœud (detail, que
+    lisent aussi mes machines d'une version d'avant) et à traduire chez qui la lit (detail_t,
+    i18n.lazy : l'interface d'ici, et mes machines, cf. activity.field)."""
+    return {"active": active, "state": state, "detail": t(key, **params),
+            "detail_t": i18n.lazy(key, **params)}
+
+
 def sharing_state(previous=None) -> dict:
     """Cette machine peut-elle calculer pour les autres en ce moment ? Avec
     l'explication. `previous` : état précédent (écarts de reprise d'un téléphone)."""
     if not settings.get("share_enabled"):
-        return {"active": False, "state": "off", "detail": "Partage désactivé."}
+        return _state(False, "off", "worker.sharing_off")
     supply = power.read()
-    device = "ce téléphone" if supply["mobile"] else "ce PC"
     if settings.get("share_on_ac_only"):
         if supply["plugged"] is False:
-            return {"active": False, "state": "battery",
-                    "detail": f"En pause : {device} est sur batterie."}
+            return _state(False, "battery", "worker.paused_battery_phone" if supply["mobile"]
+                          else "worker.paused_battery_pc")
         if supply["plugged"] is None and supply["mobile"]:
-            return {"active": False, "state": "unknown",
-                    "detail": "En pause : impossible de savoir si ce téléphone est en charge "
-                              "(Termux:API manquant ? Voir docs/android.md)."}
+            return _state(False, "unknown", "worker.paused_charge_unknown")
     if supply["mobile"]:
         paused = _phone_pause(supply, previous)
         if paused:
             return paused
-        return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
+        return _state(True, "ready", "worker.ready")
+    # Plus bas, ce n'est plus un téléphone : « ce PC »
     idle = identity.idle_seconds()
     wait = int(settings.get("idle_minutes") or 10) * 60
     in_use = idle is None or idle < wait             # inactivité inconnue : on suppose que si
     if settings.get("share_when_idle"):
         if idle is not None and idle < wait:
             left = max(1, round((wait - idle) / 60))
-            return {"active": False, "state": "busy",
-                    "detail": f"En pause : {device} est utilisé (reprise après {left} min sans activité)."}
+            return _state(False, "busy", "worker.paused_in_use", minutes=left)
     elif in_use and supply["plugged"] is False:
         # Prêt pendant l'utilisation : jamais sur batterie, même si le partage y est permis
-        return {"active": False, "state": "battery",
-                "detail": f"En pause : {device} est utilisé et sur batterie."}
+        return _state(False, "battery", "worker.paused_in_use_battery")
     elif in_use:
         # Activité inconnue (Linux, nœud sans écran) : les mêmes égards que pendant une
         # utilisation. « Seulement quand je n'utilise pas ce PC » prête alors sans retenue,
         # faute de pouvoir mesurer une utilisation (règle d'avant).
-        when = ("pendant que tu utilises ce PC" if idle is not None
-                else "(l'activité de ce PC n'est pas mesurable)")
-        return {"active": True, "state": "in_use",
-                "detail": f"Prêt à calculer pour tes autres machines, en priorité basse {when}."}
-    return {"active": True, "state": "ready", "detail": "Prêt à calculer pour tes autres machines."}
+        return _state(True, "in_use", "worker.ready_low_priority" if idle is not None
+                      else "worker.ready_low_priority_unmeasured")
+    return _state(True, "ready", "worker.ready")
 
 
 def welcomes(peer_id: str) -> bool:
@@ -192,20 +206,22 @@ def _phone_pause(supply, previous) -> dict | None:
     level, minimum = supply["level"], int(settings.get("share_min_battery") or 0)
     floor = minimum - BATTERY_MARGIN if was == "ready" else minimum
     if level is not None and level < floor:
-        return {"active": False, "state": "low_battery",
-                "detail": f"En pause : batterie à {level} % (reprise à {minimum} %)."}
+        return _state(False, "low_battery", "worker.paused_low_battery", level=level,
+                      minimum=minimum)
     heat, limit = supply["temperature"], float(settings.get("share_max_temp") or 0)
     if heat is None or not limit:
         return None
     resume = limit - HEAT_MARGIN
     if heat > (resume if was == "hot" else limit):
-        return {"active": False, "state": "hot",
-                "detail": f"En pause : batterie à {_celsius(heat)} (reprise à {_celsius(resume)})."}
+        # Températures écrites ici (décimale de la langue du nœud), telles quelles chez qui lit
+        return _state(False, "hot", "worker.paused_hot", heat=_celsius(heat),
+                      resume=_celsius(resume))
     return None
 
 
 def _celsius(value) -> str:
-    return f"{value:.1f}".rstrip("0").rstrip(".").replace(".", ",") + " °C"
+    """« 40,4 °C », « 37 °C » : une décimale au plus, à la façon de la langue."""
+    return t("format.celsius", n=i18n.number(value, 1).rstrip("0").rstrip(",."))
 
 
 def safe_name(name) -> str:
@@ -240,7 +256,7 @@ def _sealed_size(payload: dict) -> int:
 
 
 def _mib(size: int) -> str:
-    return f"{size / 1024 ** 2:.1f} Mio".replace(".", ",")
+    return t("p2p.size_mib", n=i18n.number(size / 1024 ** 2, 1))
 
 
 def _retry_after(reply) -> float:
@@ -299,7 +315,7 @@ class Worker:
         self.m = manager
         self.executor = manager.executor
         self.assignments = {}            # clé -> Assignment
-        self.state = {"active": False, "state": "off", "detail": "Partage désactivé."}
+        self.state = _state(False, "off", "worker.sharing_off")
         self._task = None
         self._wake = None
         # machine -> (instant où lui redemander, ressources déjà proposées) : une
@@ -315,7 +331,10 @@ class Worker:
     def start(self):
         shutil.rmtree(paths.work_dir(), ignore_errors=True)    # restes d'un arrêt brutal
         self._wake = asyncio.Event()
-        self._task = asyncio.create_task(self._loop(), name="aiodos-worker")
+        # Dans un contexte neuf, et non celui de qui démarre le réseau (une requête de
+        # l'interface, dans sa langue) : l'état du partage est dit dans la langue du nœud
+        self._task = asyncio.create_task(self._loop(), name="aiodos-worker",
+                                         context=contextvars.Context())
 
     async def stop(self):
         if self._task:
@@ -414,6 +433,7 @@ class Worker:
         places (executor.begin_remote), ou que je garde à mes machines : rendue sans être
         calculée, et cette machine au repos."""
         self._rest(peer["node_id"], DEFAULT_SLOTS, REFUSED_RETRY)
+        # i18n: tel quel (journal, _note)
         self._note(peer, "unité reçue pour une ressource que je n'avais pas proposée : rendue")
         unit = order.get("id") if isinstance(order, dict) else None
         full = peers.get(peer["node_id"])
@@ -463,13 +483,15 @@ class Worker:
                                 {"resources": offered, "caps": caps}, timeout=LEASE_TIMEOUT,
                                 limit=LEASE_REPLY)
         except PeerError as exc:
+            # i18n: tel quel (journal, _note)
             self._note(peer, f"demande de travail impossible ({exc})")
             # Elle m'a fait attendre jusqu'à l'échéance (le prêt attend chaque machine à son
             # tour) : pas avant un moment
-            if str(exc) == client.TOO_SLOW:
+            if isinstance(exc, client.TooSlow):
                 return {"unit": None, "retry_after": SLOW_RETRY}
             return None
         if not isinstance(reply, dict):
+            # i18n: tel quel (journal, _note)
             self._note(peer, "réponse illisible à une demande de travail")
             return None
         if reply.get("reason"):
@@ -521,7 +543,7 @@ class Worker:
     def _call(self, a: Assignment, action, payload, timeout=30) -> dict:
         peer = peers.get(a.peer_id)
         if not peer:
-            raise PeerError("Machine désappairée entre-temps.")
+            raise PeerError(t("worker.unpaired_meanwhile"))
         return client.call(self.m.node_id, peer, action, payload, timeout=timeout,
                            limit=_reply_size(action, payload))
 
@@ -532,6 +554,8 @@ class Worker:
             pass                   # sans réponse, le bail expirera chez le propriétaire
 
     def _process(self, a: Assignment) -> str:
+        """Calcule l'unité. → ce qui en est advenu, qui ne va qu'au journal (_run) : en
+        français, comme lui."""
         started, waited = time.perf_counter(), pacing.waited()
         folder = paths.work_dir() / f"{a.peer_id[:8]}-{int(a.order['id'])}"
 
@@ -542,8 +566,7 @@ class Worker:
             mine = sharing.level(a.peer_id) == sharing.MINE
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
-                raise _BadOrder(f"tâche « {str(a.order['task'])[:60]} » inconnue sur cette "
-                                "machine")
+                raise _BadOrder("worker.unknown_task", task=str(a.order["task"])[:60])
             if not mine and not registry.may_compute_for_friend(spec):
                 raise _NotForFriends()
             if not mine and _media_to_index(a.order):
@@ -559,26 +582,28 @@ class Worker:
             compute_s = computed()
             reply = self._send_result(a, output, compute_s)
             if not reply.get("accepted"):
-                return f"résultat refusé ({reply.get('reason')})"
+                return f"résultat refusé ({reply.get('reason')})"   # i18n: tel quel (journal)
             peers.account(a.peer_id, given_s=compute_s, given_units=1)
             self._rest_gpu(a, compute_s)
-            return f"faite en {compute_s:.1f} s"
+            return f"faite en {compute_s:.1f} s"                    # i18n: tel quel (journal)
         except registry.Interrupted:
             self._quiet(a, "work/release")
-            return "interrompue et rendue"
+            return "interrompue et rendue"                          # i18n: tel quel (journal)
         except _NotForFriends:
             self._quiet(a, "work/release")
             # Elle me la redonnerait aussitôt (une version d'avant me confie encore ses
             # pages) : plus rien ne lui est demandé pendant un moment
             self._rest(a.peer_id, DEFAULT_SLOTS, REFUSED_RETRY)
-            return "réservée à mes machines : rendue"
+            return "réservée à mes machines : rendue"               # i18n: tel quel (journal)
         except _NotNow:
             self._quiet(a, "work/release")
+            # i18n: tel quel (journal)
             return "téléphone hors charge ou hors Wi-Fi : rendue à l'ami"
         except _NoRoom:
             self._quiet(a, "work/release")
             # Rien d'autre de cette machine pendant un moment : elle redonnerait la même
             self._rest(a.peer_id, DEFAULT_SLOTS, NO_ROOM_RETRY)
+            # i18n: tel quel (journal)
             return "pas assez de place ici pour son fichier : unité rendue"
         except media.WhisperMissing:
             # Ni l'unité ni ce fichier n'y sont pour rien : rendue sans compter d'échec (un
@@ -587,24 +612,41 @@ class Worker:
             self._quiet(a, "work/release")
             self._rest(a.peer_id, {a.resource}, WHISPER_RETRY)
             model = str((a.order.get("options") or {}).get("whisper") or "?")[:40]
+            # i18n: tel quel (journal)
             return (f"modèle Whisper « {model} » absent ici, non téléchargé pour cette "
                     "machine : unité rendue")
         except _TooBig as exc:
-            self._quiet(a, "work/fail", error=f"résultat trop volumineux pour être rendu "
-                        f"({exc}) : à calculer sur la machine de son propriétaire",
-                        too_big=True, compute_s=computed())
+            # Dit au propriétaire dans la langue d'ici (error) et dans la sienne (error_t)
+            told = i18n.lazy("worker.result_too_big", **exc.sizes)
+            self._quiet(a, "work/fail", error=i18n.render(told), error_t=told, too_big=True,
+                        compute_s=computed())
+            # i18n: tel quel (journal)
             return f"résultat trop volumineux pour son propriétaire ({exc}) : rendu en échec"
         except PeerError as exc:
-            return f"propriétaire injoignable ({exc})"
+            return f"propriétaire injoignable ({exc})"              # i18n: tel quel (journal)
         except Exception as exc:
             if engine_down(exc):
                 self.executor.cooldown[a.resource] = time.monotonic() + ENGINE_RETRY_DELAY
                 self._quiet(a, "work/release")
-                return "Ollama injoignable ici : unité rendue"
-            self._quiet(a, "work/fail", error=self._reason(a, exc), compute_s=computed())
-            return f"échec : {exc}"
+                return "Ollama injoignable ici : unité rendue"      # i18n: tel quel (journal)
+            self._quiet(a, "work/fail", error=self._reason(a, exc), error_t=self._told(a, exc),
+                        compute_s=computed())
+            return f"échec : {exc}"                                 # i18n: tel quel (journal)
         finally:
             shutil.rmtree(folder, ignore_errors=True)
+
+    @staticmethod
+    def _told(a: Assignment, exc) -> list | None:
+        """Ce que le propriétaire apprend d'un échec (cf. _reason), à lire dans sa langue :
+        [clé, {paramètres}] (i18n.lazy, envoyé en « error_t ») ; None pour le message d'une
+        erreur tel quel, qui ne va qu'à une de mes machines."""
+        if isinstance(exc, _BadOrder):
+            return exc.lazy
+        if sharing.level(a.peer_id) == sharing.MINE:
+            return None
+        if isinstance(exc, OSError):
+            return i18n.lazy("worker.failed_io")
+        return i18n.lazy("worker.failed_compute", kind=exc.__class__.__name__)
 
     @staticmethod
     def _reason(a: Assignment, exc) -> str:
@@ -614,11 +656,8 @@ class Worker:
         d'écriture dirait que le disque d'ici est plein ; une erreur du calcul (lecteur de
         documents, transcription…) peut citer des chemins de ce PC, donc le nom de son
         compte (relecture du 21/10/2026) : il n'en apprend que la sorte."""
-        if sharing.level(a.peer_id) == sharing.MINE or isinstance(exc, _BadOrder):
-            return str(exc)[:400]
-        if isinstance(exc, OSError):
-            return "erreur de lecture ou d'écriture sur la machine qui calcule"
-        return f"échec du calcul sur la machine qui calcule ({exc.__class__.__name__})"
+        told = Worker._told(a, exc)
+        return str(exc)[:400] if told is None else i18n.render(told)[:400]
 
     def _download(self, a: Assignment, folder: Path) -> str:
         """Le fichier de l'unité, morceau par morceau. Sa taille et ses morceaux viennent de
@@ -626,10 +665,10 @@ class Worker:
         blob = a.order["blob"]
         size = blob.get("size")
         if isinstance(size, bool) or not isinstance(size, int) or size < 0:
-            raise _BadOrder("taille du fichier illisible dans l'ordre reçu")
+            raise _BadOrder("worker.size_unreadable")
         if size > work.MAX_BLOB:
-            raise _BadOrder(f"fichier annoncé trop gros ({size // 1024 ** 2} Mio, "
-                            f"{work.MAX_BLOB // 1024 ** 2} Mio au plus)")
+            raise _BadOrder("worker.file_too_big", size=size // 1024 ** 2,
+                            limit=work.MAX_BLOB // 1024 ** 2)
         folder.mkdir(parents=True, exist_ok=True)
         if shutil.disk_usage(folder).free - size < DISK_MARGIN:
             raise _NoRoom()
@@ -645,17 +684,17 @@ class Worker:
                 reply = self._chunk(a, received, want)
                 text = reply.get("data") or ""
                 if not isinstance(text, str) or len(text) > 4 * ((want + 2) // 3):
-                    raise _BadOrder("morceau du fichier plus long que demandé")
+                    raise _BadOrder("worker.chunk_too_long")
                 data = b64d(text)
                 if len(data) > want:
-                    raise _BadOrder("morceau du fichier plus long que demandé")
+                    raise _BadOrder("worker.chunk_too_long")
                 if not data:
                     break
                 f.write(data)
                 digest.update(data)
                 received += len(data)
         if received != size or digest.hexdigest() != blob.get("sha256"):
-            raise _BadOrder("fichier reçu incomplet ou modifié pendant le transfert")
+            raise _BadOrder("worker.file_altered")
         return str(target)
 
     def _chunk(self, a: Assignment, offset: int, size: int) -> dict:
@@ -674,7 +713,7 @@ class Worker:
                          a.order["blob"]["size"], exc, delay)
                 if a.stop.wait(delay):
                     raise registry.Interrupted() from exc
-        raise PeerError("Transfert impossible.")
+        raise PeerError(t("worker.transfer_failed"))
 
     def _send_result(self, a: Assignment, output, compute_s) -> dict:
         body = {"unit": a.order["id"], "output": wire.pack(output), "compute_s": compute_s}
@@ -685,7 +724,7 @@ class Worker:
         if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0:
             size = _sealed_size(body)
             if size > limit:
-                raise _TooBig(f"{_mib(size)}, {_mib(limit)} au plus")
+                raise _TooBig(_mib(size), _mib(limit))
         # Un gros résultat n'est accepté que de l'adresse connue de cette machine chez le
         # propriétaire (network/body_limit.py) : après un changement d'adresse, son prochain
         # « ping » (toutes les 15 s) la lui apprend, d'où des essais sur une trentaine de s

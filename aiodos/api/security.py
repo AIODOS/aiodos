@@ -18,6 +18,9 @@ from urllib.parse import parse_qs
 from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse, PlainTextResponse
 
+from aiodos.i18n import t, using
+from aiodos.i18n.middleware import requested
+
 # L'interface : ses propres scripts et rien d'autre (ni script en ligne, ni gestionnaire
 # onerror= glissé dans un profil), ses images et vidéos, ses requêtes vers ce nœud seul.
 # Les styles en ligne restent permis : les vues en posent beaucoup (style="…"), un style
@@ -41,6 +44,13 @@ INTERFACE_POLICY = "; ".join((
 # ainsi telles quelles dans un onglet du téléphone.
 API_POLICY = "sandbox; frame-ancestors 'none'"
 INERT_MEDIA = ("image/png", "image/jpeg", "image/webp", "image/gif", "video/", "audio/")
+
+
+def _said(scope, key) -> str:
+    """Un refus de la garde, dans la langue de la requête (elle passe avant le middleware
+    des langues, cf. api/server.py)."""
+    with using(requested(scope)):
+        return t(key)
 
 
 def protect(headers: MutableHeaders, api: bool):
@@ -73,7 +83,7 @@ class Guard:
         headers = dict(scope["headers"])
         host = headers.get(b"host", b"").decode("latin-1")
         if host not in self.hosts:
-            return await PlainTextResponse("Hôte refusé.", status_code=400)(
+            return await PlainTextResponse(_said(scope, "guard.host_refused"), status_code=400)(
                 scope, receive, send_protected)
         if api:
             given = headers.get(b"x-aiodos-token", b"").decode("latin-1")
@@ -83,6 +93,6 @@ class Guard:
             # En octets : un jeton tapé avec des accents est refusé, il ne fait pas tomber
             # la requête (compare_digest refuse les chaînes non ASCII)
             if not secrets.compare_digest(given.encode("utf-8"), self.token.encode("utf-8")):
-                return await JSONResponse({"detail": "Jeton manquant ou invalide."},
+                return await JSONResponse({"detail": _said(scope, "guard.token_invalid")},
                                           status_code=401)(scope, receive, send_protected)
         return await self.app(scope, receive, send_protected)

@@ -1,0 +1,16 @@
+{
+  "not_a_code": "This isn't an AIODOS invitation code.",
+  "unreadable": "Unreadable code: was it copied in full?",
+  "other_version": "Code from another version of AIODOS: both of you need to update.",
+  "incomplete": "Incomplete code: was it copied in full?",
+  "internet_first": "First turn on the Internet connection (“Internet” card): the invitation goes through the aiodos-net companion.",
+  "is_a_reply": "This is a reply: paste it on the machine that sent the invitation.",
+  "from_here": "This invitation comes from this very machine.",
+  "expired_ask": "Invitation expired: ask for a new one.",
+  "used": "This invitation has already been used.",
+  "is_an_invitation": "This is an invitation: paste it on your friend's machine.",
+  "mismatch": "This reply doesn't match this invitation.",
+  "expired_create": "Invitation expired: create a new one.",
+  "reply_from_here": "This reply comes from this very machine.",
+  "unreachable": "“{name}” unreachable over the Internet: {error}"
+}

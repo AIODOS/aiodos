@@ -47,6 +47,9 @@ import zipfile
 import zlib
 from xml.parsers import expat
 
+from aiodos import i18n
+from aiodos.i18n import t
+
 log = logging.getLogger("aiodos.extract")
 
 ZIP_DOCUMENTS = {".docx", ".pptx", ".xlsx", ".xlsm", ".odt", ".epub"}
@@ -111,12 +114,13 @@ class ArchiveRefused(Exception):
 
 
 def _size(n) -> str:
-    """Une taille lisible : « 850 Ko », « 16,5 Mo »."""
+    """Une taille lisible : « 850 Ko », « 16,5 Mo » (« 850 KB », « 16.5 MB » en anglais)."""
     if n < 1024:
-        return f"{n} octets"
+        return t("extract.size_bytes", n=n)
     if n < 1024 * 1024:
-        return f"{n / 1024:.0f} Ko"
-    return f"{n / (1024 * 1024):.1f}".replace(".", ",").removesuffix(",0") + " Mo"
+        return t("extract.size_kb", n=f"{n / 1024:.0f}")
+    megabytes = i18n.number(n / (1024 * 1024), 1).removesuffix(",0").removesuffix(".0")
+    return t("extract.size_mb", n=megabytes)
 
 
 def _with_zipfile(f):
@@ -151,7 +155,7 @@ def _by_hand(f):
     if start >= _LOCATOR_SIZE:
         f.seek(start - _LOCATOR_SIZE)
         if f.read(4) == _END_ZIP64_LOCATOR:
-            raise ArchiveRefused("archive zip64 : bien trop grande pour un document")
+            raise ArchiveRefused(t("extract.zip64"))
     _, _, _, _, entries, directory, _, _ = struct.unpack("<4s4H2LH", record)
     return entries, directory
 
@@ -195,9 +199,9 @@ def _xml_parts(z, infos) -> list:
     found = []
     for info in infos:
         if info.flag_bits & _ENCRYPTED:
-            raise ArchiveRefused("archive chiffrée")
+            raise ArchiveRefused(t("extract.encrypted"))
         if info.compress_type not in _METHODS:
-            raise ArchiveRefused("méthode de compression inattendue pour un document")
+            raise ArchiveRefused(t("extract.compression"))
         if info.file_size <= 0 or info.is_dir():
             continue
         if info.filename.lower().endswith(XML_PARTS):
@@ -208,7 +212,8 @@ def _xml_parts(z, infos) -> list:
                 head = f.read(HEAD_BYTES)
         except (zipfile.BadZipFile, zlib.error, OSError, EOFError, ValueError,
                 NotImplementedError, RuntimeError) as exc:
-            raise ArchiveRefused(f"archive zip abîmée ({exc.__class__.__name__})") from exc
+            raise ArchiveRefused(t("extract.damaged_zip_error",
+                                   error=exc.__class__.__name__)) from exc
         if _parsed_as_xml(head):
             found.append(info)
     return found
@@ -311,15 +316,15 @@ def _sheet_refusal(z, info) -> str | None:
         if state["row"] is not None:
             state["in_row"] += 1
             if state["in_row"] > MAX_ROW_ELEMENTS:
-                raise _Shape(f"une ligne de plus de {MAX_ROW_ELEMENTS} éléments")
+                raise _Shape(t("extract.row_too_long", max=MAX_ROW_ELEMENTS))
             return
         state["outside"] += 1
         if state["outside"] > MAX_SHEET_OUTSIDE:
-            raise _Shape(f"plus de {MAX_SHEET_OUTSIDE} éléments hors des lignes")
+            raise _Shape(t("extract.outside_rows", max=MAX_SHEET_OUTSIDE))
         if name == _ROW:
             given = dict(zip(attributes[::2], attributes[1::2])).get("r")
             if given is not None and not _row_number_ok(given):
-                raise _Shape(f"numéro de ligne hors de ceux d'Excel ({str(given)[:20]})")
+                raise _Shape(t("extract.row_number", number=str(given)[:20]))
             state["row"], state["in_row"] = state["depth"], 0
 
     def end(_name):
@@ -334,12 +339,13 @@ def _sheet_refusal(z, info) -> str | None:
                 parser.Parse(piece, False)
         parser.Parse(b"", True)
     except _Shape as exc:
-        return f"feuille « {info.filename[:80]} » : {exc}"
+        return t("extract.sheet_refused", name=info.filename[:80], reason=exc)
     except expat.ExpatError:
-        return f"feuille « {info.filename[:80]} » illisible"
+        return t("extract.sheet_unreadable", name=info.filename[:80])
     except (zipfile.BadZipFile, zlib.error, OSError, EOFError, ValueError,
             NotImplementedError, RuntimeError) as exc:
-        raise ArchiveRefused(f"archive zip abîmée ({exc.__class__.__name__})") from exc
+        raise ArchiveRefused(t("extract.damaged_zip_error",
+                               error=exc.__class__.__name__)) from exc
     return None
 
 
@@ -359,23 +365,24 @@ def check(path):
     try:
         end = _end_record(path)
     except (OSError, zipfile.BadZipFile, struct.error) as exc:
-        raise ArchiveRefused(f"archive illisible ({exc.__class__.__name__})") from exc
+        raise ArchiveRefused(t("extract.unreadable_archive",
+                               error=exc.__class__.__name__)) from exc
     if not end:
-        raise ArchiveRefused("ce n'est pas une archive zip valide")
+        raise ArchiveRefused(t("extract.not_a_zip"))
     entries, directory = end
     if entries > MAX_ENTRIES:
-        raise ArchiveRefused(f"plus de {MAX_ENTRIES} fichiers dans l'archive")
+        raise ArchiveRefused(t("extract.too_many_files", max=MAX_ENTRIES))
     if directory > MAX_DIRECTORY:
-        raise ArchiveRefused("répertoire de l'archive trop grand")
+        raise ArchiveRefused(t("extract.directory_too_big"))
     try:
         with zipfile.ZipFile(path) as z:
             infos = z.infolist()
             if len(infos) > MAX_ENTRIES:
-                raise ArchiveRefused(f"plus de {MAX_ENTRIES} fichiers dans l'archive")
+                raise ArchiveRefused(t("extract.too_many_files", max=MAX_ENTRIES))
             total = sum(max(0, info.file_size) for info in infos)
             if total > MAX_UNZIPPED:
-                raise ArchiveRefused(f"{_size(total)} une fois décompressée "
-                                     f"(au plus {_size(MAX_UNZIPPED)})")
+                raise ArchiveRefused(t("extract.unzipped_too_big", size=_size(total),
+                                       max=_size(MAX_UNZIPPED)))
             xml = _xml_parts(z, infos)
             suffix = str(path).lower()
             if suffix.endswith(".epub"):
@@ -389,16 +396,15 @@ def check(path):
                             raise ArchiveRefused(reason)
                 xml = [info for info in xml if info.filename not in sheets]
     except (zipfile.BadZipFile, OSError, ValueError, EOFError) as exc:
-        raise ArchiveRefused("archive zip abîmée") from exc
+        raise ArchiveRefused(t("extract.damaged_zip")) from exc
     biggest = max(xml, key=lambda info: info.file_size, default=None)
     if biggest is not None and biggest.file_size > MAX_XML_PART:
-        raise ArchiveRefused(f"partie « {biggest.filename[:80]} » de "
-                             f"{_size(biggest.file_size)} une fois décompressée "
-                             f"(au plus {_size(MAX_XML_PART)})")
+        raise ArchiveRefused(t("extract.part_too_big", name=biggest.filename[:80],
+                               size=_size(biggest.file_size), max=_size(MAX_XML_PART)))
     xml_total = sum(max(0, info.file_size) for info in xml)
     if xml_total > MAX_XML_TOTAL:
-        raise ArchiveRefused(f"{_size(xml_total)} de texte XML une fois décompressée "
-                             f"(au plus {_size(MAX_XML_TOTAL)})")
+        raise ArchiveRefused(t("extract.xml_too_big", size=_size(xml_total),
+                               max=_size(MAX_XML_TOTAL)))
 
 
 def refusal(path) -> str | None:

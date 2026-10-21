@@ -32,6 +32,7 @@ from fastapi.responses import StreamingResponse
 
 from aiodos import __version__
 from aiodos.cluster import helper as cluster
+from aiodos.i18n import t
 from aiodos.imaging import share as images_share
 from aiodos.network import (activity, body_limit, connections, consult, envelope, group,
                             lending, netinfo, peers, placement, sharing, work)
@@ -120,7 +121,7 @@ async def _envelope(request: Request) -> dict:
     except (ValueError, RecursionError):
         body = None
     if not isinstance(body, dict):
-        raise HTTPException(400, "Requête illisible : une enveloppe JSON est attendue.")
+        raise HTTPException(400, t("p2p.envelope_expected"))
     return body
 
 
@@ -141,7 +142,7 @@ def _check_transport(peer: dict, request: Request):
     qui a scellé l'enveloppe : une machine appairée ne se fait pas passer pour une autre."""
     key = _net_key(request)
     if key and peer.get("net_id") and key != str(peer["net_id"]).lower():
-        raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cette machine.")
+        raise HTTPException(403, t("p2p.wrong_net_key"))
 
 
 def _arrived_at(request: Request) -> list | None:
@@ -154,6 +155,7 @@ def _arrived_at(request: Request) -> list | None:
 
 
 def create_p2p_app(manager) -> FastAPI:
+    # i18n: tel quel (titre de l'application, jamais montré : documentation désactivée)
     app = FastAPI(title="AIODOS — réseau", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(body_limit.BodyLimit,
                        actions={"hello", "pair/start", *HANDLERS,
@@ -181,12 +183,12 @@ def create_p2p_app(manager) -> FastAPI:
     async def sealed_stream(action: str, request: Request):
         handler = STREAM_HANDLERS.get(action)
         if handler is None:
-            raise HTTPException(404, "Action inconnue.")
+            raise HTTPException(404, t("p2p.unknown_action"))
         body = await _envelope(request)
         sender = str(body.get("from") or "")
         peer = await asyncio.to_thread(peers.get, sender)
         if not peer or not peer["key"]:
-            raise HTTPException(403, "Machine non appairée.")
+            raise HTTPException(403, t("p2p.not_paired"))
         _check_transport(peer, request)
         try:
             payload = envelope.unwrap(peer["key"], action, manager.node_id, body, manager.guard)
@@ -246,7 +248,7 @@ def create_p2p_app(manager) -> FastAPI:
     async def sealed(action: str, request: Request):
         handler = HANDLERS.get(action)
         if handler is None:
-            raise HTTPException(404, "Action inconnue.")
+            raise HTTPException(404, t("p2p.unknown_action"))
         body = await _envelope(request)
         sender = str(body.get("from") or "")
         if action == "pair/confirm":
@@ -254,14 +256,14 @@ def create_p2p_app(manager) -> FastAPI:
             pending = manager.pairing.get(sender)
             net_key = _net_key(request)
             if net_key and (pending is None or pending.net_id != net_key):
-                raise HTTPException(403, "Clé Internet de l'appelant inattendue pour cet appairage.")
+                raise HTTPException(403, t("p2p.wrong_net_key_pairing"))
         else:
             peer = await asyncio.to_thread(peers.get, sender)
             key = peer["key"] if peer else None
             if peer:
                 _check_transport(peer, request)
         if not key:
-            raise HTTPException(403, "Machine non appairée.")
+            raise HTTPException(403, t("p2p.not_paired"))
         try:
             payload = envelope.unwrap(key, action, manager.node_id, body, manager.guard)
         except SealError as exc:

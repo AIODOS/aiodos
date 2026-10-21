@@ -1,0 +1,11 @@
+{
+  "too_slow": "L'autre machine transmet trop lentement : transfert abandonné, il reprendra plus tard.",
+  "not_here": "Version indisponible sur cette machine.",
+  "bad_request": "Demande illisible.",
+  "still_waiting": "L'autre machine n'a toujours pas répondu à la demande précédente.",
+  "bad_reply": "Réponse illisible de l'autre machine.",
+  "other_version": "La machine a envoyé une autre version que celle annoncée.",
+  "interrupted": "Transfert interrompu par l'autre machine.",
+  "bad_chunk": "Morceau de taille inattendue : transfert interrompu.",
+  "no_such_file": "La version {version} ne livre pas de fichier « {kind} »."
+}

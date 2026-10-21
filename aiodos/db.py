@@ -343,6 +343,12 @@ def now() -> float:
     return time.time()
 
 
+def is_open() -> bool:
+    """Une base a-t-elle déjà été ouverte dans ce processus ? Sans en créer ni en migrer
+    une (la langue des textes, lue avant le démarrage du nœud, cf. i18n/language.py)."""
+    return bool(_initialized)
+
+
 def connect() -> sqlite3.Connection:
     """Connexion du thread courant (recréée si la base a changé, ex. en test)."""
     path = str(paths.db_path())

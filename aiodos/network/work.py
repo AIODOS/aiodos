@@ -47,11 +47,12 @@ import time
 from collections import deque
 from pathlib import Path
 
-from aiodos import db, settings
+from aiodos import db, i18n, settings
+from aiodos.i18n import t
 from aiodos.jobs import leases, queue, registry
 from aiodos.jobs.models import MAX_ATTEMPTS, QUEUED, RUNNING
 from aiodos.knowledge import store
-from aiodos.network import envelope, peers, route, sharing, wire
+from aiodos.network import envelope, peers, profile, route, sharing, wire
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -283,29 +284,29 @@ def _sha256(path: Path) -> str:
 
 def _peer_name(node_id) -> str:
     peer = peers.get(node_id)
-    return peer["name"] if peer else "une autre machine"
+    return peer["name"] if peer else t("work.another_machine")
 
 
 def _unit_id(payload) -> int:
     try:
         return int(payload["unit"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise PeerError("Unité non précisée.") from exc
+        raise PeerError(t("work.unit_missing")) from exc
 
 
 # --------------------------------------------------------------------- bail
 def lease(manager, sender, payload):
+    """Une unité pour la machine qui demande du travail ; sinon quand redemander, et
+    pourquoi (« reason », dans la langue d'ici : elle ne va qu'au journal de l'autre)."""
     if not settings.get("offload_enabled"):
         return {"unit": None, "retry_after": 60}
     caps = payload.get("caps") or {}
     if caps.get("work_api") != WORK_API:
-        return {"unit": None, "retry_after": 600,
-                "reason": "Versions d'AIODOS différentes : mets à jour les deux machines."}
+        return {"unit": None, "retry_after": 600, "reason": t("work.versions_differ")}
     aside = sharing.set_aside_reason(sender)
     if aside:
         return {"unit": None, "retry_after": 600,
-                "reason": f"« {manager.name()} » ne te confie plus rien : {aside}. Cela se "
-                          "rétablit dans sa vue Réseau."}
+                "reason": t("work.set_aside", name=manager.name(), reason=aside)}
     friend = sharing.is_friend(sender)
     if friend and _friend_too_eager(sender):
         return {"unit": None, "retry_after": NOTHING_RETRY}
@@ -383,17 +384,14 @@ def lease(manager, sender, payload):
             # (essai du 16/10/2026 : Ollama arrêté après un redémarrage du PC).
             log.warning("Ollama ne répond pas : aucune unité confiée à %s", _peer_name(sender))
             return {"unit": None, "retry_after": 30,
-                    "reason": f"Ollama ne répond pas sur « {manager.name()} » : impossible "
-                              "d'y vérifier le modèle d'embedding, rien n'est confié."}
+                    "reason": t("work.ollama_down", name=manager.name())}
         if outdated:
             # Refus dit, plutôt que muet : la machine qui demande le note dans son journal
             # (une fois par cause) ; ici, elle redemande toutes les quelques secondes
             log.debug("%s unité(s) gardée(s) ici : « %s » est d'une version d'avant",
                       outdated, _peer_name(sender))
             return {"unit": None, "retry_after": NOTHING_RETRY,
-                    "reason": f"« {manager.name()} » a des pages web à lire, qu'elle ne confie "
-                              "qu'à une machine à jour (lecture limitée à l'Internet public) : "
-                              "mets AIODOS à jour sur cette machine."}
+                    "reason": t("work.outdated", name=manager.name())}
         return {"unit": None, "retry_after": NOTHING_RETRY}
     return _order(manager, sender, unit, options, friend, caps, max_blob)
 
@@ -434,7 +432,7 @@ def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB)
         try:
             if spec.file_optional is not None and (friend or not spec.file_optional(caps or {})
                                                    or path.stat().st_size > max_blob):
-                raise OSError("fichier facultatif gardé ici")
+                raise OSError("fichier facultatif gardé ici")   # i18n: tel quel (repris aussitôt)
             order["blob"] = {"name": path.name, "size": path.stat().st_size,
                              "sha256": _sha256(path)}
         except OSError:
@@ -478,8 +476,8 @@ def renew(manager, sender, payload):
             longest = _friend_lease_max(unit)
             if db.now() - float(unit["started"] or db.now()) > longest:
                 _friend_failed_unit(manager, sender, unit_id,
-                                    f"Sur « {_peer_name(sender)} » : calcul trop long "
-                                    f"({longest // 60} min au plus chez un ami).")
+                                    t("work.too_long", name=_peer_name(sender),
+                                      minutes=longest // 60))
                 return {"ok": False}
     return {"ok": leases.renew(unit_id, sender)}
 
@@ -491,22 +489,21 @@ def blob(manager, sender, payload):
     unit = leases.held(_unit_id(payload), sender)
     spec = registry.TASKS.get(unit["task"]) if unit else None
     if spec is None or not spec.file_key or not unit["payload"].get(spec.file_key):
-        raise PeerError("Cette unité ne t'est plus confiée.")
+        raise PeerError(t("work.not_yours"))
     if spec.file_optional is not None and sharing.is_friend(sender):
-        raise PeerError("Ce fichier reste sur la machine de son propriétaire : l'ordre est "
-                        "parti sans lui.")
+        raise PeerError(t("work.file_stays"))
     try:
         offset = int(payload.get("offset") or 0)
         size = min(BLOB_CHUNK, max(1, int(payload.get("size") or BLOB_CHUNK)))
     except (TypeError, ValueError) as exc:
-        raise PeerError("Demande illisible.") from exc
+        raise PeerError(t("work.request_unreadable")) from exc
     path = unit["payload"][spec.file_key]
     try:
         total = os.path.getsize(path)
     except OSError as exc:
-        raise PeerError("Le fichier de cette unité n'est plus là.") from exc
+        raise PeerError(t("work.file_gone")) from exc
     if not 0 <= offset <= total:
-        raise PeerError("Morceau demandé hors du fichier.")
+        raise PeerError(t("work.chunk_outside"))
     with open(path, "rb") as f:
         f.seek(offset)
         data = f.read(size)
@@ -519,7 +516,7 @@ def result(manager, sender, payload):
     compute_s = max(0.0, min(float(payload.get("compute_s") or 0), 86400.0))
     unit = leases.take_back(unit_id, sender)
     if unit is None:
-        return {"accepted": False, "reason": "Unité reprise ou annulée entre-temps."}
+        return {"accepted": False, "reason": t("work.taken_back")}
     spec = registry.TASKS[unit["task"]]
     friend = sharing.is_friend(sender)
     checked = False                   # résultat lu et contrôlé : une erreur ensuite est d'ici
@@ -529,35 +526,38 @@ def result(manager, sender, payload):
             spec.validate(unit["payload"], output)
         if friend and spec.sample:
             if not _sampled(manager, sender, unit, spec, output):
-                return {"accepted": False, "reason": "Vérification impossible pour l'instant "
-                                                     "chez le propriétaire : unité remise en file."}
+                return {"accepted": False, "reason": t("work.check_impossible")}
             output = sharing.restore_names(output, unit, spec)
         checked = True
         outcome = spec.assimilate(unit["payload"], output) or {}
     except registry.SampleMismatch as exc:
-        reason = f"un résultat ne correspond pas au calcul refait ici ({exc})"
+        reason = t("work.sample_mismatch", error=exc)
         peers.set_aside(sender, reason[:300])
         # Un résultat faux ne dépend pas de la machine à qui il a été rendu : mes autres
-        # machines la mettent de côté aussi (appairage par groupe, network/group.py)
+        # machines la mettent de côté aussi (appairage par groupe, network/group.py), avec la
+        # raison dans la langue d'ici et à traduire chez elles (reason_t)
         group = getattr(manager, "group", None)
         if group is not None:
+            told = i18n.lazy("work.sample_mismatch", error=str(exc)[:300])
             threading.Thread(target=group.spread, daemon=True, name="aiodos-mise-de-cote",
-                             args=("group/set_aside", {"node_id": sender, "reason": reason[:300]})
+                             args=("group/set_aside", {"node_id": sender, "reason": reason[:300],
+                                                       "reason_t": told})
                              ).start()
         peers.account(sender, refused_units=1)
         log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
         job_id, finished = queue.fail_unit(
-            unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {reason}"[:500], compute_s)
+            unit_id, t("work.result_refused", name=_peer_name(sender), error=reason)[:500],
+            compute_s)
         manager.executor.settle(job_id, finished)
         manager.changed()
-        return {"accepted": False, "reason": "Résultat refusé : le contrôle par échantillon a "
-                                             "échoué, plus rien ne te sera confié."}
+        return {"accepted": False, "reason": t("work.sample_failed")}
     except Exception as exc:
         log.warning("Résultat de %s refusé pour l'unité %s : %s", _peer_name(sender), unit_id, exc)
         if not checked:               # sa fiabilité ne compte que ses résultats, pas nos pannes
             peers.account(sender, refused_units=1)
         job_id, finished = queue.fail_unit(
-            unit_id, f"Résultat de « {_peer_name(sender)} » refusé : {exc}"[:500], compute_s)
+            unit_id, t("work.result_refused", name=_peer_name(sender), error=exc)[:500],
+            compute_s)
         manager.executor.settle(job_id, finished)
         return {"accepted": False, "reason": str(exc)[:200]}
     try:
@@ -569,11 +569,10 @@ def result(manager, sender, payload):
         log.warning("Résultat de %s pour l'unité %s impossible à enregistrer : %s",
                     _peer_name(sender), unit_id, exc)
         job_id, finished = queue.fail_unit(
-            unit_id, f"Résultat de « {_peer_name(sender)} » impossible à enregistrer ici "
-                     f"({exc.__class__.__name__})", compute_s)
+            unit_id, t("work.result_not_saved", name=_peer_name(sender),
+                       kind=exc.__class__.__name__), compute_s)
         manager.executor.settle(job_id, finished)
-        return {"accepted": False, "reason": "Résultat impossible à enregistrer chez le "
-                                             "propriétaire : unité remise en file."}
+        return {"accepted": False, "reason": t("work.result_not_saved_owner")}
     if friend:
         with _friends_lock:
             _friend_failures.pop(sender, None)
@@ -604,8 +603,11 @@ def _sampled(manager, sender, unit, spec, output) -> bool:
 
 def fail(manager, sender, payload):
     unit_id = _unit_id(payload)
-    error = str(payload.get("error") or "erreur inconnue")[:400]
-    message = f"Sur « {_peer_name(sender)} » : {error}"[:500]
+    # L'échec tel que l'a écrit la machine qui calcule (error, dans sa langue), traduit ici
+    # quand il vient avec sa clé (error_t, i18n.lazy : worker._told)
+    told = i18n.render(profile.lazy(payload.get("error_t"), "worker."))
+    error = (told or str(payload.get("error") or t("work.unknown_error")))[:400]
+    message = t("work.failed_on", name=_peer_name(sender), error=error)[:500]
     try:
         compute_s = max(0.0, min(float(payload.get("compute_s") or 0), 86400.0))
     except (TypeError, ValueError):
@@ -654,14 +656,13 @@ def _friend_failed_unit(manager, sender, unit_id, message, compute_s=0.0,
         if aside:
             _friend_failures.pop(sender, None)
     if aside:
-        reason = (f"{FRIEND_FAILURES_ASIDE} unités rendues en échec à la suite, sans un seul "
-                  "résultat")
+        reason = t("work.failures_aside", count=FRIEND_FAILURES_ASIDE)
         peers.set_aside(sender, reason)
         log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
         manager.changed()
     if not _kept_for_me(unit, _Mine()):
         settled = leases.fail(unit_id, sender,
-                              f"Aucune de mes machines ne sait la calculer. {message}"[:500],
+                              t("work.nobody_can", message=message)[:500],
                               compute_s)
         if settled is None:
             return {"ok": False}

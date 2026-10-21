@@ -30,6 +30,7 @@ from aiodos.network import peers, route
 from aiodos.network.client import PeerError
 from aiodos.node import identity
 from aiodos.updates import private
+from tests import i18n_js
 from tests.nodes import APP_ROOT
 
 sys.path.insert(0, str(APP_ROOT / "tools"))
@@ -428,8 +429,10 @@ def test_the_network_view_guards_with_the_interface_helpers(tmp_path):
         (js / name).write_bytes((static / name).read_bytes())
     for name, text in STUBS.items():
         (js / name).write_text(text, encoding="utf-8")
+    prelude = i18n_js.install(js, module="./js/i18n.js")      # les textes, en français
     (tmp_path / "package.json").write_text('{"type": "module"}', encoding="utf-8")
     (tmp_path / "run.js").write_text(
+        prelude +
         "import { peerFacts } from './js/views/network.js';\n"
         "globalThis.calls = [];\n"
         "const html = peerFacts({ profile: JSON.parse(process.argv[2]) });\n"
@@ -439,4 +442,4 @@ def test_the_network_view_guards_with_the_interface_helpers(tmp_path):
     assert done.returncode == 0, done.stderr
     result = json.loads(done.stdout)
     assert {"finite", "count"} <= set(result["calls"]), result["calls"]
-    assert "<" not in result["html"] and "0 modèle(s)" in result["html"]
+    assert "<" not in result["html"] and "· 0 modèle" in result["html"]

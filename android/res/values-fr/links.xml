@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Les liens d'une réponse ouverts hors de l'appli (MainActivity.java), en français. -->
+<resources>
+    <string name="link_refused">Lien non ouvert : ce n\'est ni une page web ni un courriel.</string>
+    <string name="link_no_app">Aucune appli de ce téléphone n\'ouvre ce lien.</string>
+</resources>

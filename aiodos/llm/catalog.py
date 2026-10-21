@@ -90,6 +90,7 @@ MODELS = {
     "embeddinggemma:latest": {
         "repo": "ggml-org/embeddinggemma-300M-GGUF",
         "revision": "0f741b5a6585bd53aeb15cd1372c56f2a0f65e12",
+        # i18n: tel quel (licence gardée dans model.json, jamais affichée)
         "license": "Gemma (conditions d'utilisation de Google)", "kind": "embedding",
         "family": "gemma-embedding", "parameters": "300M", "quantization": "Q8_0",
         "files": {"model": ("embeddinggemma-300M-Q8_0.gguf",

@@ -37,7 +37,8 @@ import logging
 import threading
 import time
 
-from aiodos import __version__, settings
+from aiodos import __version__, i18n, settings
+from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.network import peers, sharing
 from aiodos.node import android_app, identity
@@ -78,6 +79,7 @@ class UpdateService:
         self.download = None             # {"version", "from", "received", "size"}
         self.installing = None
         self.error = None
+        self._file_error = None          # (what, erreur) : la dernière d'un fichier non reçu
         self._failures = {}              # machine -> prochain essai (monotonic)
         self._receiving = None           # fil de la réception en cours
         self._published = 0.0
@@ -99,7 +101,7 @@ class UpdateService:
         self._wake.set()
 
     def _run(self):
-        self._step("ménage", self._tidy)
+        self._step("updates.step_tidy", self._tidy)
         while not self._stopping:
             try:
                 self.tick()
@@ -114,18 +116,21 @@ class UpdateService:
         self._receive()                   # relance aussi le compagnon, une fois tout reçu
         if launcher.developer_checkout():
             return
-        self._step("installation", self._install_newest)
-        if self._step("redémarrage", self._should_restart):
+        self._step("updates.step_install", self._install_newest)
+        if self._step("updates.step_restart", self._should_restart):
             restart.request()
 
-    def _step(self, what: str, step):
+    def _step(self, what: str, step, **params):
         """Une étape du tour, qui ne peut empêcher ni les suivantes ni les tours suivants :
-        son erreur se journalise et s'affiche (status)."""
+        son erreur se journalise et s'affiche (status). what : la clé du nom de l'étape
+        (updates.step_*), avec ses paramètres."""
         try:
             return step()
         except Exception as exc:
-            log.exception("Service de mise à jour, %s", what)
-            self._set(error=f"Erreur du service de mise à jour ({what}) : {exc}")
+            with i18n.using(i18n.SOURCE):            # au journal, son nom en français
+                named = t(what, **params)
+            log.exception("Service de mise à jour, %s", named)
+            self._set(error=t("updates.step_failed", step=t(what, **params), error=exc))
             return None
 
     # ------------------------------------------------------------- réception
@@ -141,13 +146,13 @@ class UpdateService:
         running.join(RECEIVE_WAIT)
 
     def _receive_all(self):
-        self._step("réception", self._obtain_newest)
+        self._step("updates.step_receive", self._obtain_newest)
         self._obtain_companion()
         self._obtain_engine()
         # Seul endroit où le compagnon est relancé : pas pendant la réception, qui peut
         # passer par lui, et une seule fois par tour (sa relance est asynchrone, et il reste
         # « dépassé » d'ici là)
-        self._step("relance du compagnon", self._switch_companion)
+        self._step("updates.step_companion_restart", self._switch_companion)
 
     def _receiving_elsewhere(self) -> bool:
         """La réception tourne, dans un autre fil que celui-ci."""
@@ -223,7 +228,8 @@ class UpdateService:
         except Exception as exc:              # quelle qu'en soit la cause : machine de côté
             self._failures[node_id] = time.monotonic() + PEER_RETRY
             log.warning("Version %s non reçue de « %s » : %s", wanted, name, exc)
-            self._set(download=None, error=f"Version {wanted} non reçue de « {name} » : {exc}")
+            self._set(download=None, error=t("updates.version_not_received", version=wanted,
+                                             name=name, error=exc))
             return False
         log.info("Version %s reçue de « %s »", wanted, name)
         self._set(download=None, available=None, error=None)
@@ -232,19 +238,22 @@ class UpdateService:
     # ------------------------------------ programmes livrés pour la plateforme
     def _obtain_companion(self):
         """Compagnon Internet de cette plateforme, s'il manque."""
-        self._step("compagnon", lambda: self._obtain_program(manifests.COMPANION, "compagnon"))
+        self._step("updates.step_companion",
+                   lambda: self._obtain_program(manifests.COMPANION, "compagnon"))
 
     def _obtain_engine(self):
         """Moteurs de cette plateforme (llama.cpp pour les gros modèles répartis,
         stable-diffusion.cpp pour les images), s'ils manquent. Ils restent les mêmes d'une
         version à l'autre : déjà reçus, ils sont copiés (store.reuse)."""
         for engine in manifests.ENGINES:
-            self._step(f"moteur {engine}",
-                       lambda engine=engine: self._obtain_program(engine, f"moteur {engine}"))
+            self._step("updates.step_engine",
+                       lambda engine=engine: self._obtain_program(engine, f"moteur {engine}"),
+                       engine=engine)
 
     def _obtain_program(self, program: str, what: str):
         """Programme `program` de cette plateforme, s'il manque, pour la version reçue la
-        plus récente et pour celle qui tourne (manifeste compris, s'il manque aussi)."""
+        plus récente et pour celle qui tourne (manifeste compris, s'il manque aussi).
+        what : son nom au journal, et pour l'interface (download, « what »)."""
         kind = platforms.kind(program)
         if kind is None:
             return
@@ -261,11 +270,11 @@ class UpdateService:
             holders = [p for p in self._sources() if kind in p2p.held_by(p, wanted)]
             for peer in holders[:MAX_SOURCES]:
                 if self._obtain_file(peer["node_id"], str(peer.get("name") or ""), wanted,
-                                     kind, what):
+                                     kind, what, program):
                     break
 
     def _obtain_file(self, node_id: str, name: str, wanted: str, kind: str,
-                     what: str = "compagnon") -> bool:
+                     what: str = "compagnon", program: str = manifests.COMPANION) -> bool:
         peer = peers.get(node_id)
         if not peer:
             return False
@@ -282,12 +291,19 @@ class UpdateService:
         except Exception as exc:              # quelle qu'en soit la cause : machine de côté
             self._failures[node_id] = time.monotonic() + PEER_RETRY
             log.warning("%s de la version %s non reçu de « %s » : %s", label, wanted, name, exc)
-            self._set(download=None,
-                      error=f"{label} de la version {wanted} non reçu de « {name} » : {exc}")
+            if program == manifests.COMPANION:
+                error = t("updates.companion_not_received", version=wanted, name=name,
+                          error=exc)
+            else:
+                error = t("updates.engine_not_received", engine=program, version=wanted,
+                          name=name, error=exc)
+            self._file_error = (what, error)
+            self._set(download=None, error=error)
             return False
         log.info("%s de la version %s reçu de « %s »",
                  "Compagnon Internet" if what == "compagnon" else label, wanted, name)
-        error = None if (self.error or "").startswith(label) else self.error
+        # L'erreur affichée disait que ce programme n'arrivait pas : il est là, elle s'efface
+        error = None if self._file_error == (what, self.error) else self.error
         self._set(download=None, error=error)
         return True
 
@@ -328,7 +344,8 @@ class UpdateService:
                 state.refuse(d, candidate, str(exc))
                 d["refused"][candidate]["retry_after"] = time.time() + INSTALL_RETRY
             state.update(self.store.root, remember)
-            self._set(installing=None, error=f"Version {candidate} non installée : {exc}")
+            self._set(installing=None, error=t("updates.not_installed", version=candidate,
+                                               error=exc))
             return
 
         def ready(d):

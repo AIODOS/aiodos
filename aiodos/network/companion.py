@@ -25,7 +25,8 @@ from pathlib import Path
 
 import requests
 
-from aiodos import paths
+from aiodos import i18n, paths
+from aiodos.i18n import t
 from aiodos.network.client import error_detail
 from aiodos.network.route import NO_PROXY
 from aiodos.updates import binaries, launcher
@@ -54,8 +55,25 @@ class CompanionError(Exception):
     """Compagnon introuvable, arrêté, ou qui refuse une demande."""
 
 
-BUILT_HERE = "compilé dans compagnon/target"
-BUILT_IN_BASE = "compilé dans la version d'origine"
+# Origines d'un programme : des identifiants (comparés, retenus dans _broken, donnés tels
+# quels à l'interface dans « program »), en français quelle que soit la langue ; les montrer
+# passe par shown
+BUILT_HERE = "compilé dans compagnon/target"                # i18n: tel quel (identifiant)
+BUILT_IN_BASE = "compilé dans la version d'origine"          # i18n: tel quel (identifiant)
+DELIVERED = "livré avec la version "                         # i18n: tel quel (identifiant)
+
+
+def shown(origin):
+    """L'origine d'un programme telle qu'on la montre, dans la langue de qui la lit :
+    [clé, {paramètres}] (i18n.lazy, l'interface la traduit avec tt) ; AIODOS_NET_BIN et PATH
+    tels quels."""
+    if origin == BUILT_HERE:
+        return i18n.lazy("companion.built_here")
+    if origin == BUILT_IN_BASE:
+        return i18n.lazy("companion.built_in_base")
+    if isinstance(origin, str) and origin.startswith(DELIVERED):
+        return i18n.lazy("companion.delivered", version=origin[len(DELIVERED):])
+    return origin
 
 
 def _built(root) -> Path | None:
@@ -84,7 +102,7 @@ def _delivered(activate: bool, failed: set | None = None):
     (illisible, disque plein…) est passé, et son origine notée dans `failed`."""
     store = Store()
     for version, item in binaries.candidates(store):
-        origin = f"livré avec la version {version}"
+        origin = f"{DELIVERED}{version}"
         if not activate:
             yield origin, lambda version=version, item=item: store.package_path(version, item)
             continue
@@ -263,11 +281,9 @@ class Companion:
             located = locate(skip=self._broken, failed=self._broken)
         except Exception as exc:                # jamais au point d'arrêter la surveillance
             log.exception("Choix du compagnon aiodos-net")
-            return self._fail(f"Compagnon aiodos-net : choix du programme impossible ({exc}).")
+            return self._fail(t("companion.choice_failed", error=exc))
         if located is None:
-            return self._fail("Compagnon aiodos-net introuvable : il arrive avec les mises à "
-                              "jour, d'une machine appairée qui l'a (ou le compiler : voir "
-                              "compagnon/README.md).")
+            return self._fail(t("companion.not_found"))
         binary, origin = located
         token = secrets.token_urlsafe(24)
         env = dict(os.environ, AIODOS_NET_TOKEN=token)
@@ -279,7 +295,8 @@ class Companion:
                 errors="replace", creationflags=_NO_WINDOW)
         except OSError as exc:
             self._broken.add(origin)          # le suivant sera essayé (cf. locate)
-            return self._fail(f"Le compagnon aiodos-net ({origin}) ne se lance pas : {exc}")
+            return self._fail(t("companion.wont_launch", origin=i18n.render(shown(origin)),
+                                error=exc))
         ready = threading.Event()
         found = {}
         threading.Thread(target=self._read_stdout, args=(process, ready, found), daemon=True,
@@ -295,9 +312,10 @@ class Companion:
                 process.kill()
             process.wait(5)
             time.sleep(0.2)                  # dernières lignes du journal
-            last = " / ".join(self._stderr) or f"code {process.returncode}"
+            last = " / ".join(self._stderr) or t("companion.exit_code", code=process.returncode)
             self._broken.add(origin)
-            return self._fail(f"Le compagnon aiodos-net ({origin}) n'a pas démarré : {last}")
+            return self._fail(t("companion.not_started", origin=i18n.render(shown(origin)),
+                                error=last))
         with self._lock:
             # Arrêt demandé pendant le lancement : ce compagnon-là ne doit pas rester
             # orphelin (stop() n'a rien trouvé à arrêter, ou l'ancien seulement).
@@ -408,19 +426,20 @@ class Companion:
     def api(self, method: str, path: str, body=None, timeout=API_TIMEOUT) -> dict:
         listen = self.listen
         if not listen:
-            raise CompanionError("Compagnon arrêté.")
+            raise CompanionError(t("companion.stopped"))
         try:
             response = requests.request(method, f"http://{listen}{path}", json=body,
                                         headers=self.headers, timeout=timeout,
                                         proxies=NO_PROXY)
         except requests.RequestException as exc:
-            raise CompanionError(f"Compagnon injoignable ({exc.__class__.__name__}).") from exc
+            raise CompanionError(t("companion.unreachable", error=exc.__class__.__name__)) \
+                from exc
         if response.status_code >= 400:
             raise CompanionError(error_detail(response))
         try:
             return response.json()
         except ValueError as exc:
-            raise CompanionError("Réponse illisible du compagnon.") from exc
+            raise CompanionError(t("companion.reply_unreadable")) from exc
 
     def status(self) -> dict:
         return self.api("GET", "/net/v1/status")
@@ -446,13 +465,9 @@ class Companion:
         Sans garde, n'importe quel programme de la machine (un autre compte du PC)
         joindrait par le tunnel le serveur RPC de la machine qui prête, sans mot de passe."""
         if self.features is None:
-            return ("Le compagnon aiodos-net de cette machine est trop ancien : il ouvrirait le "
-                    "tunnel vers la carte graphique prêtée à tous les programmes de la machine. "
-                    "Mets AIODOS à jour sur cette machine.")
+            return t("companion.too_old_for_tunnels")
         if GUARDED_TUNNELS not in self.features:
-            return ("Sur ce système, le compagnon aiodos-net ne peut pas vérifier quel programme "
-                    "se connecte au tunnel vers la carte graphique prêtée : pas de modèle "
-                    "réparti depuis cette machine.")
+            return t("companion.tunnel_unguarded")
         return None
 
     def open_tunnel(self, net_id: str, name: str, guarded: bool = True,
@@ -478,8 +493,7 @@ class Companion:
                 self.close_tunnel(port)
             except CompanionError:
                 pass
-            raise CompanionError("Le compagnon aiodos-net de cette machine n'a pas gardé le "
-                                 "tunnel : mets AIODOS à jour sur cette machine.")
+            raise CompanionError(t("companion.tunnel_not_kept"))
         return port
 
     def set_tunnel_owner(self, port: int, pid: int) -> None:

@@ -1,6 +1,7 @@
 // Réseau : réseau local, Internet et invitations, machines appairées et détectées, appairage par code.
 import { get, post, del } from '../api.js';
 import { $, h, esc, ago, bytes, duration, powerText, finite, count } from '../dom.js';
+import { t, tt, locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
@@ -10,7 +11,8 @@ import { renderConnected } from './connected.js';
 // vient d'ailleurs : typé avant d'entrer dans le HTML. Un objet à la place d'un nombre
 // (« length » piégé) ou du HTML à la place d'un niveau de batterie ne passe pas. Les gardes
 // des nombres et des listes sont celles de dom.js (finite, count), partagées avec les autres
-// vues : une seule copie, qui ne peut pas diverger d'une vue à l'autre.
+// vues : une seule copie, qui ne peut pas diverger d'une vue à l'autre. Les textes (t, tt)
+// sont du texte brut : échappés (esc) en entier, paramètres compris, avant d'entrer dans le HTML.
 const flag = v => (typeof v === 'boolean' ? v : null);
 
 /** Le pare-feu de Windows demande son accord au premier réseau : pas sur un téléphone. */
@@ -23,9 +25,8 @@ let lastJson = '';
 export function mountNetwork(container) {
   root = h(`
     <div class="page"><div class="page-inner">
-      <div class="page-head"><div><h1>Réseau</h1>
-        <div class="sub">Fais travailler tes machines ensemble, et celles de tes amis : chacune peut prêter sa
-        puissance de calcul aux autres. Rien ne part sans appairage confirmé sur les deux machines.</div></div></div>
+      <div class="page-head"><div><h1>${esc(t('network.title'))}</h1>
+        <div class="sub">${esc(t('network.intro'))}</div></div></div>
       <div class="card" id="net-live" hidden></div>
       <div class="card" id="net-state" style="margin-top:16px"></div>
       <div class="card" id="net-internet" style="margin-top:16px"></div>
@@ -71,43 +72,47 @@ function host(url) {
 }
 
 function invitationRow(inv) {
-  const until = new Date(inv.expires * 1000).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const until = new Date(inv.expires * 1000).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const name = inv.name || '?';
   const text = inv.role === 'received'
-    ? `Invitation de « ${esc(inv.name || '?')} » acceptée ${ago(inv.created)} : l'appairage commencera quand ton ami aura collé ta réponse.`
+    ? t('network.invitation_received', { name, ago: ago(inv.created) })
     : inv.answered
-      ? `Réponse de « ${esc(inv.name || '?')} » reçue : appairage en cours.`
-      : `Invitation créée ${ago(inv.created)}, en attente de la réponse de ton ami (valable jusqu'à ${esc(until)}).`;
-  return `<div class="peer"><div class="peer-head">${icon('link')}<span style="flex:1">${text}</span>
-    ${inv.role === 'sent' && !inv.answered ? `<button class="btn sm" data-reply="${inv.id}">Coller la réponse</button>` : ''}
-    <button class="icon-btn danger" data-cancel="${inv.id}" title="Annuler l'invitation">${icon('x')}</button></div></div>`;
+      ? t('network.invitation_answered', { name })
+      : t('network.invitation_sent', { ago: ago(inv.created), until });
+  return `<div class="peer"><div class="peer-head">${icon('link')}<span style="flex:1">${esc(text)}</span>
+    ${inv.role === 'sent' && !inv.answered ? `<button class="btn sm" data-reply="${inv.id}">${esc(t('network.paste_reply'))}</button>` : ''}
+    <button class="icon-btn danger" data-cancel="${inv.id}" title="${esc(t('network.cancel_invitation'))}">${icon('x')}</button></div></div>`;
+}
+
+/** L'état de la connexion par Internet, en texte brut : « Prête · relais … · clé … ». */
+function internetStatus(inet) {
+  if (!inet.enabled) return t('network.internet_off');
+  if (!inet.running) return inet.error || t('network.internet_starting');
+  const parts = [t('network.internet_ready')];
+  if (inet.relays?.length) {
+    parts.push(t('network.internet_relays', { n: inet.relays.length, relays: inet.relays.map(host).join(', ') }));
+  }
+  // « (essai : relais seulement) » suit ce qui précède, sans séparateur
+  if (inet.relay_only) parts.push(`${parts.pop()} ${t('network.internet_relay_only')}`);
+  if (inet.id) parts.push(t('network.internet_key', { key: inet.id.slice(0, 10) }));
+  for (const r of inet.denied_by || []) parts.push(t('network.internet_denied', { relay: host(r) }));
+  return parts.join(' · ');
 }
 
 function renderInternet(net) {
   const box = $('#net-internet', root);
   const inet = net.internet || {};
-  const status = !inet.enabled
-    ? 'Désactivée : tes machines ne se joignent que sur le réseau local.'
-    : inet.running
-      ? `Prête${inet.relays?.length ? ` · relais ${inet.relays.map(r => esc(host(r))).join(', ')}` : ''}`
-        + (inet.relay_only ? ' (essai : relais seulement)' : '')
-        + (inet.id ? ` · clé ${esc(inet.id.slice(0, 10))}…` : '')
-        + (inet.denied_by || []).map(r => ` · le relais ${esc(host(r))} refuse cette machine : `
-          + 'sa clé doit être dans la liste blanche du relais').join('')
-      : esc(inet.error || 'Démarrage du compagnon aiodos-net…');
   box.innerHTML = `
     <div class="setting-row" style="border:0;padding-top:0">
-      <div class="txt"><b>Relier mes machines par Internet</b><small>${status}</small></div>
+      <div class="txt"><b>${esc(t('network.internet_title'))}</b><small>${esc(internetStatus(inet))}</small></div>
       <label class="switch"><input type="checkbox" id="inet-toggle" ${inet.enabled ? 'checked' : ''}><span></span></label>
     </div>
-    <h2 style="margin-top:4px">${icon('link')}Inviter un ami</h2>
-    <p class="hint">Pour appairer la machine d'un ami qui n'est pas sur ton réseau. Crée une invitation et envoie-lui le code
-      (message, courriel) ; il le colle dans son AIODOS avec « Répondre à une invitation », puis te renvoie sa réponse, que
-      tu colles ici. Vous confirmez alors chacun le même code à 6 chiffres. Une invitation sert une seule fois, pendant 24 heures,
-      et il faut la connexion par Internet des deux côtés.</p>
+    <h2 style="margin-top:4px">${icon('link')}${esc(t('network.invite_title'))}</h2>
+    <p class="hint">${esc(t('network.invite_hint'))}</p>
     <div class="toolbar" style="margin:0 0 10px">
-      <button class="btn sm" id="inv-create" ${inet.running ? '' : 'disabled'}>${icon('plus')}Créer une invitation</button>
-      <button class="btn sm" id="inv-accept" ${inet.running ? '' : 'disabled'}>${icon('link')}Répondre à une invitation</button>
-      ${inet.running && inet.id ? `<button class="btn sm ghost" id="inet-key" title="Pour la liste blanche d'un relais auto-hébergé (docs/relais.md)">${icon('copy')}Copier la clé de cette machine</button>` : ''}
+      <button class="btn sm" id="inv-create" ${inet.running ? '' : 'disabled'}>${icon('plus')}${esc(t('network.create_invitation'))}</button>
+      <button class="btn sm" id="inv-accept" ${inet.running ? '' : 'disabled'}>${icon('link')}${esc(t('network.accept_invitation'))}</button>
+      ${inet.running && inet.id ? `<button class="btn sm ghost" id="inet-key" title="${esc(t('network.copy_key_title'))}">${icon('copy')}${esc(t('network.copy_key'))}</button>` : ''}
     </div>
     <div class="peer-list">${(net.invitations || []).map(invitationRow).join('')}</div>`;
   $('#inet-toggle', box).onchange = async e => {
@@ -116,7 +121,7 @@ function renderInternet(net) {
   };
   $('#inv-create', box).onclick = createInvitation;
   $('#inet-key', box)?.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(inet.id); toast('Clé copiée.', 'ok'); }
+    try { await navigator.clipboard.writeText(inet.id); toast(t('network.key_copied'), 'ok'); }
     catch { toast(inet.id, 'info', 15000); }
   });
   $('#inv-accept', box).onclick = acceptInvitation;
@@ -130,10 +135,11 @@ function renderInternet(net) {
 }
 
 async function copyCode(title, text, code, done) {
-  const r = await modal({ title, iconName: 'link', text, textarea: code, confirm: 'Copier', cancel: 'Fermer' });
+  const r = await modal({ title, iconName: 'link', text, textarea: code,
+    confirm: t('network.copy'), cancel: t('network.close') });
   if (!r.ok) return;
   try { await navigator.clipboard.writeText(code); toast(done, 'ok', 8000); }
-  catch { toast('Copie impossible : sélectionne le code et copie-le à la main.', 'err', 6000); }
+  catch { toast(t('network.copy_failed'), 'err', 6000); }
 }
 
 async function createInvitation() {
@@ -141,35 +147,30 @@ async function createInvitation() {
   try { created = await post('/network/invitations'); } catch (e) { errorToast(e); return; }
   lastJson = '';
   loadNetwork();
-  await copyCode('Invitation à envoyer à ton ami',
-    'Envoie ce code à ton ami (message, courriel). Il le colle dans son AIODOS, puis te renvoie sa réponse : '
-      + 'colle-la ici, avec « Coller la réponse ».',
-    created.code, 'Invitation copiée : envoie-la à ton ami.');
+  await copyCode(t('network.invitation_title'), t('network.invitation_text'),
+    created.code, t('network.invitation_copied'));
 }
 
 async function acceptInvitation() {
-  const r = await modal({ title: 'Répondre à une invitation', iconName: 'link', textarea: '',
-    placeholder: 'AIODOS1-…', text: 'Colle ici le code d\'invitation reçu de ton ami.', confirm: 'Continuer' });
+  const r = await modal({ title: t('network.accept_invitation'), iconName: 'link', textarea: '',
+    placeholder: 'AIODOS1-…', text: t('network.accept_text'), confirm: t('network.continue') });
   if (!r.ok || !r.value.trim()) return;
   let answer;
   try { answer = await post('/network/invitations/accept', { code: r.value }); } catch (e) { errorToast(e); return; }
   lastJson = '';
   loadNetwork();
-  await copyCode(`Réponse à renvoyer à « ${answer.name} »`,
-    `Renvoie cette réponse à « ${answer.name} ». Quand il l'aura collée, une demande d'appairage s'affichera ici : `
-      + 'vérifiez ensemble que vous voyez le même code à 6 chiffres.',
-    answer.reply, 'Réponse copiée : renvoie-la à ton ami.');
+  await copyCode(t('network.reply_title', { name: answer.name }), t('network.reply_text', { name: answer.name }),
+    answer.reply, t('network.reply_copied'));
 }
 
 async function pasteReply(invitationId) {
-  const r = await modal({ title: 'Réponse de ton ami', iconName: 'link', textarea: '', placeholder: 'AIODOS1-…',
-    text: 'Colle ici la réponse que ton ami t\'a renvoyée.', confirm: 'Appairer' });
+  const r = await modal({ title: t('network.paste_title'), iconName: 'link', textarea: '', placeholder: 'AIODOS1-…',
+    text: t('network.paste_text'), confirm: t('network.pair') });
   if (!r.ok || !r.value.trim()) return;
   let pending;
   try { pending = await post(`/network/invitations/${invitationId}/reply`, { code: r.value }); }
   catch (e) { errorToast(e); return; }
-  await confirmPairing(pending, 'Vérifie avec ton ami (au téléphone, par message) qu\'il voit ce même code, '
-    + 'dis ce qu\'est sa machine pour toi, puis confirmez chacun de votre côté.');
+  await confirmPairing(pending, t('network.paste_check'));
 }
 
 // ------------------------------------------------ réseau public (phase 3.0)
@@ -178,10 +179,19 @@ const shortKey = key => (key ? `${key.slice(0, 6)}…${key.slice(-4)}` : '');
 function publicNode(n) {
   const models = Array.isArray(n.models) ? n.models.map(String) : [];
   const key = typeof n.key === 'string' ? n.key : '';
+  const seen = ago(Date.now() / 1000 - (finite(n.seen_s) ?? 0));
   return `<div class="peer"><div class="peer-head"><span class="dot on"></span>
       <code title="${esc(key)}">${esc(shortKey(key))}</code>
-      <span class="faint">AIODOS ${esc(n.version || '?')} · vu ${ago(Date.now() / 1000 - (finite(n.seen_s) ?? 0))}</span></div>
-    <div class="peer-facts">${models.length ? esc(models.join(', ')) : 'aucun modèle annoncé'}</div></div>`;
+      <span class="faint">AIODOS ${esc(n.version || '?')} · ${esc(t('network.public_seen', { ago: seen }))}</span></div>
+    <div class="peer-facts">${esc(models.length ? models.join(', ') : t('network.public_no_models'))}</div></div>`;
+}
+
+/** « 3 autres nœuds publics en ligne · 2 voisins directs », en texte brut. */
+function publicCounts(pub) {
+  const facts = [t('network.public_count', { n: finite(pub.count) ?? 0 }),
+    t('network.public_neighbors', { n: finite(pub.neighbors) ?? 0 })];
+  if (pub.rendezvous?.error) facts.push(t('network.public_directory', { error: pub.rendezvous.error }));
+  return facts.join(' · ');
 }
 
 function renderPublic(net) {
@@ -191,25 +201,17 @@ function renderPublic(net) {
   if (box.hidden) return;
   const nodes = Array.isArray(pub.nodes) ? pub.nodes : [];
   const detail = !pub.wanted ? ''
-    : !pub.internet ? `<div class="hint" style="margin:8px 0 0">Active d'abord « Internet », plus haut : le réseau
-        public passe par lui.</div>`
+    : !pub.internet ? `<div class="hint" style="margin:8px 0 0">${esc(t('network.public_needs_internet'))}</div>`
       : pub.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(pub.error)}</div></div>`
-        : !pub.joined ? '<div class="faint" style="margin-top:8px">Connexion au réseau public…</div>'
-          : `<div class="peer-facts" style="margin:8px 0">Clé publique de cette machine :
-              <code title="${esc(pub.key)}">${esc(shortKey(String(pub.key || '')))}</code> · ${finite(pub.count) ?? 0} autre(s)
-              nœud(s) public(s) en ligne · ${finite(pub.neighbors) ?? 0} voisin(s) direct(s)${pub.rendezvous?.error
-                ? ` · annuaire : ${esc(pub.rendezvous.error)}` : ''}</div>
+        : !pub.joined ? `<div class="faint" style="margin-top:8px">${esc(t('network.public_connecting'))}</div>`
+          : `<div class="peer-facts" style="margin:8px 0">${esc(t('network.public_key'))}
+              <code title="${esc(pub.key)}">${esc(shortKey(String(pub.key || '')))}</code> · ${esc(publicCounts(pub))}</div>
             <div class="peer-list">${nodes.length ? nodes.map(publicNode).join('')
-              : '<div class="empty" style="padding:12px">Aucun autre nœud public en ligne pour l\'instant.</div>'}</div>`;
+              : `<div class="empty" style="padding:12px">${esc(t('network.public_none'))}</div>`}</div>`;
   box.innerHTML = `
     <div class="setting-row" style="border:0;padding-top:0">
-      <div class="txt"><b>Rejoindre le réseau public <span class="pill">essai</span></b>
-        <small>Un annuaire sans propriétaire (la DHT de BitTorrent), où les nœuds AIODOS se trouvent sans invitation.
-        Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais :
-        ton adresse IP n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre relais pourrait la
-        voir (limite connue de cet essai). Elle dit seulement sa version d'AIODOS et les modèles
-        qu'elle sait calculer. Rien n'est confié aux inconnus, et rien n'est calculé pour eux : cela viendra plus
-        tard, avec ton accord.</small></div>
+      <div class="txt"><b>${esc(t('network.public_title'))} <span class="pill">${esc(t('network.public_trial'))}</span></b>
+        <small>${esc(t('network.public_help'))}</small></div>
       <label class="switch"><input type="checkbox" id="public-toggle" ${pub.wanted ? 'checked' : ''}
         ${pub.internet || pub.wanted ? '' : 'disabled'}><span></span></label>
     </div>
@@ -232,24 +234,18 @@ function renderState(net) {
   // Réseau local coupé, mes machines restent jointes par Internet (net.enabled : le réseau tourne)
   const local = net.local ?? net.enabled;
   const detail = !local
-    ? (net.internet?.enabled
-      ? 'Plus de découverte ni de chemin direct sur ton réseau : tes machines appairées restent jointes '
-        + 'par Internet.'
-      : "Rien ne sort de cette machine. Active le réseau local ou Internet pour l'appairer avec tes "
-        + 'autres machines.')
+    ? t(net.internet?.enabled ? 'network.local_off_internet' : 'network.local_off_nothing')
     : net.running
-      ? `Cette machine (« ${esc(net.name)} ») est visible sur ton réseau, port ${net.port}` +
-        (net.discovery ? ', découverte automatique active.' : '.')
-      : 'Démarrage…';
+      ? t(net.discovery ? 'network.local_visible_discovery' : 'network.local_visible',
+        { name: net.name, port: net.port })
+      : t('network.starting');
   box.innerHTML = `
     <div class="setting-row" style="border:0;padding-top:0">
-      <div class="txt"><b>${local ? 'Réseau local activé' : 'Réseau local désactivé'}</b><small>${detail}</small></div>
+      <div class="txt"><b>${esc(t(local ? 'network.local_enabled' : 'network.local_disabled'))}</b><small>${esc(detail)}</small></div>
       <label class="switch"><input type="checkbox" id="net-toggle" ${local ? 'checked' : ''}><span></span></label>
     </div>
     ${net.error ? `<div class="banner warn" style="margin:8px 0 0">${icon('warn')}<div>${esc(net.error)}</div></div>` : ''}
-    ${local || !onWindows() ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>À l'activation,
-      Windows demandera sans doute l'autorisation du pare-feu pour Python : accepte pour les
-      <b>réseaux privés</b> seulement.</div></div>`}`;
+    ${local || !onWindows() ? '' : `<div class="phase-note" style="margin-top:10px">${icon('shield')}<div>${t('network.firewall_html')}</div></div>`}`;
   $('#net-toggle', box).onchange = async e => {
     try {
       state.network = await post('/network/enable', { enabled: e.target.checked });
@@ -272,113 +268,130 @@ function safePower(p) {
 // Profil envoyé par l'autre machine : chaque champ est typé (finite, count, flag) ou échappé
 export function peerFacts(peer) {
   const p = peer.profile;
-  if (!p || typeof p !== 'object') return '<span class="faint">Profil pas encore reçu.</span>';
+  if (!p || typeof p !== 'object') return `<span class="faint">${esc(t('network.profile_pending'))}</span>`;
   if (!p.memory) {                    // profil allégé : cette machine nous voit comme un ami
-    const facts = ['profil réduit (cette machine te compte parmi ses amis)'];
-    if (p.lends_models) facts.push(`prête ${count(p.ollama?.models)} modèle(s)`);
+    const facts = [esc(t('network.friend_profile'))];
+    if (p.lends_models) facts.push(esc(t('network.friend_lends_models', { n: count(p.ollama?.models) })));
     if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
     return facts.join(' · ');
   }
   const gpu = Array.isArray(p.gpus) && p.gpus[0] && typeof p.gpus[0] === 'object' ? p.gpus[0] : null;
   const facts = [
-    gpu ? `${esc(gpu.name)} · ${bytes(finite(gpu.vram_total) || 0)} de VRAM` : 'Pas de GPU NVIDIA',
-    `${bytes(finite(p.memory?.total) || 0)} de RAM`,
-    `${count(p.ollama?.models)} modèle(s)`,
+    esc(gpu ? t('network.gpu', { name: gpu.name, vram: bytes(finite(gpu.vram_total) || 0) }) : t('network.no_gpu')),
+    esc(t('network.ram', { size: bytes(finite(p.memory?.total) || 0) })),
+    esc(t('network.models', { n: count(p.ollama?.models) })),
   ];
-  if (p.lends_models) facts.push('prête ses modèles');
+  if (p.lends_models) facts.push(esc(t('network.lends_models')));
   if (p.power?.mobile === true) {              // téléphone : charge, niveau, température
     const text = powerText(safePower(p));
     facts.push(esc(text.charAt(0).toLowerCase() + text.slice(1)));
-  } else if (p.on_ac_power === false) facts.push('sur batterie');
+  } else if (p.on_ac_power === false) facts.push(esc(t('network.on_battery')));
   const idle = finite(p.idle_seconds);
-  if (idle != null) facts.push(idle < 60 ? 'utilisée en ce moment' : `inactive depuis ${duration(idle)}`);
+  if (idle != null) facts.push(esc(idle < 60 ? t('network.in_use') : t('network.idle_for', { time: duration(idle) })));
   if (p.version) facts.push(`AIODOS ${esc(p.version)}`);
   return facts.join(' · ');
 }
 
-/** La machine qui en a présenté une autre (appairage par groupe), par son nom. */
-function presenterName(peer, net) {
+/** « présentée par … » : la machine qui en a présenté une autre (appairage par groupe), par son nom. */
+function presentedBy(peer, net) {
   if (!peer.introduced_by) return '';
   const by = net.peers.find(p => p.node_id === peer.introduced_by);
-  return by ? `« ${by.name} »` : 'une machine retirée depuis';
+  return by ? t('network.introduced_by', { name: by.name }) : t('network.introduced_by_removed');
+}
+
+// Ce qui a été échangé avec une machine appairée (texte brut, une ligne chacun)
+function reliability(peer) {
+  return t('network.reliability', { facts: [
+    t('network.reliability_checked', { n: peer.checked_units || 0 }),
+    t('network.reliability_refused', { n: peer.refused_units || 0 }),
+    t('network.reliability_failed', { n: peer.failed_units || 0 }),
+  ].join(' · ') });
+}
+
+function sharedText(shared) {
+  return t(shared.bytes ? 'network.shared_size' : 'network.shared',
+    { n: shared.count, size: bytes(shared.bytes), ago: ago(shared.last) });
+}
+
+function consultedText(consulted) {
+  const facts = [t('network.consulted_searches', { n: consulted.count }),
+    t('network.consulted_passages', { n: consulted.passages })];
+  if (consulted.refused) facts.push(t('network.consulted_refusals', { n: consulted.refused }));
+  return t('network.consulted', { facts: facts.join(', '), ago: ago(consulted.last) });
 }
 
 function renderPeers(net) {
   const box = $('#net-peers', root);
   const intros = net.introductions || [];
+  const offload = t(net.offload ? 'network.offload_on' : 'network.offload_off');
   box.innerHTML = `
-    <h2>${icon('network')}Machines appairées</h2>
-    <p class="hint">Tes machines et celles de tes amis. Les échanges sont chiffrés, et chaque machine applique ses
-      propres règles de partage (réglables dans « Cette machine »). Un ami ne reçoit que les bibliothèques
-      partagées avec tes amis. ${net.offload ? 'Tes tâches peuvent leur être confiées.' : 'Tu ne leur confies pas tes tâches.'}
-      Une machine d'ami rencontre aussi tes autres machines, et les siennes les tiennes, avec votre accord.</p>
+    <h2>${icon('network')}${esc(t('network.peers_title'))}</h2>
+    <p class="hint">${esc(t('network.peers_hint', { offload }))}</p>
     ${intros.length ? '<div class="peer-list intro-list"></div>' : ''}
     <div class="peer-list"></div>`;
   for (const o of intros) {                  // présentations qui attendent ma réponse
     const row = h(`
       <div class="peer intro"><div class="peer-head">${icon('network')}<b>${esc(o.machine)}</b>
-        <span class="faint">présentée par « ${esc(o.presenter)} » ${ago(o.created)} · attend ta réponse</span>
-        <span style="flex:1"></span><button class="btn sm primary">Répondre</button></div></div>`);
+        <span class="faint">${esc(t('network.intro_waiting', { presenter: o.presenter, ago: ago(o.created) }))}</span>
+        <span style="flex:1"></span><button class="btn sm primary">${esc(t('network.answer'))}</button></div></div>`);
     row.querySelector('button').onclick = () => answerIntroduction(o);
     box.querySelector('.intro-list').append(row);
   }
   const list = box.querySelector('.peer-list:not(.intro-list)');
   if (!net.peers.length) {
-    list.append(h('<div class="empty" style="padding:18px">Aucune machine appairée pour l\'instant.</div>'));
+    list.append(h(`<div class="empty" style="padding:18px">${esc(t('network.no_peers'))}</div>`));
     return;
   }
   for (const peer of net.peers) {
     const friend = peer.trust === 'friend';
     const shared = peer.shared;
     const consulted = peer.consulted;          // ses recherches dans mes bibliothèques ouvertes
-    const presenter = presenterName(peer, net);
+    const presented = presentedBy(peer, net);
+    // Raison gardée en base : un texte, ou [clé, paramètres] à traduire ici (tt)
+    const reason = tt(peer.set_aside_reason) || t('network.check_failed');
     const row = h(`
       <div class="peer">
         <div class="peer-head">
-          <span class="dot ${peer.online ? 'on' : ''}" title="${peer.online ? 'En ligne' : 'Hors ligne'}"></span>
+          <span class="dot ${peer.online ? 'on' : ''}" title="${esc(t(peer.online ? 'network.online_title' : 'network.offline_title'))}"></span>
           <b>${esc(peer.name)}</b>
-          ${friend ? '<span class="pill" title="Machine d\'un ami : droits plus étroits">ami</span>' : ''}
-          ${peer.set_aside_at ? '<span class="pill err">mise de côté</span>' : ''}
-          ${presenter ? `<span class="faint" title="Appairée par une présentation : pas de code à comparer, la
-            confiance vient de la machine qui l'a présentée">présentée par ${esc(presenter)}</span>` : ''}
+          ${friend ? `<span class="pill" title="${esc(t('network.friend_title'))}">${esc(t('network.friend'))}</span>` : ''}
+          ${peer.set_aside_at ? `<span class="pill err">${esc(t('network.set_aside'))}</span>` : ''}
+          ${presented ? `<span class="faint" title="${esc(t('network.introduced_title'))}">${esc(presented)}</span>` : ''}
           <span class="faint">${peer.address ? `${esc(peer.address)}:${esc(peer.port || '?')}`
-            : peer.net_id ? 'par Internet' : 'adresse inconnue'}</span>
-          <span class="faint">${peer.online ? 'en ligne' : peer.last_seen ? `vue ${ago(peer.last_seen)}` : 'jamais vue'}</span>
+            : esc(t(peer.net_id ? 'network.via_internet' : 'network.unknown_address'))}</span>
+          <span class="faint">${esc(peer.online ? t('network.online')
+            : peer.last_seen ? t('network.seen', { ago: ago(peer.last_seen) }) : t('network.never_seen'))}</span>
           <span style="flex:1"></span>
-          <button class="icon-btn" data-act="refresh" title="Actualiser">${icon('retry')}</button>
-          <button class="icon-btn" data-act="more" title="Options">${icon('more')}</button>
-          <button class="icon-btn danger" data-act="unpair" title="Retirer l'appairage">${icon('x')}</button>
+          <button class="icon-btn" data-act="refresh" title="${esc(t('network.refresh'))}">${icon('retry')}</button>
+          <button class="icon-btn" data-act="more" title="${esc(t('network.options'))}">${icon('more')}</button>
+          <button class="icon-btn danger" data-act="unpair" title="${esc(t('network.unpair'))}">${icon('x')}</button>
         </div>
         <div class="peer-facts">${peerFacts(peer)}${netFact(peer)}</div>
         ${offlineHint(peer, net)}
-        ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>Mise de côté ${ago(peer.set_aside_at)} :
-          ${esc(peer.set_aside_reason || 'contrôle échoué')}. Plus rien ne lui est confié.</div>
-          <button class="btn sm" data-act="restore">Rétablir</button></div>` : ''}
-        ${peer.working_for_me ? `<div class="peer-work">${icon('bolt')}Calcule pour toi en ce moment :
-          ${peer.working_for_me} unité(s)</div>` : ''}
-        <div class="peer-ledger faint">A calculé pour toi : ${duration(peer.received_s)} (${peer.received_units} unité(s))
-          · Tu as calculé pour elle : ${duration(peer.given_s)} (${peer.given_units} unité(s))</div>
-        ${peer.received_chats || peer.given_chats ? `<div class="peer-ledger faint">Conversations servies par
-          un modèle prêté : ${peer.received_chats || 0} pour toi · ${peer.given_chats || 0} pour elle</div>` : ''}
-        ${peer.checked_units || peer.refused_units || peer.failed_units ? `<div class="peer-ledger faint">Fiabilité :
-          ${peer.checked_units || 0} résultat(s) contrôlé(s) et conforme(s) · ${peer.refused_units || 0} refusé(s)
-          · ${peer.failed_units || 0} unité(s) qu'elle n'a pas pu calculer</div>` : ''}
-        ${shared ? `<div class="peer-ledger faint">Confié à cette machine : ${shared.count} fichier(s) ou page(s)
-          ${shared.bytes ? `(${bytes(shared.bytes)})` : ''}, le dernier ${ago(shared.last)}</div>` : ''}
-        ${consulted ? `<div class="peer-ledger faint">A cherché dans tes bibliothèques : ${consulted.count} recherche(s),
-          ${consulted.passages} passage(s) rendu(s)${consulted.refused ? `, ${consulted.refused} refus` : ''},
-          la dernière ${ago(consulted.last)}</div>` : ''}
+        ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>${esc(t('network.set_aside_text',
+          { ago: ago(peer.set_aside_at), reason }))}</div>
+          <button class="btn sm" data-act="restore">${esc(t('network.restore'))}</button></div>` : ''}
+        ${peer.working_for_me ? `<div class="peer-work">${icon('bolt')}${esc(t('network.working_for_me',
+          { n: peer.working_for_me }))}</div>` : ''}
+        <div class="peer-ledger faint">${esc(t('network.ledger_received', { time: duration(peer.received_s), n: peer.received_units }))}
+          · ${esc(t('network.ledger_given', { time: duration(peer.given_s), n: peer.given_units }))}</div>
+        ${peer.received_chats || peer.given_chats ? `<div class="peer-ledger faint">${esc(t('network.ledger_chats',
+          { received: peer.received_chats || 0, given: peer.given_chats || 0 }))}</div>` : ''}
+        ${peer.checked_units || peer.refused_units || peer.failed_units
+          ? `<div class="peer-ledger faint">${esc(reliability(peer))}</div>` : ''}
+        ${shared ? `<div class="peer-ledger faint">${esc(sharedText(shared))}</div>` : ''}
+        ${consulted ? `<div class="peer-ledger faint">${esc(consultedText(consulted))}</div>` : ''}
       </div>`);
     row.querySelector('[data-act="more"]').onclick = e => {
       e.stopPropagation();
       menu(e.currentTarget, [
         friend
-          ? { label: 'C\'est une de mes machines', icon: 'network', action: () => setTrust(peer, 'mine') }
-          : { label: 'C\'est la machine d\'un ami', icon: 'shield', action: () => setTrust(peer, 'friend') },
-        ...(friend && !peer.set_aside_at ? [{ label: 'Présenter mes autres machines', icon: 'network',
+          ? { label: t('network.set_mine'), icon: 'network', action: () => setTrust(peer, 'mine') }
+          : { label: t('network.set_friend'), icon: 'shield', action: () => setTrust(peer, 'friend') },
+        ...(friend && !peer.set_aside_at ? [{ label: t('network.present'), icon: 'network',
           action: () => presentMachines(peer) }] : []),
-        ...(shared ? [{ label: 'Voir ce qui lui a été confié', icon: 'file', action: () => showShared(peer) }] : []),
-        ...(consulted ? [{ label: 'Voir ses recherches dans tes bibliothèques', icon: 'search',
+        ...(shared ? [{ label: t('network.show_shared'), icon: 'file', action: () => showShared(peer) }] : []),
+        ...(consulted ? [{ label: t('network.show_consulted'), icon: 'search',
           action: () => showConsulted(peer) }] : []),
       ]);
     };
@@ -395,25 +408,22 @@ function renderPeers(net) {
       // une de mes machines (perdue, volée) peut emporter les machines d'amis qu'elle a présentées
       const introduced = net.peers.filter(p => p.introduced_by === peer.node_id && p.trust === 'friend');
       const r = friend
-        ? await modal({ title: 'Retirer l\'appairage', iconName: 'warn', danger: true, confirm: 'Retirer',
-          text: `« ${peer.name} » ne pourra plus échanger avec cette machine. Tes autres machines la retirent `
-            + 'aussi, sauf si tu coches la case ci-dessous. Il faudra refaire l\'appairage pour la retrouver.',
-          check: 'Seulement de cette machine' })
+        ? await modal({ title: t('network.unpair'), iconName: 'warn', danger: true, confirm: t('network.unpair_confirm'),
+          text: t('network.unpair_friend_text', { name: peer.name }),
+          check: t('network.unpair_only_here') })
         : introduced.length
-          ? await modal({ title: 'Retirer l\'appairage', iconName: 'warn', danger: true, confirm: 'Retirer',
-            text: `« ${peer.name} » ne pourra plus échanger avec cette machine. Elle t'a présenté `
-              + `${introduced.length} machine(s) d'amis (${introduced.map(p => `« ${p.name} »`).join(', ')}) : si `
-              + 'elle est perdue ou volée, retire-les aussi, de toutes tes machines.',
-            check: 'Retirer aussi les machines d\'amis qu\'elle a présentées' })
-          : { ok: await confirmDanger('Retirer l\'appairage',
-            `« ${peer.name} » ne pourra plus échanger avec cette machine. Il faudra refaire l'appairage pour la retrouver.`,
-            'Retirer'), checked: false };
+          ? await modal({ title: t('network.unpair'), iconName: 'warn', danger: true, confirm: t('network.unpair_confirm'),
+            text: t('network.unpair_introduced_text', { name: peer.name, n: introduced.length,
+              names: names(introduced.map(p => p.name)) }),
+            check: t('network.unpair_with_introduced') })
+          : { ok: await confirmDanger(t('network.unpair'),
+            t('network.unpair_text', { name: peer.name }), t('network.unpair_confirm')), checked: false };
       if (!r.ok) return;
       const query = friend ? `?only_here=${r.checked}` : r.checked ? '?with_introduced=true' : '';
       try {
         const done = await del(`/network/peers/${encodeURIComponent(peer.node_id)}${query}`);
         if (done?.missed?.length) {
-          toast(`Hors ligne, à prévenir quand elles reviendront : ${names(done.missed)}.`, 'info', 10000);
+          toast(t('network.unpair_missed', { n: done.missed.length, names: names(done.missed) }), 'info', 10000);
         }
         lastJson = '';
         loadNetwork();
@@ -426,36 +436,37 @@ function renderPeers(net) {
 /** Une machine appairée hors ligne : ce qu'il faut vérifier pour la retrouver. */
 function offlineHint(peer, net) {
   if (peer.online || peer.set_aside_at) return '';
-  const internet = !net.internet?.enabled
-    ? ' ; ou active « Internet » plus haut, pour la joindre même hors du réseau local'
-    : !peer.net_id ? ' ; par Internet, il faut aussi activer « Internet » sur elle' : '';
-  return `<div class="peer-offline">${icon('info')}<div>Hors ligne : vérifie qu'elle est allumée et
-    qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local
-    (dans NordVPN, par exemple : autoriser le réseau local)${internet}.</div></div>`;
+  const hint = net.internet?.enabled
+    ? (peer.net_id ? 'network.offline_hint' : 'network.offline_hint_peer_internet')
+    : 'network.offline_hint_internet';
+  return `<div class="peer-offline">${icon('info')}<div>${esc(t(hint))}</div></div>`;
 }
 
 function netFact(peer) {
   const inet = peer.internet;
   if (!inet?.connected) return '';
   const rtt = inet.rtt_ms ? ` (${Math.round(inet.rtt_ms)} ms)` : '';
-  return ` · Internet : ${inet.path === 'direct' ? 'en direct' : 'par un relais'}${rtt}`;
+  return ` · ${esc(t(inet.path === 'direct' ? 'network.internet_direct' : 'network.internet_relay'))}${rtt}`;
 }
 
-const names = list => list.map(n => `« ${n} »`).join(', ');
+const names = list => list.map(name => t('network.quoted', { name })).join(', ');
 
 /** « Présenter mes autres machines » : celles qui ne connaissent pas encore cette machine d'ami. */
 async function presentMachines(peer) {
-  toast(`Présentation de tes autres machines à « ${peer.name} »…`, 'info', 4000);
+  toast(t('network.presenting', { name: peer.name }), 'info', 4000);
   let r;
   try { r = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/present`); } catch (e) { errorToast(e); return; }
   const parts = [];
-  if (r.introduced.length) parts.push(`appairée avec ${names(r.introduced)}`);
-  if (r.asked.length) parts.push(`son accord est demandé pour ${names(r.asked)}`);
-  if (r.known.length) parts.push(`connaît déjà ${names(r.known)}`);
-  if (r.refused.length) parts.push(`a refusé ${names(r.refused)}`);
-  if (r.unreachable.length) parts.push(`injoignable(s) pour l'instant : ${names(r.unreachable)}`);
-  toast(parts.length ? `« ${peer.name} » : ${parts.join(' ; ')}.` : 'Aucune autre de tes machines à présenter.',
-    r.unreachable.length || r.refused.length ? 'info' : 'ok', 10000);
+  if (r.introduced.length) parts.push(t('network.present_introduced', { names: names(r.introduced) }));
+  if (r.asked.length) parts.push(t('network.present_asked', { names: names(r.asked) }));
+  if (r.known.length) parts.push(t('network.present_known', { names: names(r.known) }));
+  if (r.refused.length) parts.push(t('network.present_refused', { names: names(r.refused) }));
+  if (r.unreachable.length) {
+    parts.push(t('network.present_unreachable', { n: r.unreachable.length, names: names(r.unreachable) }));
+  }
+  toast(parts.length
+    ? t('network.present_result', { name: peer.name, parts: parts.join(t('network.clause_separator')) })
+    : t('network.present_none'), r.unreachable.length || r.refused.length ? 'info' : 'ok', 10000);
   lastJson = '';
   loadNetwork();
 }
@@ -463,9 +474,8 @@ async function presentMachines(peer) {
 async function setTrust(peer, trust) {
   try {
     state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/trust`, { trust });
-    toast(trust === 'friend'
-      ? `« ${peer.name} » est désormais la machine d'un ami : seules les bibliothèques partagées avec tes amis lui seront confiées.`
-      : `« ${peer.name} » est désormais une de tes machines : confiance totale.`, 'ok', 7000);
+    toast(t(trust === 'friend' ? 'network.trust_friend_done' : 'network.trust_mine_done', { name: peer.name }),
+      'ok', 7000);
     lastJson = '';
     loadNetwork();
   } catch (e) { errorToast(e); }
@@ -474,13 +484,12 @@ async function setTrust(peer, trust) {
 async function showShared(peer) {
   let entries;
   try { ({ entries } = await get(`/network/peers/${encodeURIComponent(peer.node_id)}/shared`)); } catch (e) { errorToast(e); return; }
-  const lines = entries.map(e => `${new Date(e.at * 1000).toLocaleString('fr-FR')} · ${e.what}`
+  const lines = entries.map(e => `${new Date(e.at * 1000).toLocaleString(locale())} · ${e.what}`
     + `${e.sent_as && e.sent_as !== e.what ? ` → ${e.sent_as}` : ''}${e.size ? ` (${bytes(e.size)})` : ''}`);
   await modal({
-    title: `Confié à « ${peer.name} »`, iconName: 'file', cancel: null, confirm: 'Fermer',
-    text: 'Les fichiers et pages dont le calcul lui a été confié, du plus récent au plus ancien '
-      + '(à droite de la flèche, le nom sous lequel il les a reçus).',
-    quote: lines.join('\n') || 'Rien pour l\'instant.',
+    title: t('network.shared_title', { name: peer.name }), iconName: 'file', cancel: null, confirm: t('network.close'),
+    text: t('network.shared_text'),
+    quote: lines.join('\n') || t('network.nothing_yet'),
   });
 }
 
@@ -488,16 +497,16 @@ async function showConsulted(peer) {
   let entries;
   try { ({ entries } = await get(`/network/peers/${encodeURIComponent(peer.node_id)}/consulted`)); } catch (e) { errorToast(e); return; }
   const lines = entries.map(e => {
-    const when = new Date(e.at * 1000).toLocaleString('fr-FR');
-    if (e.refused) return `${when} · refusée : ${e.refused}`;
+    const when = new Date(e.at * 1000).toLocaleString(locale());
+    // Raison gardée en base : un texte, ou [clé, paramètres] à traduire ici (tt)
+    if (e.refused) return t('network.consulted_refused_line', { when, reason: tt(e.refused) });
     const docs = e.documents.map(d => `${d.document} (${d.library})`).join(', ');
-    return `${when} · ${e.passages} passage(s)${docs ? ` : ${docs}` : ''}`;
+    return t(docs ? 'network.consulted_line_docs' : 'network.consulted_line', { when, n: e.passages, docs });
   });
   await modal({
-    title: `Recherches de « ${peer.name} »`, iconName: 'search', cancel: null, confirm: 'Fermer',
-    text: 'Ses recherches dans les bibliothèques que tu lui ouvres, de la plus récente à la plus ancienne, '
-      + 'avec les documents d\'où viennent les passages qu\'elle a reçus. Ses questions ne sont pas gardées.',
-    quote: lines.join('\n') || 'Rien pour l\'instant.',
+    title: t('network.consulted_title', { name: peer.name }), iconName: 'search', cancel: null,
+    confirm: t('network.close'), text: t('network.consulted_text'),
+    quote: lines.join('\n') || t('network.nothing_yet'),
   });
 }
 
@@ -505,28 +514,28 @@ async function showConsulted(peer) {
 function renderVisible(net) {
   const box = $('#net-visible', root);
   if (!net.running || !(net.local ?? true)) {
-    box.innerHTML = `<h2>${icon('search')}Machines détectées</h2>
-      <p class="hint" style="margin:0">Active le réseau local pour voir les autres machines AIODOS de ton réseau
-      (par Internet : « Inviter un ami » ou une de tes machines, plus haut).</p>`;
+    box.innerHTML = `<h2>${icon('search')}${esc(t('network.visible_title'))}</h2>
+      <p class="hint" style="margin:0">${esc(t('network.visible_off'))}</p>`;
     return;
   }
   box.innerHTML = `
-    <h2>${icon('search')}Machines détectées</h2>
-    <p class="hint">Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas,
-      ajoute-la par son adresse IP.</p>
+    <h2>${icon('search')}${esc(t('network.visible_title'))}</h2>
+    <p class="hint">${esc(t('network.visible_hint'))}</p>
     <div class="peer-list" id="visible-list"></div>
     <div class="toolbar" style="margin:14px 0 0">
-      <input class="input" id="net-address" placeholder="Adresse : 192.168.1.20 ou 192.168.1.20:47701" style="max-width:360px">
-      <button class="btn" id="net-add">${icon('plus')}Ajouter</button>
+      <input class="input" id="net-address" placeholder="${esc(t('network.address_placeholder'))}" style="max-width:360px">
+      <button class="btn" id="net-add">${icon('plus')}${esc(t('network.add'))}</button>
     </div>`;
   const list = $('#visible-list', box);
   for (const p of net.pairing) {
-    const waiting = p.local_ok ? "en attente de la confirmation sur l'autre machine" : 'à confirmer ici';
-    const where = p.internet ? ' · par Internet' : p.address ? ` · ${esc(p.address)}` : '';
+    const facts = [t('network.pairing_code', { code: p.code })];
+    if (p.internet) facts.push(t('network.via_internet'));
+    else if (p.address) facts.push(p.address);
+    facts.push(t(p.local_ok ? 'network.pairing_waiting' : 'network.pairing_confirm_here'));
     const row = h(`<div class="peer"><div class="peer-head">${icon('shield')}<b>${esc(p.name)}</b>
-      <span class="faint">appairage en cours · code ${esc(p.code)}${where} · ${waiting}</span></div></div>`);
+      <span class="faint">${esc(facts.join(' · '))}</span></div></div>`);
     if (!p.local_ok) {
-      const btn = h(`<button class="btn sm">Vérifier le code</button>`);
+      const btn = h(`<button class="btn sm">${esc(t('network.check_code'))}</button>`);
       btn.onclick = () => answerPairRequest(p);       // avec sa « ref » : la réponse vise cette demande
       row.querySelector('.peer-head').append(btn);
     }
@@ -538,20 +547,20 @@ function renderVisible(net) {
       <div class="peer"><div class="peer-head">
         <span class="dot on"></span><b>${esc(v.name)}</b>
         <span class="faint">${esc(v.address)}:${esc(v.port)}</span><span style="flex:1"></span>
-        <button class="btn sm primary">${icon('shield')}Appairer</button>
+        <button class="btn sm primary">${icon('shield')}${esc(t('network.pair'))}</button>
       </div></div>`);
     row.querySelector('button').onclick = () => startPairing(v);
     list.append(row);
   }
   if (!list.children.length) {
-    list.append(h('<div class="empty" style="padding:14px">Aucune autre machine détectée pour l\'instant.</div>'));
+    list.append(h(`<div class="empty" style="padding:14px">${esc(t('network.no_visible'))}</div>`));
   }
   const add = async () => {
     const address = $('#net-address', box).value.trim();
     if (!address) return;
     try {
       const info = await post('/network/add', { address });
-      toast(`« ${info.name} » trouvée.`, 'ok');
+      toast(t('network.found', { name: info.name }), 'ok');
       lastJson = '';
       loadNetwork();
     } catch (e) { errorToast(e); }
@@ -561,20 +570,18 @@ function renderVisible(net) {
 }
 
 // ------------------------------------------------------------------ appairage
-// Ce qu'est l'autre machine pour celle-ci (network/sharing.py) : choisi sur chacune
+// Ce qu'est l'autre machine pour celle-ci (network/sharing.py) : choisi sur chacune. Des
+// clés de textes, traduites à l'ouverture de la fenêtre (trustChoices)
 const TRUST_CHOICES = [
-  { value: 'mine', label: 'Une de mes machines',
-    help: 'Confiance totale : toutes tes bibliothèques peuvent y être calculées, sauf celles gardées sur ce PC.' },
-  { value: 'friend', label: 'La machine d\'un ami',
-    help: 'Seulement les bibliothèques partagées avec tes amis, sous des noms de fichiers neutres ; '
-      + 'ses calculs sont vérifiés par échantillon.' },
+  { value: 'mine', label: 'network.trust_mine', help: 'network.trust_mine_help' },
+  { value: 'friend', label: 'network.trust_friend', help: 'network.trust_friend_help' },
 ];
+const trustChoices = () => TRUST_CHOICES.map(c => ({ value: c.value, label: t(c.label), help: t(c.help) }));
 
 async function startPairing(v) {
   let pending;
   try { pending = await post('/network/pair', { node_id: v.node_id }); } catch (e) { errorToast(e); return; }
-  await confirmPairing(pending, 'Vérifie que ce même code s\'affiche sur l\'autre machine, dis ce qu\'elle est '
-    + 'pour toi, puis confirme ici ET là-bas.');
+  await confirmPairing(pending, t('network.pair_check'));
 }
 
 let pairOpen = 0;                     // fenêtres d'appairage ouvertes en ce moment
@@ -583,17 +590,14 @@ let pairOpen = 0;                     // fenêtres d'appairage ouvertes en ce mo
  *  si elle est déjà appairée (accepter remplace sa clé), et si une autre demande est ouverte
  *  en même temps (quelqu'un d'autre tente peut-être de s'appairer). Texte brut : modal l'échappe. */
 function pairDetails(p) {
-  const where = p.internet ? ' Elle est jointe par Internet, sur invitation.'
-    : p.address ? ` Adresse de l'autre machine : ${p.address}.` : '';
-  const known = p.known ? ` Attention : « ${p.known} » est déjà appairée avec cette machine ; `
-    + "accepter remplacera sa clé. Si rien n'a changé sur elle (réinstallation, appairage retiré "
-    + 'de son côté), refuse.' : '';
+  const parts = [];
+  if (p.internet) parts.push(t('network.details_internet'));
+  else if (p.address) parts.push(t('network.details_address', { address: p.address }));
+  if (p.known) parts.push(t('network.details_known', { name: p.known }));
   const others = pairOpen + (state.network?.pairing || [])
     .filter(o => o.node_id !== p.node_id && !o.local_ok).length;
-  const crowd = others ? " Attention : une autre demande d'appairage est ouverte en même temps. Si tu "
-    + "n'attendais qu'une seule machine, refuse tout et recommence : quelqu'un d'autre tente peut-être "
-    + "de s'appairer." : '';
-  return where + known + crowd;
+  if (others) parts.push(t('network.details_crowd'));
+  return parts.map(part => ` ${part}`).join('');
 }
 
 /** La réponse vise la demande montrée (ref) ; replace : remplacer la clé d'une machine déjà appairée. */
@@ -607,16 +611,16 @@ async function confirmPairing(pending, text) {
   let r;
   try {
     r = await modal({
-      title: `Appairer avec « ${pending.name} »`, iconName: 'shield', code: pending.code,
-      text: text + details, choices: TRUST_CHOICES, danger: !!pending.known,
-      confirm: pending.known ? 'Codes identiques : remplacer sa clé' : 'Les codes sont identiques',
-      cancel: 'Annuler',
+      title: t('network.pair_with', { name: pending.name }), iconName: 'shield', code: pending.code,
+      text: text + details, choices: trustChoices(), danger: !!pending.known,
+      confirm: t(pending.known ? 'network.codes_match_replace' : 'network.codes_match'),
+      cancel: t('ui.cancel'),
     });
   } finally { pairOpen -= 1; }
   try {
     const snap = await pairAnswer(pending, r);
     const done = snap.peers.some(p => p.node_id === pending.node_id);
-    if (r.ok && !done) toast('Confirmé ici. Confirme maintenant sur l\'autre machine.', 'info', 8000);
+    if (r.ok && !done) toast(t('network.confirmed_here'), 'info', 8000);
   } catch (e) { errorToast(e); }
   lastJson = '';
   loadNetwork();
@@ -633,12 +637,10 @@ export async function answerIntroduction(ev) {
   let r;
   try {
     r = await modal({
-      title: 'Présentation', iconName: 'network',
-      text: `« ${ev.presenter} » te présente « ${ev.machine} », une autre machine de la même personne. Si tu `
-        + `acceptes, elle pourra échanger avec cette machine comme « ${ev.presenter} », au même niveau de `
-        + 'confiance, sans code à comparer.',
-      check: 'Accepter d\'office les prochaines machines de ce groupe',
-      confirm: 'Accepter', cancel: 'Refuser', cautious: true,
+      title: t('network.intro_title'), iconName: 'network',
+      text: t('network.intro_text', { presenter: ev.presenter, machine: ev.machine }),
+      check: t('network.intro_always'),
+      confirm: t('network.accept'), cancel: t('network.refuse'), cautious: true,
     });
   } finally { introOpen = false; }
   if (r.how === 'dismiss') return;
@@ -659,11 +661,10 @@ export async function answerPairRequest(ev) {
   let r;
   try {
     r = await modal({
-      title: 'Demande d\'appairage', iconName: 'shield', code: ev.code,
-      text: `« ${ev.name} » veut s'appairer avec cette machine. Accepte seulement si ce même code `
-        + `s'affiche sur son écran, et dis ce qu'elle est pour toi.${details}`,
-      choices: TRUST_CHOICES, danger: !!ev.known, cautious: true,
-      confirm: ev.known ? 'Accepter et remplacer sa clé' : 'Accepter', cancel: 'Refuser',
+      title: t('network.request_title'), iconName: 'shield', code: ev.code,
+      text: t('network.request_text', { name: ev.name }) + details,
+      choices: trustChoices(), danger: !!ev.known, cautious: true,
+      confirm: t(ev.known ? 'network.accept_replace' : 'network.accept'), cancel: t('network.refuse'),
     });
   } finally { pairOpen -= 1; }
   try {

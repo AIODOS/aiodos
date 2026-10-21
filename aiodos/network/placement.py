@@ -41,6 +41,7 @@ from dataclasses import dataclass
 
 from aiodos import settings
 from aiodos.cluster import group as cluster
+from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.network import peers, remote_models, sharing
 from aiodos.node import identity
@@ -186,8 +187,8 @@ def _local(name: str, executor) -> Candidate | None:
     if model is None:
         return None
     return Candidate(
-        model=model["name"], node_id=None, machine=profile.get("name") or "cette machine",
-        trust="local",
+        model=model["name"], node_id=None,
+        machine=profile.get("name") or t("placement.this_machine"), trust="local",
         chats=int(executor.interactive) if executor else 0,
         units=int(sum(executor.busy.values())) if executor else 0,
         fits=model["fits_vram"], loaded=bool(model["loaded"]), gpu=_gpu_load(profile))
@@ -247,9 +248,9 @@ def plan(model, executor=None) -> list:
         return [model]
     ranked = candidates(name, executor)
     if not ranked:
-        raise NoMachine(f"Aucune machine ne peut répondre avec « {name} » en ce moment : "
-                        "ni cette machine, ni une de tes machines en ligne qui le prête.")
+        raise NoMachine(t("placement.no_machine", model=name))
     log.info("Mode automatique, « %s » : %s", name,
+             # i18n: tel quel (journal)
              ", ".join(f"{c.machine} ({c.chats} conv., {c.units} unités)" for c in ranked))
     return [c.model for c in ranked]
 
@@ -257,12 +258,12 @@ def plan(model, executor=None) -> list:
 def machine_of(model) -> str | None:
     """Nom de la machine qui répond avec cet identifiant concret (None : cette machine)."""
     if cluster.parse(model):
-        return "réparti entre mes machines"
+        return t("placement.split")
     parsed = remote_models.parse(model)
     if not parsed:
         return None
     peer = peers.get(parsed[0])
-    return peer["name"] if peer else "autre machine"
+    return peer["name"] if peer else t("placement.other_machine")
 
 
 def destination(model) -> str | None:
@@ -348,9 +349,10 @@ def auto_entries(models: list) -> list:
     cette machine et de ceux prêtés (pipeline.available_models) : un modèle n'y figure
     que si au moins une machine peut le servir d'office."""
     by_name = {}
+    here = t("placement.this_machine")
     for m in models:
         if m.get("group") == "local":
-            by_name.setdefault(m["label"], []).append(("cette machine", m))
+            by_name.setdefault(m["label"], []).append((here, m))
         elif m.get("group") == "remote" and m.get("auto"):
             by_name.setdefault(m["label"], []).append((m["peer"], m))
     entries = []

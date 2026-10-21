@@ -1,0 +1,29 @@
+{
+  "file_too_big": "file larger than {size} MB: it is not read",
+  "archive_refused": "document not read: {reason}",
+  "markup_too_big": "document larger than {size} MB: HTML and RTF are parsed whole, so it is not read",
+  "rtf_too_deep": "RTF with groups nested more than {depth} levels deep: it is not read",
+  "size_bytes": {
+    "one": "{n} byte",
+    "other": "{n} bytes"
+  },
+  "size_kb": "{n} KB",
+  "size_mb": "{n} MB",
+  "zip64": "zip64 archive: far too large for a document",
+  "encrypted": "encrypted archive",
+  "compression": "unexpected compression method for a document",
+  "damaged_zip_error": "damaged zip archive ({error})",
+  "row_too_long": "a row of more than {max} elements",
+  "outside_rows": "more than {max} elements outside the rows",
+  "row_number": "row number beyond Excel's ({number})",
+  "sheet_refused": "sheet “{name}”: {reason}",
+  "sheet_unreadable": "sheet “{name}” unreadable",
+  "unreadable_archive": "unreadable archive ({error})",
+  "not_a_zip": "not a valid zip archive",
+  "too_many_files": "more than {max} files in the archive",
+  "directory_too_big": "archive directory too large",
+  "unzipped_too_big": "{size} once unzipped (at most {max})",
+  "damaged_zip": "damaged zip archive",
+  "part_too_big": "part “{name}” of {size} once unzipped (at most {max})",
+  "xml_too_big": "{size} of XML text once unzipped (at most {max})"
+}

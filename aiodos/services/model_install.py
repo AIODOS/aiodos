@@ -12,45 +12,42 @@ import logging
 import threading
 import time
 
+from aiodos.i18n import t
 from aiodos.node import android, identity
 from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.models")
 
-# Tailles : tout ce que télécharge Ollama (modèle, projecteur d'images, gabarits)
+# Tailles : tout ce que télécharge Ollama (modèle, projecteur d'images, gabarits).
+# Libellés et descriptions : des clés de textes (model_install.json), traduites par
+# suggestions() dans la langue de qui les lit
 CATALOG = [
-    {"name": "qwen3.5:0.8b", "label": "Qwen 3.5 · 0,8 milliard", "size": 1_320_000_000,
-     "license": "Apache-2.0", "about": "Le plus léger : tient sur un téléphone, pour des "
-                                        "réponses simples."},
-    {"name": "qwen3.5:2b", "label": "Qwen 3.5 · 2 milliards", "size": 2_680_000_000,
-     "license": "Apache-2.0", "about": "Léger et correct : un téléphone récent, ou un petit PC."},
-    {"name": "qwen3.5:4b", "label": "Qwen 3.5 · 4 milliards", "size": 3_320_000_000,
-     "license": "Apache-2.0", "about": "Bon équilibre : une carte graphique de 4 à 6 Go, ou "
-                                        "16 Go de mémoire."},
-    {"name": "qwen3.5:9b", "label": "Qwen 3.5 · 9 milliards", "size": 6_550_000_000,
-     "license": "Apache-2.0", "about": "Le meilleur pour une carte graphique de 8 Go (le "
-                                        "modèle conseillé par AIODOS)."},
-    {"name": "mistral:7b", "label": "Mistral · 7 milliards", "size": 4_370_000_000,
-     "license": "Apache-2.0", "about": "Mistral AI, à l'aise en français : une carte de 6 Go, "
-                                        "ou 16 Go de mémoire."},
-    {"name": "phi4-mini", "label": "Phi-4 mini · 3,8 milliards", "size": 2_490_000_000,
-     "license": "MIT", "about": "Microsoft : vif pour raisonner, moins à l'aise en français."},
+    {"name": "qwen3.5:0.8b", "label": "model_install.label_qwen35_0_8b", "size": 1_320_000_000,
+     "license": "Apache-2.0", "about": "model_install.about_qwen35_0_8b"},
+    {"name": "qwen3.5:2b", "label": "model_install.label_qwen35_2b", "size": 2_680_000_000,
+     "license": "Apache-2.0", "about": "model_install.about_qwen35_2b"},
+    {"name": "qwen3.5:4b", "label": "model_install.label_qwen35_4b", "size": 3_320_000_000,
+     "license": "Apache-2.0", "about": "model_install.about_qwen35_4b"},
+    {"name": "qwen3.5:9b", "label": "model_install.label_qwen35_9b", "size": 6_550_000_000,
+     "license": "Apache-2.0", "about": "model_install.about_qwen35_9b"},
+    {"name": "mistral:7b", "label": "model_install.label_mistral_7b", "size": 4_370_000_000,
+     "license": "Apache-2.0", "about": "model_install.about_mistral_7b"},
+    {"name": "phi4-mini", "label": "model_install.label_phi4_mini", "size": 2_490_000_000,
+     "license": "MIT", "about": "model_install.about_phi4_mini"},
     # Ajoutés le 21/10/2026, seulement par le moteur intégré (fichiers épinglés de
     # llm/catalog.py : pas de nom vérifié chez Ollama)
-    {"name": "gemma4:e4b", "label": "Gemma 4 · E4B", "size": 5_967_544_256,
+    {"name": "gemma4:e4b", "label": "model_install.label_gemma4_e4b", "size": 5_967_544_256,
      "license": "Apache-2.0", "engine": "llama.cpp",
-     "about": "Google : vif, voit les images, à l'aise en français ; une carte graphique de "
-              "8 Go."},
-    {"name": "qwen3.6:35b-a3b", "label": "Qwen 3.6 · 35 milliards, dont 3 actifs",
+     "about": "model_install.about_gemma4_e4b"},
+    {"name": "qwen3.6:35b-a3b", "label": "model_install.label_qwen36_35b_a3b",
      "size": 23_033_812_672, "license": "Apache-2.0", "engine": "llama.cpp", "moe": True,
-     "about": "Le plus capable : une mixture d'experts de 35 milliards de paramètres, dont "
-              "3 travaillent à chaque mot. Il faut 32 Go de mémoire vive."},
+     "about": "model_install.about_qwen36_35b_a3b"},
     # Le modèle des bibliothèques (docs/embeddings.md) : sans lui, pas de recherche dans
     # les documents. Celui d'Ollama ne se charge pas dans le moteur intégré
     # (docs/moteur-integre.md) : sa version standard, le même modèle, le remplace
-    {"name": "embeddinggemma", "label": "EmbeddingGemma · pour les bibliothèques",
+    {"name": "embeddinggemma", "label": "model_install.label_embeddinggemma",
      "size": 333_590_944, "license": "Gemma", "kind": "embedding",
-     "about": "Range tes bibliothèques pour y chercher : indispensable pour elles, très léger."},
+     "about": "model_install.about_embeddinggemma"},
 ]
 NAMES = {m["name"] for m in CATALOG}
 
@@ -109,7 +106,8 @@ def suggestions() -> dict:
         # en mémoire vive ; la carte et la mémoire s'additionnent (llama.cpp --fit)
         fits_moe = bool(spec.get("moe")) and spec["size"] < (found["vram"] * 0.92
                                                              + found["ram"] * 0.6)
-        models.append({**spec, "recommended": spec["name"] == best,
+        models.append({**spec, "label": t(spec["label"]), "about": t(spec["about"]),
+                       "recommended": spec["name"] == best,
                        "fits": ("gpu" if fits_gpu else "moe" if fits_moe
                                 else "ram" if fits_ram else "heavy"),
                        "installed": spec["name"] in installed
@@ -128,12 +126,12 @@ def start(name: str, changed=None) -> dict:
     """Lance l'installation (un seul à la fois). InstallError si le modèle n'est pas
     proposé, ou si une autre installation est en cours."""
     if name not in NAMES:
-        raise InstallError("Ce modèle n'est pas proposé ici.")
+        raise InstallError(t("model_install.not_offered"))
     with _lock:
         if _state["running"]:
-            raise InstallError(f"Installation de {_state['model']} déjà en cours.")
-        _state.update(model=name, running=True, completed=0, total=0, status="préparation",
-                      error=None, done=None)
+            raise InstallError(t("model_install.already_running", model=_state["model"]))
+        _state.update(model=name, running=True, completed=0, total=0,
+                      status=t("model_install.status_preparing"), error=None, done=None)
         _stop.clear()
     threading.Thread(target=_run, args=(name, changed), daemon=True,
                      name="aiodos-installation-modele").start()
@@ -158,7 +156,8 @@ def _run(name: str, changed):
         ollama.list_models(max_age=0)                          # la liste se relit
         with _lock:
             _state.update(done=bool(finished),
-                          error=None if finished else "Installation arrêtée.")
+                          error=None if finished else t("model_install.stopped"))
+        # i18n: tel quel (journal)
         log.info("Modèle %s %s", name, "installé" if finished else "pas installé (arrêt)")
     except Exception as exc:
         log.warning("Installation de %s impossible : %s", name, exc)

@@ -123,7 +123,8 @@ def confirm(my_id: str, peer: dict, address: str, port: int) -> dict:
     """Ping scellé vers cette adresse et ce port seulement : ni Internet, ni mandataire, ni
     décompression, réponse bornée. → la réponse déscellée avec la clé de la paire, qui
     prouve que la machine est bien là, et où la requête lui est arrivée : cette adresse et
-    ce port mêmes ; une exception sinon (Outdated : version qui ne le dit pas)."""
+    ce port mêmes ; une exception sinon (Outdated : version qui ne le dit pas). Ses
+    messages ne vont qu'au journal (BeaconChecks._check) : ils restent en français."""
     env = envelope.wrap(peer["key"], "ping", my_id, peer["node_id"], {"where": True})
     host = address.strip("[]")
     conn = http.client.HTTPConnection(host, port, timeout=TIMEOUT)
@@ -138,21 +139,23 @@ def confirm(my_id: str, peer: dict, address: str, port: int) -> dict:
         if response.status != 200:
             raise ValueError(f"HTTP {response.status}")
         if len(data) > MAX_REPLY:
-            raise ValueError("réponse trop longue pour un ping")
+            raise ValueError("réponse trop longue pour un ping")  # i18n: tel quel (journal)
     finally:
         timer.cancel()
         conn.close()
     reply = json.loads(data)
     if not isinstance(reply, dict):
-        raise ValueError("réponse illisible")
+        raise ValueError("réponse illisible")  # i18n: tel quel (journal)
     found = envelope.unwrap_reply(peer["key"], "ping", peer["node_id"], my_id, env["ts"], reply)
     if not isinstance(found, dict):
-        raise ValueError("réponse illisible")
+        raise ValueError("réponse illisible")  # i18n: tel quel (journal)
     where = found.get("where")
     if "where" not in found:
+        # i18n: tel quel (journal)
         raise Outdated("version qui ne dit pas où la requête est arrivée")
     if not (isinstance(where, list) and len(where) == 2
             and connections.normal_host(where[0]) == connections.normal_host(address)
             and where[1] == port):
+        # i18n: tel quel (journal)
         raise ValueError(f"requête arrivée ailleurs ({where}) : un relais, pas la machine")
     return found

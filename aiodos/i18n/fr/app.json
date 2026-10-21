@@ -1,0 +1,20 @@
+{
+  "reindex_started": "Nouveau modèle d'embedding : réindexation des connaissances lancée (voir Tâches).",
+  "images_ready": {
+    "one": "{title} : {n} image prête ({where}).",
+    "other": "{title} : {n} images prêtes ({where})."
+  },
+  "videos_ready": {
+    "one": "{title} : {n} vidéo prête ({where}).",
+    "other": "{title} : {n} vidéos prêtes ({where})."
+  },
+  "ready_in_conversation": "dans sa conversation",
+  "ready_in_images": "vue Images et vidéos",
+  "job_indexed": {
+    "one": "{title} : {n} élément indexé",
+    "other": "{title} : {n} éléments indexés"
+  },
+  "paired": "Machine appairée : « {name} »",
+  "paired_via": "Machine appairée : « {name} », présentée par « {via} »",
+  "pair_cancelled": "Appairage avec « {name} » annulé."
+}

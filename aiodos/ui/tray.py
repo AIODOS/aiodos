@@ -2,7 +2,8 @@
 
 Fermer la fenêtre la cache seulement (réglage close_to_tray, cf. ui/window.py) : le
 nœud continue de servir les machines appairées et d'avancer le travail de fond. Clic sur
-l'icône : la fenêtre revient ; clic droit : « Ouvrir AIODOS », « Quitter AIODOS ».
+l'icône : la fenêtre revient ; clic droit : « Ouvrir AIODOS », « Quitter AIODOS » (dans la
+langue du nœud, relue à chaque ouverture du menu).
 
 L'icône est un NotifyIcon de WinForms, que pywebview charge déjà sous Windows pour la
 fenêtre (pythonnet) : elle vit dans le même fil graphique qu'elle (create, appelée par
@@ -12,6 +13,8 @@ comme avant.
 """
 import logging
 import sys
+
+from aiodos.i18n import t
 
 log = logging.getLogger("aiodos.tray")
 
@@ -46,14 +49,18 @@ class Tray:
         from System.Windows.Forms import (ContextMenuStrip, NotifyIcon, ToolStripMenuItem,
                                           ToolStripSeparator)
         menu = ContextMenuStrip()
-        show = ToolStripMenuItem("Ouvrir AIODOS")
+        show = ToolStripMenuItem(t("window.tray_open"))
         show.Font = Font(show.Font, FontStyle.Bold)          # l'action du clic, en gras
         show.Click += lambda sender, args: self.on_open()
-        leave = ToolStripMenuItem("Quitter AIODOS")
+        leave = ToolStripMenuItem(t("window.tray_quit"))
         leave.Click += lambda sender, args: self.on_quit()
         menu.Items.Add(show)
         menu.Items.Add(ToolStripSeparator())
         menu.Items.Add(leave)
+
+        def opening(sender, args):          # la langue a pu changer dans les Réglages
+            show.Text, leave.Text = t("window.tray_open"), t("window.tray_quit")
+        menu.Opening += opening
         icon = NotifyIcon()
         icon.Icon = Icon(self.icon_path)
         icon.Text = TITLE

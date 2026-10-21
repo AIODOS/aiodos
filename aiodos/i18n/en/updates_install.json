@@ -1,0 +1,18 @@
+{
+  "archive_missing": "Archive missing or corrupted: it will be downloaded again.",
+  "version_mismatch": "The code announces version {declared}, the manifest {wanted}: refused.",
+  "python_unreadable": "Unreadable required Python version: {needed}",
+  "python_too_old": "This version requires Python {needed} or newer (here: {here}).",
+  "path_refused": "Path refused in the archive: {name}",
+  "reserved_name": "Name reserved by Windows in the archive: {name}",
+  "link_refused": "Link refused in the archive: {name}",
+  "no_code": "Archive without the AIODOS code.",
+  "too_many_files": "Archive refused: too many files.",
+  "too_large": "Archive refused: too large once unpacked.",
+  "longer_than_announced": "Archive refused: content longer than announced.",
+  "damaged": "Damaged archive ({error}).",
+  "smoke_timeout": "This version's code takes too long to load.",
+  "smoke_failed": "Could not try out the version ({error}).",
+  "missing_package": "This version requires the Python package “{package}”, which is missing on this machine.",
+  "does_not_load": "This version's code does not load here: {error}"
+}

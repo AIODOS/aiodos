@@ -15,6 +15,7 @@ comme num_ctx rechargerait le modèle ici) et « stats » : un dernier morceau d
 nombre de jetons. Une machine d'une version précédente ignore les deux.
 """
 from aiodos import settings
+from aiodos.i18n import t
 from aiodos.network import activity, lend_queue
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
@@ -29,12 +30,12 @@ KEEPALIVE_S = 5                   # signe de vie à la machine qui attend son to
 
 def _clean(messages) -> list:
     if not isinstance(messages, list) or not messages or len(messages) > MAX_MESSAGES:
-        raise PeerError("Conversation vide ou trop longue.")
+        raise PeerError(t("lending.chat_invalid"))
     cleaned = []
     for m in messages:
         if not isinstance(m, dict) or m.get("role") not in ROLES \
                 or not isinstance(m.get("content"), str):
-            raise PeerError("Message de conversation invalide.")
+            raise PeerError(t("lending.message_invalid"))
         cleaned.append({"role": m["role"], "content": m["content"]})
     return cleaned
 
@@ -61,20 +62,18 @@ def _options(raw) -> dict:
 def chat(manager, sender, payload, stop):
     """Vérifie la demande, puis renvoie le générateur de la réponse."""
     if not settings.get("lend_models"):
-        raise PeerError(f"« {manager.name()} » ne prête pas ses modèles pour les conversations "
-                        "(réglage « Prêter mes modèles » sur cette machine).")
+        raise PeerError(t("lending.not_lending", name=manager.name()))
     from aiodos.network import worker
     if not worker.welcomes(sender):
-        raise PeerError(f"« {manager.name()} » est un téléphone : il ne prête à ses amis qu'en "
-                        "charge et en Wi-Fi.")
+        raise PeerError(t("lending.phone_for_friends", name=manager.name()))
     model = str(payload.get("model") or "")
     messages = _clean(payload.get("messages"))
     try:
         installed = {m["name"] for m in ollama.list_models()}
     except Exception as exc:
-        raise PeerError(f"Ollama ne répond pas sur « {manager.name()} ».") from exc
+        raise PeerError(t("lending.ollama_down", name=manager.name())) from exc
     if model not in installed:
-        raise PeerError(f"Le modèle « {model} » n'est plus installé sur « {manager.name()} ».")
+        raise PeerError(t("lending.model_gone", model=model, name=manager.name()))
     think = None if payload.get("think", True) else False
     extra = {}                            # seulement si demandés (versions précédentes)
     options = _options(payload.get("options"))
@@ -100,8 +99,7 @@ def chat(manager, sender, payload, stop):
             finally:
                 manager.executor.interactive_end()
         except lend_queue.Busy:
-            raise PeerError(f"« {manager.name()} » répond déjà à d'autres conversations depuis "
-                            "longtemps : réessaie dans un moment.") from None
+            raise PeerError(t("lending.busy", name=manager.name())) from None
         except lend_queue.Cancelled:
             return                                       # elle est partie avant son tour
         finally:

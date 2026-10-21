@@ -1,0 +1,42 @@
+{
+  "no_extension": "(no extension)",
+  "job_index_folder": "Index the folder “{name}” → {target}",
+  "job_index_items": {
+    "one": "Index {n} item → {target}",
+    "other": "Index {n} items → {target}"
+  },
+  "no_usable_file": "No usable file in the selection.",
+  "file_not_found": "File not found: {path}",
+  "no_usable_text": "no usable text",
+  "refused_recompute": "{reason}; {excuse}, the unit will be computed on my machines",
+  "excuse_old_unit": "unit created by an AIODOS version from before October 21, 2026, so there is no knowing whether the file has changed since",
+  "excuse_file_changed": "the file has changed since it was handed to them",
+  "excuse_reader": "their document reader may differ from mine",
+  "vector_count_mismatch": "Ollama did not return as many vectors as passages",
+  "sample_mismatch": "passage {number} recomputed here: similarity {similarity}, at least {minimum} expected",
+  "refused_uncheckable": "text computed by a friend for an image, a sound, a video, a web page or a format this machine cannot read back: impossible to check here, the unit will be computed on my machines",
+  "refused_unreadable": "document unreadable here ({error}): impossible to check a friend's result, the unit will be computed on my machines",
+  "skipped_by_friend": "document skipped by the friend although it has text when read here",
+  "passage_not_in_document": "a returned passage is not in the document as read here",
+  "passages_cut_differently": "passages split differently from here (cherry-picked pieces, omissions or repetitions)",
+  "invalid_passages": "passages missing or invalid",
+  "passage_too_long": "passage longer than {max} characters: the splitting never makes such long ones",
+  "invalid_vector_count": "vectors missing, or not as many as the passages",
+  "invalid_vectors": "invalid vectors (zero or non-finite values)",
+  "wrong_dimension": "vectors of dimension {got} instead of {expected} (different embedding model?)",
+  "job_read_pages": {
+    "one": "Read {n} web page → {target}",
+    "other": "Read {n} web pages → {target}"
+  },
+  "empty_page": "empty page, or not text",
+  "job_memorize": "Add the conversation “{title}” to memory",
+  "conversation_deleted": "deleted",
+  "memory_cleared": "memory cleared",
+  "memory_user": "User: {text}",
+  "memory_assistant": "Assistant: {text}",
+  "job_reindex": "Reindex knowledge with {model}",
+  "entry_removed": "removed in the meantime",
+  "reindex_summary": "Model: {model}. Library items recomputed: {items} (re-read from their file: {reread}); conversations rebuilt in memory: {conversations}.",
+  "no_paths": "No path given.",
+  "no_valid_urls": "No valid URL (http:// or https://)."
+}

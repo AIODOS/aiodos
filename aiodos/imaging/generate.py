@@ -25,6 +25,7 @@ import time
 
 import requests
 
+from aiodos.i18n import t
 from aiodos.imaging import catalog, engine
 from aiodos.jobs.registry import Interrupted
 
@@ -47,6 +48,14 @@ class Shortage(ImageError):
 
 _SHORTAGE = ("no results", "memory", "capacity", "alloc")
 _turn = threading.Lock()          # un calcul à la fois sur cette machine
+# Les messages d'une image et d'une vidéo (i18n/*/imaging.json) : sd-server tombé avant la
+# demande (before) ou pendant le calcul (during), calcul en échec, calcul trop long
+_TEXTS = {
+    "image": {"before": "imaging.gone_before_image", "during": "imaging.gone_during_image",
+              "failed": "imaging.image_failed", "slow": "imaging.image_too_slow"},
+    "video": {"before": "imaging.gone_before_video", "during": "imaging.gone_during_video",
+              "failed": "imaging.video_failed", "slow": "imaging.video_too_slow"},
+}
 
 
 def request_body(params: dict) -> dict:
@@ -95,7 +104,7 @@ def video_body(params: dict) -> dict:
 def png_size(data: bytes) -> tuple:
     """(largeur, hauteur) d'un PNG ; ValueError si ce n'en est pas un."""
     if len(data) < 24 or not data.startswith(PNG_SIGNATURE) or data[12:16] != b"IHDR":
-        raise ValueError("ce n'est pas une image PNG")
+        raise ValueError(t("imaging.not_png"))
     return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
@@ -117,15 +126,15 @@ def _served(base: str, stop, then: str):
     avant d'envoyer la demande et après chaque réponse, avant de s'en servir : tombé en
     route (un programme de la machine peut le faire tomber, puisqu'il peut lui parler), son
     port est libre, et qui s'y installe répondrait « terminé » avec sa propre image ; un
-    programme qui s'ajoute sur son port recevrait les demandes. Sinon ImageError, rien de ce
-    qui a répondu n'étant cru ; Interrupted si l'arrêt était demandé (AIODOS qui s'arrête
-    arrête aussi sd-server : l'unité est rendue, elle n'a pas échoué)."""
+    programme qui s'ajoute sur son port recevrait les demandes. Sinon ImageError (then : la
+    clé de son message, _TEXTS), rien de ce qui a répondu n'étant cru ; Interrupted si
+    l'arrêt était demandé (AIODOS qui s'arrête arrête aussi sd-server : l'unité est rendue,
+    elle n'a pas échoué)."""
     if engine.serving(base):
         return
     if stop is not None and stop.is_set():
         raise Interrupted()
-    raise ImageError(f"sd-server s'est arrêté, ou un autre programme écoute sur son port : "
-                     f"{then}.")
+    raise ImageError(t(then))
 
 
 def _cancel(base: str, job: str):
@@ -138,14 +147,14 @@ def _cancel(base: str, job: str):
 def _png_of(result: dict) -> dict:
     images = result.get("images") or []
     if not images:
-        raise ImageError("sd-server n'a rendu aucune image.")
+        raise ImageError(t("imaging.no_image"))
     return {"png": base64.b64decode(images[0]["b64_json"])}
 
 
 def _webm_of(result: dict) -> dict:
     data = base64.b64decode(result.get("b64_json") or "")
     if not is_webm(data):
-        raise ImageError("sd-server n'a pas rendu de vidéo WebM.")
+        raise ImageError(t("imaging.no_webm"))
     return {"webm": data, "frames": int(result.get("frame_count") or 0),
             "fps": int(result.get("fps") or 0)}
 
@@ -154,14 +163,14 @@ def image(params: dict, stop=None, waiting=None) -> dict:
     """{"png": octets, "seconds": durée du calcul} pour une demande (modèle, consigne,
     graine, taille, pas). Interrupted si `stop` est levé en route, y compris en attendant
     son tour."""
-    return _in_turn(lambda: _once(params, "img_gen", request_body(params), _png_of, "Image",
+    return _in_turn(lambda: _once(params, "img_gen", request_body(params), _png_of, "image",
                                   stop, waiting), stop)
 
 
 def video(params: dict, stop=None, waiting=None) -> dict:
     """{"webm": octets, "frames", "fps", "seconds"} pour une demande de vidéo (modèle,
     consigne, graine, taille, nombre d'images, pas)."""
-    return _in_turn(lambda: _once(params, "vid_gen", video_body(params), _webm_of, "Vidéo",
+    return _in_turn(lambda: _once(params, "vid_gen", video_body(params), _webm_of, "video",
                                   stop, waiting), stop)
 
 
@@ -180,19 +189,21 @@ def _in_turn(run, stop):
         _turn.release()
 
 
-def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None,
+def _once(params: dict, endpoint: str, body: dict, extract, media: str, stop=None,
           waiting=None) -> dict:
+    """media : « image » ou « video », pour ses messages (_TEXTS)."""
+    texts = _TEXTS[media]
     base = engine.acquire(params["model"], stop=stop, waiting=waiting)
     began = time.monotonic()
-    dropped = f"{what.lower()} abandonnée, ce qui y répond n'est pas cru"
+    dropped = texts["during"]
     try:
-        _served(base, stop, f"{what.lower()} non demandée")
+        _served(base, stop, texts["before"])
         reply = requests.post(f"{base}/sdcpp/v1/{endpoint}", json=body, timeout=30,
                               proxies=engine.NO_PROXY)
         _served(base, stop, dropped)
         if reply.status_code != 202:
-            raise ImageError(f"sd-server refuse la demande ({reply.status_code}) : "
-                             f"{_detail(reply)}")
+            raise ImageError(t("imaging.server_refused", status=reply.status_code,
+                               detail=_detail(reply)))
         job = reply.json()["id"]
         while True:
             if stop is not None and stop.is_set():
@@ -210,12 +221,11 @@ def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None
                 error = status.get("error") or {}
                 message = str(error.get("message") or status["status"])
                 if any(word in message.lower() for word in _SHORTAGE):
-                    raise Shortage(f"{what} non calculée : {message}")
-                raise ImageError(f"{what} non calculée : {message}")
+                    raise Shortage(t(texts["failed"], message=message))
+                raise ImageError(t(texts["failed"], message=message))
             if time.monotonic() - began > MAX_SECONDS:
                 _cancel(base, job)
-                raise ImageError(f"{what} toujours pas calculée après "
-                                 f"{MAX_SECONDS // 3600} heures.")
+                raise ImageError(t(texts["slow"], hours=MAX_SECONDS // 3600))
             if stop is not None:
                 stop.wait(POLL_S)
             else:
@@ -223,6 +233,6 @@ def _once(params: dict, endpoint: str, body: dict, extract, what: str, stop=None
     except requests.RequestException as exc:
         if stop is not None and stop.is_set():
             raise Interrupted() from exc     # arrêté avec AIODOS : l'unité est rendue
-        raise ImageError(f"sd-server ne répond plus ({exc.__class__.__name__}).") from exc
+        raise ImageError(t("imaging.server_silent", error=exc.__class__.__name__)) from exc
     finally:
         engine.release()

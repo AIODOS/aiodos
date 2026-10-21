@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La notification du nœud (NodeService.java). Anglais : la langue de repli, quand le
+     téléphone n'est ni en français ni en anglais ; le français : values-fr. -->
+<resources>
+    <string name="notification_channel">AIODOS node</string>
+    <string name="notification_channel_help">Shows that the AIODOS node is running in the background, as Android requires.</string>
+    <string name="node_starting">Starting the AIODOS node…</string>
+    <string name="node_running">The AIODOS node is running.</string>
+    <string name="node_failed">AIODOS did not start: %1$s</string>
+    <string name="node_stopped_reason">the node stopped</string>
+    <string name="node_stopped">The AIODOS node stopped: tap to reopen AIODOS.</string>
+    <string name="node_stopping">Stopping the AIODOS node…</string>
+    <string name="notification_stop">Stop</string>
+</resources>

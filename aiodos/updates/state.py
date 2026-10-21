@@ -18,6 +18,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from aiodos.i18n import t
+
 LOCK_WAIT = 5.0
 LOCK_STALE = 30.0
 
@@ -51,7 +53,7 @@ def _locked(root: Path):
             except OSError:
                 pass
             if time.monotonic() > deadline:
-                raise TimeoutError("État des mises à jour verrouillé.") from None
+                raise TimeoutError(t("updates.state_locked")) from None
             time.sleep(0.05)
     try:
         yield

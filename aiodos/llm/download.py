@@ -12,6 +12,7 @@ import shutil
 
 import requests
 
+from aiodos.i18n import t
 from aiodos.llm import catalog, models as registry
 
 log = logging.getLogger("aiodos.llm")
@@ -30,8 +31,7 @@ def pull(name: str, progress=None, stop=None) -> bool:
     abîmé, réseau)."""
     spec = catalog.entry(name)
     if spec is None:
-        raise DownloadError(f"« {name} » ne fait pas partie des modèles que le moteur intégré "
-                            "sait télécharger.")
+        raise DownloadError(t("llm.not_in_catalog", name=name))
     name = registry.full_name(name)
     folder = registry.models_dir() / registry.router_id(name)
     folder.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,7 @@ def pull(name: str, progress=None, stop=None) -> bool:
         if not (target.is_file() and target.stat().st_size == size):
             finished = _fetch(catalog.url(spec, file), target, size, sha256, stop,
                               lambda got, d=done_before: progress and progress(
-                                  d + got, total, f"téléchargement de {file}"))
+                                  d + got, total, t("llm.downloading", file=file)))
             if not finished:
                 return False
         done_before += size
@@ -73,7 +73,7 @@ def _fetch(url, target, size, sha256, stop, progress) -> bool:
             if r.status_code == 200 and have:           # pas de reprise : depuis le début
                 have = 0
             elif r.status_code not in (200, 206):
-                raise DownloadError(f"Hugging Face répond {r.status_code} pour {target.name}.")
+                raise DownloadError(t("llm.hf_status", status=r.status_code, file=target.name))
             with part.open("ab" if have else "wb") as out:
                 for chunk in r.iter_content(CHUNK):
                     if stop is not None and stop.is_set():
@@ -82,12 +82,11 @@ def _fetch(url, target, size, sha256, stop, progress) -> bool:
                     have += len(chunk)
                     progress(have)
     except requests.RequestException as exc:
-        raise DownloadError(f"Téléchargement interrompu ({exc.__class__.__name__}) : il "
-                            "reprendra là où il s'est arrêté.") from exc
+        raise DownloadError(t("llm.download_interrupted",
+                              error=exc.__class__.__name__)) from exc
     if part.stat().st_size != size or _sha256(part) != sha256:
         part.unlink(missing_ok=True)
-        raise DownloadError(f"{target.name} ne correspond pas à l'empreinte attendue : "
-                            "supprimé, à retélécharger.")
+        raise DownloadError(t("llm.checksum_mismatch", file=target.name))
     shutil.move(str(part), str(target))
     return True
 

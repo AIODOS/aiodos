@@ -5,9 +5,15 @@
 // n'essaie pas d'appairer un ami.
 import { get, post } from '../api.js';
 import { esc, bytes } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
+
+// Ce que la machine reçoit en plus d'une version (« what », updates/service.py) : son
+// compagnon Internet, ou un moteur (« moteur llama.cpp »)
+const COMPANION = 'compagnon';      // i18n: tel quel (valeur envoyée par le nœud)
+const ENGINE = 'moteur ';           // i18n: tel quel (valeur envoyée par le nœud)
 
 export async function loadUpdates() {
   try { state.updates = await get('/updates'); } catch { return; }
@@ -20,50 +26,51 @@ export async function announceUpdate() {
   const notice = state.updates?.notice;
   if (!notice) return;
   if (notice.kind === 'updated') {
-    toast(`AIODOS a été mis à jour : version ${notice.version}.${notice.notes ? ` ${notice.notes}` : ''}`,
-      'ok', 12000);
+    toast(t(notice.notes ? 'updates.updated_notes' : 'updates.updated',
+      { version: notice.version, notes: notice.notes }), 'ok', 12000);
   } else {
-    toast(`La version ${notice.version} n'a pas démarré sur cette machine : AIODOS continue avec la précédente.`,
-      'err', 12000);
+    toast(t('updates.rolled_back', { version: notice.version }), 'err', 12000);
   }
   try { await post('/updates/notice/seen'); } catch { /* redit au prochain démarrage */ }
 }
 
+// Réception en cours : la version, son compagnon ou un moteur, avec sa progression si sa
+// taille est connue
+function receiving(d) {
+  const params = { version: d.version, from: d.from, received: bytes(d.received), size: bytes(d.size) };
+  if (d.what === COMPANION) {
+    return t(d.size ? 'updates.receiving_companion_progress' : 'updates.receiving_companion', params);
+  }
+  if (d.what?.startsWith(ENGINE)) {
+    return t(d.size ? 'updates.receiving_engine_progress' : 'updates.receiving_engine',
+      { ...params, engine: d.what.slice(ENGINE.length) });
+  }
+  return t(d.size ? 'updates.receiving_progress' : 'updates.receiving', params);
+}
+
 function stateLine(u) {
-  if (u.android_app) {
-    return 'Appli Android : une nouvelle version d\'AIODOS arrive avec une nouvelle appli.';
-  }
-  if (u.developer) {
-    return 'Copie de développement (dépôt git) : son code n\'est jamais remplacé. '
-      + 'Elle transmet les versions publiées à tes machines.';
-  }
+  if (u.android_app) return t('updates.android_app');
+  if (u.developer) return t('updates.developer');
   if (u.ready) {
-    return `Version ${esc(u.ready)} installée : elle démarrera ${u.restart_when === 'idle'
-      ? 'dès que la machine sera libre' : 'au prochain démarrage d\'AIODOS'}.`;
+    return t(u.restart_when === 'idle' ? 'updates.ready_idle' : 'updates.ready_next_start',
+      { version: u.ready });
   }
-  if (u.installing) return `Installation de la version ${esc(u.installing)}…`;
-  if (u.download) {
-    const d = u.download;
-    const progress = d.size ? ` : ${bytes(d.received)} / ${bytes(d.size)}` : '…';
-    const what = d.what === 'compagnon'
-      ? `du compagnon Internet de la version ${esc(d.version)}`
-      : d.what ? `du ${esc(d.what)} de la version ${esc(d.version)}` : `de la version ${esc(d.version)}`;
-    return `Réception ${what} depuis « ${esc(d.from)} »${progress}`;
-  }
-  if (!u.auto) return 'Mises à jour automatiques désactivées.';
-  return 'À jour : aucune version plus récente chez tes machines appairées.';
+  if (u.installing) return t('updates.installing', { version: u.installing });
+  if (u.download) return receiving(u.download);
+  if (!u.auto) return t('updates.auto_off');
+  return t('updates.up_to_date');
 }
 
 export function updatesStatus() {
   const u = state.updates;
-  if (!u) return '<div class="help">État des mises à jour indisponible.</div>';
+  if (!u) return `<div class="help">${esc(t('updates.unavailable'))}</div>`;
   return `
     <div class="setting-row updates-status"><div class="txt"><b>AIODOS ${esc(u.version)}</b>
-      <small>${stateLine(u)}</small>
+      <small>${esc(stateLine(u))}</small>
       ${u.error ? `<small class="warn">${esc(u.error)}</small>` : ''}
       ${u.friends_refused ? `<small class="warn">${esc(u.friends_refused)}</small>` : ''}
-      ${u.offer ? `<small>Transmet la version ${esc(u.offer)} à tes machines appairées.</small>` : ''}</div>
-      ${u.ready ? `<button class="btn sm" id="updates-restart" type="button">${icon('retry')}Redémarrer maintenant</button>` : ''}
+      ${u.offer ? `<small>${esc(t('updates.offer', { version: u.offer }))}</small>` : ''}</div>
+      ${u.ready ? `<button class="btn sm" id="updates-restart" type="button">${icon('retry')}${esc(t('updates.restart_now'))}</button>` : ''}
     </div>`;
 }
 
@@ -74,7 +81,7 @@ export function bindUpdates(box) {
     button.disabled = true;
     try {
       await post('/updates/restart');
-      toast('Redémarrage sur la nouvelle version…', 'info', 6000);
+      toast(t('updates.restarting'), 'info', 6000);
     } catch (e) { button.disabled = false; errorToast(e); }
   };
 }

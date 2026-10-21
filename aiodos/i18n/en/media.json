@@ -1,0 +1,10 @@
+{
+  "image_header": "[Image: {name}]",
+  "unknown_whisper_model": "Unknown Whisper model: “{name}” (expected: tiny, base, small, medium, large-v3…).",
+  "child_not_answering": "The transcription program is no longer responding.",
+  "child_stopped": "The transcription program stopped partway through.",
+  "child_unexpected": "Unexpected reply from the transcription program.",
+  "whisper_missing": "Whisper model “{model}” is not on this machine: it only downloads by itself the model chosen in its own settings. To have it downloaded, choose “{model}” in its settings (Images, audio and video: Transcribe audio and video, Whisper model).",
+  "transcription_failed": "Transcription failed: {error}",
+  "transcription_header": "[Transcription of {name} · language: {language}]"
+}

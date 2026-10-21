@@ -11,14 +11,13 @@ Le propriétaire garde la main : lui seul intègre les résultats dans ses donn�
 """
 import json
 
-from aiodos import db
+from aiodos import db, i18n
 from aiodos.jobs import queue
 from aiodos.jobs.models import FAILED, MAX_ATTEMPTS, QUEUED, RUNNING
 
 LEASE_S = 90          # durée d'un bail ; la machine qui calcule le renouvelle toutes les ~30 s
 SCAN = 200            # unités examinées à la fois (les premières de la file)
 SCAN_MAX = 2000       # au plus, par demande : au-delà, la machine redemandera
-EXPIRED = "La machine qui calculait cette unité ne donne plus de nouvelles."
 
 
 def _unit(row) -> dict:
@@ -122,18 +121,19 @@ def expire(now=None) -> list:
     """Baux échus. → [(travail, terminé ?)] pour prévenir l'interface."""
     now = now or db.now()
     touched = []
+    expired = i18n.t("jobs.lease_expired")         # l'erreur gardée pour l'unité
     for r in db.query("SELECT id, job_id, attempts FROM units WHERE status=? "
                       "AND lease_until IS NOT NULL AND lease_until < ?", (RUNNING, now)):
         with db.transaction() as c:
             if r["attempts"] < MAX_ATTEMPTS:
                 n = c.execute("UPDATE units SET status=?, lease_until=NULL, error=? "
                               "WHERE id=? AND status=? AND lease_until < ?",
-                              (QUEUED, EXPIRED, r["id"], RUNNING, now)).rowcount
+                              (QUEUED, expired, r["id"], RUNNING, now)).rowcount
                 finished = False
             else:
                 n = c.execute("UPDATE units SET status=?, lease_until=NULL, error=?, finished=? "
                               "WHERE id=? AND status=? AND lease_until < ?",
-                              (FAILED, EXPIRED, now, r["id"], RUNNING, now)).rowcount
+                              (FAILED, expired, now, r["id"], RUNNING, now)).rowcount
                 if n:
                     c.execute("UPDATE jobs SET failed = failed + 1 WHERE id=?", (r["job_id"],))
                 finished = bool(n) and queue._complete_if_last(c, r["job_id"])

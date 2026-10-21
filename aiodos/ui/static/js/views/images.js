@@ -4,6 +4,7 @@
 // mes machines qui ont le modèle (docs/generation-repartie.md).
 import { get, post, put, del } from '../api.js';
 import { $, h, esc, bytes, debounce } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { errorToast, modal } from '../ui.js';
@@ -19,26 +20,25 @@ let complete = false;            // toute la galerie est chargée
 let shownDone = new Map();       // travail → images déjà comptées (recharger à chaque nouvelle)
 
 export function mountImages(container) {
+  // L'icône du bouton, au milieu de la phrase : posée après l'échappement du texte
+  const ask = esc(t('images.ask')).replace('{icon}', () => icon('image'));
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>Images et vidéos</h1>
-          <div class="sub">Tes créations, et les modèles qui les calculent ici ou chez tes machines qui
-          prêtent leur puissance.</div></div>
+        <div><h1>${esc(t('images.title'))}</h1>
+          <div class="sub">${esc(t('images.intro'))}</div></div>
       </div>
       <div class="card img-ask">
-        <div class="img-ask-text">${icon('chat')}<div>Pour créer une image ou une vidéo, demande-la dans une
-          discussion : « Crée une image d'un phare sous l'orage », ou touche ${icon('image')} à côté du
-          message pour choisir le modèle, le format et le nombre.</div></div>
+        <div class="img-ask-text">${icon('chat')}<div>${ask}</div></div>
         <div class="img-ask-buttons">
-          <button class="btn primary" data-create="image">${icon('image')}Créer une image</button>
-          <button class="btn" data-create="video">${icon('video')}Créer une vidéo</button>
+          <button class="btn primary" data-create="image">${icon('image')}${esc(t('images.create_image'))}</button>
+          <button class="btn" data-create="video">${icon('video')}${esc(t('images.create_video'))}</button>
         </div>
       </div>
       <div id="img-models"></div>
       <div id="img-pending"></div>
       <div class="img-grid" id="img-grid"></div>
-      <div class="img-more"><button class="btn ghost" id="img-more" hidden>Voir les plus anciennes</button></div>
+      <div class="img-more"><button class="btn ghost" id="img-more" hidden>${esc(t('images.older'))}</button></div>
     </div></div>`);
   container.append(root);
   root.querySelectorAll('[data-create]').forEach(b => {
@@ -78,9 +78,8 @@ const modelOf = id => info?.models.find(m => m.id === id);
 function renderModels() {
   const box = $('#img-models', root);
   const engine = info.engine.found ? '' : `
-    <div class="banner warn">${icon('warn')}<div>stable-diffusion.cpp n'est pas installé sur cette
-      machine (Réglages → Images). ${anyHelper() ? 'Tes machines qui ont le modèle calculeront à sa place.'
-      : 'Sans lui, seules tes machines qui ont le modèle peuvent calculer.'}</div></div>`;
+    <div class="banner warn">${icon('warn')}<div>${esc(t('images.engine_missing'))}
+      ${esc(t(anyHelper() ? 'images.engine_helpers' : 'images.engine_no_helpers'))}</div></div>`;
   box.innerHTML = engine + info.models.map(modelCard).join('');
   box.querySelectorAll('[data-download]').forEach(b => {
     b.onclick = () => download(b.dataset.download, b.dataset.source || null);
@@ -101,59 +100,57 @@ function anyHelper() {
 function modelCard(m) {
   const dl = info.download?.model === m.id ? info.download : null;
   const helpers = m.helpers.length
-    ? `<div class="faint">Machines qui l'ont et peuvent le calculer pour toi : ${m.helpers.map(esc).join(', ')}.</div>` : '';
+    ? `<div class="faint">${esc(t('images.helpers', { names: m.helpers.join(', ') }))}</div>` : '';
   // Un ami propose sa carte graphique : avec ton accord, une fois pour toutes (Réglages)
   const friends = !info.from_friends && m.state !== 'ready' && (m.friends || []).length ? `
-    <div class="banner info img-friends">${icon('network')}<div>${esc(m.friends.join(', '))} ${m.friends.length > 1
-      ? 'peuvent' : 'peut'} calculer ce modèle pour toi : ta description et le résultat passeront chez
-      ${m.friends.length > 1 ? 'eux' : 'lui'} le temps du calcul, sans y être gardés.</div>
-      <button class="btn sm" data-friends-ok>Autoriser mes amis</button></div>` : '';
+    <div class="banner info img-friends">${icon('network')}<div>${esc(t('images.friends', {
+      names: m.friends.join(', '), n: m.friends.length }))}</div>
+      <button class="btn sm" data-friends-ok>${esc(t('images.friends_allow'))}</button></div>` : '';
   const glyph = icon(m.kind === 'video' ? 'video' : 'image');
   const notice = m.notice ? `<div class="banner warn img-notice">${icon('warn')}<div>${esc(m.notice)}</div></div>` : '';
   if (m.state === 'ready' && !dl?.running) {
-    const where = info.engine.device ? ` · calcul sur ${esc(info.engine.device)}` : '';
+    const where = info.engine.device ? ` · ${esc(t('images.computing_on', { device: info.engine.device }))}` : '';
     return `<div class="img-model ok">${icon('check')}<div><b>${esc(m.label)}</b>
-      <span class="pill ok">Prêt</span> <span class="faint">${esc(m.license)}${where}</span>${helpers}
+      <span class="pill ok">${esc(t('images.ready'))}</span> <span class="faint">${esc(m.license)}${where}</span>${helpers}
       ${m.notice ? `<div class="faint">⚠ ${esc(m.notice)}</div>` : ''}</div></div>`;
   }
   let action;
   if (dl?.running) {
     const pct = dl.total ? Math.floor(100 * dl.done / dl.total) : 0;
     action = `<div class="img-dl"><div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <span class="faint">${bytes(dl.done)} sur ${bytes(dl.total)} · ${bytes(dl.rate)}/s
-        · depuis ${esc(dl.source || 'Hugging Face')}</span>
-      <button class="btn sm ghost" data-cancel>${icon('x')}Arrêter</button></div>`;
+      <span class="faint">${esc(t('images.download_progress', { done: bytes(dl.done), total: bytes(dl.total),
+        rate: bytes(dl.rate), source: dl.source || 'Hugging Face' }))}</span>
+      <button class="btn sm ghost" data-cancel>${icon('x')}${esc(t('images.stop'))}</button></div>`;
   } else if (m.state === 'checking') {
-    action = '<span class="faint">Vérification des fichiers déjà présents…</span>';
+    action = `<span class="faint">${esc(t('images.checking'))}</span>`;
   } else {
     // Fichiers identiques déjà sur ce PC (ComfyUI, PANDORA…) : repris d'abord, sans téléchargement
     const local = m.local || [];
     const localBytes = local.reduce((n, f) => n + f.size, 0);
     const rest = Math.max(0, m.missing_bytes - localBytes);
     const size = bytes(rest);
-    const here = local.length ? `<div class="faint">${bytes(localBytes)} déjà sur ce PC
-      (${esc([...new Set(local.map(f => f.from))].join(', '))}) : repris sans
-      ${local.length > 1 ? 'les' : 'le'} retélécharger, après vérification.</div>` : '';
+    const here = local.length ? `<div class="faint">${esc(t('images.local', { n: local.length,
+      size: bytes(localBytes), sources: [...new Set(local.map(f => f.from))].join(', ') }))}</div>` : '';
     const copies = rest ? [...m.sources].sort((a, b) => b.near - a.near).map(s => `
-      <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}Copier
-        depuis ${esc(s.name)} (${s.near ? 'réseau local' : 'Internet'}, ${size})</button>`).join('') : '';
-    const label = !rest ? `Reprendre depuis ce PC (${bytes(localBytes)})`
-      : m.state === 'bad' ? 'Retélécharger' : `Télécharger depuis Hugging Face (${size})`;
+      <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}${esc(t(
+        s.near ? 'images.copy_lan' : 'images.copy_internet', { name: s.name, size }))}</button>`).join('') : '';
+    const label = !rest ? t('images.take_local', { size: bytes(localBytes) })
+      : m.state === 'bad' ? t('images.download_again') : t('images.download_hf', { size });
     action = `${here}<div class="img-dl">${copies}
-      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon(rest ? 'cloud' : 'check')}${label}</button>
+      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon(rest ? 'cloud' : 'check')}${esc(label)}</button>
       ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}</div>`;
   }
   return `<div class="card img-model-card">
     <h2>${glyph}${esc(m.label)} <span class="pill${m.notice ? ' warn' : ''}">${esc(m.license)}</span></h2>
-    <p class="hint">${esc(m.about)} ${bytes(m.size)} depuis Hugging Face, chaque fichier vérifié par son empreinte.</p>
+    <p class="hint">${esc(m.about)} ${esc(t('images.about_size', { size: bytes(m.size) }))}</p>
     ${notice}${helpers}${friends}${action}</div>`;
 }
 
 async function download(id, source) {
   const model = modelOf(id);
   if (model?.notice) {          // licence restrictive : lue et acceptée avant de télécharger
-    const { ok } = await modal({ title: `Licence de ${model.label}`, text: model.notice,
-      iconName: 'warn', confirm: 'J\'ai lu, télécharger', cancel: 'Annuler' });
+    const { ok } = await modal({ title: t('images.license_title', { name: model.label }), text: model.notice,
+      iconName: 'warn', confirm: t('images.license_confirm'), cancel: t('ui.cancel') });
     if (!ok) return;
   }
   try { info.download = await post(`/images/models/${encodeURIComponent(id)}/download`, { source }); }
@@ -180,17 +177,17 @@ function onJobs() {
   const names = new Map((state.network?.peers || []).map(p => [p.node_id, p.name]));
   $('#img-pending', root).innerHTML = pending.map(j => {
     const p = j.params || {};
-    const away = Object.entries(j.remote || {}).map(([id, n]) => `${esc(names.get(id) || 'une autre machine')} (${n})`);
-    const where = away.length ? ` · en calcul chez ${away.join(', ')}` : '';
+    const away = Object.entries(j.remote || {}).map(([id, n]) => `${names.get(id) || t('images.another_machine')} (${n})`);
+    const where = away.length ? ` · ${esc(t('images.computing_at', { machines: away.join(', ') }))}` : '';
     const pct = j.total ? Math.floor(100 * (j.done + j.failed) / j.total) : 0;
     const open = p.conversation_id ? `<button class="icon-btn" data-conv="${p.conversation_id}"
-      title="Ouvrir sa conversation">${icon('chat')}</button>` : '';
+      title="${esc(t('images.open_conversation'))}">${icon('chat')}</button>` : '';
     return `<div class="card img-job">
       <div class="img-job-head"><span class="pill run">${j.done}/${j.total}</span>
-        <span class="img-job-text">« ${esc(p.prompt || '')} »</span>${open}
-        <button class="icon-btn danger" data-stop="${j.id}" title="Annuler">${icon('x')}</button></div>
+        <span class="img-job-text">${esc(t('images.prompt', { prompt: p.prompt || '' }))}</span>${open}
+        <button class="icon-btn danger" data-stop="${j.id}" title="${esc(t('images.cancel'))}">${icon('x')}</button></div>
       <div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <div class="faint">${waiting(j, p, away)}${where}</div></div>`;
+      <div class="faint">${esc(waiting(j, p, away))}${where}</div></div>`;
   }).join('');
   $('#img-pending', root).querySelectorAll('[data-stop]').forEach(b => {
     b.onclick = async () => {
@@ -203,11 +200,10 @@ function onJobs() {
 }
 
 function waiting(job, params, away) {
-  if (job.status !== 'queued' || away.length) return 'En cours';
+  if (job.status !== 'queued' || away.length) return t('images.running');
   const model = info?.models.find(m => m.id === params.model);
   const here = info?.engine.found && model?.state === 'ready';
-  return here ? 'En attente d\'une carte graphique libre'
-    : 'En attente d\'une de tes machines qui a le modèle et prête sa puissance';
+  return t(here ? 'images.waiting_gpu' : 'images.waiting_machine');
 }
 
 // ----------------------------------------------------------------- galerie
@@ -215,7 +211,7 @@ function renderGrid() {
   const grid = $('#img-grid', root);
   $('#img-more', root).hidden = complete;
   if (!images.length) {
-    grid.innerHTML = `<div class="card empty img-empty">${icon('image')}<div>Aucune image ni vidéo pour l'instant.</div></div>`;
+    grid.innerHTML = `<div class="card empty img-empty">${icon('image')}<div>${esc(t('images.empty'))}</div></div>`;
     return;
   }
   grid.innerHTML = images.map(img => `
@@ -225,20 +221,20 @@ function renderGrid() {
              style="aspect-ratio:${img.width}/${img.height}"></video>`
         : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}"
              style="aspect-ratio:${img.width}/${img.height}">`}
-      <span class="img-tag">${isVideo(img) ? `vidéo ${length(img)} · ` : ''}${esc(img.machine || 'cette machine')}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
+      <span class="img-tag">${isVideo(img) ? `${esc(t('images.video_length', { length: length(img) }))} · ` : ''}${esc(img.machine || t('images.this_machine'))}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
     </button>`).join('');
-  grid.querySelectorAll('.img-tile').forEach(t => {
-    t.onclick = () => openMedia(images.find(i => i.id === Number(t.dataset.id)), {
+  grid.querySelectorAll('.img-tile').forEach(tile => {
+    tile.onclick = () => openMedia(images.find(i => i.id === Number(tile.dataset.id)), {
       // « Reprendre » : la description revient dans une discussion, en mode « Créer »
       onReuse: img => emit('chat:create', { kind: isVideo(img) ? 'video' : 'image', model: img.model,
         prompt: img.prompt, width: img.width, height: img.height, frames: img.frames, seed: img.seed }),
       onDeleted: img => { images = images.filter(i => i.id !== img.id); renderGrid(); },
       onConversation: img => { emit('view:show', 'chat'); emit('chat:open', img.conversation_id); },
     });
-    const video = t.querySelector('video');
+    const video = tile.querySelector('video');
     if (video) {                  // la vidéo s'anime au survol
-      t.onmouseenter = () => video.play().catch(() => {});
-      t.onmouseleave = () => video.pause();
+      tile.onmouseenter = () => video.play().catch(() => {});
+      tile.onmouseleave = () => video.pause();
     }
   });
 }

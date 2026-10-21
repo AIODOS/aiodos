@@ -30,6 +30,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from aiodos.i18n import t
+
 NONCE = 12
 TAG = 16
 _SALT = b"aiodos/appairage/v1"
@@ -108,18 +110,22 @@ def transcript_secrets(private, initiator: tuple, responder: tuple):
     clé publique, nonce) de la machine qui lance l'appairage et de celle qui répond ;
     `private` est la clé privée de l'une des deux. ValueError : clé illisible ou faible
     (secret commun nul)."""
+    # Ces trois refus ne sont jamais montrés : pairing.py les remplace par le sien
     mine = _public_bytes(private)
     if mine == bytes(initiator[1]):
         theirs = responder[1]
     elif mine == bytes(responder[1]):
         theirs = initiator[1]
     else:
+        # i18n: tel quel (jamais montré)
         raise ValueError("Cette clé privée n'est d'aucun des deux côtés.")
     for _, public, nonce in (initiator, responder):
         if len(public) != 32 or len(nonce) != PAIR_NONCE:
+            # i18n: tel quel (jamais montré)
             raise ValueError("Clé ou nonce de longueur inattendue.")
     if bytes(initiator[1]) == bytes(responder[1]):
         # Sa propre clé renvoyée en miroir : ce n'est pas une autre machine
+        # i18n: tel quel (jamais montré)
         raise ValueError("Les deux côtés présentent la même clé.")
     shared = private.exchange(X25519PublicKey.from_public_bytes(bytes(theirs)))
     transcript = _fields(b"v2", initiator[0], responder[0], initiator[1], responder[1],
@@ -136,8 +142,8 @@ def seal(key: bytes, data: bytes, aad: bytes) -> bytes:
 
 def open_sealed(key: bytes, box: bytes, aad: bytes) -> bytes:
     if len(box) < NONCE + TAG:
-        raise SealError("Message tronqué.")
+        raise SealError(t("p2p.truncated"))
     try:
         return ChaCha20Poly1305(key).decrypt(box[:NONCE], box[NONCE:], aad)
     except InvalidTag as exc:
-        raise SealError("Message altéré, ou clé incorrecte.") from exc
+        raise SealError(t("p2p.altered")) from exc

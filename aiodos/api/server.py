@@ -11,9 +11,10 @@ from aiodos import paths, render
 from aiodos.api.events import EventBus
 from aiodos.api.security import Guard
 from aiodos.api.routes import (autostart, chat, cluster, conversations, creations, gateway,
-                               images, jobs, knowledge, model_install, network, node, system,
-                               updates)
+                               i18n, images, jobs, knowledge, model_install, network, node,
+                               system, updates)
 from aiodos.gateway.server import Gateway
+from aiodos.i18n.middleware import Language
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
 from aiodos.jobs.executor import Executor
@@ -79,8 +80,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
     app.state.show_key = show_key
-    for module in (autostart, chat, cluster, conversations, creations, gateway, images, knowledge, jobs,
-                   model_install, network, node, system, updates):
+    for module in (autostart, chat, cluster, conversations, creations, gateway, i18n, images,
+                   knowledge, jobs, model_install, network, node, system, updates):
         app.include_router(module.router)
     app.include_router(system.window_router)
 
@@ -97,4 +98,5 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         return FileResponse(paths.LOGO_PNG, headers={"Cache-Control": "no-cache"})
 
     app.mount("/", Revalidated(directory=paths.STATIC_DIR, html=True), name="ui")
+    app.add_middleware(Language)              # les textes d'une requête, dans sa langue
     return Guard(app, token, hosts)

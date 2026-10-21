@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
+from aiodos.i18n import t
 from aiodos.network import consult, group, invitations, peers, sharing
 from aiodos.network.client import PeerError
 from aiodos.network.pairing import PairingRefused
@@ -78,7 +79,7 @@ async def public_enable(body: EnableIn, request: Request):
     de confié. Il passe par le compagnon Internet."""
     manager = _manager(request)
     if body.enabled and not manager.internet.enabled:
-        raise HTTPException(400, "Active d'abord « Internet » : le réseau public passe par lui.")
+        raise HTTPException(400, t("net.public_needs_internet"))
     await asyncio.to_thread(settings.set_value, "public_network", body.enabled)
     await manager.public.sync()
     manager.changed()
@@ -106,7 +107,7 @@ async def add(body: AddressIn, request: Request):
     try:
         return await _manager(request).add_manual(body.address)
     except (PeerError, ValueError) as exc:
-        raise HTTPException(400, f"Impossible de joindre {body.address} : {exc}")
+        raise HTTPException(400, t("net.cannot_reach", address=body.address, error=exc))
 
 
 @router.post("/pair")
@@ -114,7 +115,7 @@ async def pair(body: NodeIn, request: Request):
     manager = _manager(request)
     target = manager.visible.get(body.node_id)
     if target is None:
-        raise HTTPException(404, "Machine introuvable sur le réseau.")
+        raise HTTPException(404, t("net.machine_not_found"))
     try:
         # La machine choisie dans la liste : une autre qui répondrait à son adresse est refusée
         pending = await asyncio.to_thread(manager.pairing.start, target["address"],
@@ -175,7 +176,7 @@ async def invitation_reply(invitation_id: int, body: CodeIn, request: Request):
     except PairingRefused as exc:             # refus lisible tel quel (version trop ancienne…)
         raise HTTPException(400, str(exc))
     except PeerError as exc:
-        raise HTTPException(400, f"« {target['name']} » injoignable par Internet : {exc}")
+        raise HTTPException(400, t("invitations.unreachable", name=target["name"], error=exc))
     return _started(pending)
 
 
@@ -198,10 +199,10 @@ async def refresh(node_id: str, request: Request):
 async def set_trust(node_id: str, body: TrustIn, request: Request):
     """Une de mes machines, ou celle d'un ami (cf. network/sharing.py)."""
     if body.trust not in sharing.LEVELS:
-        raise HTTPException(400, f"Niveau de confiance inconnu : {body.trust!r}")
+        raise HTTPException(400, t("sharing.unknown_trust", trust=repr(body.trust)))
     before = await asyncio.to_thread(peers.trust_of, node_id)
     if not await asyncio.to_thread(peers.set_trust, node_id, body.trust):
-        raise HTTPException(404, "Machine appairée introuvable.")
+        raise HTTPException(404, t("net.paired_not_found"))
     manager = _manager(request)
     if body.trust == sharing.FRIEND and before != sharing.FRIEND:
         manager.present_later(node_id)    # un ami rencontre mes autres machines
@@ -272,7 +273,7 @@ async def unpair(node_id: str, request: Request, only_here: bool = False,
     missed = set()
     for target in targets:
         friend = await asyncio.to_thread(peers.trust_of, target) == sharing.FRIEND
-        await asyncio.to_thread(group.decline, target, "retirée ici")
+        await asyncio.to_thread(group.decline, target, t("group.declined_removed_here"))
         await manager.unpair(target)
         if friend and not (only_here and target == node_id):
             missed.update(await asyncio.to_thread(manager.group.spread, "group/remove",

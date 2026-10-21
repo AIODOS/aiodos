@@ -16,7 +16,8 @@ import math
 import secrets
 from pathlib import Path
 
-from aiodos import settings
+from aiodos import i18n, settings
+from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, generate
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import pacing
@@ -37,15 +38,14 @@ def normalize(params: dict) -> dict:
     ValueError avec un message pour l'utilisateur sinon."""
     model_id = str(params.get("model") or "")
     if model_id not in catalog.MODELS:
-        raise ValueError("Modèle d'images inconnu.")
+        raise ValueError(t("imaging.unknown_model"))
     spec = catalog.model(model_id)
     video = catalog.is_video(model_id)
-    what = "vidéo" if video else "image"
     prompt = str(params.get("prompt") or "").strip()
     if not prompt:
-        raise ValueError(f"Décris la {what} à créer.")
+        raise ValueError(t("imaging.describe_video" if video else "imaging.describe_image"))
     if len(prompt) > MAX_PROMPT:
-        raise ValueError(f"Description trop longue ({MAX_PROMPT} caractères au plus).")
+        raise ValueError(t("imaging.prompt_too_long", max=MAX_PROMPT))
     default_w, default_h = spec["sizes"][0][:2]
     try:
         width = int(params.get("width") or default_w)
@@ -56,22 +56,23 @@ def normalize(params: dict) -> dict:
         seed = params.get("seed")
         seed = secrets.randbelow(SEED_SPACE) if seed in (None, "") else int(seed) % SEED_SPACE
     except (TypeError, ValueError) as exc:
-        raise ValueError("Taille, nombre, durée, pas ou graine invalides.") from exc
+        raise ValueError(t("imaging.bad_settings")) from exc
     multiple, (low, high) = spec["multiple"], spec["side"]
     for side in (width, height):
         if side % multiple or not low <= side <= high:
-            raise ValueError(f"Côtés en multiples de {multiple}, de {low} à {high} pixels.")
+            raise ValueError(t("imaging.bad_sides", multiple=multiple, low=low, high=high))
     if width * height > spec["max_pixels"]:
-        raise ValueError(f"{what.capitalize()} trop grande pour ce modèle.")
+        raise ValueError(t("imaging.video_too_big" if video else "imaging.image_too_big"))
     if video:
         step, base = spec["frame_step"], spec["frame_base"]
         if not base <= frames <= spec["max_frames"] or (frames - base) % step:
-            raise ValueError(f"Durée : de {base} à {spec['max_frames']} images, en "
-                             f"{step} × k + {base}.")
+            raise ValueError(t("imaging.bad_frames", base=base, max=spec["max_frames"],
+                               step=step))
     if not 1 <= count <= MAX_COUNT:
-        raise ValueError(f"De 1 à {MAX_COUNT} {what}s à la fois.")
+        raise ValueError(t("imaging.video_count" if video else "imaging.image_count",
+                           max=MAX_COUNT))
     if not 1 <= steps <= 100:
-        raise ValueError("De 1 à 100 pas.")
+        raise ValueError(t("imaging.bad_steps"))
     negative = str(params.get("negative") or "").strip()[:MAX_PROMPT] if spec["negative"] else ""
     found = {"model": model_id, "prompt": prompt, "negative": negative, "width": width,
              "height": height, "steps": steps, "cfg": spec["cfg"], "seed": seed,
@@ -87,21 +88,21 @@ def _start_from(path, strength, video, spec) -> dict:
     """Une image de départ (retouche) : un PNG de cette machine, au format du modèle, et la
     force de la retouche ; ValueError sinon."""
     if video:
-        raise ValueError("Une vidéo ne part pas d'une image.")
+        raise ValueError(t("imaging.video_from_image"))
     try:
         data = Path(str(path)).read_bytes()
         width, height = generate.png_size(data)
     except (OSError, ValueError) as exc:
-        raise ValueError("Image de départ illisible.") from exc
+        raise ValueError(t("imaging.start_unreadable")) from exc
     if len(data) > MAX_PNG or width % spec["multiple"] or height % spec["multiple"] \
             or width * height > spec["max_pixels"]:
-        raise ValueError("Image de départ d'un format que ce modèle ne prend pas.")
+        raise ValueError(t("imaging.start_format"))
     try:
         strength = float(STRENGTH if strength in (None, "") else strength)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Force de retouche invalide.") from exc
+        raise ValueError(t("imaging.bad_strength")) from exc
     if not 0.05 <= strength <= 1.0:
-        raise ValueError("Force de retouche : de 0,05 à 1.")
+        raise ValueError(t("imaging.strength_range"))
     return {"init_path": str(path), "strength": strength, "width": width, "height": height}
 
 
@@ -117,9 +118,11 @@ def split_generate(params):
     units = [UnitSpec("generate_image", "gpu",
                       {**common, "seed": (params["seed"] + i) % SEED_SPACE, "index": i})
              for i in range(params["count"])]
-    many = f" ×{params['count']}" if params["count"] > 1 else ""
-    what = "Vidéos" if catalog.is_video(params["model"]) else "Images"
-    return f"{what} : « {_short(params['prompt'])} »{many}", units, {"batch": params["batch"]}
+    # « Images : « … » ×3 », traduit dans la langue de qui le lit (jobs/queue.py)
+    title = i18n.lazy("imaging.job_videos" if catalog.is_video(params["model"])
+                      else "imaging.job_images", prompt=_short(params["prompt"]),
+                      n=params["count"])
+    return title, units, {"batch": params["batch"]}
 
 
 def runnable_here(model) -> bool:
@@ -143,10 +146,10 @@ def checked(payload) -> dict:
     if payload.get("strength") is not None:
         strength = float(payload["strength"])
         if not 0.05 <= strength <= 1.0:
-            raise ValueError("ordre d'image incohérent")
+            raise ValueError(t("imaging.order_mismatch"))
         params["strength"] = strength
     if params["model"] != payload.get("model") or params["seed"] != int(payload["seed"]):
-        raise ValueError("ordre d'image incohérent")
+        raise ValueError(t("imaging.order_mismatch"))
     found = {**payload, "width": params["width"], "height": params["height"],
              "steps": params["steps"], "cfg": params["cfg"], "negative": params["negative"]}
     if "strength" in params:
@@ -183,6 +186,7 @@ def _start_image(file, payload) -> bytes | None:
     try:
         data = Path(file).read_bytes()
         if len(data) > MAX_PNG or generate.png_size(data) != (payload["width"], payload["height"]):
+            # i18n: tel quel (journal : l'image se fait alors depuis sa description)
             raise ValueError("image de départ d'une autre taille que celle demandée")
         try:
             from PIL import Image
@@ -191,7 +195,7 @@ def _start_image(file, payload) -> bytes | None:
         import io
         with Image.open(io.BytesIO(data)) as picture:
             if picture.format != "PNG" or picture.size != (payload["width"], payload["height"]):
-                raise ValueError("image de départ invalide")
+                raise ValueError("image de départ invalide")      # i18n: tel quel (journal)
             clean = picture.convert("RGB")
         out = io.BytesIO()
         clean.save(out, "PNG")
@@ -204,19 +208,19 @@ def _start_image(file, payload) -> bytes | None:
 def _decoded(payload, output) -> bytes:
     """Le PNG ou le WebM d'une sortie, contrôlé (signature, poids, taille d'une image)."""
     video = catalog.is_video(payload["model"])
-    what = "vidéo" if video else "image"
     try:
         data = base64.b64decode(str(output.get("webm" if video else "png") or ""),
                                 validate=True)
     except ValueError as exc:
-        raise ValueError(f"{what} illisible") from exc
+        raise ValueError(t("imaging.video_unreadable" if video
+                           else "imaging.image_unreadable")) from exc
     if len(data) > (MAX_WEBM if video else MAX_PNG):
-        raise ValueError(f"{what} trop lourde")
+        raise ValueError(t("imaging.video_too_heavy" if video else "imaging.image_too_heavy"))
     if video:
         if not generate.is_webm(data):
-            raise ValueError("ce n'est pas une vidéo WebM")
+            raise ValueError(t("imaging.not_webm"))
     elif generate.png_size(data) != (payload["width"], payload["height"]):
-        raise ValueError("image d'une autre taille que celle demandée")
+        raise ValueError(t("imaging.wrong_size"))
     return data
 
 

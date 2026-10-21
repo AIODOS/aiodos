@@ -1,0 +1,10 @@
+{
+  "image_header": "[Image : {name}]",
+  "unknown_whisper_model": "Modèle Whisper inconnu : « {name} » (attendu : tiny, base, small, medium, large-v3…).",
+  "child_not_answering": "Le programme de transcription ne répond plus.",
+  "child_stopped": "Le programme de transcription s'est arrêté en route.",
+  "child_unexpected": "Réponse inattendue du programme de transcription.",
+  "whisper_missing": "Modèle Whisper « {model} » absent de cette machine : elle ne télécharge d'elle-même que celui de son réglage. Pour qu'elle le télécharge, choisis « {model} » dans ses réglages (Images, audio et vidéo : Transcrire l'audio et la vidéo, Modèle Whisper).",
+  "transcription_failed": "Transcription impossible : {error}",
+  "transcription_header": "[Transcription de {name} · langue : {language}]"
+}

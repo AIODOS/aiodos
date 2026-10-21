@@ -5,6 +5,8 @@ import base64
 
 import numpy as np
 
+from aiodos.i18n import t
+
 _ARRAY = "__array__"
 
 
@@ -27,7 +29,7 @@ def unpack(value):
             data = base64.b64decode(str(value[_ARRAY]).encode("ascii"), validate=True)
             array = np.frombuffer(data, dtype=np.float32)
             if not shape or any(n < 0 for n in shape) or array.size != int(np.prod(shape)):
-                raise ValueError("Tableau reçu incohérent.")
+                raise ValueError(t("work.array_inconsistent"))
             return array.reshape(shape)
         return {k: unpack(v) for k, v in value.items()}
     if isinstance(value, list):

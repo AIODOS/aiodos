@@ -128,7 +128,7 @@ def _windows_thread() -> list:
     k, applied = _kernel32(), []
     thread = k.GetCurrentThread()
     if k.SetThreadPriority(thread, _THREAD_PRIORITY_BELOW_NORMAL):
-        applied.append("priorité inférieure à la normale")
+        applied.append("priorité inférieure à la normale")      # i18n: tel quel (journal)
     eco = _Throttling(_THROTTLING_VERSION, _EXECUTION_SPEED, _EXECUTION_SPEED)
     if k.SetThreadInformation(thread, _THREAD_POWER_THROTTLING, ctypes.byref(eco),
                               ctypes.sizeof(eco)):
@@ -136,7 +136,7 @@ def _windows_thread() -> list:
     memory = ctypes.c_ulong(_MEMORY_PRIORITY_BELOW_NORMAL)
     if k.SetThreadInformation(thread, _THREAD_MEMORY_PRIORITY, ctypes.byref(memory),
                               ctypes.sizeof(memory)):
-        applied.append("mémoire de priorité inférieure")
+        applied.append("mémoire de priorité inférieure")        # i18n: tel quel (journal)
     return applied
 
 
@@ -212,7 +212,7 @@ def _windows_process(pid: int) -> list:
         return applied
     try:
         if k.SetPriorityClass(process, BELOW_NORMAL_PRIORITY_CLASS):
-            applied.append("priorité inférieure à la normale")
+            applied.append("priorité inférieure à la normale")  # i18n: tel quel (journal)
         eco = _Throttling(_THROTTLING_VERSION, _EXECUTION_SPEED, _EXECUTION_SPEED)
         if k.SetProcessInformation(process, _PROCESS_POWER_THROTTLING, ctypes.byref(eco),
                                    ctypes.sizeof(eco)):

@@ -1,0 +1,16 @@
+{
+  "built_here": "compilé dans compagnon/target",
+  "built_in_base": "compilé dans la version d'origine",
+  "delivered": "livré avec la version {version}",
+  "choice_failed": "Compagnon aiodos-net : choix du programme impossible ({error}).",
+  "not_found": "Compagnon aiodos-net introuvable : il arrive avec les mises à jour, d'une machine appairée qui l'a (ou le compiler : voir compagnon/README.md).",
+  "wont_launch": "Le compagnon aiodos-net ({origin}) ne se lance pas : {error}",
+  "exit_code": "code {code}",
+  "not_started": "Le compagnon aiodos-net ({origin}) n'a pas démarré : {error}",
+  "stopped": "Compagnon arrêté.",
+  "unreachable": "Compagnon injoignable ({error}).",
+  "reply_unreadable": "Réponse illisible du compagnon.",
+  "too_old_for_tunnels": "Le compagnon aiodos-net de cette machine est trop ancien : il ouvrirait le tunnel vers la carte graphique prêtée à tous les programmes de la machine. Mets AIODOS à jour sur cette machine.",
+  "tunnel_unguarded": "Sur ce système, le compagnon aiodos-net ne peut pas vérifier quel programme se connecte au tunnel vers la carte graphique prêtée : pas de modèle réparti depuis cette machine.",
+  "tunnel_not_kept": "Le compagnon aiodos-net de cette machine n'a pas gardé le tunnel : mets AIODOS à jour sur cette machine."
+}

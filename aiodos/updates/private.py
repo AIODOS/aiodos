@@ -26,8 +26,9 @@ compte lui-même soit autorisé.
 Le contrôle du dépôt tourne avant que les outils n'importent quoi que ce soit du dépôt : ils
 chargent ce fichier par son chemin, le dossier du dépôt et celui des outils retirés de
 sys.path, sans lire aucun __pycache__ (amorce en tête de tools/publish.py et
-tools/build_installer.py). Ce fichier ne dépend donc que de la bibliothèque standard. Il
-refuse :
+tools/build_installer.py). Ce fichier ne dépend donc que de la bibliothèque standard : ses
+messages restent en français (« i18n: tel quel »), pour l'auteur qui publie et pour le
+journal. Il refuse :
 - un chemin du dépôt (.git compris) que d'autres comptes peuvent modifier, ou qu'un autre
   compte possède (il l'y aurait créé) ;
 - un fichier non suivi par git là où Python cherche les modules des outils (aiodos/,
@@ -148,12 +149,14 @@ def my_sid() -> str:
     ctypes, wintypes, advapi, kernel = _win()
     token = wintypes.HANDLE()
     if not advapi.OpenProcessToken(kernel.GetCurrentProcess(), 0x8, ctypes.byref(token)):
+        # i18n: tel quel (bibliothèque standard seulement)
         raise OSError(ctypes.get_last_error(), "jeton du processus illisible")
     try:
         needed = wintypes.DWORD()
         advapi.GetTokenInformation(token, 1, None, 0, ctypes.byref(needed))     # TokenUser
         buffer = ctypes.create_string_buffer(needed.value)
         if not advapi.GetTokenInformation(token, 1, buffer, needed, ctypes.byref(needed)):
+            # i18n: tel quel (bibliothèque standard seulement)
             raise OSError(ctypes.get_last_error(), "compte du processus illisible")
         sid = ctypes.c_void_p.from_buffer(buffer).value
         return _sid_text(ctypes, advapi, kernel, sid)
@@ -238,10 +241,10 @@ def _posix(path: Path, write: bool) -> list:
     uid = os.getuid()
     found = []
     if info.st_uid not in (uid, 0):
-        found.append(f"propriétaire uid {info.st_uid}")
+        found.append(f"propriétaire uid {info.st_uid}")      # i18n: tel quel (cf. en tête)
     other, group = (0o002, 0o020) if write else (0o004, 0o040)
     if info.st_mode & other:
-        found.append("tous les comptes")
+        found.append("tous les comptes")                      # i18n: tel quel (cf. en tête)
     if info.st_mode & group and _group_has_others(info.st_gid, uid):
         found.append(f"groupe {info.st_gid}")
     return found
@@ -281,6 +284,7 @@ def _create(path: Path):
     descriptor = ctypes.c_void_p()
     if not advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
             sddl, 1, ctypes.byref(descriptor), None):
+        # i18n: tel quel (bibliothèque standard seulement)
         raise OSError(ctypes.get_last_error(), "liste d'accès privée impossible à préparer")
 
     class Attributes(ctypes.Structure):
@@ -292,7 +296,7 @@ def _create(path: Path):
             error = ctypes.get_last_error()
             if error == 183:                      # ERROR_ALREADY_EXISTS
                 raise FileExistsError(str(path))
-            raise OSError(error, f"dossier impossible à créer : {path}")
+            raise OSError(error, f"dossier impossible à créer : {path}")   # i18n: tel quel
     finally:
         kernel.LocalFree(descriptor)
 
@@ -304,8 +308,10 @@ def require_private(path, what: str):
     except FileNotFoundError:
         return
     except OSError as exc:
+        # i18n: tel quel (bibliothèque standard seulement)
         raise NotPrivate(f"Droits de {what} illisibles ({path}) : {exc}") from exc
     if others:
+        # i18n: tel quel (bibliothèque standard seulement)
         raise NotPrivate(f"{what[:1].upper() + what[1:]} est modifiable par d'autres comptes "
                          f"de cette machine ({', '.join(others)}) : {path}")
 
@@ -339,7 +345,7 @@ def private_dir(path) -> Path:
     try:
         _create(path)
     except FileExistsError:
-        require_private(path, "le dossier de travail")
+        require_private(path, "le dossier de travail")         # i18n: tel quel (cf. en tête)
     return path
 
 
@@ -358,7 +364,7 @@ def private_tempdir(prefix: str, base=None):
         except FileExistsError:
             continue
     else:
-        raise OSError(f"Aucun dossier temporaire libre dans {base}")
+        raise OSError(f"Aucun dossier temporaire libre dans {base}")   # i18n: tel quel
     try:
         yield path
     finally:
@@ -460,6 +466,7 @@ def git_state_problems(repo) -> list:
     problems = []
     replaced = _git(repo, "for-each-ref", "--format=%(refname)", "refs/replace").split()
     if replaced:
+        # i18n: tel quel (bibliothèque standard seulement)
         problems.append(f"  - objets de remplacement ({', '.join(replaced[:5])}) : git "
                         "archive sortirait d'autres fichiers que ceux du commit "
                         "(git replace -d …, ou git update-ref -d …)")
@@ -469,6 +476,7 @@ def git_state_problems(repo) -> list:
     except OSError:
         lines = []
     if any(line.strip() and not line.lstrip().startswith("#") for line in lines):
+        # i18n: tel quel (bibliothèque standard seulement)
         problems.append(f"  - {git_dir / 'info' / 'attributes'} : des attributs (export-ignore, "
                         "export-subst, filtres) changeraient ce que git archive publie ; "
                         "vide-le")
@@ -478,6 +486,7 @@ def git_state_problems(repo) -> list:
     except OSError:
         hooks = []
     if hooks:
+        # i18n: tel quel (bibliothèque standard seulement)
         problems.append(f"  - crochets actifs dans {git_dir / 'hooks'} ({', '.join(hooks)}) : "
                         "vérifie-les et retire-les")
     return problems
@@ -519,7 +528,7 @@ def repository_problems(repo, extra=()) -> list:
     if found:
         shown = found[:20] + ([(f"… et {len(found) - 20} autres", ["idem"])]
                               if len(found) > 20 else [])
-        return [
+        return [                     # i18n: tel quel (bibliothèque standard seulement)
             "Le dépôt est modifiable par d'autres comptes de cette machine :\n"
             f"{describe(shown)}\n"
             "Ce qu'ils y auraient glissé (un réglage de .git/config, un crochet, du code) serait "
@@ -529,18 +538,19 @@ def repository_problems(repo, extra=()) -> list:
     messages = []
     problems = git_config_problems(repo)
     if problems:
-        messages.append(
+        messages.append(             # i18n: tel quel (bibliothèque standard seulement)
             "La configuration de git ferait lire ou exécuter ce que le dépôt ne montre pas :\n"
             + "\n".join(problems) + "\n"
             "Retire ces réglages de .git/config (git config --local --unset …), ou rends ces "
             "fichiers privés, puis recommence.")
     problems = git_state_problems(repo)
     if problems:
+        # i18n: tel quel (bibliothèque standard seulement)
         messages.append("Le dépôt git contient de quoi publier autre chose que le commit :\n"
                         + "\n".join(problems))
     problems = untracked_problems(repo)
     if problems:
-        messages.append(
+        messages.append(             # i18n: tel quel (bibliothèque standard seulement)
             "Fichiers non suivis par git là où les outils cherchent leur code :\n"
             + "\n".join(problems) + "\n"
             "Un module planté là s'exécuterait avec la clé de publication à portée. Commite-les "
