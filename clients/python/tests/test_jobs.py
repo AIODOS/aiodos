@@ -496,7 +496,7 @@ def test_sensitive_stays_on_my_machines_within_the_agreement(fake, make_client):
     count = len(fake.requests_to("/aiodos/v1/jobs"))
     with pytest.raises(errors.WhereDenied) as caught:
         _submit(friends_only, sensitive=True)
-    assert "sensibles" in caught.value.message and caught.value.allowed == ["friends"]
+    assert "sensible" in caught.value.message and caught.value.allowed == ["friends"]
     assert len(fake.requests_to("/aiodos/v1/jobs")) == count    # rien n'est parti
 
 

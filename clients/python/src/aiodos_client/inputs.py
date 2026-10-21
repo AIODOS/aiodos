@@ -23,7 +23,7 @@ import os
 import re
 from pathlib import Path
 
-from . import errors
+from . import errors, texts
 
 FEATURE = "inputs"
 MAX_INPUT = 100 * 1024 * 1024           # celui d'AIODOS (gateway/input_store.py)
@@ -124,7 +124,10 @@ class Inputs:
         client._gate(FEATURE)
         source = data if isinstance(data, Source) else Source(data)
         if source.size > MAX_INPUT:
+            size = -(-source.size // (1024 * 1024))
             raise errors.make("input_too_large", client.lang,
+                              message=texts.error("input_size", client.lang, size=size),
+                              hint=texts.hint("input_size", client.lang),
                               detail={"bytes": source.size, "max_bytes": MAX_INPUT})
         sha = source.sha256()
         path = f"/aiodos/v1/inputs/{sha}"

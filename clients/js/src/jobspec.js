@@ -11,7 +11,7 @@
 // - sensitive : le lieu resserré à ce PC et à mes machines (here, mine), dans l'accord de
 //   l'appli (fiches de casting, visages de référence : jamais chez un ami ni un inconnu).
 
-import { makeError } from './errors.js';
+import { clientError, makeError } from './errors.js';
 import { checkWhere, isPlainObject, snakeKeys, toList } from './util.js';
 
 const PRIORITIES = new Set(['high', 'normal', 'low']);
@@ -63,11 +63,12 @@ export async function placeHeaders(ctx, { where, sensitive, signal }, lang = 'fr
     }
     circles = circles.filter((c) => SENSITIVE.includes(c));
     if (!circles.length) {
-      throw makeError(
-        'where_denied',
-        lang === 'en' ? 'Sensitive job: neither this PC nor my machines are allowed here.' : 'Travail sensible : ni ce PC ni mes machines ne sont permis ici.',
-        { param: 'where', detail: { sensitive: true, allowed: SENSITIVE } },
-      );
+      throw clientError('where_denied', lang, {
+        textKey: 'sensitive_denied',
+        hint: null,
+        param: 'where',
+        detail: { sensitive: true, allowed: SENSITIVE },
+      });
     }
   }
   return circles ? { 'X-Aiodos-Where': circles.join(',') } : {};

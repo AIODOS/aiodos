@@ -190,8 +190,8 @@ class File:
 
     def _mismatch(self):
         lang = self._client.lang
-        return errors.make("protocol", lang, message=texts.error("hash_mismatch", lang),
-                           hint=texts.hint("hash_mismatch", lang),
+        return errors.make("protocol", lang, message=texts.error("file_hash", lang),
+                           hint=texts.hint("file_hash", lang),
                            detail={"file": self.id, "sha256": self.sha256})
 
     def content(self, start=None, end=None, cancel=None) -> bytes:
@@ -297,7 +297,11 @@ class File:
                 try:
                     for piece in exchange.chunks():
                         if received + len(piece) > expected:
-                            raise errors.make("protocol", self._client.lang)
+                            lang = self._client.lang
+                            raise errors.make("protocol", lang,
+                                              message=texts.error("file_size", lang),
+                                              hint=texts.hint("file_size", lang),
+                                              detail={"file": self.id})
                         out.write(piece)
                         digest.update(piece)
                         received += len(piece)

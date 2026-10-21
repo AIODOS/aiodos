@@ -13,14 +13,6 @@ from support import SOURCE
 JS = SOURCE.parents[2] / "js" / "src" / "texts.js"
 ONLY_JS = {"proxy"}                                    # le proxy de Node : sans objet ici
 ONLY_PYTHON = {"no_model", "image_by_url", "bad_image", "too_large"}
-# Les textes des travaux ComfyUI (0.2.0) : tant que le client JavaScript de cette copie ne
-# les a pas encore ; présents des deux côtés, ils doivent être les mêmes, mot pour mot.
-NEW_IN_020 = {"hash_mismatch", "job_failed", "sensitive_denied", "graph_not_api",
-              "graph_invalid", "patch_invalid",
-              "forbidden_value", "forbidden_node", "input_missing", "input_hash_mismatch",
-              "input_too_large", "graph_too_large", "engine_not_found", "job_not_found",
-              "file_not_found", "input_not_found", "model_unavailable", "model_unresolved",
-              "model_ambiguous", "job_not_cancellable", "job_not_pausable", "quota_exceeded"}
 
 
 def _js_tables():
@@ -52,7 +44,7 @@ def test_codes_and_hints_are_the_same(js, lang):
     for ours, theirs in ((texts.ERRORS[lang], js["CODES"][lang]),
                          (texts.HINTS[lang], js["HINTS"][lang])):
         assert set(theirs) - set(ours) <= ONLY_JS
-        assert set(ours) - set(theirs) <= ONLY_PYTHON | NEW_IN_020
+        assert set(ours) - set(theirs) <= ONLY_PYTHON
         for code in set(ours) & set(theirs):
             assert ours[code] == theirs[code], code
 

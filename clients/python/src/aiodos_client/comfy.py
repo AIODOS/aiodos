@@ -104,9 +104,8 @@ def _failure(job, lang):
     reason = next((e.get("message") for e in failed if isinstance(e.get("message"), str)), None)
     if reason is None and isinstance(job.error, dict):
         reason = job.error.get("message") if isinstance(job.error.get("message"), str) else None
-    message = texts.error("job_failed", lang)
-    if reason:
-        message = f"{message} {reason}"
+    message = texts.error("job_failed", lang, reason=reason or (
+        "no unit could be done." if lang == "en" else "aucune unité n'a pu se faire."))
     # À réessayer quand le temps ou les machines ont manqué, pas quand le graphe échoue
     later = bool(failed) and all(e.get("code") in RETRY_LATER for e in failed)
     return errors.make("engine_failed", lang, message=message, hint=texts.hint("job_failed", lang),
@@ -346,7 +345,9 @@ class Comfy:
         job.wait(timeout=timeout, cancel=cancel)
         lang = self._client.lang
         if job.status == "cancelled":
-            raise errors.make("cancelled", lang, detail={"job": job.id, "by": job.cancelled_by})
+            raise errors.make("cancelled", lang, message=texts.error("job_cancelled", lang),
+                              hint=texts.hint("job_cancelled", lang),
+                              detail={"job": job.id, "by": job.cancelled_by})
         if job.status == "failed":
             raise _failure(job, lang)
         folder = dest_dir if dest_dir is not None else tempfile.mkdtemp(prefix="aiodos-")
