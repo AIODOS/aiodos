@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — les types de toute la surface (Node 20.3 et plus : les types de
+// aiodos-client 0.2.0 — les types de toute la surface (Node 20.3 et plus : les types de
 // fetch, Response et AbortSignal viennent de @types/node ou de la bibliothèque « dom »).
 
 /** Version de la bibliothèque. */
-export declare const VERSION: '0.1.0';
+export declare const VERSION: '0.2.0';
 /** Version de l'API des applications d'AIODOS que ce client parle. */
 export declare const API_VERSION: 1;
 
@@ -288,16 +288,324 @@ export interface EmbedResult {
   usage: { promptTokens: number | null; totalTokens: number | null } | null;
 }
 
-/** ComfyUI (livraison L2 d'AIODOS) : rejette NotSupported tant que features ne l'annonce pas. */
+// --- les travaux ComfyUI (docs/api-applications.md § 5.7) ---------------------------------
+// Chaque fonction rejette NotSupported tant que `features` n'annonce pas « engines.comfyui »
+// (et « jobs », « jobs.pause », « inputs », « files » selon ce qu'elle touche).
+
+/** Des octets, ou le chemin d'un fichier (texte, ou URL file:). */
+export type InputData = Uint8Array | ArrayBuffer | ArrayBufferView | string | URL;
+/** Une entrée de travail : des octets, un chemin, avec son genre, ou une entrée déjà envoyée ({ sha256 }). */
+export type InputValue =
+  | InputData
+  | { data: Uint8Array | ArrayBuffer | ArrayBufferView; type?: string }
+  | { path: string | URL; type?: string }
+  | { sha256: string; type?: string };
+/** Pour tokenize : la même chose, et l'entrée de fichier d'un nœud de chargement que le client ne connaît pas. */
+export type TokenizeValue =
+  | InputData
+  | { data: Uint8Array | ArrayBuffer | ArrayBufferView; type?: string; input?: string }
+  | { path: string | URL; type?: string; input?: string }
+  | { sha256: string; type?: string; input?: string };
+
+/** Un nœud d'un graphe au format API. */
+export interface ComfyNode {
+  class_type: string;
+  inputs?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}
+/** Un graphe ComfyUI au format API (« Exporter (API) ») : { "<nœud>": { class_type, inputs } }. */
+export type ComfyGraph = Record<string, ComfyNode>;
+
+/** Une unité : un graphe (indice dans graphs), sa graine (@seed), ses retouches. */
+export interface JobItem {
+  graph?: number;
+  label?: string;
+  seed?: number;
+  /** [nœud, entrée, valeur] : remplace une valeur déjà présente, du même type, jamais un lien. */
+  set?: Array<[node: string, input: string, value: unknown]>;
+}
+/** À la place d'items : count variations, valeur + i × step. */
+export interface JobRepeat {
+  count: number;
+  vary?: Array<{ node: string; input: string; step: number }>;
+  graph?: number;
+}
+/** Bornes : durée d'une unité (s), poids des sorties (Mo), attente d'une machine (s). */
+export interface JobBounds {
+  unitSeconds?: number;
+  outputMb?: number;
+  waitS?: number;
+}
+
+export interface ComfyJobOptions {
+  /** Le graphe (format API), ou graphs : 64 au plus. */
+  graph?: ComfyGraph;
+  graphs?: ComfyGraph[];
+  /** Une unité par élément (256 au plus) ; sans items ni repeat, une unité par graphe. */
+  items?: JobItem[];
+  repeat?: JobRepeat;
+  /** Les entrées citées par les jetons @in:<id> : hachées, envoyées si AIODOS ne les a pas. */
+  inputs?: Record<string, InputValue>;
+  /** « auto » (défaut : AIODOS relève les noms de modèles), ou les jetons @model:<clé>. */
+  models?: 'auto' | Record<string, { folder: string; name: string; sha256?: string }>;
+  /** Resserre le lieu de calcul (X-Aiodos-Where), dans l'accord de l'appli. */
+  where?: Circle | Circle[] | string;
+  priority?: 'high' | 'normal' | 'low';
+  label?: string;
+  /** La référence de l'appli, aussi clé d'idempotence : le même clientRef rend le même travail. */
+  clientRef?: string;
+  bounds?: JobBounds;
+  strict?: boolean;
+  /** Vrai : le lieu resserré à ce PC et à mes machines (here, mine), dans l'accord. */
+  sensitive?: boolean;
+  /** Une recette (L4) : pas encore servie, NotSupported. */
+  recipe?: unknown;
+  signal?: AbortSignal;
+}
+
+export interface ComfyRunOptions extends ComfyJobOptions {
+  /** Le dossier des fichiers (créé au besoin). */
+  destDir: string | URL;
+  /** Le début des noms (<stem>-<unité>.<ext>) ; l'identifiant du travail par défaut. */
+  stem?: string;
+  onFile?: (path: string, file: JobFile) => void | Promise<void>;
+  /** Chaque événement du suivi. */
+  onEvent?: (event: JobEvent) => void | Promise<void>;
+  /** Délai total de l'attente, en ms. */
+  timeout?: number;
+}
+
+/** Le pré-vol (comfy.plan) : rien n'est mis en file. */
+export interface Plan {
+  ok: boolean;
+  whereEffective: Circle[];
+  whereReason: string | null;
+  machines: { here: boolean; mine: number | null; friends: number | null; public: number | null };
+  missing: Array<{ folder: string | null; name: string; machine: string; size?: number }>;
+  refused: Record<string, Array<{ class: string; reason: string }>>;
+  licenses: Array<{ sha256: string; id: string; restrictive: boolean }>;
+  units: number;
+  estimate: { secondsPerUnit: number; machines: number } | null;
+  [field: string]: unknown;
+}
+
+/** Un moteur (engines()), selon les cercles de l'appli. */
+export interface Engine {
+  id: 'comfyui' | string;
+  label: string;
+  here: { enabled: boolean; version: string | null; vramMib: number | null } | null;
+  /** Combien de machines l'ont : ce PC (0 ou 1), mes machines (null : cercle non permis). */
+  machines: { here: number; mine: number | null; friends: number | null; public: number | null };
+  models: Array<{
+    folder: string | null;
+    name: string;
+    sha256: string | null;
+    size: number | null;
+    /** here : sur ce PC ; mine : les noms de mes machines qui l'ont. */
+    where: { here: boolean; mine: string[] | null; friends: number | null; public: number | null };
+    license: { id: string | null; restrictive: boolean } | null;
+  }>;
+  objectInfo: { available: boolean; machine: string | null; digest: string | null };
+  recipes: number;
+  [field: string]: unknown;
+}
+
+export type JobStatus = 'queued' | 'in_progress' | 'pausing' | 'paused' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+export type UnitStage = 'queued' | 'waiting_machine' | 'sending_inputs' | 'waiting_engine' | 'loading' | 'running' | 'receiving' | 'checking' | 'done';
+/** Le code d'échec d'une unité (no_machine : aucune machine ne l'a prise avant bounds.waitS). */
+export type UnitErrorCode = 'engine_error' | 'engine_timeout' | 'output_invalid' | 'output_too_large' | 'no_machine' | 'lost' | 'no_progress' | 'cancelled' | string;
+
+export interface JobProgress {
+  total: number;
+  done: number;
+  running: number;
+  queued: number;
+  failed: number;
+  percent: number;
+  /** Toujours vrai en v1 : une estimation. */
+  estimated: boolean;
+  elapsedS: number;
+  etaS: number | null;
+  stage: UnitStage | string;
+  machines: Array<{ name: string; place: Place | string; running: number; done: number; medianS?: number }>;
+  /** « 1 sur 2 · 1 en cours sur 1 machine ». */
+  message: string;
+}
+
+export interface JobUnit {
+  index: number;
+  label: string | null;
+  status: 'queued' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | string;
+  place: Place | string | null;
+  machine: string | null;
+  /** Les identifiants de ses fichiers. */
+  files: string[];
+  seconds: number | null;
+  stage?: UnitStage | string | null;
+  error?: { code: UnitErrorCode; message: string };
+}
+
+/** L'objet travail en entier (job.state), en camelCase. */
+export interface JobState {
+  id: string;
+  object: 'aiodos.job';
+  engine: string;
+  label: string | null;
+  clientRef: string | null;
+  status: JobStatus;
+  /** Pendant une pause : { when, pending } (unités encore en calcul). */
+  pause: { when: 'after_current' | 'now'; pending: number } | null;
+  priority: 'high' | 'normal' | 'low';
+  where: Circle[] | null;
+  whereEffective: Circle[];
+  whereReason: string | null;
+  progress: JobProgress;
+  waiting: Record<string, unknown> | null;
+  units: JobUnit[];
+  files: JobFile[];
+  error: { code: string; message: string } | null;
+  /** « app » : annulé par cette appli. */
+  cancelledBy: string | null;
+  createdAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  [field: string]: unknown;
+}
+
+/** Un événement de job.watch(). */
+export type JobEvent =
+  | { type: 'job'; job: Job }
+  | { type: 'file'; file: JobFile; job: Job }
+  | { type: 'end'; status: 'completed' | 'failed' | 'cancelled' | 'deleted' | string | null; job: Job }
+  /** AIODOS ne répond plus : nouvel essai dans retryIn ms (reconnexion automatique). */
+  | { type: 'unreachable'; error: AiodosError; attempt: number; retryIn: number; job: Job }
+  /** Un événement d'une version suivante d'AIODOS, tel quel. */
+  | { type: 'unit' | 'machine' | 'file_doubt'; data: Record<string, unknown>; job: Job };
+
+export interface WatchOptions {
+  /** Ferme vraiment la connexion (« Arrêté ») ; le travail continue dans AIODOS. */
+  signal?: AbortSignal;
+  /** Délai total, en ms (Timeout) ; sans lui, le suivi attend la fin, reconnexions comprises. */
+  timeout?: number;
+  /** Silence après lequel le flux est rouvert, en ms (45 000 ; AIODOS envoie « : ping » toutes les 15 s). */
+  idleTimeout?: number;
+}
+
+export interface DownloadOptions {
+  /** Le début des noms (<stem>-<unité>[-<n>].<ext>) ; l'identifiant du travail par défaut. */
+  stem?: string;
+  onFile?: (path: string, file: JobFile) => void | Promise<void>;
+  signal?: AbortSignal;
+}
+
+/** Un fichier produit pour l'appli. */
+export interface JobFile {
+  readonly id: string;
+  /** L'indice de l'unité qui l'a produit. */
+  readonly unit: number | null;
+  /** Le nœud de sortie (SaveImage…). */
+  readonly node: string | null;
+  readonly type: string | null;
+  /** La taille, en octets. */
+  readonly bytes: number;
+  readonly sha256: string | null;
+  readonly width: number | null;
+  readonly height: number | null;
+  /** La machine qui l'a calculé (null pour un inconnu du réseau public). */
+  readonly machine: string | null;
+  readonly place: Place | string | null;
+  /** « comfyui 0.35.1 ». */
+  readonly engine: string | null;
+  readonly verified: string | null;
+  /** Récupéré (servi jusqu'au dernier octet) : AIODOS le garde encore 7 jours. */
+  readonly fetched: boolean;
+  readonly expiresAt: number | null;
+  readonly createdAt: number | null;
+  /** Relit la fiche. */
+  refresh(options?: { signal?: AbortSignal }): Promise<JobFile>;
+  /** Les octets (un Buffer de Node), l'empreinte vérifiée. */
+  content(options?: { signal?: AbortSignal }): Promise<Uint8Array>;
+  /** L'écrit à ce chemin, repris s'il est partiel (« .part »), vérifié ; rend le chemin absolu. */
+  save(path: string | URL, options?: { signal?: AbortSignal }): Promise<string>;
+  /** L'efface dans AIODOS. */
+  delete(options?: { signal?: AbortSignal }): Promise<{ id: string; deleted: true }>;
+  /** Un lien signé : pas encore servi (NotSupported). */
+  link(options?: { ttl?: number; uses?: number; signal?: AbortSignal }): Promise<never>;
+  toJSON(): Record<string, unknown>;
+  toString(): string;
+}
+/** Le même, sous le nom de la conception. */
+export type File = JobFile;
+
+/** Un travail de l'appli : les champs suivent le dernier état reçu (state les donne tous). */
+export interface Job {
+  readonly id: string;
+  readonly engine: string | null;
+  readonly label: string | null;
+  readonly clientRef: string | null;
+  readonly status: JobStatus | null;
+  readonly priority: 'high' | 'normal' | 'low' | null;
+  readonly where: Circle[] | null;
+  readonly whereEffective: Circle[];
+  readonly whereReason: string | null;
+  readonly progress: JobProgress | null;
+  readonly waiting: Record<string, unknown> | null;
+  readonly units: JobUnit[];
+  readonly error: { code: string; message: string } | null;
+  readonly cancelledBy: string | null;
+  readonly createdAt: number | null;
+  readonly startedAt: number | null;
+  readonly completedAt: number | null;
+  /** Tout le dernier état, fichiers (state.files) et pause (state.pause) compris. */
+  readonly state: JobState;
+  /** Fini : completed, failed ou cancelled. */
+  readonly done: boolean;
+  /** Oublié par delete(). */
+  readonly deleted: boolean;
+  /** Relit l'état. */
+  refresh(options?: { signal?: AbortSignal }): Promise<Job>;
+  /** Les événements, en itérateur asynchrone, avec reconnexion automatique. */
+  watch(options?: WatchOptions): AsyncGenerator<JobEvent, void, undefined>;
+  /** Attend la fin ; rend le travail, quel que soit son état final. */
+  wait(options?: WatchOptions): Promise<Job>;
+  /** Après l'unité en cours (défaut : rien ne se perd), ou tout de suite (« now »). */
+  pause(options?: { when?: 'after_current' | 'now'; signal?: AbortSignal }): Promise<Job>;
+  resume(options?: { signal?: AbortSignal }): Promise<Job>;
+  /** Le calcul en cours s'arrête dans ComfyUI (ce calcul seulement) ; les fichiers rendus restent. */
+  cancel(options?: { signal?: AbortSignal }): Promise<Job>;
+  /** Les unités en échec repartent. */
+  retryFailed(options?: { signal?: AbortSignal }): Promise<Job>;
+  /** Oublie un travail fini ; files: true efface aussi ses fichiers. */
+  delete(options?: { files?: boolean | 'keep' | 'delete'; signal?: AbortSignal }): Promise<{ id: string; deleted: boolean }>;
+  /** Ses fichiers : ceux pas encore récupérés (défaut), ou tous (unfetched: false). */
+  files(options?: { unfetched?: boolean; signal?: AbortSignal }): Promise<JobFile[]>;
+  /** Télécharge tous ses fichiers dans destDir ; rend leurs chemins. */
+  download(destDir: string | URL, options?: DownloadOptions): Promise<string[]>;
+  toJSON(): Record<string, unknown>;
+  toString(): string;
+}
+
+/** ComfyUI par AIODOS. */
 export interface Comfy {
-  plan(options?: Record<string, unknown> & { signal?: AbortSignal }): Promise<never>;
+  /** Pré-vol : le corps d'un travail vérifié comme au dépôt (ses entrées envoyées), rien en file. */
+  plan(options: ComfyJobOptions): Promise<Plan>;
+  /** L'object_info relayé (L2c) : pas encore servi, NotSupported. */
   objectInfo(cls?: string | null, options?: { signal?: AbortSignal }): Promise<never>;
+  /** Un gabarit relayé (L2c) : pas encore servi, NotSupported. */
   template(name: string, options?: { signal?: AbortSignal }): Promise<never>;
+  /** Les recettes (L4) : pas encore servies, NotSupported. */
   recipes(options?: { signal?: AbortSignal }): Promise<never>;
   recipeFor(template: unknown, options?: { signal?: AbortSignal }): Promise<never>;
-  tokenize(graph: unknown, inputs: unknown, options?: { signal?: AbortSignal }): Promise<never>;
-  submit(options?: Record<string, unknown> & { signal?: AbortSignal }): Promise<never>;
-  run(options?: Record<string, unknown> & { signal?: AbortSignal }): Promise<never>;
+  /**
+   * Une copie du graphe avec « @in:<id> » dans l'entrée de fichier des nœuds donnés
+   * (LoadImage, LoadImageMask : image ; LoadVideo : file ; LoadAudio : audio), et les entrées
+   * à donner à submit.
+   */
+  tokenize<G extends ComfyGraph>(graph: G, files: Record<string, TokenizeValue>, options?: { signal?: AbortSignal }): Promise<{ graph: G; inputs: Record<string, InputValue> }>;
+  /** Envoie les entrées absentes, puis le travail. */
+  submit(options: ComfyJobOptions): Promise<Job>;
+  /** submit, l'attente de la fin, puis download ; arrêté par signal, le travail est annulé. */
+  run(options: ComfyRunOptions): Promise<string[]>;
 }
 
 export interface AiodosClient {
@@ -323,16 +631,22 @@ export interface AiodosClient {
   embed(options: EmbedOptions): Promise<EmbedResult>;
   /** Ramène la fenêtre d'AIODOS sur une page. */
   openInAiodos(options?: { page?: 'applications' | 'models' | 'jobs' | 'gallery'; model?: string | null; signal?: AbortSignal }): Promise<{ opened: boolean }>;
-  /** Les moteurs (L2). */
-  engines(options?: { signal?: AbortSignal }): Promise<never>;
-  /** ComfyUI (L2). */
+  /** Les moteurs : qui a ComfyUI, sa version, ses modèles. */
+  engines(options?: { signal?: AbortSignal }): Promise<Engine[]>;
+  /** ComfyUI : plan, tokenize, submit, run. */
   readonly comfy: Comfy;
-  /** Ses travaux (L2). */
-  jobs(options?: { active?: boolean | null; status?: string; clientRef?: string; signal?: AbortSignal }): Promise<never>;
-  /** Un travail (L2). */
-  job(id: string, options?: { signal?: AbortSignal }): Promise<never>;
-  /** Les entrées des travaux (L2). */
-  readonly inputs: { put(data: Uint8Array, options?: { type?: string; signal?: AbortSignal }): Promise<never> };
+  /**
+   * Ses travaux, les plus récents d'abord (après un redémarrage de l'appli comme d'AIODOS).
+   * Sans filtre : ceux en cours ; avec clientRef ou status : tous, finis compris ;
+   * active: null pour tous, false pour les finis.
+   */
+  jobs(options?: { active?: boolean | null; status?: JobStatus | JobStatus[] | string; clientRef?: string; limit?: number; signal?: AbortSignal }): Promise<Job[]>;
+  /** Un de ses travaux (celui d'une autre appli : JobNotFound). */
+  job(id: string, options?: { signal?: AbortSignal }): Promise<Job>;
+  /** Un de ses fichiers, par son identifiant. */
+  file(id: string, options?: { signal?: AbortSignal }): Promise<JobFile>;
+  /** Les entrées des travaux : put envoie des octets (ou un fichier) s'ils manquent ; rend leur sha256. */
+  readonly inputs: { put(data: InputData | { data: Uint8Array | ArrayBuffer | ArrayBufferView; type?: string } | { path: string | URL; type?: string }, options?: { type?: string; signal?: AbortSignal }): Promise<string> };
   toJSON(): { client: 'aiodos-client'; version: string; app: string | null };
   toString(): string;
 }
@@ -431,5 +745,55 @@ export declare class RateLimited extends AiodosError {}
 export declare class Busy extends AiodosError {}
 export declare class PeerFailed extends AiodosError {}
 export declare class EngineFailed extends AiodosError {}
+/** Moteur pas prêt (503, retryAfter), ou aucune machine permise n'a ComfyUI ouvert et accordé (409). */
 export declare class EngineUnavailable extends AiodosError {}
 export declare class ApprovalUnavailable extends AiodosError {}
+/** graph_not_api (format de l'éditeur), graph_invalid, patch_invalid : `code` dit lequel. */
+export declare class GraphInvalid extends AiodosError {
+  readonly node: string | null;
+  readonly graph: number | null;
+}
+export declare class GraphTooLarge extends AiodosError {}
+/** Chemin, adresse ou annotation de dossier. */
+export declare class ForbiddenValue extends AiodosError {
+  readonly node: string | null;
+  readonly input: string | null;
+  readonly reason: string | null;
+}
+/** Nœud d'un service en ligne. */
+export declare class ForbiddenNode extends AiodosError {
+  readonly nodeClass: string | null;
+}
+/** Jeton @in: sans entrée déclarée, ou entrée jamais envoyée par cette appli. */
+export declare class InputMissing extends AiodosError {
+  readonly input: string | null;
+}
+export declare class InputHashMismatch extends AiodosError {}
+/** Plus de 100 Mo : refusée avant l'envoi. */
+export declare class InputTooLarge extends AiodosError {}
+export declare class EngineNotFound extends AiodosError {}
+export declare class InputNotFound extends AiodosError {}
+/** Introuvable, ou à une autre appli. */
+export declare class JobNotFound extends AiodosError {}
+/** Introuvable, ou à une autre appli. */
+export declare class FileNotFound extends AiodosError {}
+/** Modèles absents (detail.machine : la machine la plus proche de les avoir tous). */
+export declare class ModelUnavailable extends AiodosError {
+  readonly models: Array<{ folder: string | null; name: string }>;
+}
+export declare class ModelUnresolved extends AiodosError {
+  readonly model: string | null;
+}
+export declare class ModelAmbiguous extends AiodosError {
+  readonly candidates: string[];
+}
+export declare class JobNotCancellable extends AiodosError {}
+export declare class JobNotPausable extends AiodosError {}
+/** Travaux actifs, entrées, fichiers non récupérés (quota). */
+export declare class QuotaExceeded extends AiodosError {
+  readonly quota: string | null;
+}
+/** comfy.run : travail fini en échec, ou annulé ailleurs (detail.status, detail.units). */
+export declare class JobFailed extends AiodosError {
+  readonly job: string | null;
+}
