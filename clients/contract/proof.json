@@ -2,10 +2,10 @@
   "description": "Preuve d'identité d'AIODOS (docs/api-applications.md § 5.1) : proof = base64url sans '=' de HMAC-SHA256(clé = SHA-256(clé d'accès en UTF-8), 32 octets bruts ; message = 'aiodos-proof/1\\n' + défi en ASCII).",
   "vectors": [
     {
-      "key": "aiodos_app_k3j9m2qa_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      "key_id": "k3j9m2qa",
+      "key": "aiodos_app_k3j7m2qa_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "key_id": "k3j7m2qa",
       "challenge": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
-      "proof": "ocmP0gkcKMVVkGsuQx5Je8XzeMOmfAyld2V9GopffCw"
+      "proof": "kzujpClJtfCeF66dvjiKZvhVjt_Gf-u5t_oCAAOeIks"
     }
   ],
   "key_format": {

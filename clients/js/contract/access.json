@@ -1,0 +1,122 @@
+{
+  "interactions": [
+    {
+      "name": "demande d'accès",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/requests", "headers": {},
+                  "json": {"client_name": "PANDORA", "client_id": "arkane.pandora",
+                           "client_version": "3.2.0", "scope": "chat embed",
+                           "where": ["here", "mine", "friends", "public"],
+                           "purpose": "Traduire les prompts et décrire les images."}},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"device_code": "Zb4l3Fq0iTq9mJmQyH8w7mY2uYV1zq3Kk1vB0aE1cQo", "user_code": "482 197",
+                 "expires_in": 600, "interval": 2, "request_id": "req_8f3KqZ2m",
+                 "message": "Une demande d'accès t'attend dans AIODOS. Vérifie que le code est 482 197."}
+      },
+      "exact": ["interval"]
+    },
+    {
+      "name": "relève : pas encore de réponse",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "authorization_pending",
+                            "error_description": "La demande attend la réponse de l'utilisateur dans AIODOS."}},
+      "exact": ["error"]
+    },
+    {
+      "name": "relève : trop souvent",
+      "server": "client",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "slow_down", "error_description": "Interroge moins souvent : 5 s de plus."}},
+      "exact": ["error"]
+    },
+    {
+      "name": "relève : accordé",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 200, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"access_token": "aiodos_app_k3j7m2qa_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                            "token_type": "Bearer", "scope": "chat embed",
+                            "aiodos": {"app_id": "k3j7m2qa", "where": ["here", "mine"],
+                                       "priority": "interactive", "expires": null}}},
+      "exact": ["token_type"]
+    },
+    {
+      "name": "relève : droits en plus accordés à la même clé",
+      "server": "client",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 200, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"token_type": "Bearer", "scope": "chat embed libraries",
+                            "aiodos": {"app_id": "k3j7m2qa", "where": ["here", "mine"],
+                                       "priority": "interactive", "expires": null, "upgraded": true}}},
+      "exact": ["aiodos.upgraded"]
+    },
+    {
+      "name": "relève : refusé",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "access_denied", "error_description": "L'accès a été refusé dans AIODOS."}},
+      "exact": ["error"]
+    },
+    {
+      "name": "relève : expirée",
+      "server": "client",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "{device_code}"}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "expired_token", "error_description": "La demande a expiré : recommence."}},
+      "exact": ["error"]
+    },
+    {
+      "name": "relève : code inconnu ou clé déjà relevée",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/token", "headers": {},
+                  "json": {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                           "device_code": "inconnu"}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "invalid_grant", "error_description": "Demande inconnue, ou clé déjà relevée."}},
+      "exact": ["error"]
+    },
+    {
+      "name": "demande refusée : AIODOS n'accepte pas de nouvelle application",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/requests", "headers": {},
+                  "json": {"client_name": "PANDORA", "client_id": "arkane.pandora",
+                           "client_version": "3.2.0", "scope": "chat", "purpose": ""}},
+      "response": {"status": 403, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "AIODOS n'accepte pas de nouvelle application en ce moment.",
+                                      "type": "invalid_request_error", "param": null, "code": "requests_closed",
+                                      "aiodos": {"hint": "Réglages → Applications et autres outils.",
+                                                 "retryable": false, "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "demande refusée : en-têtes d'une page web",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/requests",
+                  "headers": {"Origin": "https://exemple.fr"},
+                  "json": {"client_name": "PANDORA", "client_id": "arkane.pandora", "scope": "chat"}},
+      "response": {"status": 403, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "Origine refusée : la passerelle d'AIODOS ne répond pas aux pages web.",
+                                      "type": "invalid_request_error", "param": null, "code": "origin_refused",
+                                      "aiodos": {"hint": "Appelle AIODOS depuis le programme de l'application, pas depuis une page.",
+                                                 "retryable": false, "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "l'appli se retire elle-même",
+      "request": {"method": "POST", "path": "/aiodos/v1/access/revoke",
+                  "headers": {"Authorization": "Bearer {key}"}, "json": {}},
+      "response": {"status": 200, "headers": {"X-Aiodos-Api": "1"}, "json": {"revoked": true}},
+      "exact": ["revoked"]
+    }
+  ]
+}

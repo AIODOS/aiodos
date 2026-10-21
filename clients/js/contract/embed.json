@@ -1,0 +1,33 @@
+{
+  "interactions": [
+    {
+      "name": "embeddings",
+      "request": {"method": "POST", "path": "/v1/embeddings",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "embeddinggemma", "input": ["un chat noir", "un chien blanc"]}},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "list", "model": "embeddinggemma",
+                 "data": [{"object": "embedding", "index": 0, "embedding": [0.6, 0.8]},
+                          {"object": "embedding", "index": 1, "embedding": [0.8, -0.6]}],
+                 "usage": {"prompt_tokens": 0, "total_tokens": 0}}
+      },
+      "exact": ["object", "data.0.object"],
+      "server": "client"
+    },
+    {
+      "name": "embeddings sans le droit",
+      "request": {"method": "POST", "path": "/v1/embeddings",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "embeddinggemma", "input": "un chat noir"}},
+      "response": {
+        "status": 403, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"error": {"message": "Cette application n'a pas le droit « embed » : demande-le dans AIODOS.",
+                           "type": "invalid_request_error", "param": null, "code": "scope_denied",
+                           "aiodos": {"hint": "Demande ce droit en plus (connect avec ce droit).",
+                                      "retryable": false, "detail": {"scope": "embed"}}}}
+      },
+      "exact": ["error.code", "error.aiodos.detail.scope"]
+    }
+  ]
+}
