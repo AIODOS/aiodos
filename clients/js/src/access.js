@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — l'accès : connect(), requestAccess(), la relève de la clé (vocabulaire
+// aiodos-client 0.2.0 — l'accès : connect(), requestAccess(), la relève de la clé (vocabulaire
 // de la RFC 8628) et disconnect() (docs/api-applications.md § 4.3, § 4.4, § 6).
 //
 // connect() : passerelle ouverte, POST /aiodos/v1/access/requests ; fermée, AIODOS arrêté ou

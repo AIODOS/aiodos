@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — la conversation : POST /v1/chat/completions, toujours en flux
+// aiodos-client 0.2.0 — la conversation : POST /v1/chat/completions, toujours en flux
 // (docs/api-applications.md § 5.5).
 //
 // - messages et outils au format neutre d'ARKLIGHT (neutral.js) ;

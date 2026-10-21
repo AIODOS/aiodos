@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : status() dans tous les états du tableau § 6 de
+// aiodos-client 0.2.0 — essais : status() dans tous les états du tableau § 6 de
 // docs/api-applications.md, sans jamais rejeter ; waitReady().
 
 import assert from 'node:assert/strict';

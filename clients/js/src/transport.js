@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — le transport vers la passerelle.
+// aiodos-client 0.2.0 — le transport vers la passerelle.
 //
 // - `fetch` est relu à chaque appel (option `fetch` du client, sinon globalThis.fetch) :
 //   les essais le remplacent ;
@@ -7,7 +7,9 @@
 // - aucune redirection suivie (redirect: 'error'), aucun proxy (le proxy d'environnement de
 //   Node, NODE_USE_ENV_PROXY, ferait passer 127.0.0.1 par lui : la requête est refusée) ;
 // - un délai d'inactivité, que le lecteur d'un flux remet à zéro à chaque morceau ;
-// - l'annulation par AbortSignal, qui ferme vraiment la connexion.
+// - l'annulation par AbortSignal, qui ferme vraiment la connexion ;
+// - des corps JSON, ou bruts (les entrées des travaux) ; des réponses lues entières, ou en
+//   flux (événements SSE, contenu d'un fichier).
 
 import { AiodosError, clientError, errorFromResponse } from './errors.js';
 import { CLIENT_HEADER } from './version.js';
@@ -205,7 +207,7 @@ export function createTransport(ctx) {
 
     const method = o.method || 'GET';
     const headers = {
-      Accept: o.stream ? 'text/event-stream' : 'application/json',
+      Accept: o.accept || (o.stream ? 'text/event-stream' : 'application/json'),
       'Accept-Language': lang,
       'X-Aiodos-Client': CLIENT_HEADER,
       ...(o.headers || {}),
@@ -214,6 +216,10 @@ export function createTransport(ctx) {
     if (o.json !== undefined) {
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(o.json);
+    } else if (o.body != null) {
+      // un corps brut (l'envoi d'une entrée) : ses octets tels quels, avec leur genre
+      headers['Content-Type'] = o.contentType || 'application/octet-stream';
+      body = o.body;
     }
     if (o.key) headers.Authorization = `Bearer ${o.key}`;
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : le client refuse de tourner dans une page (rendu).
+// aiodos-client 0.2.0 — essais : le client refuse de tourner dans une page (rendu).
 
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';

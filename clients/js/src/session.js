@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — la session d'un client : GET /aiodos/v1/info, la preuve d'identité,
+// aiodos-client 0.2.0 — la session d'un client : GET /aiodos/v1/info, la preuve d'identité,
 // et l'envoi de la clé (docs/api-applications.md § 5.1).
 //
 // La clé n'est envoyée qu'après une preuve juste. La preuve est refaite quand `instance`
@@ -123,7 +123,8 @@ export function createSession(ctx) {
 
   /**
    * Une requête avec la clé, après une preuve juste. Rend la réponse brute du transport.
-   * `feature` : la fonction que l'info doit annoncer (sinon NotSupported, sans rien envoyer).
+   * `feature` : la fonction (ou la liste de fonctions) que l'info doit annoncer (sinon
+   * NotSupported, sans rien envoyer).
    */
   async function keyed(o) {
     const key = await requireKey();
@@ -138,14 +139,17 @@ export function createSession(ctx) {
     }
   }
 
+  /** La première fonction demandée que l'info n'annonce pas lève NotSupported. */
   function requireFeatureIn(data, feature) {
     const list = data && Array.isArray(data.features) ? data.features : [];
-    if (!list.includes(feature)) {
-      throw clientError('not_supported', ctx.lang(), { vars: { feature }, detail: { feature, announced: false } });
+    for (const f of Array.isArray(feature) ? feature : [feature]) {
+      if (!list.includes(f)) {
+        throw clientError('not_supported', ctx.lang(), { vars: { feature: f }, detail: { feature: f, announced: false } });
+      }
     }
   }
 
-  /** Lève NotSupported si l'AIODOS joint n'annonce pas cette fonction. */
+  /** Lève NotSupported si l'AIODOS joint n'annonce pas cette fonction (ou l'une de ces fonctions). */
   async function requireFeature(feature, { signal, origin } = {}) {
     const o = origin ?? (await ctx.resolveOrigin()).origin;
     const data = await getInfo(o, { signal });
@@ -153,5 +157,16 @@ export function createSession(ctx) {
     return data;
   }
 
-  return { fetchInfo, getInfo, ensureProof, readKey, requireKey, keyed, requireFeature, forget };
+  /**
+   * L'info avec la clé, après la preuve : l'état de la clé (auth), les droits et les cercles
+   * accordés à l'appli (app.scopes, app.where), l'ouverture aux applis (access).
+   */
+  async function appInfo({ signal } = {}) {
+    const key = await requireKey();
+    const origin = (await ctx.resolveOrigin()).origin;
+    await ensureProof(origin, key, { signal });
+    return fetchInfo(origin, { key, signal });
+  }
+
+  return { fetchInfo, getInfo, ensureProof, readKey, requireKey, keyed, requireFeature, appInfo, forget };
 }

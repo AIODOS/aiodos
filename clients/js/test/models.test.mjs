@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : le catalogue (models.json) au format d'ARKLIGHT, et pickModel.
+// aiodos-client 0.2.0 — essais : le catalogue (models.json) au format d'ARKLIGHT, et pickModel.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

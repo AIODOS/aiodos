@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — les embeddings : POST /v1/embeddings, sur ce PC seulement
+// aiodos-client 0.2.0 — les embeddings : POST /v1/embeddings, sur ce PC seulement
 // (docs/api-applications.md § 5.6).
 
 import { clientError, makeError } from './errors.js';

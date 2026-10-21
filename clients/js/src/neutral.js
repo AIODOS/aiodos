@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — le format neutre des messages (celui d'ARKLIGHT) ↔ celui d'OpenAI.
+// aiodos-client 0.2.0 — le format neutre des messages (celui d'ARKLIGHT) ↔ celui d'OpenAI.
 //
 // Neutre :
 //   { role: 'system', content }

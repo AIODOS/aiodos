@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — le catalogue : GET /aiodos/v1/models?kind=chat|embed
+// aiodos-client 0.2.0 — le catalogue : GET /aiodos/v1/models?kind=chat|embed
 // (docs/api-applications.md § 5.2), rendu au format qu'ARKLIGHT attend déjà
 // ({ id, size, caps, params }), plus machine, context, loaded, here, default, where.
 // `default` : le modèle qu'AIODOS prend lui-même (ses conversations, ses bibliothèques).

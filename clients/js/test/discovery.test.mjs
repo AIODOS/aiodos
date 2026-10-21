@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — essais : trouver AIODOS (gateway.json, pid, registre, installation),
+// aiodos-client 0.2.0 — essais : trouver AIODOS (gateway.json, pid, registre, installation),
 // le lancer (launch) et le programme d'aide (--app-request), sans jamais toucher au vrai.
 
 import assert from 'node:assert/strict';

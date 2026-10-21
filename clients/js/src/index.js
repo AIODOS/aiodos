@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// aiodos-client 0.1.0 — ce qu'une appli importe : createClient, pickModel, les erreurs, les
+// aiodos-client 0.2.0 — ce qu'une appli importe : createClient, pickModel, les erreurs, les
 // textes, la conversion des messages, VERSION et API_VERSION.
 //
 // Le client tourne dans Node ou dans le processus principal d'Electron, jamais dans une page :
@@ -66,4 +66,22 @@ export {
   EngineFailed,
   EngineUnavailable,
   ApprovalUnavailable,
+  GraphInvalid,
+  GraphTooLarge,
+  ForbiddenValue,
+  ForbiddenNode,
+  InputMissing,
+  InputHashMismatch,
+  InputTooLarge,
+  EngineNotFound,
+  InputNotFound,
+  JobNotFound,
+  FileNotFound,
+  ModelUnavailable,
+  ModelUnresolved,
+  ModelAmbiguous,
+  JobNotCancellable,
+  JobNotPausable,
+  QuotaExceeded,
+  JobFailed,
 } from './errors.js';
