@@ -14,6 +14,8 @@ import { mountNetwork, loadNetwork, answerPairRequest, answerIntroduction } from
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
+import { loadApps } from './views/gateway-apps.js';
+import { showRequests } from './views/gateway-request.js';
 import { mountRailStatus } from './views/connected.js';
 import { mountMobile } from './mobile.js';
 import { frenchSpacing } from './typo.js';
@@ -105,6 +107,11 @@ function onEvent(ev) {
     case 'network': emit('network:changed'); break;
     case 'updates': loadUpdates(); break;
     case 'gateway': if (state.view === 'settings') loadGateway(); break;
+    case 'gateway_access':                                 // une appli demande l'accès
+      if (ev.status === 'pending') showRequests();
+      else if (state.view === 'settings') loadApps();
+      break;
+    case 'show_view': if (VIEWS.includes(ev.view)) show(ev.view); break;   // POST /aiodos/v1/open
     case 'images': emit('images:changed'); break;
     case 'model_install': emit('model-install', ev); break;
     case 'cluster': emit('cluster:changed', ev); break;
@@ -177,6 +184,7 @@ async function boot() {
   loadNetwork();
   await loadSettings();
   announceUpdate();                         // « AIODOS a été mis à jour », une fois
+  showRequests();                           // une appli a demandé l'accès avant l'ouverture
   await loadModels();
   const last = prefs.get('lastConversation', null);
   emit(last ? 'chat:open' : 'chat:new', last);

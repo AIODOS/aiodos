@@ -17,6 +17,7 @@
   "data_dir": "data folder (several nodes on the same machine)",
   "ui_file_metavar": "FILE",
   "ui_file": "writes the interface address, token included, to this file readable by you only, deleted on exit (Android app)",
+  "app_request": "helper program for applications: passes to AIODOS (started if needed) the access request read on standard input, writes the answer on standard output (gateway/app_connect.py)",
   "node_failed": "The AIODOS node could not start (see data/logs).",
   "start_cancelled": "Start abandoned: the window was closed.",
   "already_open": "AIODOS is already open on this machine.",

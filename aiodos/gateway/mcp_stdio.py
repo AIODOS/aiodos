@@ -1,7 +1,7 @@
 """Pont stdio vers le serveur MCP d'AIODOS, pour les assistants qui lancent un programme au
 lieu d'appeler une adresse (Claude Desktop…) :
 
-    python -m aiodos.gateway.mcp_stdio
+    python -P -m aiodos.gateway.mcp_stdio
 
 Lit les messages JSON-RPC sur l'entrée standard, un par ligne (transport stdio de MCP), les
 envoie au serveur MCP de la passerelle (http://127.0.0.1:<port>/mcp) avec la clé d'accès, et
@@ -10,18 +10,36 @@ Il ajoute les en-têtes que le transport HTTP exige (MCP-Protocol-Version, Mcp-M
 Mcp-Name) et retient la version convenue par initialize pour les clients plus anciens.
 
 L'adresse et la clé sont lues dans les réglages d'AIODOS (dossier de données habituel, ou
-AIODOS_DATA_DIR) ; AIODOS_MCP_URL et AIODOS_KEY les remplacent. AIODOS doit tourner, avec la
-passerelle ouverte (Réglages → Autres outils). Une clé renouvelée est relue d'elle-même.
+AIODOS_DATA_DIR) ; AIODOS_MCP_URL et AIODOS_KEY les remplacent. La clé lue dans les réglages ne
+part que vers cette machine : une adresse ailleurs doit venir avec sa propre AIODOS_KEY. AIODOS
+doit tourner, avec la passerelle ouverte (Réglages → Autres outils). Une clé renouvelée est
+relue d'elle-même.
+
+-P : sans lui, Python met en tête de sys.path le dossier où l'assistant lance le pont (souvent
+le projet ouvert), et un requests.py ou un dossier aiodos/ de ce projet s'exécuterait à sa
+place (faille 3 de l'audit du 20/10/2026). Lancé par une configuration copiée avant, le pont
+retire ce dossier de sys.path avant ses autres imports, et le signale ; le paquet aiodos, lui,
+a déjà été cherché là : il faut recopier la configuration (Réglages → Autres outils).
 """
-import base64
-import json
 import os
 import sys
 
-import requests
+if not sys.flags.safe_path:
+    _here = os.path.normcase(os.path.abspath(os.getcwd()))
+    sys.path[:] = [p for p in sys.path
+                   if p and os.path.normcase(os.path.abspath(p)) != _here]
+    print("AIODOS : pont MCP lancé sans -P ; recopie sa configuration (Réglages → Autres "
+          "outils).", file=sys.stderr)
+
+import base64  # noqa: E402  (après le nettoyage de sys.path)
+import json  # noqa: E402
+from urllib.parse import urlsplit  # noqa: E402
+
+import requests  # noqa: E402
 
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
 TIMEOUT = (5, 900)                   # une réponse de modèle peut prendre plusieurs minutes
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
 def target() -> tuple:
@@ -29,6 +47,9 @@ def target() -> tuple:
     url, key = os.environ.get("AIODOS_MCP_URL"), os.environ.get("AIODOS_KEY")
     if url and key:
         return url, key
+    if url and _host(url) not in LOOPBACK:
+        raise RuntimeError(f"AIODOS_MCP_URL ({url}) n'est pas sur cette machine : la clé "
+                           "d'AIODOS n'y part pas d'elle-même, donne-la par AIODOS_KEY.")
     from aiodos import paths, settings
     from aiodos.gateway import access
     if not paths.db_path().exists():
@@ -38,6 +59,13 @@ def target() -> tuple:
         raise RuntimeError("La passerelle d'AIODOS n'a jamais été ouverte : active-la dans "
                            "Réglages → Autres outils.")
     return url or f"http://127.0.0.1:{int(settings.get('gateway_port'))}/mcp", key
+
+
+def _host(url: str) -> str:
+    try:
+        return (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
 def _header_value(value) -> str:

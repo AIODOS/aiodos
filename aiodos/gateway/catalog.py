@@ -56,12 +56,15 @@ def local_name(model_id) -> str:
     model = internal(model_id)
     if remote_models.parse(model) or cluster.parse(model):
         raise UnknownModel("Les embeddings ne se calculent que sur cette machine : "
-                           f"« {model_id} » n'est pas un modèle d'Ollama d'ici.")
+                           f"« {model_id} » n'est pas un de ses modèles.")
     return placement.parse(model) or model
 
 
 def local_tags(max_age=TAGS_TTL) -> list:
-    """Modèles de l'Ollama de cette machine, tels qu'il les décrit (/api/tags)."""
+    """Modèles de cette machine, tels qu'Ollama les décrit (/api/tags) : ceux de son Ollama,
+    ou ceux du moteur intégré quand il le remplace (services/ollama.use_integrated)."""
+    if ollama.use_integrated():
+        return _integrated_tags(max_age)
     with _lock:
         if _tags["models"] is not None and time.monotonic() - _tags["at"] < max_age:
             return list(_tags["models"])
@@ -73,7 +76,18 @@ def local_tags(max_age=TAGS_TTL) -> list:
     return list(models)
 
 
-def _remote_details(m: dict) -> dict:
+def _integrated_tags(max_age) -> list:
+    """Les modèles du moteur intégré (llm/), par la façade ; elle les garde déjà en cache."""
+    models = ollama.list_models(max_age)
+    caps = ollama.capabilities_many([m["name"] for m in models])
+    return [{"name": m["name"], "model": m["name"], "modified_at": now_iso(),
+             "size": m.get("size", 0), "digest": m.get("digest", ""), "details": details(m),
+             "capabilities": caps.get(m["name"]) or []} for m in models]
+
+
+def details(m: dict) -> dict:
+    """« details » d'Ollama pour un modèle décrit comme ollama.list_models le fait (family,
+    parameters, quantization) : prêté, ou du moteur intégré."""
     family = m.get("family") or ""
     return {"parent_model": "", "format": "gguf", "family": family,
             "families": [family] if family else None,
@@ -96,7 +110,7 @@ def entries() -> list:
         out.append({"id": name, "name": name, "machine": None, "remote": False,
                     "size": t.get("size", 0), "digest": t.get("digest", ""),
                     "details": t.get("details") or {}, "capabilities": caps,
-                    "modified_at": t.get("modified_at") or now_iso()})
+                    "modified_at": t.get("modified_at") or now_iso(), "trust": "local"})
         seen.add(name)
     remote = remote_models.available()
     for m in remote:                      # seulement chez mes machines : mode automatique
@@ -111,16 +125,19 @@ def entries() -> list:
         offers = []
     for m in offers:
         out.append({"id": m["id"], "name": m["label"], "machine": "réparti", "remote": True,
-                    "size": m.get("size", 0), "digest": "", "details": _remote_details({}),
-                    "capabilities": ["completion"], "modified_at": now_iso()})
+                    "size": m.get("size", 0), "digest": "", "details": details({}),
+                    "capabilities": ["completion"], "modified_at": now_iso(), "trust": "mine"})
     return out
 
 
 def _remote_entry(m: dict, model_id: str, machine) -> dict:
+    """trust : « mine » ou « friend », la machine qui le prête ; pour une entrée du choix
+    automatique (machine None), celle qui le prête d'office."""
     return {"id": model_id, "name": m["label"], "machine": machine, "remote": True,
             "size": m.get("size", 0), "digest": m.get("digest", ""),
-            "details": _remote_details(m), "capabilities": m.get("caps") or ["completion"],
-            "modified_at": now_iso()}
+            "details": details(m), "capabilities": m.get("caps") or ["completion"],
+            "modified_at": now_iso(), "trust": m.get("trust") or "mine",
+            "loaded": bool(m.get("loaded"))}
 
 
 def find(model_id) -> dict | None:

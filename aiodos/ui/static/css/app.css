@@ -567,6 +567,14 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .modal .choice small { color: var(--muted); font-size: 12.5px; }
 .modal .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .modal .input, .modal .textarea { margin-top: 12px; }
+/* Carte d'accord d'une application (views/gateway-request.js) : longue, elle défile */
+.modal.gateway-request { width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.modal.gateway-request .warn { color: var(--amber, #ffc46b); margin-top: 8px; }
+.modal.gateway-request code { word-break: break-all; }
+.modal.gateway-request .more { margin-top: 14px; color: var(--muted); font-size: 13px; }
+.modal.gateway-request .more summary { cursor: pointer; }
+.modal.gateway-request .more select { width: auto; margin: 0 0 0 6px; padding: 4px 8px; }
+.modal.gateway-request .buttons { flex-wrap: wrap; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 .menu { position: fixed; z-index: 60; min-width: 190px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 5px; box-shadow: 0 14px 40px rgba(0, 0, 0, .45); }

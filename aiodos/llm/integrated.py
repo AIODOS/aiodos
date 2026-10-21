@@ -1,7 +1,8 @@
 """Le moteur intégré vu du reste d'AIODOS : les mêmes fonctions que services/ollama.py
 (lister, converser en flux, embeddings, images, capacités, décharger), servies par le
 routeur de llama.cpp (llm/engine.py) au lieu d'Ollama. services/ollama.py choisit l'un ou
-l'autre ; les appels du reste d'AIODOS ne changent pas.
+l'autre ; les appels du reste d'AIODOS ne changent pas. La passerelle vers les autres outils
+(gateway/engine.py) leur transmet en plus ses demandes telles quelles (forward).
 
 Un modèle inutilisé depuis IDLE_UNLOAD secondes est déchargé, comme chez Ollama : la
 mémoire de la carte graphique revient aux autres (images, jeux). Un modèle que llama.cpp
@@ -76,19 +77,32 @@ def _janitor():
                 _last_use.pop(model_id, None)
 
 
-def _post(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
-    """Requête au routeur ; un modèle que llama.cpp ne sait pas charger est écarté."""
+class Incompatible(RuntimeError):
+    """Un modèle que llama.cpp ne sait pas charger : écarté pour de bon."""
+
+
+def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
+    """Requête au routeur, sa réponse rendue même en erreur ; un modèle que llama.cpp ne
+    sait pas charger est écarté (Incompatible)."""
     url = _router.url()
     _used(model.id)
     response = requests.post(url + path, json={**body, "model": model.id}, stream=stream,
                              headers=_router.headers, timeout=timeout, proxies=NO_PROXY)
     if response.status_code >= 400:
         text = _error_text(response)
-        response.close()
         if "failed to load" in text:
+            response.close()
             registry.mark_incompatible(model, text)
-            raise RuntimeError(
-                t("llm.model_incompatible", name=model.name))
+            raise Incompatible(t("llm.model_incompatible", name=model.name))
+    return response
+
+
+def _post(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
+    """Requête au routeur ; une erreur devient RuntimeError."""
+    response = _send(model, path, body, stream=stream, timeout=timeout)
+    if response.status_code >= 400:
+        text = _error_text(response)
+        response.close()
         raise RuntimeError(t("llm.engine_error", error=text))
     return response
 
@@ -231,6 +245,20 @@ def unload_chat_models() -> list:
         if not m.embedding and states.get(m.id) == "loaded" and _router.unload(m.id):
             names.append(m.name)
     return names
+
+
+def forward(name, path: str, body: dict, stream=False, timeout=(10, 900)):
+    """Demande d'un autre outil transmise au routeur pour ce modèle (gateway/engine.py) : son
+    API est déjà celle d'OpenAI. « model » devient l'identifiant du routeur ; la réponse de
+    llama-server est rendue telle quelle, erreurs comprises. RuntimeError si le modèle n'est
+    pas sur cette machine, Incompatible s'il ne se charge pas."""
+    return _send(_model(name), path, body, stream=stream, timeout=timeout)
+
+
+def unload(name) -> bool:
+    """Décharge ce modèle s'il est chargé (un autre outil le demande : keep_alive 0)."""
+    found = registry.find(name)
+    return found is not None and _router.unload(found.id)
 
 
 def pull(name, progress=None, stop=None) -> bool:

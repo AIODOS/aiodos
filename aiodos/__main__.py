@@ -344,6 +344,7 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=None, help=t("cli.data_dir"))
     parser.add_argument("--ui-file", default=None, metavar=t("cli.ui_file_metavar"),
                         help=t("cli.ui_file"))
+    parser.add_argument("--app-request", action="store_true", help=t("cli.app_request"))
     return parser
 
 
@@ -351,6 +352,9 @@ def main():
     args = parser().parse_args()
     if args.data_dir:
         os.environ["AIODOS_DATA_DIR"] = os.path.abspath(args.data_dir)
+    if args.app_request:                  # ni journal, ni lanceur : il parle à l'instance
+        from aiodos.gateway import app_connect
+        return app_connect.run_helper()
 
     _setup_logging()
     _windows_app_id()

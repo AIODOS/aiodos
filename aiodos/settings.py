@@ -14,6 +14,9 @@ from aiodos.node import android, vault
 log = logging.getLogger("aiodos")
 
 SECRET_KEYS = {"mistral_key", "qwen_key"}
+# Secrets gardés dans la table des réglages mais hors de DEFAULTS (ni lus ni écrits par
+# PUT /api/settings) : protégés par DPAPI comme les clés d'API (gateway/access.py les relit)
+PROTECTED_ELSEWHERE = ("gateway_key",)
 
 # Seuil de pertinence mesuré pour chaque modèle d'embedding sur un jeu de test en
 # français (docs/embeddings.md) : chaque modèle a sa propre échelle de scores.
@@ -121,6 +124,17 @@ DEFAULTS = {
     # OpenAI et Ollama, serveur MCP, sur 127.0.0.1 seulement ; désactivé par défaut ---
     "gateway_enabled": False,
     "gateway_port": 11435,            # fixe (celui d'Ollama + 1), réglable
+    # --- Applications (gateway/apps.py, docs/api-applications.md) : une clé par appli,
+    # accordée dans AIODOS. Fermé par défaut ; le premier accord donné à une appli l'ouvre
+    # (décision de l'auteur, 20/10/2026 : « fermée, ouverte au premier usage ») ---
+    "gateway_apps": False,            # « Ouvrir AIODOS aux applications de ce PC »
+    "gateway_requests": True,         # « Accepter les nouvelles demandes d'accès »
+    "gateway_same_account": True,     # refuser les applis d'un autre compte Windows
+    "gateway_log_days": 30,           # journal des applis : 30 jours (compteurs : 90)
+    # --- Contexte des modèles de conversation du moteur intégré (llm/context.py) : 0 =
+    # selon la mémoire vidéo (16 384 jetons si elle le permet, sinon 8 192) ---
+    "chat_context": 0,
+    "chat_context_overrides": {},     # {"modèle": jetons} : exceptions par modèle
 }
 
 
@@ -237,9 +251,11 @@ def set_many(values: dict):
 
 
 def protect_secrets() -> int:
-    """Protège les clés d'API enregistrées avant DPAPI. → nombre de clés protégées."""
+    """Protège les clés d'API enregistrées avant DPAPI, et la clé générale de la
+    passerelle (gardée hors des réglages ordinaires, PROTECTED_ELSEWHERE). → nombre de clés
+    protégées."""
     done = 0
-    for key in sorted(SECRET_KEYS):
+    for key in sorted(SECRET_KEYS) + list(PROTECTED_ELSEWHERE):
         row = db.query_one("SELECT value FROM settings WHERE key=?", (key,))
         clear = _decode(row["value"]) if row else None
         if not isinstance(clear, str) or not clear or vault.is_protected(clear):

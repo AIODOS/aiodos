@@ -1,0 +1,100 @@
+{
+  "description": "Une réponse d'erreur par code stable (docs/api-applications.md § 3). Les clients en tirent la sous-classe d'erreur (code) et lisent hint, retryable, detail et Retry-After.",
+  "interactions": [
+    {
+      "name": "clé absente",
+      "request": {"method": "GET", "path": "/v1/models", "headers": {}, "json": null},
+      "response": {"status": 401, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "Clé d'accès d'AIODOS manquante ou invalide.",
+                                      "type": "invalid_request_error", "param": null, "code": "invalid_api_key",
+                                      "aiodos": {"hint": "Connecte l'application à AIODOS.", "retryable": false,
+                                                 "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "clé retirée",
+      "request": {"method": "GET", "path": "/v1/models", "headers": {"Authorization": "Bearer {key}"},
+                  "json": null},
+      "response": {"status": 401, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "L'accès de cette application a été retiré dans AIODOS.",
+                                      "type": "invalid_request_error", "param": null, "code": "key_revoked",
+                                      "aiodos": {"hint": "Reconnecte l'application, après un clic de l'utilisateur.",
+                                                 "retryable": false, "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "lieu plus large que l'accord",
+      "request": {"method": "POST", "path": "/v1/chat/completions",
+                  "headers": {"Authorization": "Bearer {key}", "X-Aiodos-Where": "friends"},
+                  "json": {"model": "qwen3.5:9b", "messages": [{"role": "user", "content": "Bonjour"}]}},
+      "response": {"status": 403, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "Lieu de calcul refusé : cette application n'a pas accès à « friends ».",
+                                      "type": "invalid_request_error", "param": null, "code": "where_denied",
+                                      "aiodos": {"hint": "Resserre X-Aiodos-Where, ou demande ce cercle dans AIODOS.",
+                                                 "retryable": false, "detail": {"allowed": ["here", "mine"]}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "modèle inconnu",
+      "request": {"method": "POST", "path": "/v1/chat/completions",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "inexistant:1b", "messages": [{"role": "user", "content": "Bonjour"}]}},
+      "response": {"status": 404, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "Aucune machine ne peut répondre avec « inexistant:1b » en ce moment.",
+                                      "type": "invalid_request_error", "param": "model", "code": "model_not_found",
+                                      "aiodos": {"hint": "Installe le modèle dans AIODOS, ou choisis-en un de la liste.",
+                                                 "retryable": false, "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "trop de demandes",
+      "server": "client",
+      "request": {"method": "POST", "path": "/v1/chat/completions",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "qwen3.5:9b", "messages": [{"role": "user", "content": "Bonjour"}]}},
+      "response": {"status": 429, "headers": {"X-Aiodos-Api": "1", "Retry-After": "2"},
+                   "json": {"error": {"message": "Trop de demandes de cette application en même temps.",
+                                      "type": "invalid_request_error", "param": null, "code": "busy",
+                                      "aiodos": {"hint": "Réessaie dans quelques secondes.", "retryable": true,
+                                                 "detail": {}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "moteur qui démarre",
+      "server": "client",
+      "request": {"method": "POST", "path": "/v1/chat/completions",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "qwen3.5:9b", "messages": [{"role": "user", "content": "Bonjour"}]}},
+      "response": {"status": 503, "headers": {"X-Aiodos-Api": "1", "Retry-After": "5"},
+                   "json": {"error": {"message": "Le moteur intégré ne démarre pas encore.",
+                                      "type": "api_error", "param": null, "code": "engine_unavailable",
+                                      "aiodos": {"hint": "Réessaie dans quelques secondes.", "retryable": true,
+                                                 "detail": {}}}}},
+      "exact": ["error.code", "error.type"]
+    },
+    {
+      "name": "texte trop long pour le contexte",
+      "server": "client",
+      "request": {"method": "POST", "path": "/v1/chat/completions",
+                  "headers": {"Authorization": "Bearer {key}"},
+                  "json": {"model": "qwen3.5:9b", "messages": [{"role": "user", "content": "…"}]}},
+      "response": {"status": 400, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": {"message": "Le texte fait 20 512 jetons, ce modèle en accepte 16 384.",
+                                      "type": "invalid_request_error", "param": "messages",
+                                      "code": "context_length_exceeded",
+                                      "aiodos": {"hint": "Raccourcis la demande, ou découpe-la.", "retryable": false,
+                                                 "detail": {"needed": 20512, "limit": 16384}}}}},
+      "exact": ["error.code"]
+    },
+    {
+      "name": "fermé aux applications (forme d'Ollama)",
+      "server": "client",
+      "request": {"method": "GET", "path": "/api/tags", "headers": {"Authorization": "Bearer {key}"},
+                  "json": null},
+      "response": {"status": 403, "headers": {"X-Aiodos-Api": "1"},
+                   "json": {"error": "AIODOS n'est ouvert qu'aux autres outils : ouvre-le aussi aux applications.",
+                            "code": "apps_closed", "hint": "Réglages → Applications et autres outils."}},
+      "exact": ["code"]
+    }
+  ]
+}

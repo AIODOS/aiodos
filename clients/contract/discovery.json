@@ -1,0 +1,53 @@
+{
+  "description": "Le fichier de découverte gateway.json (docs/api-applications.md § 1.2) et la sortie du programme d'aide « python -m aiodos --app-request » (§ 4.4).",
+  "files": {
+    "open": {
+      "product": "aiodos", "format": 1, "version": "2.1.0", "api": 1,
+      "pid": 12345, "instance": "Hk3v9QmZ", "running": true,
+      "gateway": {"state": "open", "url": "http://127.0.0.1:11435",
+                  "apps": true, "requests": true, "approval_ui": true, "error": null},
+      "updated": 1792500000.0
+    },
+    "closed": {
+      "product": "aiodos", "format": 1, "version": "2.1.0", "api": 1,
+      "pid": 12345, "instance": "Hk3v9QmZ", "running": true,
+      "gateway": {"state": "closed", "url": "http://127.0.0.1:11435",
+                  "apps": false, "requests": true, "approval_ui": true, "error": null},
+      "updated": 1792500000.0
+    },
+    "error": {
+      "product": "aiodos", "format": 1, "version": "2.1.0", "api": 1,
+      "pid": 12345, "instance": "Hk3v9QmZ", "running": true,
+      "gateway": {"state": "error", "url": "http://127.0.0.1:11435",
+                  "apps": true, "requests": true, "approval_ui": true,
+                  "error": "Le port 11435 est déjà pris sur cette machine (C:\\Users\\moi\\AppData\\Local\\Programs\\Ollama\\ollama.exe) : choisis-en un autre dans les Réglages."},
+      "updated": 1792500000.0
+    },
+    "stopped": {
+      "product": "aiodos", "format": 1, "version": "2.1.0", "api": 1,
+      "pid": 12345, "instance": "Hk3v9QmZ", "running": false,
+      "gateway": {"state": "closed", "url": "http://127.0.0.1:11435",
+                  "apps": true, "requests": true, "approval_ui": true, "error": null},
+      "updated": 1792500000.0
+    },
+    "headless": {
+      "product": "aiodos", "format": 1, "version": "2.1.0", "api": 1,
+      "pid": 12345, "instance": "Hk3v9QmZ", "running": true,
+      "gateway": {"state": "open", "url": "http://127.0.0.1:11435",
+                  "apps": true, "requests": true, "approval_ui": false, "error": null},
+      "updated": 1792500000.0
+    }
+  },
+  "app_request": {
+    "stdin": {"client_name": "PANDORA", "client_id": "arkane.pandora", "client_version": "3.2.0",
+              "scope": "chat embed", "where": ["here", "mine", "friends", "public"],
+              "purpose": "Traduire les prompts et décrire les images."},
+    "stdout_ok": {"device_code": "Zb4l3Fq0iTq9mJmQyH8w7mY2uYV1zq3Kk1vB0aE1cQo", "user_code": "482 197",
+                  "interval": 2, "expires_in": 600, "request_id": "req_8f3KqZ2m",
+                  "url": "http://127.0.0.1:11435"},
+    "exit_ok": 0,
+    "stdout_error": {"error": {"code": "approval_unavailable",
+                               "message": "AIODOS tourne sans fenêtre : ouvre-le pour autoriser l'application."}},
+    "exit_error": 1
+  }
+}

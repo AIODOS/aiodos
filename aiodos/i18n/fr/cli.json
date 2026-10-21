@@ -17,6 +17,7 @@
   "data_dir": "dossier de données (plusieurs nœuds sur une même machine)",
   "ui_file_metavar": "FICHIER",
   "ui_file": "écrit l'adresse de l'interface, jeton compris, dans ce fichier lisible par soi seul, effacé à l'arrêt (application Android)",
+  "app_request": "programme d'aide des applications : transmet à AIODOS (lancé au besoin) la demande d'accès lue sur l'entrée standard, écrit la réponse sur la sortie standard (gateway/app_connect.py)",
   "node_failed": "Le nœud AIODOS n'a pas pu démarrer (voir data/logs).",
   "start_cancelled": "Démarrage abandonné : la fenêtre a été fermée.",
   "already_open": "AIODOS est déjà ouvert sur cette machine.",

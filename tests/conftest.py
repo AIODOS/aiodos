@@ -11,6 +11,8 @@ os.environ["AIODOS_QUIET"] = "1"
 # Les essais lisent les textes en français, quelle que soit la langue de la machine qui les
 # lance (nœuds lancés compris) ; test_i18n.py passe à l'anglais quand il le faut
 os.environ["AIODOS_LANGUAGE"] = "fr"
+# Le fichier de découverte des applications (gateway/discovery.py) : jamais le vrai
+os.environ["AIODOS_DISCOVERY_FILE"] = "-"
 
 import numpy as np
 import pytest
@@ -39,6 +41,12 @@ def data_dir(tmp_path, monkeypatch):
     work.forget_friends()
     client._turns.clear()
     client._lingering.clear()
+    # Applications (gateway/) : clés en cache, demandes d'accès, limites
+    from aiodos.gateway import access_flow, apps, limits, open_page
+    apps.forget_all()
+    access_flow.forget()
+    limits.forget()
+    open_page.forget()
     yield tmp_path
     db.close()
 

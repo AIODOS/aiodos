@@ -6,6 +6,7 @@ import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
+import { appsCard, bindApps } from './gateway-apps.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
@@ -21,6 +22,10 @@ const SECTIONS = [
     { key: 'auto_route_friends', label: 'settings.auto_route_friends', type: 'switch',
       help: 'settings.auto_route_friends_help' },
     { key: 'think', label: 'settings.think', type: 'switch', help: 'settings.think_help' },
+    { key: 'chat_context', label: 'settings.chat_context', type: 'select', options: [
+      ['0', 'settings.chat_context_auto'], ['8192', 'settings.chat_context_8k'],
+      ['16384', 'settings.chat_context_16k'], ['32768', 'settings.chat_context_32k']],
+      help: 'settings.chat_context_help' },
     { key: 'system_prompt', label: 'settings.system_prompt', type: 'textarea' },
   ] },
   { title: 'settings.section_knowledge', icon: 'book', fields: [
@@ -134,6 +139,10 @@ export function mountSettings(container) {
   on('gateway:loaded', () => {
     const box = root && $('#gateway-box', root);
     if (box) { box.innerHTML = gatewayCard(); bindGateway(box); }
+  });
+  on('gateway-apps:loaded', () => {
+    const box = root && $('#gateway-apps-box', root);
+    if (box) { box.innerHTML = appsCard(); bindApps(box); }
   });
 }
 

@@ -13,15 +13,31 @@ AIODOS peut s'ouvrir aux autres outils d'IA de ta machine : Open WebUI, Anything
 Les formats ont été vérifiés le 17/10/2026 dans la documentation d'OpenAI, celle d'Ollama
 (0.40.5), la spécification MCP (2026-07-28) et le code d'Open WebUI 0.12.3, AnythingLLM 1.18,
 Continue, et des clients officiels openai 3.33.0 et mcp 2.3.0, avec lesquels AIODOS est essayé
-(`tests/test_gateway.py`, `tests/test_gateway_nodes.py`).
+(`tests/test_gateway.py`, `tests/test_gateway_nodes.py`) ; ceux du moteur intégré, le
+20/10/2026 avec llama.cpp b11707 (`tests/test_gateway_integrated.py`, et un essai réel).
+
+Les **applications** (PANDORA, ARKLIGHT PC…) passent par la même passerelle, mais chacune avec
+sa propre clé, demandée par l'appli et accordée sur une carte dans AIODOS :
+[integrer-aiodos.md](integrer-aiodos.md). Ce document-ci parle des outils qu'on branche à la
+main.
 
 ## 1. Ouvrir la passerelle
 
-**Réglages → Autres outils** :
+**Réglages → Applications et autres outils** : deux façons de donner une clé à un outil.
 
-1. active **« Ouvrir AIODOS aux autres outils »** (désactivé par défaut) ;
-2. copie la **clé d'accès** (bouton « Copier ») : c'est la « clé d'API » à donner à l'outil ;
-3. copie l'**adresse** qui convient à l'outil :
+- **Une clé « à la main » pour cet outil** (conseillé) : « Ajouter un outil », un nom ; la clé
+  (`aiodos_app_…`) n'est montrée qu'une fois. Elle a ses propres droits (conversation,
+  embeddings) et ses cercles (ce PC et mes machines), et se retire seule, sans toucher aux
+  autres outils. AIODOS doit alors être ouvert aux applications (premier interrupteur).
+- **La clé générale** : active **« Clé générale pour les autres outils »** (désactivé par
+  défaut ; la clé est créée à ce moment, plus d'office, et gardée chiffrée par DPAPI). Elle a
+  les droits d'avant : conversation, embeddings et bibliothèques, pour tous les outils à la
+  fois. C'est elle que lit le pont MCP des assistants qui lancent un programme (§ 7).
+
+Puis :
+
+1. copie la **clé** : c'est la « clé d'API » à donner à l'outil ;
+2. copie l'**adresse** qui convient à l'outil :
 
 | Pour un outil qui parle… | Adresse |
 |---|---|
@@ -67,17 +83,37 @@ Les machines d'un ami ne répondent d'office que si tu l'acceptes (Réglages →
 « faire aussi répondre les machines de mes amis »). Les modèles du cloud ne passent pas par
 la passerelle : leur envoi se valide dans AIODOS, message par message.
 
-Une demande calculée par **cette machine** est transmise telle quelle à Ollama : les outils
-(*tool calling*), les images, un format de réponse imposé, la complétion de code y passent.
-Une **machine appairée**, elle, ne reçoit que la conversation en texte. D'où :
+Une demande calculée par **cette machine** va à son moteur : le moteur intégré d'AIODOS
+(llama.cpp, [moteur-integre.md](moteur-integre.md)), ou Ollama là où il n'est pas encore.
+Les outils (*tool calling*), les images, un format de réponse imposé, la complétion de code
+y passent. Une **machine appairée**, elle, ne reçoit que la conversation en texte. D'où :
 
 - images, format imposé (`format`, `response_format`), complétion de code (`suffix`,
   `/v1/completions`), probabilités (`logprobs`) : **cette machine seulement** ;
 - outils : cette machine d'abord ; si seule une machine appairée a le modèle, elle répond
   sans eux, en texte ;
-- embeddings : **cette machine seulement** (son Ollama) ;
+- embeddings : **cette machine seulement** (son modèle d'embedding) ;
 - réglages d'échantillonnage (température, `max_tokens`, `stop`…) : transmis ; ceux qui
   rechargeraient le modèle chez l'autre (`num_ctx`…) restent à ses valeurs.
+
+**Avec le moteur intégré** (sans Ollama), les mêmes adresses et les mêmes formats :
+
+- `/v1/chat/completions` est transmis tel quel à son routeur, dont l'API est déjà celle
+  d'OpenAI : outils, images, `response_format`, `logprobs`, plusieurs réponses (`n`) ; le nom
+  du modèle est remis dans la réponse. Une conversation en texte seul y arrive mise en forme
+  (une seule consigne système, en tête ; deux messages de suite du même rôle réunis) : le
+  gabarit de mistral, par exemple, refuserait sinon. `reasoning_effort: "none"` coupe la
+  réflexion ;
+- l'API d'Ollama (`/api/chat`, `/api/generate`) répond au format d'Ollama : images (`images`),
+  outils (`tools`, `tool_calls` avec les arguments en objet) et `format` (`"json"` ou un
+  schéma) traduits pour le routeur, complétion de code (`suffix`) par les jetons de
+  complétion du modèle — seulement les modèles de code qui les ont (qwen2.5-coder…) ;
+- ce que le modèle ne sait pas faire est **refusé clairement** (erreur 400 qui dit pourquoi) :
+  images pour un modèle qui ne les voit pas, complétion de code sans ses jetons, texte trop
+  long pour son contexte ;
+- `/api/show` donne le contexte que le moteur intégré donne au modèle (`num_ctx`, 8192 pour
+  la conversation, 2048 pour les embeddings) ; `/api/version` donne la version d'Ollama dont
+  la passerelle suit les formats (0.40.5).
 
 ## 3. Open WebUI
 
@@ -248,10 +284,15 @@ Pour VS Code, Continue, AnythingLLM et l'exemple `.mcp.json` de Claude Code, la 
 est bâtie sur les clés que décrit leur documentation, qui n'a pas d'exemple tout fait de ce cas.
 
 **Assistant qui lance un programme** (stdio : Claude Desktop…) : le pont
-`python -m aiodos.gateway.mcp_stdio` relaie vers la passerelle. Il lit lui-même l'adresse et
-la clé dans les réglages d'AIODOS, et relit une clé renouvelée. La configuration exacte, avec
+`python -P -m aiodos.gateway.mcp_stdio` relaie vers la passerelle. Il lit lui-même l'adresse et
+la clé dans les réglages d'AIODOS, et relit une clé renouvelée ; cette clé ne part que vers
+cette machine (une adresse `AIODOS_MCP_URL` ailleurs doit venir avec sa propre `AIODOS_KEY`).
+`-P` (et `PYTHONSAFEPATH`) compte : sans lui, Python cherche d'abord ses modules dans le
+dossier où l'assistant lance le pont, souvent le projet ouvert, et un `requests.py` ou un
+dossier `aiodos/` de ce projet s'exécuterait à sa place (faille corrigée le 21/10/2026 : une
+configuration copiée avant doit être recopiée). La configuration exacte, avec
 le chemin de Python et celui d'AIODOS sur ta machine, est prête à copier dans **Réglages →
-Autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
+Applications et autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
 `%APPDATA%\Claude\claude_desktop_config.json` (Settings → Developer → « Edit Config »), puis
 on relance Claude Desktop. Ce fichier n'accepte que ce genre de serveur : les « connecteurs »
 distants de Claude Desktop passent par les serveurs d'Anthropic, qui ne joignent pas
@@ -260,8 +301,9 @@ distants de Claude Desktop passent par les serveurs d'Anthropic, qui ne joignent
 ```json
 {"mcpServers": {"aiodos": {
   "command": "C:\\…\\python.exe",
-  "args": ["-m", "aiodos.gateway.mcp_stdio"],
-  "env": {"PYTHONPATH": "C:\\…\\AIODOS", "PYTHONIOENCODING": "utf-8"}}}}
+  "args": ["-P", "-m", "aiodos.gateway.mcp_stdio"],
+  "env": {"PYTHONPATH": "C:\\…\\AIODOS", "PYTHONIOENCODING": "utf-8",
+          "PYTHONSAFEPATH": "1"}}}}
 ```
 
 AIODOS doit tourner, la passerelle ouverte. Après une mise à jour d'AIODOS installée à côté de
@@ -270,12 +312,23 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 ## 8. Limites
 
 - Pas de gestion des modèles par la passerelle (`/api/pull`, `create`, `delete`…) : on les
-  installe avec Ollama.
+  installe dans AIODOS (« Installer un modèle ») ou avec Ollama.
 - Une machine appairée ne reçoit ni outils, ni images, ni format imposé (§ 2).
+- Moteur intégré : un texte à transformer en embedding fait au plus 2048 jetons (de l'ordre
+  de 6 000 caractères de français avec nomic-embed-text ; au-delà, refusé : à découper ;
+  Ollama, lui, le tronquait) et le nombre de jetons lus n'est pas
+  donné (0) ; le contexte est celui du moteur, quel que soit `num_ctx` ; `template` et
+  `context` de `/api/generate` (propres à Ollama) sont refusés : la conversation passe par
+  `/api/chat`.
+- Une réponse attendue sans flux (`stream: false`) par `/v1/chat/completions` ne s'arrête
+  pas en route si l'outil part : le moteur n'envoie rien avant la fin (en flux, et par l'API
+  d'Ollama, elle s'arrête).
 - Pas de connexion depuis une autre machine : 127.0.0.1 seulement (un conteneur Docker
   Desktop de cette machine passe en principe par `host.docker.internal`, § 3).
 - Pas de CORS : un outil qui tourne dans le navigateur (extension, page web) ne peut pas
   l'utiliser.
+- Une requête fait au plus 64 Mio (de quoi porter des images en base64) : au-delà, 413, sans
+  que le reste soit lu.
 - Le nombre de jetons d'une réponse venue d'une machine appairée n'est connu que si elle a
   une version d'AIODOS qui le donne ; sinon 0.
 
@@ -284,7 +337,9 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
 - `aiodos/gateway/server.py` : le serveur (127.0.0.1, port, ouverture et fermeture sans
   relancer), les trois verrous (Host, Origin, clé) ; `access.py` : la clé.
 - `openai_api.py`, `ollama_api.py` : les deux API ; `catalog.py` : les modèles proposés ;
-  `answer.py` : relais vers l'Ollama local ou conversation par une machine appairée.
+  `answer.py` : relais vers l'Ollama local ou conversation par une machine appairée ;
+  `engine.py` : la réponse du moteur intégré (son routeur, `aiodos/llm/integrated.forward`,
+  ou la façade `services/ollama.py`).
 - `mcp_server.py` : le serveur MCP ; `mcp_stdio.py` : le pont stdio.
 - `aiodos/network/placement.py` : le choix automatique de la machine qui répond, commun aux
   conversations d'AIODOS et à la passerelle.
