@@ -346,11 +346,13 @@ def normalize(body, *, app_id: str, where: list, inventory: dict | None) -> dict
             raise Invalid(exc.code, str(exc), param="items", item=n, **exc.detail) from exc
         if comfy_graph.tokens(graph)["seed"] and item["seed"] is None:
             item["seed"] = secrets.randbelow(2 ** 32)
-    outputs = [comfy_graph.outputs(g, defs) for g in graphs]
+    # Les aperçus (PreviewImage…) sont retirés au calcul : ils ne comptent pas comme sorties
+    outputs = [[n for n in comfy_graph.outputs(g, defs)
+                if g[n]["class_type"] not in comfy_graph.PREVIEWS] for g in graphs]
     for i, found in enumerate(outputs):
         if not found:
-            raise Invalid("graph_invalid", "Ce graphe n'a aucun nœud de sortie (SaveImage…).",
-                          param="graphs", graph=i)
+            raise Invalid("graph_invalid", "Ce graphe n'enregistre aucun fichier (SaveImage…) : "
+                          "les aperçus ne sont pas gardés.", param="graphs", graph=i)
     priority = body.get("priority", "normal")
     if priority not in PRIORITIES:
         raise Invalid("invalid_request", "« priority » : high, normal ou low.", param="priority")

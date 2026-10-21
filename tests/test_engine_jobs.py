@@ -145,6 +145,12 @@ def test_refused_before_the_queue(comfy):
                           "items": [{"set": [["3", "model", "x"]]}]},
                          app_id=APP, where=["here"], inventory=comfyui.inventory(comfy.url))
     assert caught.value.code == "patch_invalid"
+    preview_only = {**{k: v for k, v in GRAPH.items() if k != "9"},
+                    "11": {"class_type": "PreviewImage", "inputs": {"images": ["8", 0]}}}
+    with pytest.raises(engine.Invalid) as caught:           # un aperçu n'est pas une sortie
+        engine.normalize({"graph": preview_only, "inputs": {"ref0": {"sha256": sha}}},
+                         app_id=APP, where=["here"], inventory=comfyui.inventory(comfy.url))
+    assert caught.value.code == "graph_invalid"
     assert db.query_one("SELECT COUNT(*) AS n FROM jobs")["n"] == 0
 
 
