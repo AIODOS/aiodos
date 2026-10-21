@@ -23,7 +23,7 @@ from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
 from aiodos.network import placement, remote_models
 from aiodos.network.client import PeerError
-from aiodos.services import cloud, ollama
+from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.gateway")
 
@@ -100,12 +100,6 @@ def plan(model_id, executor, *, local_only=False, prefer_local=False, where=None
         raise GatewayError(404, str(exc), code="model_not_found", param="model") from exc
     except placement.NoMachine as exc:
         raise GatewayError(404, str(exc), code="model_not_found", param="model") from exc
-    # Rien vers le cloud par ici, quel que soit le chemin : son envoi se valide dans
-    # l'interface, message par message
-    models = [m for m in models if not cloud.provider_of(m)]
-    if not models:
-        raise GatewayError(404, f"« {model_id} » n'est pas un modèle du cercle AIODOS.",
-                           code="model_not_found", param="model")
     if where is not None:
         allowed = [m for m in models if circle_of(m) in where]
         if not allowed:

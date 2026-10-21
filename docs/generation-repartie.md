@@ -297,8 +297,8 @@ et les créations en cours.
   (le réglage `images_from_friends`), et la création repart aussitôt.
 - **Le modèle** : celui choisi la dernière fois pour ce genre s'il peut calculer, sinon
   le premier prêt, ici ou chez mes machines en ligne ; ceux à licence restrictive en
-  dernier. Si aucun ne peut, la conversation le dit, avec un lien vers la vue Images et
-  vidéos, et rien n'est gardé.
+  dernier. Si aucun ne peut, la conversation le dit, avec un lien vers Réglages → Modèles,
+  où il se télécharge, et rien n'est gardé.
 - **Ce qui est gardé** : le message, puis une réponse de l'assistant dont la colonne
   `media` (migration 11) garde la demande : genre, modèle, description, nombre, taille,
   graine, lot et travail. La réponse montre les images à mesure qu'elles arrivent (lot de

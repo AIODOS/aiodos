@@ -455,9 +455,6 @@ def test_lent_models_and_the_rules_of_the_circle(tool, lender):
         "url": "data:image/png;base64,iVBORw0KGgo="}}]}]
     refused = tool.post("/v1/chat/completions", {"model": LENT, "messages": image})
     assert refused.status_code == 400 and "cette machine" in refused.json()["error"]["message"]
-    for model in ("cloud:mistral", "local:cloud:mistral"):
-        assert tool.post("/v1/chat/completions", {"model": model,
-                                                  "messages": HELLO}).status_code == 404
 
 
 def test_a_tool_that_leaves_stops_the_router(tool):
@@ -502,8 +499,8 @@ def test_mcp_with_the_integrated_engine(tool):
                                      "arguments": {"message": "Salut", "modele": LOCAL}})
     assert said["structuredContent"] == {"reponse": ANSWER, "modele": LOCAL,
                                          "machine": "cette machine"}
-    # Sans modèle d'ici par défaut : le premier qui converse, pas le modèle d'embedding
-    settings.set_value("default_model", "cloud:mistral")
+    # Sans modèle par défaut : le premier qui converse, pas le modèle d'embedding
+    settings.set_value("default_model", "")
     default = _rpc(tool, "tools/call", {"name": "converser", "arguments": {"message": "Salut"}})
     assert not default["isError"] and default["structuredContent"]["reponse"] == ANSWER
     assert default["structuredContent"]["modele"] != EMBEDDING

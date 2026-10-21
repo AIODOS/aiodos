@@ -592,12 +592,13 @@ droits réels du dossier et de la base. Ce qu'AIODOS écrit pour l'utilisateur h
 données (« Enregistrer sous… », une galerie dans un dossier choisi) garde les droits
 habituels de l'utilisateur.
 
-Il n'y a pas de coffre hors de Windows : les clés des paires et du cloud restent en clair
+Il n'y a pas de coffre hors de Windows : les clés des paires restent en clair
 dans la base, et seuls ces droits les ferment aux autres comptes. Pas à un programme lancé
 sous le même compte. Les versions d'avant le 20/10/2026 laissaient la base lisible par
 tous (0644), et fermer les droits après coup ne reprend pas un secret déjà lu. Sur une
-machine partagée, après la mise à jour : refaire les appairages, et changer les clés du
-cloud (Mistral, Qwen) et celle de la passerelle.
+machine partagée, après la mise à jour : refaire les appairages, et changer la clé de la
+passerelle. Les clés du cloud (Mistral, Qwen) d'avant le 21/10/2026 sont effacées de la base
+avec le retrait du cloud (migration 23).
 
 **Windows.** Rien ne change : les droits du profil (`%LOCALAPPDATA%`) et DPAPI. Une copie
 lancée depuis les sources hors du profil garde les droits du dossier où elle est posée :
@@ -860,7 +861,7 @@ le n° 3 et faire auditer la passerelle.
   suivis), publier la 1.0.0 avec sa note de version, reconstruire et installer l'appli du
   téléphone, puis mettre à jour toutes les machines avant tout nouvel appairage.
 - **Sur une machine Linux ou macOS partagée** qui a fait tourner une version d'avant :
-  refaire les appairages, et changer les clés du cloud et de la passerelle (§ 3.8).
+  refaire les appairages, et changer la clé de la passerelle (§ 3.8).
 - **À trancher** : les liens mailto dans l'appli Android (§ 6) ; le prêt de carte, activé
   par défaut pour mes machines (§ 3.6).
 - **À lancer une fois** sur un vrai Linux ou macOS, dans `/tmp` et pas dans `/mnt/c` :

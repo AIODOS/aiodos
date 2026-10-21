@@ -8,7 +8,7 @@ DEFAULT_TITLE = "Nouvelle conversation"
 ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une erreur (affichée)
 ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
 # À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
-# doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
+# doit pas les recevoir (modèle prêté par un ami : cf. pipeline.peers_allowed)
 WITHHELD = ("(Réponse non transmise à ce modèle : elle s'appuie sur des documents, des "
             "souvenirs ou des passages qui ne lui sont pas confiés.)")
 

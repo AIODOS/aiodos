@@ -1,6 +1,6 @@
 """Les secrets de cette machine, à l'abri sur le disque (étape 2.3 de
-docs/phase2-internet.md) : les clés des paires de machines appairées et les clés d'API
-du cloud.
+docs/phase2-internet.md) : les clés des paires de machines appairées et la clé générale
+de la passerelle.
 
 Sous Windows, ils sont chiffrés par DPAPI pour le compte de l'utilisateur
 (CryptProtectData) : la base copiée sur une autre machine, ou lue depuis un autre compte,
@@ -11,7 +11,7 @@ privé de l'appli). Cela les ferme aux autres comptes de la machine, pas à un p
 lancé sous le même compte, ni à qui emporte une copie de la base. Fermer les droits après
 coup ne reprend pas un secret déjà lu : la base des versions d'avant le 20/10/2026 était
 lisible par tous (0644), et un descripteur ouvert avant le chmod le reste. Sur une machine
-partagée, refaire les appairages et changer les clés du cloud et de la passerelle.
+partagée, refaire les appairages et changer la clé de la passerelle.
 
 Un secret protégé commence par MARK (octets) ou TEXT_MARK (texte). Un secret enregistré par
 cette version est protégé tout de suite. Une valeur sans marque (enregistrée avant) est

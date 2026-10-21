@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -370,6 +370,13 @@ MIGRATIONS = {
     CREATE INDEX IF NOT EXISTS ix_gateway_files_job ON gateway_files(job_id, created);
     CREATE INDEX IF NOT EXISTS ix_gateway_files_app ON gateway_files(app_id, fetched_at);
     ALTER TABLE units ADD COLUMN run_uuid TEXT;
+    """,
+    # Le cloud est retiré (21/10/2026, décision de l'auteur) : ses réglages, clés d'API
+    # comprises, sont effacés, et un modèle par défaut du cloud revient à celui d'AIODOS
+    23: """
+    DELETE FROM settings WHERE key IN ('cloud_confirm', 'mistral_key', 'qwen_key',
+                                       'mistral_cloud_model', 'qwen_cloud_model');
+    DELETE FROM settings WHERE key = 'default_model' AND value LIKE '"cloud:%';
     """,
 }
 

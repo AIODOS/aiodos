@@ -6,7 +6,8 @@ import { state } from '../state.js';
 export const AUTO = 'auto:';
 const CLUSTER = 'reparti:';
 
-/** [{ name, size, auto: identifiant automatique ou null, machines: [{ id, label, slow }] }] */
+/** [{ name, size, auto: identifiant automatique ou null, machines: [{ id, label, slow }] }],
+ *  du plus puissant au moins puissant (le plus gros d'abord). */
 export function catalog() {
   const byName = new Map();
   const entry = name => {
@@ -29,7 +30,13 @@ export function catalog() {
                         slow: m.fits_vram === false });
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  return [...byName.values()].sort(byPower);
+}
+
+/** Du plus puissant au moins puissant : le plus gros d'abord, puis par nom. */
+export function byPower(a, b) {
+  return (b.size || 0) - (a.size || 0)
+    || String(a.name || a.label || '').localeCompare(String(b.name || b.label || ''), 'fr');
 }
 
 /** Nom du modèle désigné par un identifiant : « auto:x », « peer:<machine>:x »,
@@ -56,7 +63,7 @@ export function modelLabel(id, here = false) {
   }
   if (id?.startsWith('peer:')) return `${modelName(id)} · autre machine`;
   if (id?.startsWith(CLUSTER)) return `${modelName(id)} · réparti`;
-  return here && id && !id.startsWith('cloud:') ? `${id} · cette machine` : (id || '');
+  return here && id ? `${id} · cette machine` : (id || '');
 }
 
 /** Identifiant à utiliser pour ce modèle quand on ne désigne pas de machine. */
@@ -67,5 +74,5 @@ export function defaultChoice(entry) {
 /** Modèle par défaut réglé avant le mode automatique : le nom seul y désignait le modèle,
  *  pas la machine ; il vaut désormais « automatique ». */
 export function asDefault(id) {
-  return id && !/^(auto|peer|cloud|reparti):/.test(id) ? AUTO + id : id;
+  return id && !/^(auto|peer|reparti):/.test(id) ? AUTO + id : id;
 }

@@ -4,7 +4,7 @@ import { $, h, esc, bytes, duration, linkAction, linkKind } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
-import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
+import { AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, here, integrated } from './model-install.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
@@ -102,7 +102,7 @@ export function mountChat(container) {
     }
   });
   document.addEventListener('keydown', e => {
-    // Échap déjà pris par une fenêtre de dialogue (validation du cloud…) : rien de plus
+    // Échap déjà pris par une fenêtre de dialogue (validation d'une recherche web…) : rien de plus
     if (e.key !== 'Escape' || e.defaultPrevented) return;
     if (busy) stop();
     else if (editing) stopEditing();
@@ -149,10 +149,10 @@ function vramTotal() {
 }
 
 /** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
- *  précise, un gros modèle réparti, ou un modèle du cloud. */
+ *  précise, ou un gros modèle réparti. */
 function selectedModel() {
   const value = el.model.value;
-  if (/^(cloud|reparti):/.test(value)) return value;
+  if (/^reparti:/.test(value)) return value;
   const entry = entries.find(e => e.name === value);
   return entry ? (el.machine.value || defaultChoice(entry)) : '';
 }
@@ -163,8 +163,7 @@ function fillModels() {
   entries = catalog();
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
-  const cloud = state.models.filter(m => m.group === 'cloud');
-  const cluster = state.models.filter(m => m.group === 'cluster');
+  const cluster = state.models.filter(m => m.group === 'cluster').sort(byPower);
   el.model.innerHTML = '';
   const group = (label, items) => {
     if (!items.length) return;
@@ -180,7 +179,6 @@ function fillModels() {
       : `${e.name} · ${e.machines.map(m => m.label).join(', ')} · ${bytes(e.size)}`]));
   group('Réparti entre mes machines · cartes graphiques réunies', cluster.map(m => [m.id,
     `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`]));
-  group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));
   selectModel(wanted);
   // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un
   el.banner.innerHTML = progressBar(installing) + (local.length ? '' : remote.length ? `
@@ -197,15 +195,13 @@ function fillModels() {
 }
 
 /** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,
- *  « reparti:x », « cloud:… »). */
+ *  « reparti:x »). */
 function selectModel(id) {
-  const value = /^(cloud|reparti):/.test(id || '') ? id : modelName(id);
+  const value = /^reparti:/.test(id || '') ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
-  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines, puis un
-  // modèle du cloud qui a sa clé ; jamais d'office un modèle du cloud sans clé
+  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
-  const keyed = state.models.find(m => m.group === 'cloud' && m.has_key)?.id;
-  const usable = values.filter(v => v && (!/^cloud:/.test(v) || v === keyed));
+  const usable = values.filter(Boolean);
   if (!values.includes(value) && !here && !usable.length) {
     if (!values.includes('')) el.model.prepend(new Option('Aucun modèle prêt pour l’instant', ''));
     el.model.value = '';
@@ -262,7 +258,7 @@ function showPreparation(ev) {
 
 async function rememberModel() {
   const id = selectedModel();
-  if (id && !id.startsWith('cloud:')) {
+  if (id) {
     try { state.settings = await put('/settings', { default_model: id }); } catch { /* sans gravité */ }
   }
 }
@@ -344,7 +340,7 @@ function showWelcome() {
     <div class="welcome">
       <img src="/logo.png?v=serpents" alt="">
       <h1>Que fait-on aujourd'hui&nbsp;?</h1>
-      <p>Tout tourne sur ta machine. Le web et le cloud ne servent qu'avec ton accord.</p>
+      <p>Tout tourne sur tes machines. Le web ne sert qu'avec ton accord.</p>
     </div>`);
   el.list.append(welcome);
 }
@@ -654,40 +650,7 @@ async function confirmOutgoing(text, model, pre) {
 
   const peers = await confirmPeers(text, pre);
 
-  let cloudConfirmed = false;
-  if (pre.cloud) {
-    const label = state.models.find(m => m.id === model)?.label || pre.cloud;
-    if (!pre.cloud_has_key) {
-      const r = await modal({
-        title: 'Clé API manquante', iconName: 'cloud',
-        text: `Il faut une clé API pour utiliser ${label}. Tu peux la saisir dans les Réglages.`,
-        confirm: 'Ouvrir les réglages',
-      });
-      if (r.ok) emit('view:show', 'settings');
-      return null;
-    }
-    if (pre.cloud_confirm && !session.cloudConsent.has(pre.cloud)) {
-      const leaving = ['ton message', "l'historique de cette conversation"];
-      // Ce que reçoit le cloud (pipeline.visible_libraries) : ni les bibliothèques gardées
-      // sur ce PC, ni la mémoire des conversations
-      if (state.settings?.knowledge_enabled) {
-        leaving.push('la liste des fichiers de tes bibliothèques et les extraits utilisés pour '
-          + 'répondre (sauf les bibliothèques gardées sur ce PC, et ta mémoire des conversations)');
-      }
-      if (web) leaving.push('les résultats web');
-      const r = await modal({
-        title: 'Envoyer vers le cloud ?', iconName: 'cloud',
-        text: `Cette réponse sera calculée par ${label}, sur les serveurs de ${pre.cloud_host}.\n` +
-              `Quitteront ta machine : ${leaving.join(', ')}.`,
-        quote: text.slice(0, 400), confirm: 'Envoyer', cancel: 'Annuler',
-        check: 'Ne plus demander pour ce fournisseur pendant cette session',
-      });
-      if (!r.ok) return null;
-      if (r.checked) session.cloudConsent.add(pre.cloud);
-    }
-    cloudConfirmed = true;
-  }
-  return { web, cloudConfirmed, peers };
+  return { web, peers };
 }
 
 // « Chez les autres » : la question part chez les machines qui m'ouvrent leurs bibliothèques
@@ -696,8 +659,8 @@ async function confirmOutgoing(text, model, pre) {
 async function confirmPeers(text, pre) {
   if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return [];
   if (!pre.consult_allowed) {
-    toast('Les passages trouvés chez tes machines et tes amis ne vont ni au cloud, ni à un modèle '
-      + 'prêté par un ami : cette réponse s\'en passera.', 'info', 7000);
+    toast('Les passages trouvés chez tes machines et tes amis ne vont pas à un modèle prêté par '
+      + 'un ami : cette réponse s\'en passera.', 'info', 7000);
     return [];
   }
   const ids = pre.consult.map(m => m.node_id);
@@ -773,7 +736,7 @@ async function sendNow(asText, replace) {
   let failure = null;
   try {
     await streamChat({
-      text, model, web: go.web, cloud_confirmed: go.cloudConfirmed, peer_libraries: go.peers,
+      text, model, web: go.web, peer_libraries: go.peers,
       conversation_id: state.currentConversation?.id ?? null, ...swap,
     }, ev => {
       if (ev.type === 'start') {

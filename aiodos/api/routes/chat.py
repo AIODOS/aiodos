@@ -5,8 +5,8 @@ tout de suite et suspend les nouvelles unités GPU le temps de répondre (si le
 modèle tourne ici ; servi par une machine appairée, c'est elle qui suspend les siennes).
 En mode automatique (« auto:<modèle> »), la machine qui répond est choisie au moment
 d'envoyer (network/placement.py) ; l'événement « route » dit laquelle.
-La validation des envois sortants (web, cloud) est revérifiée ici : même si
-l'interface était contournée, rien ne part dans le cloud sans accord.
+La recherche web n'a lieu que si l'envoi la dit validée : même si l'interface était
+contournée, rien ne part sur le web sans accord.
 """
 import asyncio
 import logging
@@ -22,7 +22,6 @@ from aiodos.api.events import sse
 from aiodos.chat import conversations, creations, pending, pipeline
 from aiodos.jobs.kinds import index
 from aiodos.network import placement
-from aiodos.services import cloud
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger("aiodos.chat")
@@ -40,7 +39,6 @@ class ChatIn(BaseModel):
     model: str
     conversation_id: int | None = None
     web: bool = False                   # recherche web validée par l'utilisateur
-    cloud_confirmed: bool = False       # envoi cloud validé par l'utilisateur
     libraries: bool | None = None
     conversations: bool | None = None
     think: bool | None = None
@@ -74,13 +72,6 @@ async def chat(body: ChatIn, request: Request):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "Message vide.")
-    provider = cloud.provider_of(body.model)
-    if provider:
-        if not cloud.has_key(provider):
-            raise HTTPException(400, f"Aucune clé API pour {cloud.PROVIDERS[provider]['label']}.")
-        if settings.get("cloud_confirm") and not body.cloud_confirmed:
-            raise HTTPException(409, "L'envoi vers le cloud doit être validé.")
-
     executor = request.app.state.executor
     bus = request.app.state.bus
     try:                          # machines à essayer, la mieux placée d'abord
@@ -151,7 +142,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
             loop.call_soon_threadsafe(inbox.put_nowait, item)
         try:
             # Arrêtée pendant la préparation (recherche web, bibliothèques des autres) : rien
-            # ne part ensuite, ni au cloud, ni à une autre machine. Et l'arrêt va à la
+            # ne part ensuite vers aucune autre machine. Et l'arrêt va à la
             # recherche web elle-même : Stop (ou le client parti) interrompt la page en cours
             # de lecture, et les suivantes ne sont pas lues
             web = pipeline.web_context(text, stop) if body.web and not stop.is_set() else None

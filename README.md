@@ -16,7 +16,7 @@ pour une seule carte graphique se répartit entre plusieurs.
 > **Tes machines d'abord, le reste avec ton accord.** Tes machines appairées calculent
 > ensemble dès la première ouverture ; tes amis et le réseau public, seulement si tu
 > l'acceptes. Entre machines, tout est chiffré, et rien n'est gardé par celle qui calcule.
-> Le web et le cloud restent optionnels, et chaque envoi se valide d'abord.
+> Jamais de cloud ; le web reste optionnel, et chaque recherche se valide d'abord.
 
 *AI* + *hodos* : « le chemin » en grec, celui de « méthode » et de « synode » (faire route
 ensemble).
@@ -32,7 +32,7 @@ ensemble).
 
 ## Ce que fait la phase 0
 
-- **Conversations** avec les modèles locaux (et Mistral/Qwen cloud en option),
+- **Conversations** avec les modèles de tes machines (aucun modèle du cloud),
   réponses en streaming, rendu Markdown et coloration du code, dossiers, renommage,
   recherche dans leur contenu ; « Régénérer » la dernière réponse (avec le modèle choisi
   à ce moment) et « Modifier » le dernier message, la suite de la conversation et sa
@@ -112,8 +112,7 @@ Conversation). Quelle que soit la machine, une bibliothèque gardée sur ce PC e
 des conversations ne la suivent jamais, ni les réponses qui s'en sont servies, ni celles qui
 ont pu les reprendre ensuite dans la même conversation (l'historique envoyé les remplace par
 une mention) ; chez un ami, seules les bibliothèques partagées avec tes amis donnent leurs
-extraits. Un modèle du cloud, après validation, ne reçoit ni les bibliothèques gardées sur ce
-PC, ni la mémoire des conversations.
+extraits.
 
 **Ouvrir AIODOS aux applications** (PANDORA, ARKLIGHT PC…) : chaque appli demande l'accès
 d'elle-même ; une carte s'affiche dans AIODOS avec un code à 6 chiffres à comparer, ce qu'elle
@@ -197,9 +196,10 @@ une » : une variante). Chacune devient une
 unité de la file, calculée ici ou par mes machines qui ont le même modèle et prêtent leur
 puissance ; elle s'affiche dans la conversation et n'est gardée qu'ici (dans
 `Images\AIODOS` pour AIODOS installé, ou le dossier choisi dans les Réglages). La vue
-Images et vidéos réunit la galerie et les modèles. Le moteur est
+Images et vidéos réunit les créations en cours et la galerie ; les modèles se gèrent dans
+Réglages → Modèles, avec ceux des discussions, du plus puissant au moins puissant. Le moteur est
 [stable-diffusion.cpp], livré avec les mises à jour, et le modèle Z-Image Turbo
-(Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis la vue,
+(Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis les Réglages,
 ou copié d'une de mes machines qui l'a déjà, sans Internet. Sur une
 RTX 4070 de portable : 22 s par image en 1024 × 1024. Pour la vidéo, Wan 2.1 (Apache-2.0,
 7,2 Go) : 2 s de vidéo en 480p en moins de 4 minutes ; MiniMax H3 (vidéo et son) est aussi
@@ -294,7 +294,7 @@ aiodos/
 │                      d'AIODOS et d'Ollama (models.py), catalogue et téléchargement
 │                      (catalog.py, download.py), mêmes fonctions qu'Ollama (integrated.py)
 ├── services/          modèles (ollama.py : moteur intégré ou Ollama), extraction de
-│                      fichiers, médias, web, cloud
+│                      fichiers, médias, web
 ├── knowledge/         bibliothèques : stockage, découpage, recherche vectorielle,
 │                      ce qui en est consultable par les autres machines (visibility.py)
 ├── chat/              conversations et préparation des réponses

@@ -23,7 +23,7 @@ from aiodos.chat import conversations, creations
 from aiodos.cluster import group as cluster
 from aiodos.knowledge import search, store
 from aiodos.network import placement, remote_models, remote_search, sharing
-from aiodos.services import cloud, ollama, web
+from aiodos.services import ollama, web
 
 log = logging.getLogger("aiodos.chat")
 
@@ -72,16 +72,11 @@ _RULE_WEB_NOTHING = ("RAPPEL IMPORTANT : la recherche web n'a rien donné d'util
 
 
 def preflight(text: str, model: str, conversation_id=None, replace_from=None) -> dict:
-    """Ce que l'interface doit faire valider avant l'envoi (web, cloud). replace_from : le
+    """Ce que l'interface doit faire valider avant l'envoi (web). replace_from : le
     message que celui-ci remplacera (« Modifier »)."""
-    provider = cloud.provider_of(model)
     return {
         "remote": remote_models.peer_name(model),     # machine appairée qui répondra
         "web_intent": bool(WEB_INTENT.search(text or "")),
-        "cloud": provider,
-        "cloud_host": cloud.PROVIDERS[provider]["host"] if provider else None,
-        "cloud_has_key": cloud.has_key(provider) if provider else None,
-        "cloud_confirm": bool(settings.get("cloud_confirm")),
         "consult": _consult_targets(),                 # chez qui partirait la question
         "consult_allowed": peers_allowed(model),       # et si ce modèle peut s'en servir
         "create": _creation(text, conversation_id, replace_from),   # image ou vidéo à créer
@@ -112,15 +107,15 @@ def runs_here(model) -> bool:
     """Le modèle tourne-t-il sur ce PC (et occupe-t-il son GPU) ? Pour le mode
     automatique, on ne le sait qu'une fois la machine choisie (placement.run) ; un gros
     modèle réparti ne tourne pas seulement ici."""
-    return not (cloud.provider_of(model) or remote_models.parse(model)
-                or placement.parse(model) or cluster.parse(model))
+    return not (remote_models.parse(model) or placement.parse(model)
+                or cluster.parse(model))
 
 
 def peers_allowed(model) -> bool:
     """Les passages trouvés chez mes machines et mes amis (et les réponses qui s'en servent)
     peuvent-ils aller à ce modèle ? Ils ne vont pas plus loin que mes machines : le
     propriétaire les a ouverts à moi, pas à des tiers. Liste d'autorisations, tout le reste
-    est refusé (cloud, modèle prêté par un ami, toute nouvelle façon de répondre ailleurs) :
+    est refusé (modèle prêté par un ami, toute nouvelle façon de répondre ailleurs) :
     - un modèle installé ici (Ollama) ;
     - un gros modèle réparti : il tourne ici, avec les cartes de mes seules machines
       (cluster/group.py) ;
@@ -145,7 +140,7 @@ def peers_allowed(model) -> bool:
 
 def available_models() -> list:
     """Modèles de conversation : en mode automatique (une fois chacun), locaux (Ollama),
-    ceux de mes machines, les gros modèles répartis entre elles, puis cloud."""
+    ceux de mes machines, puis les gros modèles répartis entre elles."""
     models = []
     try:
         installed = ollama.list_models()
@@ -167,9 +162,6 @@ def available_models() -> list:
     except Exception as exc:
         log.warning("Modèles répartis indisponibles : %s", exc)
     models[:0] = placement.auto_entries(models)
-    for name, spec in cloud.PROVIDERS.items():
-        models.append({"id": cloud.MODEL_PREFIX + name, "label": spec["label"],
-                       "group": "cloud", "caps": [], "has_key": cloud.has_key(name)})
     return models
 
 
@@ -217,13 +209,12 @@ def web_context(question, stop=None) -> tuple:
 def visible_libraries(destination) -> set | None:
     """Bibliothèques dont le sommaire et les extraits peuvent accompagner une conversation,
     selon la machine qui répond (placement.destination) : None, cette machine : toutes ;
-    « mine », une de mes machines, et « cloud », un modèle du cloud après validation
-    (décision de l'auteur, 18/10/2026) : toutes sauf celles gardées sur ce PC ; « friend »,
-    la machine d'un ami : celles partagées avec mes amis. La mémoire des conversations ne
+    « mine », une de mes machines : toutes sauf celles gardées sur ce PC ; « friend », la
+    machine d'un ami : celles partagées avec mes amis. La mémoire des conversations ne
     va qu'à cette machine (build_messages)."""
     if destination is None:
         return None
-    if destination in ("mine", "cloud"):
+    if destination == "mine":
         return {c["id"] for c in store.list_collections() if c["scope"] != "local"}
     return store.shareable_ids()
 
@@ -469,11 +460,8 @@ def build_messages(history, question, *, libraries, conversations, web_search,
 
 
 def generate(model, messages, think=True, stop=None):
-    """Couples (genre, texte) depuis le modèle local, d'une machine appairée, ou cloud."""
-    provider = cloud.provider_of(model)
-    if provider:
-        yield from cloud.chat_stream(provider, messages, stop=stop)
-    elif remote_models.parse(model):
+    """Couples (genre, texte) depuis le modèle local, d'une machine appairée, ou réparti."""
+    if remote_models.parse(model):
         yield from remote_models.chat_stream(model, messages, think, stop)
     elif cluster.parse(model):
         yield from cluster.chat_stream(model, messages, think, stop)

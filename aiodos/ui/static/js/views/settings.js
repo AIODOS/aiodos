@@ -10,6 +10,7 @@ import { bindEngines, enginesCard, loadEngines } from './engines.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
+import { modelsCard, bindModels, loadImageModels, mountModels } from './settings-models.js';
 
 const SECTIONS = [
   { title: 'Conversation', icon: 'chat', fields: [
@@ -26,6 +27,29 @@ const SECTIONS = [
       help: 'Ce qu\'un modèle lit d\'un coup : la conversation, les extraits et la réponse. Plus grand, il prend '
         + 'plus de mémoire vidéo ; le moteur repart avec le nouveau réglage. Les applications ne le changent jamais.' },
     { key: 'system_prompt', label: 'Consignes générales données à l\'IA', type: 'textarea' },
+  ] },
+  // Les modèles : ceux des discussions, puis ceux des images et des vidéos (settings-models.js),
+  // du plus puissant au moins puissant ; l'onglet Images y renvoie (« settings:focus »)
+  { title: 'Modèles', icon: 'layers', id: 'modeles', fields: [
+    { type: 'models' },
+    { type: 'subhead', label: 'Images et vidéos : dossiers, carte et amis' },
+    { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
+      help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
+        + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },
+    { key: 'images_device', label: 'Carte qui calcule les images', type: 'text',
+      help: 'Vide : la meilleure carte graphique (jamais celle intégrée au processeur s\'il y en a une autre). '
+        + 'Sinon son nom (« Vulkan1 », « CUDA0 »), ou « CPU ».' },
+    { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'folder',
+      help: 'Vide : data/images/models. Les modèles se téléchargent ci-dessus.' },
+    { key: 'images_other_dirs', label: 'Autres dossiers de modèles sur ce PC', type: 'textarea',
+      help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
+        + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
+        + 'téléchargé, sans prendre de place en plus sur le même disque.' },
+    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'folder',
+      help: 'Vide : Images\\AIODOS (le dossier Images de Windows) pour AIODOS installé. Les images déjà créées '
+        + 'restent où elles sont et s’affichent toujours.' },
+    { key: 'sdcpp_dir', label: 'Dossier de stable-diffusion.cpp', type: 'folder',
+      help: 'Le dossier qui contient sd-server. Vide : celui livré avec AIODOS (installeur et mises à jour).' },
   ] },
   { title: 'Connaissances', icon: 'book', fields: [
     { key: 'knowledge_enabled', label: 'Utiliser les bibliothèques par défaut', type: 'switch' },
@@ -49,15 +73,7 @@ const SECTIONS = [
         + 'est demandée avant d\'envoyer une requête, ou une fois pour la session.' },
     { key: 'web_results', label: 'Pages lues par recherche', type: 'number', min: 1, max: 8 },
   ] },
-  { title: 'Cloud', icon: 'cloud', fields: [
-    { key: 'cloud_confirm', label: 'Demander une validation avant chaque envoi vers le cloud', type: 'switch',
-      help: 'Recommandé : rien ne quitte ta machine sans ton accord.' },
-    { key: 'mistral_key', label: 'Clé API Mistral', type: 'secret' },
-    { key: 'mistral_cloud_model', label: 'Modèle Mistral', type: 'text' },
-    { key: 'qwen_key', label: 'Clé API Qwen (DashScope)', type: 'secret' },
-    { key: 'qwen_cloud_model', label: 'Modèle Qwen', type: 'text' },
-  ] },
-  { title: 'Images, audio et vidéo', icon: 'image', fields: [
+  { title: 'Lire les images, l\'audio et la vidéo des bibliothèques', icon: 'eye', fields: [
     { key: 'media_vision', label: 'Lire les images (texte + description)', type: 'switch' },
     { key: 'media_vision_mode', label: 'Ce qu\'on garde des images', type: 'select', options: [
       ['both', 'Texte + description'], ['ocr', 'Texte seulement (OCR)'], ['describe', 'Description seulement']] },
@@ -90,26 +106,6 @@ const SECTIONS = [
     { key: 'lend_gpu_device', label: 'Carte prêtée', type: 'text',
       help: 'Vide : la carte qui a le plus de mémoire libre. Sinon son nom (« Vulkan1 », « CUDA0 »), '
         + 'ou « CPU » pour prêter la mémoire vive (bien plus lent).' },
-  ] },
-  { title: 'Images (stable-diffusion.cpp)', icon: 'image', fields: [
-    { key: 'sdcpp_dir', label: 'Dossier de stable-diffusion.cpp', type: 'folder',
-      help: 'Le dossier qui contient sd-server. Vide : data/engines/stable-diffusion.cpp (il sera bientôt '
-        + 'livré avec les mises à jour, comme llama.cpp).' },
-    { key: 'images_models_dir', label: 'Dossier des modèles d\'images', type: 'folder',
-      help: 'Vide : data/images/models. Les modèles se téléchargent depuis la vue Images.' },
-    { key: 'images_other_dirs', label: 'Autres dossiers de modèles sur ce PC', type: 'textarea',
-      help: 'Un dossier par ligne. Toujours regardés : celui de ComfyUI (que PANDORA utilise aussi) et celui de '
-        + 'minimax-h3-local. Un fichier identique, vérifié par son empreinte, y est repris au lieu d\'être '
-        + 'téléchargé, sans prendre de place en plus sur le même disque.' },
-    { key: 'images_out_dir', label: 'Dossier des images et vidéos créées', type: 'folder',
-      help: 'Vide : Images\\AIODOS (le dossier Images de Windows) pour AIODOS installé. Les images déjà créées '
-        + 'restent où elles sont et s’affichent toujours.' },
-    { key: 'images_from_friends', label: 'Faire calculer mes images par mes amis qui le proposent', type: 'switch',
-      help: 'Quand cette machine ne peut pas calculer un modèle, un ami qui prête sa carte graphique pour les images '
-        + 'le fait : ta description et le résultat passent chez lui le temps du calcul, sans y être gardés.' },
-    { key: 'images_device', label: 'Carte qui calcule les images', type: 'text',
-      help: 'Vide : la meilleure carte graphique (jamais celle intégrée au processeur s\'il y en a une autre). '
-        + 'Sinon son nom (« Vulkan1 », « CUDA0 »), ou « CPU ».' },
   ] },
   { title: 'Mises à jour', icon: 'retry', fields: [
     { key: 'auto_update', label: 'Installer automatiquement les nouvelles versions', type: 'switch',
@@ -162,7 +158,18 @@ export function mountSettings(container) {
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
   window.addEventListener('pywebviewready', refresh);     // les boutons « Choisir… » des dossiers
-  on('view:shown', view => { if (view === 'settings') { render(); loadUpdates(); loadGateway(); loadEngines(); } });
+  on('view:shown', view => {
+    if (view === 'settings') { render(); loadUpdates(); loadGateway(); loadEngines(); loadImageModels(); }
+  });
+  mountModels();
+  const refreshModels = () => {
+    const box = root && $('#models-box', root);
+    if (box) { box.innerHTML = modelsCard(); bindModels(box); }
+  };
+  on('image-models:loaded', refreshModels);
+  on('models:loaded', refreshModels);
+  // Depuis l'onglet Images (« Gérer les modèles ») : la section Modèles, tout de suite visible
+  on('settings:focus', id => $(`#settings-${id}`, root)?.scrollIntoView({ block: 'start' }));
   on('updates:loaded', () => {
     const box = root && $('#updates-status', root);
     if (box) { box.innerHTML = updatesStatus(); bindUpdates(box); }
@@ -187,6 +194,8 @@ function field(f) {
   if (f.type === 'gateway') return `<div id="gateway-box">${gatewayCard()}</div>`;
   if (f.type === 'approval') return '<div id="approval-box"></div>';
   if (f.type === 'engines') return `<div id="engines-box">${enginesCard()}</div>`;
+  if (f.type === 'models') return `<div id="models-box">${modelsCard()}</div>`;
+  if (f.type === 'subhead') return `<h3 class="settings-sub">${esc(f.label)}</h3>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(f.help)}</div>` : '';
   if (f.type === 'switch') {
@@ -201,11 +210,6 @@ function field(f) {
     const options = f.type === 'model' ? modelOptions(current) : f.options;
     control = `<select class="select" id="${id}" data-key="${f.key}">${options.map(([v, l]) =>
       `<option value="${esc(v)}" ${v === current ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  } else if (f.type === 'secret') {
-    const placeholder = s[`${f.key}_set`] ? `Clé enregistrée (${s[`${f.key}_hint`] || '••••'}) — laisser vide pour la garder` : 'Aucune clé';
-    control = `<div style="display:flex;gap:8px"><input class="input" type="password" id="${id}" data-key="${f.key}"
-      autocomplete="off" placeholder="${esc(placeholder)}">${s[`${f.key}_set`]
-        ? `<button class="btn" data-clear="${f.key}" type="button">Effacer</button>` : ''}</div>`;
   } else if (f.type === 'folder') {       // un dossier : tapé, ou choisi dans la fenêtre d'AIODOS
     control = `<div class="folder-field"><input class="input" type="text" id="${id}" data-key="${f.key}"
       value="${esc(s[f.key])}">${window.pywebview?.api?.pick_folder
@@ -234,7 +238,7 @@ function render() {
   draft = {};
   const form = $('#settings-form', root);
   form.innerHTML = SECTIONS.map(sec => `
-    <div class="card"><h2>${icon(sec.icon)}${esc(sec.title)}</h2>${sec.fields.map(field).join('')}</div>`).join('') +
+    <div class="card"${sec.id ? ` id="settings-${sec.id}"` : ''}><h2>${icon(sec.icon)}${esc(sec.title)}</h2>${sec.fields.map(field).join('')}</div>`).join('') +
     // N'apparaît qu'avec des modifications à enregistrer : toujours affichée, elle cachait
     // le réglage du dessous en faisant défiler la page
     `<div class="save-bar" hidden><div class="save-box"><span>Modifications non enregistrées</span>
@@ -252,9 +256,6 @@ function render() {
     input.addEventListener(input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input',
       () => { draft[key] = read(); bar.hidden = false; });
   });
-  form.querySelectorAll('[data-clear]').forEach(b => {
-    b.onclick = () => { draft[b.dataset.clear] = null; save(); };
-  });
   form.querySelectorAll('[data-pick]').forEach(b => {
     b.onclick = async () => {
       let chosen;
@@ -268,6 +269,7 @@ function render() {
   bindUpdates(form);
   bindGateway(form);
   bindEngines(form);
+  bindModels($('#models-box', root));
   renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
   $('#settings-cancel', root).onclick = render;           // le formulaire revient aux réglages

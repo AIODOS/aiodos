@@ -58,14 +58,33 @@ def test_an_unreadable_pair_key_asks_for_a_new_pairing(monkeypatch):
 
 
 @windows
-def test_api_keys_are_protected_and_still_masked():
-    settings.set_value("mistral_key", "sk-test-12345678")
-    raw = json.loads(db.query_one("SELECT value FROM settings WHERE key='mistral_key'")["value"])
+def test_api_keys_are_protected_and_still_masked(monkeypatch):
+    """Plus aucune clé d'API depuis le retrait du cloud : la mécanique reste, essayée ici avec
+    deux clés d'essai."""
+    for key in ("essai_key", "autre_key"):
+        monkeypatch.setitem(settings.DEFAULTS, key, "")
+    monkeypatch.setattr(settings, "SECRET_KEYS", {"essai_key", "autre_key"})
+    settings.set_value("essai_key", "sk-test-12345678")
+    raw = json.loads(db.query_one("SELECT value FROM settings WHERE key='essai_key'")["value"])
     assert raw.startswith(vault.TEXT_MARK) and "12345678" not in raw
-    assert settings.get("mistral_key") == "sk-test-12345678"
+    assert settings.get("essai_key") == "sk-test-12345678"
     view = settings.public_view()
-    assert view["mistral_key"] == "" and view["mistral_key_hint"] == "••••5678"
-    db.execute("UPDATE settings SET value=? WHERE key='qwen_key'", (json.dumps("sk-ancienne-0000"),))
-    db.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('qwen_key', ?)",
+    assert view["essai_key"] == "" and view["essai_key_hint"] == "••••5678"
+    db.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('autre_key', ?)",
                (json.dumps("sk-ancienne-0000"),))
-    assert settings.protect_secrets() == 1 and settings.get("qwen_key") == "sk-ancienne-0000"
+    assert settings.protect_secrets() == 1 and settings.get("autre_key") == "sk-ancienne-0000"
+
+
+def test_the_cloud_settings_are_erased_by_the_update():
+    """Migration 23 : les réglages du cloud, clés d'API comprises, quittent la base ; un modèle
+    par défaut du cloud revient à celui d'AIODOS ; le reste ne bouge pas."""
+    db.execute("INSERT INTO settings(key, value) VALUES('mistral_key', ?), ('cloud_confirm', "
+               "'true'), ('default_model', ?), ('web_results', '5')",
+               (json.dumps("sk-ancienne-0000"), json.dumps("cloud:mistral")))
+    path = db.connect().execute("PRAGMA database_list").fetchone()[2]
+    db.execute("PRAGMA user_version=22")
+    db.close()
+    db._initialized.discard(path)
+    keys = {r["key"] for r in db.query("SELECT key FROM settings")}
+    assert keys.isdisjoint({"mistral_key", "cloud_confirm", "default_model"}) and "web_results" in keys
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION

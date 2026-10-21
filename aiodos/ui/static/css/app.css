@@ -539,6 +539,22 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 
 /* ------------------------------------------------------------------ réglages */
 .settings { display: flex; flex-direction: column; gap: 16px; }   /* même largeur que les autres vues (.page-inner) */
+/* Réglages → Modèles (settings-models.js) : discussions, puis images et vidéos, du plus
+   puissant au moins puissant, ceux à télécharger en bas */
+.settings-sub { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600;
+  margin: 18px 0 6px; }
+.settings-sub .icon { width: 16px; height: 16px; color: var(--muted); }
+.settings-sub2 { color: var(--muted); font-size: 12.5px; margin: 14px 0 2px; }
+.model-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 6px 4px;
+  border-bottom: 1px solid var(--line); }
+.model-row b { font-weight: 600; }
+.model-actions { margin-top: 10px; }
+#models-box .img-model { padding: 6px 4px; }
+#models-box .banner { margin: 6px 0; }
+.model-dl { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 8px; }
+.model-dl-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.model-dl-head > .icon { color: var(--cyan); }
+.card .model-dl .hint { margin: 0 0 8px; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .field label { font-size: 12.5px; color: var(--muted); }
 .field .help { font-size: 12px; color: var(--faint); }
@@ -591,21 +607,22 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 @keyframes slide { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ------------------------------------------------------------------ images */
-#img-models { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-#img-models .banner { margin: 0; }
 .img-model { display: flex; gap: 10px; align-items: flex-start; padding: 2px 4px; color: var(--muted); }
 .img-model.ok > .icon { color: var(--ok); margin-top: 2px; }
 .img-model b { color: var(--text); font-weight: 600; margin-right: 6px; }
-.img-model-card .hint { margin-bottom: 10px; }
 .img-dl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .img-dl .bar { flex: 1; min-width: 180px; }
 .err-text { color: var(--err); font-size: 13px; margin-left: 8px; }
-/* Elles se demandent dans une discussion : la vue le rappelle, avec de quoi y aller */
-.img-ask { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
-.img-ask-text { display: flex; gap: 10px; flex: 1 1 320px; color: var(--muted); }
-.img-ask-text > .icon { color: var(--cyan); margin-top: 2px; }
-.img-ask-text div .icon { width: 16px; height: 16px; vertical-align: -3px; color: var(--text); }
-.img-ask-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Elles se demandent dans une discussion : le titre le rappelle, avec de quoi y aller ; les
+   modèles se gèrent dans Réglages → Modèles, la vue n'en garde qu'un résumé en bas */
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.img-sub .icon { width: 16px; height: 16px; vertical-align: -3px; color: var(--text); }
+#img-banner .banner { margin: 0 0 14px; }
+.img-summary { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 18px;
+  padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.img-summary > .icon { width: 16px; height: 16px; }
+.img-summary-text { flex: 1 1 260px; }
+.img-summary:empty { display: none; }
 #img-pending { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 #img-pending:empty { display: none; }
 .img-job { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; }

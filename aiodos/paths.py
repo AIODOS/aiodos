@@ -2,7 +2,7 @@
 
 Hors Windows (Linux, macOS, Android), les données ne sont lisibles que par l'utilisateur :
 dossier en 0700, fichiers en 0600 (keep_private). La base y garde en clair les clés des
-machines appairées et du cloud (node/vault.py), les conversations et les bibliothèques ;
+machines appairées (node/vault.py), les conversations et les bibliothèques ;
 un autre compte de la machine ne doit pas pouvoir la lire. Ce qu'AIODOS écrit pour
 l'utilisateur hors de ses données reprend les droits habituels de celui-ci (for_user). Sous
 Windows, ce sont les droits du profil (%LOCALAPPDATA%) et DPAPI qui s'en chargent ; une copie

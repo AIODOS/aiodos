@@ -1,13 +1,14 @@
-// Images et vidéos : les modèles qui les calculent (téléchargement, copie depuis mes machines),
-// les créations en cours et la galerie. Elles se demandent dans une discussion, comme dans les
-// autres assistants (chat-create.js) ; chacune est une unité de la file, calculée ici ou par
-// mes machines qui ont le modèle (docs/generation-repartie.md).
-import { get, post, put, del } from '../api.js';
-import { $, h, esc, bytes, debounce } from '../dom.js';
+// Images et vidéos : les créations en cours et la galerie. Elles se demandent dans une
+// discussion, comme dans les autres assistants (chat-create.js) ; chacune est une unité de la
+// file, calculée ici ou par mes machines qui ont le modèle (docs/generation-repartie.md). Les
+// modèles se gèrent dans Réglages → Modèles (settings-models.js) : ici, un résumé en bas.
+import { get, post } from '../api.js';
+import { $, h, esc, debounce } from '../dom.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
-import { errorToast, modal } from '../ui.js';
+import { errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
+import { byPower } from './models.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PAGE = 60;
@@ -22,23 +23,19 @@ export function mountImages(container) {
   root = h(`
     <div class="page"><div class="page-inner">
       <div class="page-head">
-        <div><h1>Images et vidéos</h1>
-          <div class="sub">Tes créations, et les modèles qui les calculent ici ou chez tes machines qui
-          prêtent leur puissance.</div></div>
-      </div>
-      <div class="card img-ask">
-        <div class="img-ask-text">${icon('chat')}<div>Pour créer une image ou une vidéo, demande-la dans une
-          discussion : « Crée une image d'un phare sous l'orage », ou touche ${icon('image')} à côté du
-          message pour choisir le modèle, le format et le nombre.</div></div>
-        <div class="img-ask-buttons">
+        <div class="grow"><h1>Images et vidéos</h1>
+          <div class="sub img-sub">Demande-les dans une discussion (« Crée une image d'un phare sous l'orage »),
+          ou touche ${icon('image')} à côté du message pour choisir le modèle, le format et le nombre.</div></div>
+        <div class="page-actions">
           <button class="btn primary" data-create="image">${icon('image')}Créer une image</button>
           <button class="btn" data-create="video">${icon('video')}Créer une vidéo</button>
         </div>
       </div>
-      <div id="img-models"></div>
+      <div id="img-banner"></div>
       <div id="img-pending"></div>
       <div class="img-grid" id="img-grid"></div>
       <div class="img-more"><button class="btn ghost" id="img-more" hidden>Voir les plus anciennes</button></div>
+      <div class="img-summary" id="img-summary"></div>
     </div></div>`);
   container.append(root);
   root.querySelectorAll('[data-create]').forEach(b => {
@@ -48,7 +45,7 @@ export function mountImages(container) {
   on('view:shown', view => { if (view === 'images') refresh(); });
   on('images:changed', debounce(() => { if (state.view === 'images') refresh(); }, 300));
   on('jobs:changed', () => { if (state.view === 'images') onJobs(); });
-  setInterval(() => {            // avancement d'un téléchargement
+  setInterval(() => {            // avancement d'un téléchargement, dans le résumé
     if (state.view === 'images' && info?.download?.running) loadModels();
   }, 1500);
 }
@@ -73,97 +70,36 @@ async function loadImages(more) {
 }
 
 // ------------------------------------------------------------------ modèles
-const modelOf = id => info?.models.find(m => m.id === id);
+/** Réglages → Modèles, la section affichée. */
+function manageModels() {
+  emit('view:show', 'settings');
+  emit('settings:focus', 'modeles');
+}
 
 function renderModels() {
-  const box = $('#img-models', root);
-  const engine = info.engine.found ? '' : `
-    <div class="banner warn">${icon('warn')}<div>stable-diffusion.cpp n'est pas installé sur cette
-      machine (Réglages → Images). ${anyHelper() ? 'Tes machines qui ont le modèle calculeront à sa place.'
-      : 'Sans lui, seules tes machines qui ont le modèle peuvent calculer.'}</div></div>`;
-  box.innerHTML = engine + info.models.map(modelCard).join('');
-  box.querySelectorAll('[data-download]').forEach(b => {
-    b.onclick = () => download(b.dataset.download, b.dataset.source || null);
-  });
-  box.querySelectorAll('[data-cancel]').forEach(b => { b.onclick = cancelDownload; });
-  box.querySelectorAll('[data-friends-ok]').forEach(b => {
-    b.onclick = async () => {
-      try { await put('/settings', { images_from_friends: true }); } catch (err) { errorToast(err); return; }
-      loadModels();
-    };
-  });
-}
-
-function anyHelper() {
-  return info.models.some(m => m.helpers.length);
-}
-
-function modelCard(m) {
-  const dl = info.download?.model === m.id ? info.download : null;
-  const helpers = m.helpers.length
-    ? `<div class="faint">Machines qui l'ont et peuvent le calculer pour toi : ${m.helpers.map(esc).join(', ')}.</div>` : '';
-  // Un ami propose sa carte graphique : avec ton accord, une fois pour toutes (Réglages)
-  const friends = !info.from_friends && m.state !== 'ready' && (m.friends || []).length ? `
-    <div class="banner info img-friends">${icon('network')}<div>${esc(m.friends.join(', '))} ${m.friends.length > 1
-      ? 'peuvent' : 'peut'} calculer ce modèle pour toi : ta description et le résultat passeront chez
-      ${m.friends.length > 1 ? 'eux' : 'lui'} le temps du calcul, sans y être gardés.</div>
-      <button class="btn sm" data-friends-ok>Autoriser mes amis</button></div>` : '';
-  const glyph = icon(m.kind === 'video' ? 'video' : 'image');
-  const notice = m.notice ? `<div class="banner warn img-notice">${icon('warn')}<div>${esc(m.notice)}</div></div>` : '';
-  if (m.state === 'ready' && !dl?.running) {
-    const where = info.engine.device ? ` · calcul sur ${esc(info.engine.device)}` : '';
-    return `<div class="img-model ok">${icon('check')}<div><b>${esc(m.label)}</b>
-      <span class="pill ok">Prêt</span> <span class="faint">${esc(m.license)}${where}</span>${helpers}
-      ${m.notice ? `<div class="faint">⚠ ${esc(m.notice)}</div>` : ''}</div></div>`;
+  // En haut, seulement quand rien ne peut calculer : ni ce PC, ni une de mes machines
+  const usable = info.models.some(m => (m.state === 'ready' && info.engine.found) || m.helpers.length);
+  $('#img-banner', root).innerHTML = usable ? '' : `
+    <div class="banner info wrap">${icon('image')}<div class="banner-text">Aucun modèle d'image ni de vidéo
+      prêt, sur ce PC ou sur tes machines : choisis-en un à télécharger.</div>
+      <div class="banner-actions"><button class="btn sm primary" data-manage>${icon('download')}Choisir un modèle</button></div></div>`;
+  // En bas, le résumé, du plus puissant au moins puissant ; la gestion est dans les Réglages
+  const ready = info.models.filter(m => m.state === 'ready').sort(byPower);
+  const elsewhere = info.models.filter(m => m.state !== 'ready' && m.helpers.length).sort(byPower);
+  const missing = info.models.length - ready.length - elsewhere.length;
+  const dl = info.download?.running ? info.download : null;
+  const parts = [];
+  if (ready.length) parts.push(`${ready.map(m => esc(m.label)).join(', ')} : prêt${ready.length > 1 ? 's' : ''}`);
+  for (const m of elsewhere) parts.push(`${esc(m.label)} : chez ${esc(m.helpers.join(', '))}`);
+  if (dl) {
+    const label = info.models.find(m => m.id === dl.model)?.label || dl.model;
+    parts.push(`téléchargement de ${esc(label)} : ${dl.total ? Math.floor(100 * dl.done / dl.total) : 0} %`);
+  } else if (missing) {
+    parts.push(`${missing} autre${missing > 1 ? 's' : ''} à télécharger`);
   }
-  let action;
-  if (dl?.running) {
-    const pct = dl.total ? Math.floor(100 * dl.done / dl.total) : 0;
-    action = `<div class="img-dl"><div class="bar"><i class="fill" style="width:${pct}%"></i></div>
-      <span class="faint">${bytes(dl.done)} sur ${bytes(dl.total)} · ${bytes(dl.rate)}/s
-        · depuis ${esc(dl.source || 'Hugging Face')}</span>
-      <button class="btn sm ghost" data-cancel>${icon('x')}Arrêter</button></div>`;
-  } else if (m.state === 'checking') {
-    action = '<span class="faint">Vérification des fichiers déjà présents…</span>';
-  } else {
-    // Fichiers identiques déjà sur ce PC (ComfyUI, PANDORA…) : repris d'abord, sans téléchargement
-    const local = m.local || [];
-    const localBytes = local.reduce((n, f) => n + f.size, 0);
-    const rest = Math.max(0, m.missing_bytes - localBytes);
-    const size = bytes(rest);
-    const here = local.length ? `<div class="faint">${bytes(localBytes)} déjà sur ce PC
-      (${esc([...new Set(local.map(f => f.from))].join(', '))}) : repris sans
-      ${local.length > 1 ? 'les' : 'le'} retélécharger, après vérification.</div>` : '';
-    const copies = rest ? [...m.sources].sort((a, b) => b.near - a.near).map(s => `
-      <button class="btn sm" data-download="${esc(m.id)}" data-source="${esc(s.id)}">${icon('network')}Copier
-        depuis ${esc(s.name)} (${s.near ? 'réseau local' : 'Internet'}, ${size})</button>`).join('') : '';
-    const label = !rest ? `Reprendre depuis ce PC (${bytes(localBytes)})`
-      : m.state === 'bad' ? 'Retélécharger' : `Télécharger depuis Hugging Face (${size})`;
-    action = `${here}<div class="img-dl">${copies}
-      <button class="btn sm${copies ? ' ghost' : ''}" data-download="${esc(m.id)}">${icon(rest ? 'cloud' : 'check')}${label}</button>
-      ${dl?.error ? `<span class="err-text">${esc(dl.error)}</span>` : ''}</div>`;
-  }
-  return `<div class="card img-model-card">
-    <h2>${glyph}${esc(m.label)} <span class="pill${m.notice ? ' warn' : ''}">${esc(m.license)}</span></h2>
-    <p class="hint">${esc(m.about)} ${bytes(m.size)} depuis Hugging Face, chaque fichier vérifié par son empreinte.</p>
-    ${notice}${helpers}${friends}${action}</div>`;
-}
-
-async function download(id, source) {
-  const model = modelOf(id);
-  if (model?.notice) {          // licence restrictive : lue et acceptée avant de télécharger
-    const { ok } = await modal({ title: `Licence de ${model.label}`, text: model.notice,
-      iconName: 'warn', confirm: 'J\'ai lu, télécharger', cancel: 'Annuler' });
-    if (!ok) return;
-  }
-  try { info.download = await post(`/images/models/${encodeURIComponent(id)}/download`, { source }); }
-  catch (err) { errorToast(err); return; }
-  renderModels();
-}
-
-async function cancelDownload() {
-  try { await del('/images/models/download'); } catch (err) { errorToast(err); }
-  loadModels();
+  $('#img-summary', root).innerHTML = `${icon('layers')}<span class="img-summary-text">Modèles · ${parts.join(' · ') || 'aucun'}</span>
+    <button class="btn sm ghost" data-manage>Gérer les modèles${icon('chev-right')}</button>`;
+  root.querySelectorAll('[data-manage]').forEach(b => { b.onclick = manageModels; });
 }
 
 // --------------------------------------------------------- créations en cours

@@ -6,6 +6,7 @@
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { icon } from '../icons.js';
+import { byPower } from './models.js';
 import { state, on, emit, prefs } from '../state.js';
 import { menu, toast, errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
@@ -99,12 +100,18 @@ async function load() {
 
 const usable = m => (m.state === 'ready' && info?.engine.found) || m.helpers.length > 0;
 
+/** Réglages → Modèles : les modèles d'images et de vidéos s'y téléchargent. */
+function showModels() {
+  emit('view:show', 'settings');
+  emit('settings:focus', 'modeles');
+}
+
 /** Les listes de la barre, selon le genre et le modèle choisis (règles du catalogue). */
 function fill() {
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   const k = KINDS[mode];
   ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${k.label}${icon('x')}`;
-  const models = (info?.models || []).filter(m => (m.kind || 'image') === mode);
+  const models = (info?.models || []).filter(m => (m.kind || 'image') === mode).sort(byPower);
   const select = field('model');
   const wanted = prefs.get(`create.model.${mode}`, '') || select.value;
   select.innerHTML = models.map(m => {
@@ -118,8 +125,8 @@ function fill() {
   const note = ui.bar.querySelector('.create-note');
   note.innerHTML = !info ? '<span class="faint">Chargement des modèles…</span>' : ready.length ? ''
     : `<span class="faint">Aucun modèle de ${k.noun}s prêt.</span>
-       <button class="btn sm" data-go-images>${icon(k.icon)}Images et vidéos</button>`;
-  note.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
+       <button class="btn sm" data-go-models>${icon('download')}Choisir un modèle</button>`;
+  note.querySelector('[data-go-models]')?.addEventListener('click', showModels);
   for (const name of ['format', 'frames', 'count']) field(name).hidden = !model || !ready.length;
   if (!model) return;
   // « Portrait » suffit ici ; les dimensions sont dans la galerie
@@ -186,10 +193,10 @@ export function appendNotice(list, message, { images = false, friends = [], retr
       <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body"><div class="banner warn">${icon('warn')}<div>${esc(message)}</div>
         ${friends.length && retry ? `<button class="btn sm" data-friends-ok>${icon('network')}Autoriser mes amis</button>` : ''}
-        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}Images et vidéos</button>` : ''}
+        ${images ? `<button class="btn sm ghost" data-go-models>${icon('download')}Choisir un modèle</button>` : ''}
         ${asText ? `<button class="btn sm ghost" data-as-text>${icon('chat')}Répondre en texte</button>` : ''}</div></div>
     </div>`);
-  node.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
+  node.querySelector('[data-go-models]')?.addEventListener('click', showModels);
   node.querySelector('[data-as-text]')?.addEventListener('click', () => asText());
   const friendsOk = node.querySelector('[data-friends-ok]');
   friendsOk?.addEventListener('click', async () => {

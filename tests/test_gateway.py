@@ -262,7 +262,7 @@ def test_unknown_models_and_bad_requests(gateway):
     assert gateway.post("/v1/chat/completions", {"model": LOCAL}).status_code == 400
     cloud = gateway.post("/v1/chat/completions",
                          {"model": "cloud:mistral", "messages": [{"role": "user", "content": "x"}]})
-    assert cloud.status_code == 404                     # le cloud ne passe pas par ici
+    assert cloud.status_code == 404           # un ancien identifiant du cloud : un nom inconnu
 
 
 def test_raw_text_completion_for_code_editors(gateway):
@@ -704,14 +704,10 @@ def test_large_models_split_between_my_machines(gateway, monkeypatch):
                                            "input": "x"}).status_code == 400
 
 
-def test_cloud_models_never_pass_even_disguised(gateway, monkeypatch):
-    """Un modèle du cloud ne passe pas par la passerelle, même déguisé (« local:cloud:… ») :
-    son envoi se valide dans l'interface, message par message."""
-    from aiodos.services import cloud
-    settings.set_value("mistral_key", "sk-test-12345678")
-    sent = []
-    monkeypatch.setattr(cloud, "chat_stream",
-                        lambda *a, **k: sent.append(a) or iter([("content", "parti !")]))
+def test_disguised_identifiers_never_pass(gateway):
+    """« local: » ne désigne que cette machine : « local:peer:… », « local:auto:… » ou
+    « local:reparti:… » ne passent pas, ni un ancien identifiant du cloud, ni par l'API ni par
+    le pont MCP."""
     question = [{"role": "user", "content": "Salut"}]
     for model in ("cloud:mistral", "local:cloud:mistral", "auto:cloud:mistral",
                   "local:peer:x:y", "local:auto:x", "local:reparti:x"):
@@ -721,9 +717,8 @@ def test_cloud_models_never_pass_even_disguised(gateway, monkeypatch):
                                           "messages": question}).status_code == 404, model
     version = {"MCP-Protocol-Version": "2025-11-25"}
     refused = _rpc(gateway, "tools/call", {"name": "converser", "arguments": {
-        "message": "Salut", "modele": "local:cloud:mistral"}}, headers=version).json()["result"]
+        "message": "Salut", "modele": "local:peer:x:y"}}, headers=version).json()["result"]
     assert refused["isError"]
-    assert sent == []
 
 
 def test_libraries_kept_on_this_pc_are_never_shown_to_assistants(gateway):
