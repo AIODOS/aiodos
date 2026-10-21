@@ -146,12 +146,18 @@ def python313() -> str:
                      f"(« uv python install {android_deps.PYTHON} »)")
 
 
+# La numérotation a repris à 1.0.0 le 21/10/2026, après des 2.0.x : Android refuse un
+# versionCode plus petit que celui de l'appli en place (20002 pour 2.0.2-dev), sauf à la
+# désinstaller et perdre les données du nœud. Le décalage garde chaque code au-dessus.
+CODE_OFFSET = 100000
+
+
 def version() -> tuple:
-    """(versionName, versionCode) : « 2.0.2-dev » → 20002."""
+    """(versionName, versionCode) : « 1.0.0 » → 110000 (CODE_OFFSET)."""
     text = (ROOT / "aiodos" / "__init__.py").read_text(encoding="utf-8")
     name = re.search(r'__version__\s*=\s*"([^"]+)"', text).group(1)
     major, minor, patch = (int(n) for n in re.findall(r"\d+", name)[:3])
-    return name, major * 10000 + minor * 100 + patch
+    return name, CODE_OFFSET + major * 10000 + minor * 100 + patch
 
 
 def run(*command, cwd=None, quiet=True, env=None):
