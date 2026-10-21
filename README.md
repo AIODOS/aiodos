@@ -318,6 +318,7 @@ aiodos/
 │   ├── jobs_api.py    travaux ComfyUI des applis (/aiodos/v1/jobs : déposer, suivre, commandes)
 │   ├── engines_api.py moteurs vus par l'appli et pré-vol ; inputs_api.py : entrées par empreinte
 │   ├── files_api.py   fichiers produits (plages) ; file_store.py, input_store.py : leur rangement
+│   ├── links_api.py   liens vers un fichier, lus sans clé (1 h et 5 lectures au plus)
 │   └── retention.py   garde : récupérés + 7 jours ; ownership.py : accès remplacé ou retiré
 ├── engines/           moteurs des applis : AIODOS rejoue leurs graphes, ne les remplace pas
 │   ├── comfy_find.py  ComfyUI de ce PC (Desktop, version portable, instance ouverte)

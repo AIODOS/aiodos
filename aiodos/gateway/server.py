@@ -265,12 +265,13 @@ def _replay(body: bytes, receive):
 def create_gateway_app(node, port: int):
     """node : l'état de l'application du nœud (exécuteur, réseau…)."""
     from aiodos.gateway import (access_api, engines_api, files_api, info, inputs_api, jobs_api,
-                                mcp_server, models_api, ollama_api, open_page, openai_api)
+                                links_api, mcp_server, models_api, ollama_api, open_page,
+                                openai_api)
     app = FastAPI(title="AIODOS — passerelle", docs_url=None, redoc_url=None,
                   openapi_url=None)
     app.state.node = node
     for module in (info, access_api, models_api, open_page, openai_api, ollama_api, mcp_server,
-                   engines_api, inputs_api, jobs_api, files_api):
+                   engines_api, inputs_api, jobs_api, files_api, links_api):
         app.include_router(module.router)
     return Guard(app, hosts(port))
 

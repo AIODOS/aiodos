@@ -316,7 +316,8 @@ une requête.
 | `HEAD`, `PUT /aiodos/v1/inputs/{sha256}` | oui | `engines:comfyui` |
 | `POST /aiodos/v1/jobs`, `GET /aiodos/v1/jobs`, `GET /aiodos/v1/jobs/{id}`, `…/events`, `…/files` | oui | `engines:comfyui` |
 | `POST /aiodos/v1/jobs/{id}/pause`, `/resume`, `/cancel`, `/retry` ; `DELETE /aiodos/v1/jobs/{id}` ; `POST /aiodos/v1/jobs/pause`, `/resume` | oui | `engines:comfyui` (ses travaux) |
-| `GET /aiodos/v1/files/{id}`, `/content` ; `DELETE /aiodos/v1/files/{id}` | oui | `engines:comfyui` (ses fichiers) |
+| `GET /aiodos/v1/files/{id}`, `/content` ; `DELETE /aiodos/v1/files/{id}` ; `POST /aiodos/v1/files/{id}/link` | oui | `engines:comfyui` (ses fichiers) |
+| `GET /aiodos/v1/links/{jeton}` | non (le jeton) | — |
 
 ### 5.1 `GET /aiodos/v1/info`
 
@@ -326,13 +327,13 @@ Sans clé, toujours 200 :
 { "object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
   "instance": "Hk3v9QmZ",
   "features": ["access", "models", "chat", "embed", "open", "engines", "engines.comfyui",
-               "jobs", "jobs.pause", "inputs", "files"],
+               "jobs", "jobs.pause", "inputs", "files", "files.link"],
   "access": { "apps": true, "requests": true, "approval_ui": true }, "auth": "none" }
 ```
 
 - `features` dit ce que **cette version** sert ; un client ne compare jamais de numéros de
   version. Les travaux ComfyUI (§ 5.7) : `engines`, `engines.comfyui`, `jobs`, `jobs.pause`,
-  `inputs`, `files`.
+  `inputs`, `files`, `files.link`.
 - Avec `Authorization`, `auth` vaut `valid`, `revoked`, `expired` ou `invalid` ; s'il vaut
   `valid` :
 
@@ -538,6 +539,12 @@ l'échéance en secondes Unix), `Cache-Control: no-store`, `X-Content-Type-Optio
 Un fichier servi jusqu'à son dernier octet est **récupéré** : AIODOS le garde encore 7 jours.
 Un fichier jamais récupéré n'est jamais effacé seul ; retirer l'appli fait commencer les
 7 jours.
+
+**Les liens.** Pour du code qui ne sait que lire une adresse (`requests.get(url)`), sans la
+clé : `POST /aiodos/v1/files/{id}/link` `{"ttl": 900, "uses": 3}` → `{"url":
+"http://127.0.0.1:11435/aiodos/v1/links/…", "expires_at", "uses"}`. Une heure et 5 lectures
+au plus (une plage compte pour une lecture) ; le lien meurt aussi avec AIODOS. Il ne se lit
+que depuis ce PC, par un programme : une page web est refusée (`origin_refused`).
 
 ## 6. Les bibliothèques clientes
 

@@ -30,7 +30,9 @@ ANY = "any"                 # une clé valide suffit
 PUBLIC = "public"           # sans clé
 PUBLIC_ROUTES = {("GET", "/"), ("HEAD", "/"), ("GET", "/aiodos/v1/info"),
                  ("HEAD", "/aiodos/v1/info"), ("POST", "/aiodos/v1/access/requests"),
-                 ("POST", "/aiodos/v1/access/token")}
+                 ("POST", "/aiodos/v1/access/token"), ("GET", "/aiodos/v1/links/{token}")}
+# Un lien vers un fichier se lit sans clé : son jeton tient lieu de clé (gateway/links_api.py)
+LINKS = "/aiodos/v1/links/"
 _EXACT = {
     "/v1/chat/completions": "chat", "/v1/completions": "chat", "/v1/embeddings": "embed",
     "/api/chat": "chat", "/api/generate": "chat", "/api/show": "chat", "/api/ps": "chat",
@@ -42,6 +44,8 @@ def required(method: str, path: str) -> str:
     """Le droit qu'exige cette route : un nom de SCOPES, ANY ou PUBLIC. La demande d'accès
     porte parfois une clé (droits en plus) : elle reste publique."""
     if (method.upper(), path) in PUBLIC_ROUTES:
+        return PUBLIC
+    if method.upper() == "GET" and path.startswith(LINKS):
         return PUBLIC
     if path.startswith(ENGINE_ROUTES):
         return "engines:comfyui"

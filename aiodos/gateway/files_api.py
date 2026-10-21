@@ -56,6 +56,12 @@ async def file_content(file_id: str, request: Request):
     row = await _own(request, file_id)
     if row is None:
         return _fail(request, ApiError("file_not_found"))
+    return serve(row, request)
+
+
+def serve(row, request: Request):
+    """Les octets d'un fichier (tout, ou une plage), comptés pour sa récupération ; aussi
+    par un lien (gateway/links_api.py)."""
     path = file_store.path_of(row)
     if not path.is_file():
         return _fail(request, ApiError("file_not_found", "Le fichier n'est plus sur ce PC."))

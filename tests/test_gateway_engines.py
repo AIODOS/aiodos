@@ -245,6 +245,37 @@ def test_the_gateway_answers_like_the_jobs_contract(node):
             found["job_id"] = reply.json()["id"]
 
 
+def test_a_link_to_a_file(node):
+    """Un lien : lu sans clé, un nombre de fois borné, jamais par une page web, jamais vers
+    le fichier d'une autre appli."""
+    key = node.connect(ENGINES)
+    other = node.connect({**ENGINES, "client_id": "arkane.arklight"})
+    sha, _ = put(node, key, png())
+    job = node.call("POST", "/aiodos/v1/jobs", key=key,
+                    json={"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}}).json()
+    wait_for(node, key, job["id"])
+    [file] = node.call("GET", f"/aiodos/v1/jobs/{job['id']}/files", key=key).json()["files"]
+    made = node.call("POST", f"/aiodos/v1/files/{file['id']}/link", key=key,
+                     json={"ttl": 60, "uses": 2}).json()
+    assert made["uses"] == 2 and made["url"].startswith(node.base + "/aiodos/v1/links/")
+    first = requests.get(made["url"], timeout=10)                  # sans clé
+    assert first.status_code == 200 and first.content.startswith(b"\x89PNG")
+    assert first.headers["Cache-Control"] == "no-store"
+    page = requests.get(made["url"], headers={"Origin": "http://exemple.fr"}, timeout=10)
+    assert page.status_code == 403 and page.json()["error"]["code"] == "origin_refused"
+    image = requests.get(made["url"], headers={"Sec-Fetch-Dest": "image"}, timeout=10)
+    assert image.status_code == 403
+    assert requests.get(made["url"], timeout=10).status_code == 200      # 2e lecture
+    used = requests.get(made["url"], timeout=10)                          # plus de lecture
+    assert used.status_code == 404 and used.json()["error"]["code"] == "file_not_found"
+    assert requests.get(node.base + "/aiodos/v1/links/inconnu", timeout=10).status_code == 404
+    assert node.call("POST", f"/aiodos/v1/files/{file['id']}/link", key=other,
+                     json={}).status_code == 404                     # le fichier d'une autre
+    too_long = node.call("POST", f"/aiodos/v1/files/{file['id']}/link", key=key,
+                         json={"ttl": 86400})
+    assert too_long.status_code == 400 and too_long.json()["error"]["param"] == "ttl"
+
+
 def test_without_the_right_or_comfyui(node):
     chat_only = node.connect({**ENGINES, "client_id": "arkane.texte", "scope": "chat"})
     reply = node.call("POST", "/aiodos/v1/jobs", key=chat_only, json={"graph": GRAPH})
