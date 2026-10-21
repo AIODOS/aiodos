@@ -1,0 +1,14 @@
+{
+  "page_too_slow": "page trop lente : plus de {seconds} s pour la lire",
+  "scheme_refused": "adresse refusée : seules les pages http et https se lisent.",
+  "page_error": "la page répond par une erreur (HTTP {status})",
+  "too_many_redirects": "trop de redirections (plus de {n})",
+  "page_timeout": "page injoignable : délai dépassé",
+  "page_unreachable": "page injoignable : connexion impossible ou interrompue",
+  "search_too_slow": "recherche web trop lente : plus de {seconds} s",
+  "search_error": "la recherche web répond par une erreur (HTTP {status})",
+  "search_timeout": "recherche web injoignable : délai dépassé",
+  "search_unreachable": "recherche web injoignable : connexion impossible ou interrompue",
+  "blocked": "adresse refusée : introuvable ou hors de l'Internet public (réseau local, cette machine). Seule une page demandée sur cette machine peut viser son réseau local, par son adresse IP (http://192.168.1.20/…) ou son nom local (http://nas.local/…).",
+  "guard_bypassed": "lecture refusée : la garde des adresses ne s'applique pas avec cette version de requests ou d'urllib3. Mets AIODOS à jour, ou reviens à la version de ces paquets qu'il installe."
+}

@@ -1,0 +1,81 @@
+{
+  "kind_image": "Image",
+  "kind_video": "Vidéo",
+  "placeholder_image": "Décris l'image à créer…",
+  "placeholder_video": "Décris la vidéo à créer…",
+  "hint": "Entrée pour créer · Maj+Entrée pour aller à la ligne · Échap pour revenir à la conversation",
+  "button": "Créer une image ou une vidéo",
+  "close": "Revenir à la conversation",
+  "model": "Modèle",
+  "format": "Format",
+  "duration": "Durée",
+  "count": "Combien",
+  "seed_title": "Même graine, même description : même résultat",
+  "create_image": "Créer une image",
+  "create_video": "Créer une vidéo",
+  "model_to_install": "{label} · à installer",
+  "model_on": "{label} · chez {names}",
+  "no_model_image": "Aucun modèle d'images prêt.",
+  "no_model_video": "Aucun modèle de vidéos prêt.",
+  "count_image": {
+    "one": "{n} image",
+    "other": "{n} images"
+  },
+  "count_video": {
+    "one": "{n} vidéo",
+    "other": "{n} vidéos"
+  },
+  "seed": "graine {seed}",
+  "allow_friends": "Autoriser mes amis",
+  "as_text": "Répondre en texte",
+  "busy": "Une création est déjà en route : réessaie dans un instant.",
+  "as_text_title": "Ce n'était pas une demande d'image : la retirer, et répondre en texte",
+  "reuse": "Reprendre cette description",
+  "copy_prompt": "Copier la description",
+  "prompt_copied": "Description copiée.",
+  "video_tag": "vidéo {length}",
+  "retouch": "retouche de l'image précédente",
+  "seconds_each_image": "{seconds} s par image",
+  "seconds_each_video": "{seconds} s par vidéo",
+  "paused": "En pause",
+  "computing_on": "Calcul chez {names}",
+  "running": "Création en cours",
+  "queued": "En attente de son tour",
+  "progress": "{done} sur {n}",
+  "usual": "d'habitude {time}",
+  "usual_each_image": "d'habitude {time} par image",
+  "usual_each_video": "d'habitude {time} par vidéo",
+  "stop": "Arrêter",
+  "stopped_partial": "Arrêtée : {done} sur {n}.",
+  "stopped": "Création arrêtée.",
+  "failed_image": {
+    "one": "{n} image sur {total} n'a pas pu être créée : {error}.",
+    "other": "{n} images sur {total} n'ont pas pu être créées : {error}."
+  },
+  "failed_image_tasks": {
+    "one": "{n} image sur {total} n'a pas pu être créée (le détail est dans Tâches).",
+    "other": "{n} images sur {total} n'ont pas pu être créées (le détail est dans Tâches)."
+  },
+  "failed_video": {
+    "one": "{n} vidéo sur {total} n'a pas pu être créée : {error}.",
+    "other": "{n} vidéos sur {total} n'ont pas pu être créées : {error}."
+  },
+  "failed_video_tasks": {
+    "one": "{n} vidéo sur {total} n'a pas pu être créée (le détail est dans Tâches).",
+    "other": "{n} vidéos sur {total} n'ont pas pu être créées (le détail est dans Tâches)."
+  },
+  "interrupted": "Création interrompue, ou ses fichiers ont été supprimés.",
+  "nothing_ready_friends_images": {
+    "one": "Aucun modèle d'images n'est prêt ici ni chez tes machines, mais {who} peut les calculer pour toi : ta description et le résultat passeront chez lui le temps du calcul, sans y être gardés.",
+    "other": "Aucun modèle d'images n'est prêt ici ni chez tes machines, mais {who} peuvent les calculer pour toi : ta description et le résultat passeront chez eux le temps du calcul, sans y être gardés."
+  },
+  "nothing_ready_friends_videos": {
+    "one": "Aucun modèle de vidéos n'est prêt ici ni chez tes machines, mais {who} peut les calculer pour toi : ta description et le résultat passeront chez lui le temps du calcul, sans y être gardés.",
+    "other": "Aucun modèle de vidéos n'est prêt ici ni chez tes machines, mais {who} peuvent les calculer pour toi : ta description et le résultat passeront chez eux le temps du calcul, sans y être gardés."
+  },
+  "nothing_ready_images": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : installe-en un dans « Images et vidéos ».",
+  "nothing_ready_videos": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : installe-en un dans « Images et vidéos ».",
+  "unknown_kind": "Genre inconnu : image ou vidéo.",
+  "not_found": "Création introuvable.",
+  "continued": "La conversation a continué depuis : seule la dernière création peut céder la place à une réponse en texte."
+}

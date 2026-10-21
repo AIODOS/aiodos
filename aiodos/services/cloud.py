@@ -8,6 +8,7 @@ import json
 import requests
 
 from aiodos import settings
+from aiodos.i18n import t
 
 PROVIDERS = {
     "mistral": {
@@ -46,13 +47,14 @@ def chat_stream(provider, messages, stop=None):
     spec = PROVIDERS[provider]
     key = settings.get(spec["key"])
     if not key:
-        raise RuntimeError(f"Aucune clé API pour {spec['label']} (voir Réglages).")
+        raise RuntimeError(t("cloud.no_key", name=spec["label"]))
     payload = {"model": settings.get(spec["model"]), "messages": messages, "stream": True}
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     with requests.post(spec["url"], json=payload, headers=headers,
                        stream=True, timeout=(10, 300)) as r:
         if r.status_code >= 400:
-            raise RuntimeError(f"{spec['label']} : HTTP {r.status_code} {r.text[:200]}")
+            raise RuntimeError(t("cloud.http_error", name=spec["label"], status=r.status_code,
+                                 detail=r.text[:200]))
         for line in r.iter_lines(decode_unicode=True):
             if stop is not None and stop.is_set():
                 break

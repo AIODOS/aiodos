@@ -1,6 +1,7 @@
 // Barre latérale des conversations : dossiers, recherche, glisser-déposer, menus.
 import { get, post, patch, del } from '../api.js';
 import { $, h, esc, debounce } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs } from '../state.js';
 import { ask, confirmDanger, menu, errorToast } from '../ui.js';
@@ -15,12 +16,12 @@ export function mountSidebar(container) {
     <aside class="sidebar">
       <div class="sidebar-top">
         <div class="row">
-          <button class="btn primary" id="new-chat">${icon('plus')}Nouvelle conversation</button>
-          <button class="btn" id="new-folder" title="Nouveau dossier">${icon('folder-plus')}</button>
+          <button class="btn primary" id="new-chat">${icon('plus')}${esc(t('chat.new_conversation'))}</button>
+          <button class="btn" id="new-folder" title="${esc(t('sidebar.new_folder'))}">${icon('folder-plus')}</button>
         </div>
         <div class="sidebar-head">
-          <div class="search">${icon('search')}<input class="input" id="conv-search" placeholder="Rechercher une conversation"></div>
-          <button class="icon-btn sidebar-fold" id="sidebar-fold" title="Replier la liste des conversations">${icon('chev-right')}</button>
+          <div class="search">${icon('search')}<input class="input" id="conv-search" placeholder="${esc(t('sidebar.search'))}"></div>
+          <button class="icon-btn sidebar-fold" id="sidebar-fold" title="${esc(t('sidebar.fold'))}">${icon('chev-right')}</button>
         </div>
       </div>
       <div class="tree" id="conv-tree"></div>
@@ -72,7 +73,7 @@ function render() {
       <div class="t-row folder ${open ? 'open' : ''}">
         ${icon('chev-right', 'chev')}${icon('folder')}
         <span class="label">${esc(f.name)}</span><span class="count">${items.length || ''}</span>
-        <button class="icon-btn" title="Options du dossier">${icon('more')}</button>
+        <button class="icon-btn" title="${esc(t('sidebar.folder_options'))}">${icon('more')}</button>
       </div>`);
     row.onclick = e => { if (!e.target.closest('.icon-btn')) toggleFolder(f.id); };
     row.querySelector('.icon-btn').onclick = e => { e.stopPropagation(); folderMenu(row, f); };
@@ -81,17 +82,17 @@ function render() {
     if (open) {
       const kids = h('<div class="t-children"></div>');
       items.forEach(c => kids.append(convRow(c)));
-      if (!items.length) kids.append(h('<div class="t-row faint" style="cursor:default">Vide : glisse une conversation ici</div>'));
+      if (!items.length) kids.append(h(`<div class="t-row faint" style="cursor:default">${esc(t('sidebar.empty_folder'))}</div>`));
       treeEl.append(kids);
     }
   }
   const loose = conversations.filter(c => !c.folder_id && match(c));
-  if (folders.length && loose.length) treeEl.append(h('<div class="tree-section">Conversations</div>'));
+  if (folders.length && loose.length) treeEl.append(h(`<div class="tree-section">${esc(t('sidebar.section'))}</div>`));
   loose.forEach(c => treeEl.append(convRow(c)));
   if (!conversations.length) {
-    treeEl.append(h(`<div class="empty">${icon('chat')}<div>Aucune conversation pour l'instant.</div></div>`));
+    treeEl.append(h(`<div class="empty">${icon('chat')}<div>${esc(t('sidebar.empty'))}</div></div>`));
   } else if (filter && !treeEl.children.length) {
-    treeEl.append(h('<div class="empty">Aucun résultat.</div>'));
+    treeEl.append(h(`<div class="empty">${esc(t('sidebar.no_results'))}</div>`));
   }
 }
 
@@ -102,7 +103,7 @@ function convRow(c) {
   const row = h(`
     <div class="t-row ${active ? 'active' : ''}${snippet ? ' found' : ''}" draggable="true" title="${esc(c.title)}">
       <span class="label">${esc(c.title)}${snippet ? `<span class="t-snippet">${esc(snippet)}</span>` : ''}</span>
-      <button class="icon-btn" title="Options">${icon('more')}</button>
+      <button class="icon-btn" title="${esc(t('sidebar.options'))}">${icon('more')}</button>
     </div>`);
   row.onclick = e => { if (!e.target.closest('.icon-btn')) emit('chat:open', c.id); };
   row.ondblclick = () => rename(c);
@@ -141,26 +142,26 @@ function toggleFolder(id) {
 function convMenu(anchor, c) {
   const targets = state.tree.folders.filter(f => f.id !== c.folder_id);
   menu(anchor.querySelector('.icon-btn'), [
-    { label: 'Renommer', icon: 'edit', action: () => rename(c) },
-    { title: 'Déplacer vers' },
-    ...(c.folder_id ? [{ label: 'Hors dossier', icon: 'chat', action: () => move(c.id, null) }] : []),
+    { label: t('sidebar.rename'), icon: 'edit', action: () => rename(c) },
+    { title: t('sidebar.move_to') },
+    ...(c.folder_id ? [{ label: t('sidebar.out_of_folder'), icon: 'chat', action: () => move(c.id, null) }] : []),
     ...targets.map(f => ({ label: f.name, icon: 'folder', action: () => move(c.id, f.id) })),
-    { label: 'Nouveau dossier…', icon: 'folder-plus',
+    { label: t('sidebar.new_folder_more'), icon: 'folder-plus',
       action: async () => { const id = await newFolder(); if (id) move(c.id, id); } },
     'sep',
-    { label: 'Supprimer', icon: 'trash', danger: true, action: () => remove(c) },
+    { label: t('ui.delete'), icon: 'trash', danger: true, action: () => remove(c) },
   ]);
 }
 
 function folderMenu(anchor, f) {
   menu(anchor.querySelector('.icon-btn'), [
-    { label: 'Renommer le dossier', icon: 'edit', action: () => renameFolder(f) },
-    { label: 'Supprimer le dossier', icon: 'trash', danger: true, action: () => deleteFolder(f) },
+    { label: t('sidebar.rename_folder'), icon: 'edit', action: () => renameFolder(f) },
+    { label: t('sidebar.delete_folder'), icon: 'trash', danger: true, action: () => deleteFolder(f) },
   ]);
 }
 
 async function rename(c) {
-  const title = await ask('Renommer la conversation', 'Nouveau titre :', c.title);
+  const title = await ask(t('chat.rename_title'), t('chat.rename_label'), c.title);
   if (!title || title === c.title) return;
   try {
     await patch(`/conversations/${c.id}`, { title });
@@ -179,8 +180,7 @@ async function move(id, folderId) {
 }
 
 async function remove(c) {
-  const ok = await confirmDanger('Supprimer la conversation',
-    `« ${c.title} » et sa trace dans la mémoire seront supprimées définitivement.`);
+  const ok = await confirmDanger(t('sidebar.delete_title'), t('sidebar.delete_text', { title: c.title }));
   if (!ok) return;
   try {
     await del(`/conversations/${c.id}`);
@@ -189,7 +189,7 @@ async function remove(c) {
 }
 
 async function newFolder() {
-  const name = await ask('Nouveau dossier', 'Nom du dossier :', '', 'ex. Projet court-métrage');
+  const name = await ask(t('sidebar.new_folder'), t('sidebar.folder_name'), '', t('sidebar.folder_example'));
   if (!name) return null;
   try {
     const { id } = await post('/folders', { name });
@@ -200,14 +200,13 @@ async function newFolder() {
 }
 
 async function renameFolder(f) {
-  const name = await ask('Renommer le dossier', 'Nouveau nom :', f.name);
+  const name = await ask(t('sidebar.rename_folder'), t('sidebar.new_name'), f.name);
   if (!name || name === f.name) return;
   try { await patch(`/folders/${f.id}`, { name }); } catch (e) { errorToast(e); }
 }
 
 async function deleteFolder(f) {
-  const ok = await confirmDanger('Supprimer le dossier',
-    `Le dossier « ${f.name} » sera supprimé. Ses conversations sont conservées et reviennent hors dossier.`);
+  const ok = await confirmDanger(t('sidebar.delete_folder'), t('sidebar.delete_folder_text', { name: f.name }));
   if (!ok) return;
   try { await del(`/folders/${f.id}`); } catch (e) { errorToast(e); }
 }

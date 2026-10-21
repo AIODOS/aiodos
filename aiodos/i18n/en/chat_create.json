@@ -1,0 +1,81 @@
+{
+  "kind_image": "Image",
+  "kind_video": "Video",
+  "placeholder_image": "Describe the image to create…",
+  "placeholder_video": "Describe the video to create…",
+  "hint": "Enter to create · Shift+Enter for a new line · Esc to go back to the conversation",
+  "button": "Create an image or a video",
+  "close": "Back to the conversation",
+  "model": "Model",
+  "format": "Format",
+  "duration": "Duration",
+  "count": "How many",
+  "seed_title": "Same seed, same description: same result",
+  "create_image": "Create an image",
+  "create_video": "Create a video",
+  "model_to_install": "{label} · to install",
+  "model_on": "{label} · on {names}",
+  "no_model_image": "No image model ready.",
+  "no_model_video": "No video model ready.",
+  "count_image": {
+    "one": "1 image",
+    "other": "{n} images"
+  },
+  "count_video": {
+    "one": "1 video",
+    "other": "{n} videos"
+  },
+  "seed": "seed {seed}",
+  "allow_friends": "Allow my friends",
+  "as_text": "Answer in text",
+  "busy": "A creation is already under way: try again in a moment.",
+  "as_text_title": "This was not a request for an image: remove it and answer in text",
+  "reuse": "Reuse this description",
+  "copy_prompt": "Copy the description",
+  "prompt_copied": "Description copied.",
+  "video_tag": "video {length}",
+  "retouch": "edit of the previous image",
+  "seconds_each_image": "{seconds} s per image",
+  "seconds_each_video": "{seconds} s per video",
+  "paused": "Paused",
+  "computing_on": "Computing on {names}",
+  "running": "Creating",
+  "queued": "Waiting for its turn",
+  "progress": "{done} of {n}",
+  "usual": "usually {time}",
+  "usual_each_image": "usually {time} per image",
+  "usual_each_video": "usually {time} per video",
+  "stop": "Stop",
+  "stopped_partial": "Stopped: {done} of {n}.",
+  "stopped": "Creation stopped.",
+  "failed_image": {
+    "one": "{n} image of {total} could not be created: {error}.",
+    "other": "{n} images of {total} could not be created: {error}."
+  },
+  "failed_image_tasks": {
+    "one": "{n} image of {total} could not be created (details in Tasks).",
+    "other": "{n} images of {total} could not be created (details in Tasks)."
+  },
+  "failed_video": {
+    "one": "{n} video of {total} could not be created: {error}.",
+    "other": "{n} videos of {total} could not be created: {error}."
+  },
+  "failed_video_tasks": {
+    "one": "{n} video of {total} could not be created (details in Tasks).",
+    "other": "{n} videos of {total} could not be created (details in Tasks)."
+  },
+  "interrupted": "Creation interrupted, or its files were deleted.",
+  "nothing_ready_friends_images": {
+    "one": "No image model is ready here or on your machines, but {who} can compute them for you: your description and the result will go to their machine for the computation, without being kept there.",
+    "other": "No image model is ready here or on your machines, but {who} can compute them for you: your description and the result will go to their machines for the computation, without being kept there."
+  },
+  "nothing_ready_friends_videos": {
+    "one": "No video model is ready here or on your machines, but {who} can compute them for you: your description and the result will go to their machine for the computation, without being kept there.",
+    "other": "No video model is ready here or on your machines, but {who} can compute them for you: your description and the result will go to their machines for the computation, without being kept there."
+  },
+  "nothing_ready_images": "No image model can compute right now, here or on your online machines: install one in “Images and videos”.",
+  "nothing_ready_videos": "No video model can compute right now, here or on your online machines: install one in “Images and videos”.",
+  "unknown_kind": "Unknown kind: image or video.",
+  "not_found": "Creation not found.",
+  "continued": "The conversation has continued since: only the last creation can give way to a text answer."
+}

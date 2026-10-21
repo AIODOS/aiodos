@@ -1,0 +1,23 @@
+{
+  "new_folder": "Nouveau dossier",
+  "search": "Rechercher une conversation",
+  "fold": "Replier la liste des conversations",
+  "folder_options": "Options du dossier",
+  "empty_folder": "Vide : glisse une conversation ici",
+  "section": "Conversations",
+  "empty": "Aucune conversation pour l'instant.",
+  "no_results": "Aucun résultat.",
+  "options": "Options",
+  "rename": "Renommer",
+  "move_to": "Déplacer vers",
+  "out_of_folder": "Hors dossier",
+  "new_folder_more": "Nouveau dossier…",
+  "rename_folder": "Renommer le dossier",
+  "delete_folder": "Supprimer le dossier",
+  "delete_title": "Supprimer la conversation",
+  "delete_text": "« {title} » et sa trace dans la mémoire seront supprimées définitivement.",
+  "folder_name": "Nom du dossier :",
+  "folder_example": "ex. Projet court-métrage",
+  "new_name": "Nouveau nom :",
+  "delete_folder_text": "Le dossier « {name} » sera supprimé. Ses conversations sont conservées et reviennent hors dossier."
+}

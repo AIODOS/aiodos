@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from aiodos import db, render
 from aiodos.chat import conversations, creations, pending
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/api")
 
@@ -45,7 +46,7 @@ def read(conv_id: int, settled: bool = False):
         pending.wait(conv_id)
     conv = conversations.get(conv_id)
     if conv is None:
-        raise HTTPException(404, "Conversation introuvable.")
+        raise HTTPException(404, t("chat.not_found"))
     for m in conv["messages"]:
         if m["role"] == "assistant":
             m["html"] = render.to_html(m["content"])
@@ -75,7 +76,7 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
     pending.wait(conv_id)                 # une réponse arrêtée juste avant : retirée aussi
     text = conversations.user_message(conv_id, body.message_id)
     if text is None:
-        raise HTTPException(404, "Message introuvable dans cette conversation.")
+        raise HTTPException(404, t("chat.message_not_found"))
     try:                                  # ses créations en cours s'arrêtent ; d'un seul geste
         with db.transaction():
             stopped = creations.replace(conv_id, body.message_id, body.expect)

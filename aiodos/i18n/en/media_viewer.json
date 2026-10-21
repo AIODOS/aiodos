@@ -1,0 +1,18 @@
+{
+  "frames": "{frames} frames at {fps} fps ({length})",
+  "seed": "seed {seed}",
+  "steps": {
+    "one": "{n} step",
+    "other": "{n} steps"
+  },
+  "save_as": "Save as…",
+  "open_folder": "Show in folder",
+  "save": "Save",
+  "reuse": "Reuse",
+  "see_conversation": "See the conversation",
+  "close": "Close",
+  "saved": "Saved: {where}",
+  "delete_image": "Delete this image?",
+  "delete_video": "Delete this video?",
+  "delete_text": "The file will be deleted from this machine."
+}

@@ -1,0 +1,14 @@
+{
+  "page_too_slow": "page too slow: more than {seconds} s to read it",
+  "scheme_refused": "address refused: only http and https pages can be read.",
+  "page_error": "the page returned an error (HTTP {status})",
+  "too_many_redirects": "too many redirects (more than {n})",
+  "page_timeout": "page unreachable: timed out",
+  "page_unreachable": "page unreachable: connection failed or interrupted",
+  "search_too_slow": "web search too slow: more than {seconds} s",
+  "search_error": "the web search returned an error (HTTP {status})",
+  "search_timeout": "web search unreachable: timed out",
+  "search_unreachable": "web search unreachable: connection failed or interrupted",
+  "blocked": "address refused: not found or outside the public Internet (local network, this machine). Only a page requested on this machine can target its local network, by its IP address (http://192.168.1.20/…) or its local name (http://nas.local/…).",
+  "guard_bypassed": "reading refused: the address guard does not apply with this version of requests or urllib3. Update AIODOS, or go back to the version of these packages it installs."
+}

@@ -15,6 +15,7 @@ import re
 
 from aiodos import db, settings
 from aiodos.chat import conversations, retouches
+from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
@@ -33,32 +34,38 @@ class CreationError(Exception):
 
 
 # ------------------------------------------------------------- la demande, dans le texte
+# Les motifs reconnaissent les demandes en français comme en anglais : ils ne se traduisent pas
+# i18n: tel quel (motif de détection)
 _STRONG = (r"cr[ée]e|cr[ée]é|cr[ée]er|cr[ée]ez|cr[ée]es|g[ée]n[èée]re|g[ée]n[ée]rer|g[ée]n[ée]rez|"
            r"dessine|dessiner|dessinez|peins|peindre|peignez|imagine|imaginer|imaginez|"
            r"create|generate|draw|paint|render")
+# i18n: tel quel (motif de détection)
 _WEAK = (r"fais|faites|faire|fabrique|fabriquer|fabriquez|r[ée]alise|r[ée]aliser|r[ée]alisez|"
          r"produis|produire|produisez|donne|donner|donnez|envoie|envoyer|envoyez|montre|"
          r"montrer|montrez|j'aimerais|je voudrais|je veux|il me faut|make|give|show|send|"
          r"i want|i'd like|i would like")
+# i18n: tel quel (motif de détection)
 _ARTICLE = (r"une?|des|quelques|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|douze|seize|"
             r"\d{1,2}|l'|la|le|les|ma|mon|mes|an?|some|two|three|four|five|six|eight|ten")
+# i18n: tel quel (motif de détection)
 _ADJECTIVE = (r"petite?s?|belles?|beaux?|jolie?s?|nouvelles?|nouveaux?|autres?|courtes?|"
               r"superbes?|magnifiques?|grandes?|grands?|vraie?s?|r[ée]alistes?|simples?|nice|"
               r"beautiful|short|new|quick|little|small|cool|great|realistic")
+# i18n: tel quel (motif de détection)
 _IMAGES = (r"images?|photos?|photographies?|dessins?|logos?|fonds? d'[ée]cran|wallpapers?|"
            r"pictures?|drawings?|affiches?|posters?|ic[ôo]nes?|visuels?|croquis|esquisses?|"
            r"aquarelles?|icons?|sketch(?:es)?")
 # Noms qui ont aussi un sens figuré (« donne-moi une illustration de ce principe », « un
 # portrait de Napoléon ») : seulement avec un verbe de création sans ambiguïté
 _IMAGES_STRONG = r"illustrations?|peintures?|portraits?|paintings?"
-_VIDEOS = r"vid[ée]os?|clips?|animations?|videos?"
+_VIDEOS = r"vid[ée]os?|clips?|animations?|videos?"   # i18n: tel quel (motif de détection)
 
-_REQUEST = re.compile(
+_REQUEST = re.compile(            # i18n: tel quel (motif de détection)
     rf"(?:^|[\s,.;:!?«\"(])(?:(?:me|nous|lui|leur)\s+|m')?(?P<verb>{_STRONG}|{_WEAK})"
     rf"(?:[- ](?:moi|nous|lui|leur|me|us))?\s+(?P<n>{_ARTICLE})\s*"
     rf"(?:(?:{_ADJECTIVE})\s+){{0,3}}(?P<noun>{_IMAGES}|{_IMAGES_STRONG}|{_VIDEOS})\b"
     rf"(?P<rest>.*)$", re.IGNORECASE | re.DOTALL)
-_DRAWING = re.compile(
+_DRAWING = re.compile(            # i18n: tel quel (motif de détection)
     rf"(?:^|[\s,.;:!?«\"(])(?:(?:me|nous|lui)\s+|m')?(?P<verb>dessine\w*|peins|peindre|"
     rf"peignez|draw|paint)(?:[- ](?:moi|nous|lui|me|us))?\s+(?P<rest>(?:{_ARTICLE})\s*\S.*)$",
     re.IGNORECASE | re.DOTALL)
@@ -66,7 +73,7 @@ _DRAWING = re.compile(
 # Une question ou un sujet de code : la réponse est un texte, pas une image
 _QUESTION = re.compile(r"^\s*(comment|pourquoi|quels?|quelles?|combien|explique\w*|how|why|"
                        r"what|which)\b", re.IGNORECASE)
-_TECHNICAL = re.compile(
+_TECHNICAL = re.compile(          # i18n: tel quel (motif de détection)
     r"\b(docker\w*|iso|kubernetes|k8s|vm|machines? virtuelles?|bootable|base ?64|svg|ascii|"
     r"latex|tikz|matplotlib|pillow|pil|opencv|canvas|html|css|python|javascript|typescript|"
     r"js|rust|golang|code|script|fonction|commande|terminal|powershell|bash|api|sql|regex|"
@@ -76,27 +83,35 @@ _TECHNICAL = re.compile(
     re.IGNORECASE)
 _NOT_A_DRAWING = re.compile(r"^(?:\S+\s+)?(tableaux?|graphiques?|plans?|arbres?|courbes?|"
                             r"cartes? mentales?)\b", re.IGNORECASE)
+# i18n: tel quel (motif de détection)
 _LINK = re.compile(r"^\s*(?:[:—–-]\s*|de\s+|d'|d\s+(?=une?\b)|du\s+|des\s+|of\s+|avec\s+|with\s+|"
                    r"qui\s+(?:montre|repr[ée]sente)\w*\s+|montrant\s+|repr[ée]sentant\s+|"
                    r"showing\s+|o[ùu]\s+|where\s+|sur\s+laquelle\s+|sur\s+lequel\s+)",
                    re.IGNORECASE)
 # Le format dit dans la phrase sert à choisir la taille (shape_of), pas à décrire l'image
+# i18n: tel quel (motif de détection)
 _FORMAT = re.compile(r"\s*\b(?:en|au|format)\s+(?:format\s+)?(?:16[:/]9|9[:/]16|1[:/]1|4[:/]3|"
                      r"3[:/]4|portrait|paysage|carr[ée]e?|vertical\w*|horizontal\w*)\b",
                      re.IGNORECASE)
 # « J'ai créé une image hier » : un récit, pas une demande (l'auxiliaire juste avant le verbe)
+# i18n: tel quel (motif de détection)
 _PAST = re.compile(r"\b(?:ai|as|a|avons|avez|ont)\s+(?:d[ée]j[àa]\s+|bien\s+|aussi\s+)?$",
                    re.IGNORECASE)
+# i18n: tel quel (motif de détection)
 _POLITE = re.compile(r"[\s,]*(s'il (?:te|vous) pla[iî]t|stp|svp|please|merci)\s*[.!?]*\s*$",
                      re.IGNORECASE)
+# i18n: tel quel (motif de détection)
 _MEDIUM = re.compile(r"^(images?|pictures?|vid[ée]os?|videos?|clips?)$", re.IGNORECASE)
 # Noms qui servent aussi au figuré : avec « donne-moi », « je voudrais »…, il faut dire ce
 # qu'ils montrent (« une image de… ») ; une affiche ou un logo se demandent sans détour
+# i18n: tel quel (motif de détection)
 _LOOSE = re.compile(r"^(images?|photos?|photographies?|pictures?|vid[ée]os?|videos?|clips?|"
                     r"animations?)$", re.IGNORECASE)
 # Des expressions où « image » ou « photo » ne demandent rien à dessiner
+# i18n: tel quel (motif de détection)
 _FIGURATIVE = re.compile(r"\b(?:images? de marque|photos? d'identit[ée]|images? publique)",
                          re.IGNORECASE)
+# i18n: tel quel (motif de détection)
 _EMPTY = re.compile(r"^(ça|ca|cela|ceci|it|this|that|quelque chose|something)$", re.IGNORECASE)
 _NUMBERS = {"un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6,
             "sept": 7, "huit": 8, "neuf": 9, "dix": 10, "douze": 12, "seize": 16, "two": 2,
@@ -104,18 +119,22 @@ _NUMBERS = {"un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "s
 _PLURAL = {"des", "quelques", "les", "mes", "some"}
 
 # Format : un mot explicite d'abord, puis l'écran visé, puis le sujet lui-même
-_SHAPES = (
+_SHAPES = (                        # i18n: tel quel (motifs de détection)
     ("square", re.compile(r"\b(carr[ée]e?s?|square|1[:/]1)\b", re.IGNORECASE)),
+    # i18n: tel quel (motif de détection)
     ("portrait", re.compile(r"\b(vertical\w*|9[:/]16|format portrait|en portrait|"
                             r"t[ée]l[ée]phones?|smartphones?|stor(?:y|ies))\b", re.IGNORECASE)),
+    # i18n: tel quel (motif de détection)
     ("landscape", re.compile(r"\b(horizontal\w*|16[:/]9|format paysage|en paysage|"
                              r"panoram\w*|banni[èe]res?|banners?|wide)\b", re.IGNORECASE)),
     ("portrait", re.compile(r"\bportraits?\b", re.IGNORECASE)),
+    # i18n: tel quel (motif de détection)
     ("landscape", re.compile(r"\b(paysages?|fonds? d'[ée]cran|wallpapers?|landscapes?)\b",
                              re.IGNORECASE)),
 )
 _SECONDS = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:s|sec|secs|secondes?|seconds?)\b", re.IGNORECASE)
 # La durée d'une vidéo n'a rien à faire dans sa description (« de 5 secondes d'un renard »)
+# i18n: tel quel (motif de détection)
 _DURATION = re.compile(r"(?:^|,?\s+(?:de|d'une durée de|pendant|durant|of)?\s*)"
                        r"\d+(?:[.,]\d+)?\s*(?:s|sec|secs|secondes?|seconds?)\b\s*(?:de\s+|d')?",
                        re.IGNORECASE)
@@ -127,7 +146,7 @@ def technical(text: str) -> bool:
 
 
 def _clean(text: str) -> str:
-    text = text.replace("’", "'").replace("‘", "'")
+    text = text.replace("’", "'").replace("‘", "'")   # i18n: tel quel (apostrophes ramenées)
     return " ".join(text.split())
 
 
@@ -189,7 +208,7 @@ def intent(text: str) -> dict | None:
             "seconds": float(seconds[1].replace(",", ".")) if seconds else None}
 
 
-_ELLIPTIC = re.compile(
+_ELLIPTIC = re.compile(           # i18n: tel quel (motif de détection)
     rf"^\s*(?P<n>une?|des|deux|trois|quatre|cinq|six|\d{{1,2}})\s+(?:(?:{_ADJECTIVE})\s+){{0,2}}"
     rf"(?P<noun>{_IMAGES}|{_VIDEOS})\b(?P<rest>.*)$", re.IGNORECASE | re.DOTALL)
 
@@ -200,6 +219,7 @@ def _elliptic(text: str):
     found = _ELLIPTIC.match(text)
     if found is None or text.rstrip().endswith("?") or not _LINK.match(found["rest"]):
         return None
+    # i18n: tel quel (un verbe de _STRONG, jamais affiché)
     return {"verb": "crée", "n": found["n"], "noun": found["noun"], "rest": found["rest"]}
 
 
@@ -260,12 +280,11 @@ def frames_for(model_id: str, seconds: float | None) -> int | None:
 
 
 def describe(media: dict) -> str:
-    """Ce que le modèle de conversation lit de cette réponse (historique, mémoire)."""
+    """Ce que le modèle de conversation lit de cette réponse (historique, mémoire), dans la
+    langue de la demande (le texte est gardé avec la réponse)."""
     n, video = int(media.get("count") or 1), media.get("kind") == "video"
-    what = ("vidéo" if video else "image") + ("s" if n > 1 else "")
-    many = f"de {n}" if n > 1 else "d'une"
-    return (f"(Création {many} {what} avec {media.get('label') or media.get('model')}, "
-            f"d'après la description : « {media.get('prompt')} ».)")
+    return t("chat_prompts.creation_video" if video else "chat_prompts.creation_image", n=n,
+             model=media.get("label") or media.get("model"), prompt=media.get("prompt"))
 
 
 def capability_note() -> str | None:
@@ -274,13 +293,13 @@ def capability_note() -> str | None:
     kinds = {catalog.MODELS[m].get("kind", "image") for m in usable()}
     if not kinds:
         return None
-    what = "des images et des vidéos" if kinds == {"image", "video"} else (
-        "des vidéos" if kinds == {"video"} else "des images")
-    return (f"AIODOS, l'application où tu réponds, sait aussi créer {what} : l'utilisateur "
-            "les demande dans la conversation (par exemple « Crée une image d'un phare sous "
-            "l'orage ») et AIODOS les crée lui-même. Si on te demande si tu sais en créer, "
-            "réponds que oui et invite à décrire ce qu'il faut créer. Tu ne vois pas les "
-            "images créées : tu n'en connais que la description.")
+    if kinds == {"image", "video"}:
+        what = t("chat_prompts.capability_both")
+    elif kinds == {"video"}:
+        what = t("chat_prompts.capability_videos")
+    else:
+        what = t("chat_prompts.capability_images")
+    return f"{what} {t('chat_prompts.capability_more')}"
 
 
 def preflight(text: str, conversation_id=None, before=None) -> dict | None:
@@ -310,20 +329,16 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
 def _nothing_can(media_kind: str) -> CreationError:
     """Aucun modèle de ce genre ne peut calculer : la façon d'en avoir un. Des amis qui
     le proposeraient, si on les y autorise, sont nommés (friends)."""
-    what = "vidéos" if media_kind == "video" else "images"
+    what = "videos" if media_kind == "video" else "images"
     offered = sorted({name for model_id, names in lenders.helpers(friends=True).items()
                       if catalog.MODELS.get(model_id, {}).get("kind", "image") == media_kind
                       for name in names})
     if offered and not settings.get("images_from_friends"):
-        who = ", ".join(offered)
-        return CreationError(
-            f"Aucun modèle de {what} n'est prêt ici ni chez tes machines, mais {who} "
-            f"{'peuvent' if len(offered) > 1 else 'peut'} les calculer pour toi : ta "
-            f"description et le résultat passeront chez {'eux' if len(offered) > 1 else 'lui'} "
-            f"le temps du calcul, sans y être gardés.", status=409, friends=offered)
-    return CreationError(f"Aucun modèle de {what} ne peut calculer en ce moment, ni ici ni "
-                         f"chez tes machines en ligne : installe-en un dans « Images et "
-                         f"vidéos ».", status=409)
+        # chat_create.nothing_ready_friends_images, chat_create.nothing_ready_friends_videos
+        return CreationError(t(f"chat_create.nothing_ready_friends_{what}", n=len(offered),
+                               who=", ".join(offered)), status=409, friends=offered)
+    # chat_create.nothing_ready_images, chat_create.nothing_ready_videos
+    return CreationError(t(f"chat_create.nothing_ready_{what}"), status=409)
 
 
 def _followed(request: dict, text: str, conv_id, chat_model, before=None) -> dict:
@@ -382,18 +397,18 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     qu'accept() enregistre ; CreationError si la demande ne peut pas aboutir."""
     text = (text or "").strip()
     if not text:
-        raise CreationError("Message vide.")
+        raise CreationError(t("chat.empty_message"))
     conv_id = conversation_id
     if conv_id is not None and not conversations.get(conv_id):
         conv_id = None
     if replace_from is not None and conv_id is None:
-        raise CreationError(CHANGED, status=CHANGED_STATUS)
+        raise CreationError(changed(), status=CHANGED_STATUS)
     if request.get("followup") and not request.get("prompt"):
         request = _followed(request, text, conv_id, chat_model, replace_from)
     found = intent(text) or {}
     media_kind = request.get("kind") or found.get("kind") or "image"
     if media_kind not in ("image", "video"):
-        raise CreationError("Genre inconnu : image ou vidéo.")
+        raise CreationError(t("chat_create.unknown_kind"))
     model_id = pick(media_kind, request.get("model"))
     if model_id is None:
         raise _nothing_can(media_kind)
@@ -430,7 +445,7 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
     with db.transaction() as c:
         if conv_id is not None and c.execute("SELECT 1 FROM conversations WHERE id=?",
                                              (conv_id,)).fetchone() is None:
-            raise CreationError(CHANGED, status=CHANGED_STATUS)
+            raise CreationError(changed(), status=CHANGED_STATUS)
         stopped = replace(conv_id, replace_from, replace_text) if replace_from is not None else []
         if conv_id is None:
             conv_id = conversations.create(model=plan["chat_model"] or None)
@@ -462,10 +477,9 @@ def undo(message_id: int) -> dict:
     conversation. → {"conversation_id", "text", "job_id"} ; CreationError sinon."""
     found = conversations.creation_message(message_id)
     if found is None:
-        raise CreationError("Création introuvable.", status=404)
+        raise CreationError(t("chat_create.not_found"), status=404)
     if not found["last"]:
-        raise CreationError("La conversation a continué depuis : seule la dernière création "
-                            "peut céder la place à une réponse en texte.", status=409)
+        raise CreationError(t("chat_create.continued"), status=409)
     media = found["media"]
     job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
     if same_job(job, media) and job["status"] in ("queued", "running", "paused"):
@@ -476,7 +490,11 @@ def undo(message_id: int) -> dict:
             "job_id": job["id"] if same_job(job, media) else None}
 
 
-CHANGED = "La conversation a changé entre-temps (autre fenêtre ?) : elle est rechargée."
+def changed() -> str:
+    """La conversation a changé entre-temps (autre fenêtre) : elle sera relue."""
+    return t("chat.changed")
+
+
 CHANGED_STATUS = 412              # pas 409 : celui-là dit qu'aucun modèle ne peut calculer
 
 
@@ -489,7 +507,7 @@ def replace(conv_id, message_id, expect=None) -> list:
     found = conversations.user_message(conv_id, message_id)
     if (found is None or (expect is not None and found != expect)
             or conversations.later_question(conv_id, message_id)):
-        raise CreationError(CHANGED, status=CHANGED_STATUS)
+        raise CreationError(changed(), status=CHANGED_STATUS)
     stopped = []
     for media in conversations.media_from(conv_id, message_id):
         job = queue.job_summary(media["job_id"]) if media.get("job_id") else None
@@ -497,7 +515,7 @@ def replace(conv_id, message_id, expect=None) -> list:
             queue.cancel_job(job["id"])
             stopped.append(job["id"])
     if conversations.rewind(conv_id, message_id, expect) is None:
-        raise CreationError(CHANGED, status=CHANGED_STATUS)
+        raise CreationError(changed(), status=CHANGED_STATUS)
     return stopped
 
 

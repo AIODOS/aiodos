@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 
+from aiodos.i18n import t
 from aiodos.services import addresses
 
 # En-tête en ASCII pur : requests encode les en-têtes en latin-1 (le « œ » casse).
@@ -55,7 +56,7 @@ class PageUnreadable(Exception):
 
 
 def _too_slow() -> "PageUnreadable":
-    return PageUnreadable(f"page trop lente : plus de {TOTAL_TIMEOUT:.0f} s pour la lire")
+    return PageUnreadable(t("web.page_too_slow", seconds=f"{TOTAL_TIMEOUT:.0f}"))
 
 
 class _TextExtractor(HTMLParser):
@@ -124,6 +125,7 @@ def _web_charsets() -> dict:
     table = {
         "utf-8": ("utf-8", "utf8", "unicode-1-1-utf-8", "unicode11utf8", "unicode20utf8",
                   "x-unicode20utf8"),
+        # i18n: tel quel (noms de codecs)
         "utf-16-le": ("utf-16", "utf-16le", "ucs-2", "unicode", "csunicode",
                       "iso-10646-ucs-2", "unicodefeff"),
         "utf-16-be": ("utf-16be", "unicodefffe"),
@@ -163,6 +165,7 @@ def _web_charsets() -> dict:
 
 
 WEB_CHARSETS = _web_charsets()
+# i18n: tel quel (noms de codecs)
 _BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
 _DECLARED = re.compile(rb"""<meta[^>]{0,200}?charset\s*=\s*["']?\s*([\w.:-]{1,40})"""
                        rb"""|<\?xml[^>]{0,200}?encoding\s*=\s*["']([\w.:-]{1,40})""", re.I)
@@ -186,7 +189,7 @@ def _declared_in_page(raw: bytes):
     if not match:
         return None
     codec = _web_codec((match.group(1) or match.group(2)).decode("ascii", "replace"))
-    return "utf-8" if codec in ("utf-16-le", "utf-16-be") else codec
+    return "utf-8" if codec in ("utf-16-le", "utf-16-be") else codec   # i18n: tel quel (codecs)
 
 
 def _decoded(raw: bytes, codec: str) -> str:
@@ -248,8 +251,7 @@ def _read(session, url, guard, stop, deadline):
     for _ in range(MAX_REDIRECTS + 1):
         parsed = urlparse(current)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise addresses.BlockedAddress("adresse refusée : seules les pages http et "
-                                           "https se lisent.")
+            raise addresses.BlockedAddress(t("web.scheme_refused"))
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise _too_slow()
@@ -260,13 +262,12 @@ def _read(session, url, guard, stop, deadline):
             if not guard.joined:
                 # Aucune connexion n'est passée par la garde : une version de requests ou
                 # d'urllib3 la contourne (addresses.supported). Rien de lu n'est rendu
-                raise addresses.BlockedAddress(addresses.GUARD_BYPASSED)
+                raise addresses.BlockedAddress(addresses.guard_bypassed())
             if response.is_redirect and response.headers.get("Location"):
                 current = urljoin(current, response.headers["Location"])
                 continue
             if response.status_code >= 400:
-                raise PageUnreadable("la page répond par une erreur "
-                                     f"(HTTP {response.status_code})")
+                raise PageUnreadable(t("web.page_error", status=response.status_code))
             content_type = response.headers.get("Content-Type", "")
             if not _type_ok(content_type):
                 return current, content_type, ""
@@ -274,7 +275,7 @@ def _read(session, url, guard, stop, deadline):
         finally:
             response.close()
         return current, content_type, _decode(raw, content_type)
-    raise PageUnreadable(f"trop de redirections (plus de {MAX_REDIRECTS})")
+    raise PageUnreadable(t("web.too_many_redirects", n=MAX_REDIRECTS))
 
 
 def _watch(guard, stop, deadline, done):
@@ -310,15 +311,16 @@ def _guarded(public_only, deadline, stop, name):
 
 
 def _failure(exc, guard, stop, slow, what) -> Exception:
-    """L'exception à lever, en clair, pour un échec du réseau pendant une lecture."""
+    """L'exception à lever, en clair, pour un échec du réseau pendant une lecture. what :
+    « page » ou « search » (web.page_timeout, web.search_unreachable…)."""
     if stop is not None and stop.is_set():
         return FetchStopped()
     if guard.was_cut:
         return slow()
     if isinstance(exc, requests.Timeout):
-        return PageUnreadable(f"{what} injoignable : délai dépassé")
+        return PageUnreadable(t(f"web.{what}_timeout"))
     if isinstance(exc, requests.RequestException):
-        return PageUnreadable(f"{what} injoignable : connexion impossible ou interrompue")
+        return PageUnreadable(t(f"web.{what}_unreachable"))
     return exc
 
 
@@ -355,7 +357,7 @@ MAX_TITLE = 300                        # caractères gardés du titre d'un résu
 
 
 def _search_too_slow() -> "PageUnreadable":
-    return PageUnreadable(f"recherche web trop lente : plus de {SEARCH_TIMEOUT:.0f} s")
+    return PageUnreadable(t("web.search_too_slow", seconds=f"{SEARCH_TIMEOUT:.0f}"))
 
 
 class _Results(HTMLParser):
@@ -425,10 +427,9 @@ def web_search(query, max_results=3, stop=None):
                                     timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
             try:
                 if not guard.joined:
-                    raise addresses.BlockedAddress(addresses.GUARD_BYPASSED)
+                    raise addresses.BlockedAddress(addresses.guard_bypassed())
                 if response.status_code >= 300:
-                    raise PageUnreadable("la recherche web répond par une erreur "
-                                         f"(HTTP {response.status_code})")
+                    raise PageUnreadable(t("web.search_error", status=response.status_code))
                 content_type = response.headers.get("Content-Type", "")
                 raw = _stream_body(response, guard, stop, deadline, SEARCH_MAX_BYTES,
                                    _search_too_slow)
@@ -437,7 +438,7 @@ def web_search(query, max_results=3, stop=None):
         except (addresses.BlockedAddress, FetchStopped, PageUnreadable):
             raise
         except Exception as exc:
-            failure = _failure(exc, guard, stop, _search_too_slow, "recherche web")
+            failure = _failure(exc, guard, stop, _search_too_slow, "search")
             if failure is exc:
                 raise
             raise failure from exc

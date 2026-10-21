@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from aiodos.chat import creations, pending
+from aiodos.i18n import t
 
 router = APIRouter(prefix="/api/chat")
 
@@ -60,7 +61,7 @@ async def create(body: CreateIn, request: Request):
         marker = pending.begin(conv_id) if conv_id is not None else None
         try:
             if await request.is_disconnected():     # parti avant l'acceptation : rien ne change
-                return JSONResponse({"detail": "Demande abandonnée."}, status_code=400)
+                return JSONResponse({"detail": t("chat.abandoned")}, status_code=400)
             made = await asyncio.to_thread(creations.accept, plan, body.replace_from,
                                            body.replace_text)
         finally:

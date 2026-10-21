@@ -5,6 +5,7 @@
 // calculées ici ou par tes machines qui ont le modèle.
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit, prefs } from '../state.js';
 import { menu, toast, errorToast } from '../ui.js';
@@ -12,10 +13,10 @@ import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const COUNTS = [1, 2, 4, 8];
-const KINDS = { image: { noun: 'image', label: 'Image', icon: 'image' },
-  video: { noun: 'vidéo', label: 'Vidéo', icon: 'video' } };
-const PLACEHOLDER = { image: "Décris l'image à créer…", video: 'Décris la vidéo à créer…' };
-const HINT = 'Entrée pour créer · Maj+Entrée pour aller à la ligne · Échap pour revenir à la conversation';
+// Les textes de chaque genre : chat_create.kind_image, create_image, placeholder_image,
+// no_model_image, count_image… (et _video)
+const KINDS = { image: { icon: 'image' }, video: { icon: 'video' } };
+const kindOf = media => (KINDS[media.kind] ? media.kind : 'image');
 
 let info = null;              // modèles d'images et de vidéos (GET /images/models)
 let mode = null;              // null, 'image' ou 'video' : le mode « Créer » du message
@@ -32,21 +33,21 @@ export function mountCreate(footer, input, grow) {
   ui = {
     input, hint: footer.querySelector('.hint'),
     placeholder: input.placeholder, hintText: footer.querySelector('.hint')?.textContent || '',
-    button: h(`<button class="icon-btn create-btn" title="Créer une image ou une vidéo">${icon('image')}</button>`),
+    button: h(`<button class="icon-btn create-btn" title="${esc(t('chat_create.button'))}">${icon('image')}</button>`),
     bar: h(`<div class="create-bar" hidden>
-      <button class="create-kind" data-c="close" title="Revenir à la conversation"></button>
-      <select class="select" data-c="model" title="Modèle"></select>
-      <select class="select" data-c="format" title="Format"></select>
-      <select class="select" data-c="frames" title="Durée" hidden></select>
-      <select class="select" data-c="count" title="Combien"></select>
-      <span class="chip on create-seed" hidden title="Même graine, même description : même résultat"></span>
+      <button class="create-kind" data-c="close" title="${esc(t('chat_create.close'))}"></button>
+      <select class="select" data-c="model" title="${esc(t('chat_create.model'))}"></select>
+      <select class="select" data-c="format" title="${esc(t('chat_create.format'))}"></select>
+      <select class="select" data-c="frames" title="${esc(t('chat_create.duration'))}" hidden></select>
+      <select class="select" data-c="count" title="${esc(t('chat_create.count'))}"></select>
+      <span class="chip on create-seed" hidden title="${esc(t('chat_create.seed_title'))}"></span>
       <span class="create-note"></span>
     </div>`),
   };
   box.prepend(ui.button);
   box.before(ui.bar);
   ui.button.onclick = () => menu(ui.button, Object.entries(KINDS).map(([kind, k]) => ({
-    label: `Créer une ${k.noun}`, icon: k.icon, action: () => setMode(kind) })));
+    label: t(`chat_create.create_${kind}`), icon: k.icon, action: () => setMode(kind) })));
   // Les modèles se chargent dès que le pointeur approche du bouton : la barre est prête au clic
   ui.button.addEventListener('pointerenter', () => { if (!info) load(); }, { once: true });
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
@@ -75,8 +76,8 @@ export function setMode(kind, p = {}) {
   preset = kind && p.seed != null ? { seed: p.seed } : {};
   ui.bar.hidden = !kind;
   ui.button.classList.toggle('on', !!kind);
-  ui.input.placeholder = kind ? PLACEHOLDER[kind] : ui.placeholder;
-  if (ui.hint) ui.hint.textContent = kind ? HINT : ui.hintText;
+  ui.input.placeholder = kind ? t(`chat_create.placeholder_${kind}`) : ui.placeholder;
+  if (ui.hint) ui.hint.textContent = kind ? t('chat_create.hint') : ui.hintText;
   if (!kind) { ui.input.focus(); return; }
   if (p.prompt) {
     ui.input.value = p.prompt;
@@ -103,22 +104,23 @@ const usable = m => (m.state === 'ready' && info?.engine.found) || m.helpers.len
 function fill() {
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   const k = KINDS[mode];
-  ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${k.label}${icon('x')}`;
+  ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${esc(t(`chat_create.kind_${mode}`))}${icon('x')}`;
   const models = (info?.models || []).filter(m => (m.kind || 'image') === mode);
   const select = field('model');
   const wanted = prefs.get(`create.model.${mode}`, '') || select.value;
   select.innerHTML = models.map(m => {
-    const where = !usable(m) ? ' · à installer' : m.state === 'ready' && info.engine.found ? ''
-      : ` · chez ${m.helpers.join(', ')}`;
-    return `<option value="${esc(m.id)}"${usable(m) ? '' : ' disabled'}>${esc(m.label)}${esc(where)}</option>`;
+    const text = !usable(m) ? t('chat_create.model_to_install', { label: m.label })
+      : m.state === 'ready' && info.engine.found ? m.label
+      : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') });
+    return `<option value="${esc(m.id)}"${usable(m) ? '' : ' disabled'}>${esc(text)}</option>`;
   }).join('');
   const ready = models.filter(usable);
   select.value = ready.some(m => m.id === wanted) ? wanted : ready[0]?.id || models[0]?.id || '';
   const model = models.find(m => m.id === select.value);
   const note = ui.bar.querySelector('.create-note');
-  note.innerHTML = !info ? '<span class="faint">Chargement des modèles…</span>' : ready.length ? ''
-    : `<span class="faint">Aucun modèle de ${k.noun}s prêt.</span>
-       <button class="btn sm" data-go-images>${icon(k.icon)}Images et vidéos</button>`;
+  note.innerHTML = !info ? `<span class="faint">${esc(t('chat.loading_models'))}</span>` : ready.length ? ''
+    : `<span class="faint">${esc(t(`chat_create.no_model_${mode}`))}</span>
+       <button class="btn sm" data-go-images>${icon(k.icon)}${esc(t('nav.images_title'))}</button>`;
   note.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
   for (const name of ['format', 'frames', 'count']) field(name).hidden = !model || !ready.length;
   if (!model) return;
@@ -136,11 +138,12 @@ function fill() {
     : String(model.default_frames || model.durations?.[0]?.[0] || '');
   const count = field('count');
   const n = String(prefs.get(`create.count.${mode}`, 1));
-  count.innerHTML = COUNTS.map(c => `<option value="${c}">${c} ${k.noun}${c > 1 ? 's' : ''}</option>`).join('');
+  count.innerHTML = COUNTS.map(c =>
+    `<option value="${c}">${esc(t(`chat_create.count_${mode}`, { n: c }))}</option>`).join('');
   count.value = COUNTS.map(String).includes(n) ? n : '1';
   const seed = ui.bar.querySelector('.create-seed');
   seed.hidden = preset.seed == null;
-  seed.innerHTML = preset.seed == null ? '' : `graine ${esc(preset.seed)} ${icon('x')}`;
+  seed.innerHTML = preset.seed == null ? '' : `${esc(t('chat_create.seed', { seed: preset.seed }))} ${icon('x')}`;
 }
 
 /** La demande du mode « Créer », s'il est ouvert : la description est le message. */
@@ -185,9 +188,9 @@ export function appendNotice(list, message, { images = false, friends = [], retr
     <div class="msg assistant notice">
       <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body"><div class="banner warn">${icon('warn')}<div>${esc(message)}</div>
-        ${friends.length && retry ? `<button class="btn sm" data-friends-ok>${icon('network')}Autoriser mes amis</button>` : ''}
-        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}Images et vidéos</button>` : ''}
-        ${asText ? `<button class="btn sm ghost" data-as-text>${icon('chat')}Répondre en texte</button>` : ''}</div></div>
+        ${friends.length && retry ? `<button class="btn sm" data-friends-ok>${icon('network')}${esc(t('chat_create.allow_friends'))}</button>` : ''}
+        ${images ? `<button class="btn sm ghost" data-go-images>${icon('image')}${esc(t('nav.images_title'))}</button>` : ''}
+        ${asText ? `<button class="btn sm ghost" data-as-text>${icon('chat')}${esc(t('chat_create.as_text'))}</button>` : ''}</div></div>
     </div>`);
   node.querySelector('[data-go-images]')?.addEventListener('click', () => emit('view:show', 'images'));
   node.querySelector('[data-as-text]')?.addEventListener('click', () => asText());
@@ -200,7 +203,7 @@ export function appendNotice(list, message, { images = false, friends = [], retr
     if (await retry() === false) {                // une autre création en route : plus tard
       node.hidden = false;
       friendsOk.disabled = false;
-      toast('Une création est déjà en route : réessaie dans un instant.');
+      toast(t('chat_create.busy'));
       return;
     }
     node.remove();
@@ -236,10 +239,10 @@ export function appendMedia(list, media, messageId = null) {
         <div class="meta">
           <span class="model-tag"></span>
           ${media.auto && messageId ? `<button class="link-btn as-text" data-act="as-text"
-            title="Ce n'était pas une demande d'image : la retirer, et répondre en texte">Répondre en texte</button>` : ''}
+            title="${esc(t('chat_create.as_text_title'))}">${esc(t('chat_create.as_text'))}</button>` : ''}
           <span class="actions">
-            <button class="icon-btn" data-act="reuse" title="Reprendre cette description">${icon('retry')}</button>
-            <button class="icon-btn" data-act="copy-prompt" title="Copier la description">${icon('copy')}</button>
+            <button class="icon-btn" data-act="reuse" title="${esc(t('chat_create.reuse'))}">${icon('retry')}</button>
+            <button class="icon-btn" data-act="copy-prompt" title="${esc(t('chat_create.copy_prompt'))}">${icon('copy')}</button>
           </span>
         </div>
       </div>
@@ -255,7 +258,7 @@ export function appendMedia(list, media, messageId = null) {
     model: media.model, prompt: media.prompt, width: media.width, height: media.height,
     frames: media.frames });
   node.querySelector('[data-act="copy-prompt"]').onclick = () => navigator.clipboard
-    .writeText(media.prompt).then(() => toast('Description copiée.', 'ok', 1800));
+    .writeText(media.prompt).then(() => toast(t('chat_create.prompt_copied'), 'ok', 1800));
   node.querySelector('[data-act="as-text"]')?.addEventListener('click', () => {
     live.delete(media.batch);
     emit('chat:as-text', { messageId, node });
@@ -298,7 +301,7 @@ function paintGrid(view) {
       <button class="creation-tile" data-id="${img.id}" title="${esc(img.prompt)}" style="${ratio}">
         ${isVideo(img)
           ? `<video muted loop playsinline preload="metadata" src="${fileOf(img)}"></video>
-             <span class="img-tag">vidéo ${length(img)}</span>`
+             <span class="img-tag">${esc(t('chat_create.video_tag', { length: length(img) }))}</span>`
           : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}">`}
       </button>`).join('')
     + `<div class="creation-slot" style="${ratio}">${icon(KINDS[media.kind]?.icon || 'image')}</div>`.repeat(waiting);
@@ -311,11 +314,12 @@ function paintGrid(view) {
       onDeleted: img => { view.images = view.images.filter(i => i.id !== img.id); paintGrid(view); },
     });
   });
-  const machines = [...new Set(images.map(i => i.machine || 'cette machine'))];
+  const machines = [...new Set(images.map(i => i.machine || t('chat.this_machine')))];
   const seconds = images.length ? Math.round(images.reduce((n, i) => n + (i.seconds || 0), 0) / images.length) : 0;
   view.node.querySelector('.model-tag').textContent = [media.label,
-    media.retouch ? "retouche de l'image précédente" : '', machines.join(', '),
-    seconds ? `${seconds} s${images.length > 1 ? ' par ' + KINDS[media.kind].noun : ''}` : '']
+    media.retouch ? t('chat_create.retouch') : '', machines.join(', '),
+    !seconds ? '' : images.length > 1 ? t(`chat_create.seconds_each_${kindOf(media)}`, { seconds })
+      : t('format.seconds', { n: seconds })]
     .filter(Boolean).join(' · ');
   onGrow();
 }
@@ -324,41 +328,44 @@ function paintState(view) {
   const { media, images } = view;
   const job = view.job ? state.jobs.get(view.job.id) || view.job : null;
   const box = view.node.querySelector('.creation-state');
-  const noun = KINDS[media.kind]?.noun || 'image';
+  const what = kindOf(media);
   let text = '';
   let kind = 'faint';
   if (job && sameJob(job, media) && ACTIVE.includes(job.status)) {
     const names = new Map((state.network?.peers || []).map(p => [p.node_id, p.name]));
-    const away = Object.keys(job.remote || {}).map(id => names.get(id) || 'une autre machine');
-    const doing = job.status === 'paused' ? 'En pause'
-      : away.length ? `Calcul chez ${away.join(', ')}`
-      : job.status === 'running' ? 'Création en cours' : 'En attente de son tour';
-    const count = media.count > 1 ? ` · ${images.length} sur ${media.count}` : '';
-    const since = job.created ? ` · ${duration(Math.max(0, Date.now() / 1000 - job.created))}` : '';
+    const away = Object.keys(job.remote || {}).map(id => names.get(id) || t('jobs.another_machine'));
+    const doing = job.status === 'paused' ? t('chat_create.paused')
+      : away.length ? t('chat_create.computing_on', { names: away.join(', ') })
+      : t(job.status === 'running' ? 'chat_create.running' : 'chat_create.queued');
+    const count = media.count > 1 ? t('chat_create.progress', { done: images.length, n: media.count }) : '';
+    const since = job.created ? duration(Math.max(0, Date.now() / 1000 - job.created)) : '';
     // D'après les précédentes, de ce modèle à cette taille (la première est plus longue)
-    const usual = media.expected_s && job.status !== 'paused'
-      ? ` · d'habitude ${duration(media.expected_s)}${media.count > 1 ? ` par ${noun}` : ''}` : '';
+    const usual = !media.expected_s || job.status === 'paused' ? ''
+      : t(media.count > 1 ? `chat_create.usual_each_${what}` : 'chat_create.usual',
+        { time: duration(media.expected_s) });
     // Construit une fois, puis seul le texte change : un clic sur « Arrêter » n'est pas
     // perdu quand l'état se redessine (chaque seconde)
     if (!box.querySelector('[data-stop]')) {
       box.innerHTML = `<span class="typing"><i></i><i></i><i></i></span><span class="faint state-text"></span>
-        <button class="icon-btn" data-stop title="Arrêter">${icon('stop')}</button>`;
+        <button class="icon-btn" data-stop title="${esc(t('chat_create.stop'))}">${icon('stop')}</button>`;
       box.querySelector('[data-stop]').onclick = async () => {
         try { await post(`/jobs/${job.id}/cancel`); } catch (err) { errorToast(err); }
       };
     }
-    box.querySelector('.state-text').textContent = `${doing}${count}${since}${usual}`;
+    box.querySelector('.state-text').textContent = [doing, count, since, usual].filter(Boolean).join(' · ');
     return;
   }
   if (job?.status === 'cancelled') {
-    text = images.length ? `Arrêtée : ${images.length} sur ${media.count}.` : 'Création arrêtée.';
+    text = images.length ? t('chat_create.stopped_partial', { done: images.length, n: media.count })
+      : t('chat_create.stopped');
   } else if (job && (job.status === 'failed' || job.failed)) {
     const failed = job.failed || media.count - images.length;
-    text = `${failed} ${noun}${failed > 1 ? 's' : ''} sur ${media.count} n'${failed > 1 ? 'ont' : 'a'} pas pu être `
-      + `créée${failed > 1 ? 's' : ''}${job.error ? ` : ${job.error}` : ' (le détail est dans Tâches)'}.`;
+    text = job.error
+      ? t(`chat_create.failed_${what}`, { n: failed, total: media.count, error: job.error })
+      : t(`chat_create.failed_${what}_tasks`, { n: failed, total: media.count });
     kind = 'err-text';
   } else if (!job && images.length < media.count && !images.length) {
-    text = 'Création interrompue, ou ses fichiers ont été supprimés.';
+    text = t('chat_create.interrupted');
   }
   box.innerHTML = text ? `<span class="${kind}">${esc(text)}</span>` : '';
 }

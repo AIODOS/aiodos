@@ -1,0 +1,23 @@
+{
+  "new_folder": "New folder",
+  "search": "Search conversations",
+  "fold": "Collapse the conversation list",
+  "folder_options": "Folder options",
+  "empty_folder": "Empty: drag a conversation here",
+  "section": "Conversations",
+  "empty": "No conversations yet.",
+  "no_results": "No results.",
+  "options": "Options",
+  "rename": "Rename",
+  "move_to": "Move to",
+  "out_of_folder": "No folder",
+  "new_folder_more": "New folder…",
+  "rename_folder": "Rename the folder",
+  "delete_folder": "Delete the folder",
+  "delete_title": "Delete the conversation",
+  "delete_text": "“{title}” and its trace in memory will be permanently deleted.",
+  "folder_name": "Folder name:",
+  "folder_example": "e.g. Short film project",
+  "new_name": "New name:",
+  "delete_folder_text": "The folder “{name}” will be deleted. Its conversations are kept and move out of the folder."
+}

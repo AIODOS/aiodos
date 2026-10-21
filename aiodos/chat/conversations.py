@@ -1,16 +1,40 @@
 """Conversations, messages et dossiers de classement."""
 import json
 
-from aiodos import db
+from aiodos import db, i18n
+from aiodos.i18n import t
 from aiodos.knowledge import store
 
-DEFAULT_TITLE = "Nouvelle conversation"
 ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une erreur (affichée)
 ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
-# À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui ne
-# doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)
-WITHHELD = ("(Réponse non transmise à ce modèle : elle s'appuie sur des documents, des "
-            "souvenirs ou des passages qui ne lui sont pas confiés.)")
+
+
+def default_title() -> str:
+    """Le titre d'une conversation neuve, écrit à sa création dans la langue en cours."""
+    return t("chat.new_conversation")
+
+
+def default_titles() -> list:
+    """Ce titre dans chaque langue : une conversation neuve garde celui de sa création, quelle
+    que soit la langue de qui lui écrit ensuite (auto_title)."""
+    titles = []
+    for lang in i18n.LANGUAGES:
+        with i18n.using(lang):
+            titles.append(default_title())
+    return titles
+
+
+def withheld() -> str:
+    """À la place d'une réponse appuyée sur des passages d'autres machines, pour un modèle qui
+    ne doit pas les recevoir (cloud, modèle prêté par un ami : cf. pipeline.peers_allowed)."""
+    return t("chat_prompts.withheld")
+
+
+def __getattr__(name):
+    """conversations.WITHHELD : le texte de withheld(), dans la langue en cours."""
+    if name == "WITHHELD":
+        return withheld()
+    raise AttributeError(name)
 
 
 def list_tree() -> dict:
@@ -23,7 +47,9 @@ def list_tree() -> dict:
     }
 
 
-def create(title=DEFAULT_TITLE, model=None, folder_id=None) -> int:
+def create(title=None, model=None, folder_id=None) -> int:
+    """title : sans titre, celui d'une conversation neuve (default_title)."""
+    title = default_title() if title is None else title
     now = db.now()
     return db.execute(
         "INSERT INTO conversations(title, folder_id, model, created, updated) "
@@ -78,7 +104,7 @@ def _snippet(text: str, query: str, before: int = 18, after: int = 70) -> str:
 def rename(conv_id, title):
     title = (title or "").strip()
     if not title:
-        raise ValueError("Le titre ne peut pas être vide.")
+        raise ValueError(t("chat.title_empty"))
     db.execute("UPDATE conversations SET title=? WHERE id=?", (title[:200], conv_id))
 
 
@@ -203,7 +229,7 @@ def rewind(conv_id, message_id, expect=None) -> str | None:
                   (conv_id, int(message_id)))
         if first:                     # le titre redeviendra celui du nouveau premier message
             c.execute("UPDATE conversations SET title=? WHERE id=? AND title=?",
-                      (DEFAULT_TITLE, conv_id, _title_of(row["content"])))
+                      (default_title(), conv_id, _title_of(row["content"])))
     store.remove_chunks_from(store.conversation_collection_id(), str(conv_id),
                              int(message_id) * 1000)
     return row["content"]
@@ -232,7 +258,7 @@ def cites_others(sources) -> bool:
 
 def history(conv_id, limit=30, with_others=True) -> list:
     """Derniers échanges, dans l'ordre, au format attendu par les modèles. with_others=False :
-    une réponse appuyée sur des passages d'autres machines est remplacée par WITHHELD."""
+    une réponse appuyée sur des passages d'autres machines est remplacée par withheld()."""
     return as_history(history_rows(conv_id, limit),
                       None if with_others else (lambda sources: not cites_others(sources)))
 
@@ -247,7 +273,7 @@ def history_rows(conv_id, limit=30) -> list:
 
 def as_history(rows, keep=None) -> list:
     """Messages au format des modèles. keep(sources) faux : la réponse est remplacée par
-    WITHHELD (elle s'appuie sur ce que cette machine ne doit pas recevoir). Les réponses
+    withheld() (elle s'appuie sur ce que cette machine ne doit pas recevoir). Les réponses
     qui ne sont qu'une erreur n'y vont pas."""
     found = []
     for r in rows:
@@ -255,7 +281,7 @@ def as_history(rows, keep=None) -> list:
             if is_error(r):
                 continue
             if keep is not None and not keep(_sources(r["sources"])):
-                found.append({"role": "assistant", "content": WITHHELD})
+                found.append({"role": "assistant", "content": withheld()})
                 continue
         found.append({"role": r["role"], "content": r["content"]})
     return found
@@ -291,9 +317,12 @@ def auto_title(conv_id, text) -> str | None:
     title = _title_of(text)
     if not title:
         return None
-    # D'un seul geste : deux messages à la fois ne se disputent pas le titre
-    changed = db.execute("UPDATE conversations SET title=? WHERE id=? AND title=?",
-                         (title, conv_id, DEFAULT_TITLE)).rowcount
+    # D'un seul geste : deux messages à la fois ne se disputent pas le titre. Celui d'une
+    # conversation neuve, dans l'une ou l'autre langue (celle de sa création)
+    titles = default_titles()
+    changed = db.execute(
+        f"UPDATE conversations SET title=? WHERE id=? AND title IN ({','.join('?' * len(titles))})",
+        (title, conv_id, *titles)).rowcount
     return title if changed else None
 
 
@@ -301,9 +330,9 @@ def auto_title(conv_id, text) -> str | None:
 def create_folder(name) -> int:
     name = (name or "").strip()
     if not name:
-        raise ValueError("Le nom du dossier ne peut pas être vide.")
+        raise ValueError(t("chat.folder_name_empty"))
     if db.query_one("SELECT 1 FROM folders WHERE name=?", (name,)):
-        raise ValueError(f"Le dossier « {name} » existe déjà.")
+        raise ValueError(t("chat.folder_exists", name=name))
     return db.execute("INSERT INTO folders(name, created) VALUES(?, ?)",
                       (name, db.now())).lastrowid
 
@@ -311,10 +340,10 @@ def create_folder(name) -> int:
 def rename_folder(folder_id, name):
     name = (name or "").strip()
     if not name:
-        raise ValueError("Le nom du dossier ne peut pas être vide.")
+        raise ValueError(t("chat.folder_name_empty"))
     clash = db.query_one("SELECT id FROM folders WHERE name=?", (name,))
     if clash and clash["id"] != folder_id:
-        raise ValueError(f"Le dossier « {name} » existe déjà.")
+        raise ValueError(t("chat.folder_exists", name=name))
     db.execute("UPDATE folders SET name=? WHERE id=?", (name, folder_id))
 
 

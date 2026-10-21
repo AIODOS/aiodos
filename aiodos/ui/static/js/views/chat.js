@@ -1,12 +1,13 @@
 // Conversation : choix du modèle, options, messages en streaming, validations.
 import { get, post, put, patch, streamChat, openExternal, inNativeWindow } from '../api.js';
 import { $, h, esc, bytes, duration, linkAction, linkKind } from '../dom.js';
+import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
-import { chooseModel, progressBar, cancelInstall, finished, here, integrated } from './model-install.js';
+import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated } from './model-install.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 
@@ -28,32 +29,31 @@ export function mountChat(container) {
   const chat = h(`
     <div class="chat">
       <header class="chat-head">
-        <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="Afficher ou masquer les conversations">${icon('menu')}</button>
-        <button class="icon-btn chat-new-btn" id="chat-new-btn" title="Nouvelle conversation">${icon('plus')}</button>
-        <div class="chat-title" id="chat-title" title="Cliquer pour renommer">Nouvelle conversation</div>
-        <select class="select" id="model-select" title="Modèle utilisé pour répondre"></select>
+        <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="${esc(t('chat.list_toggle'))}">${icon('menu')}</button>
+        <button class="icon-btn chat-new-btn" id="chat-new-btn" title="${esc(t('chat.new_conversation'))}">${icon('plus')}</button>
+        <div class="chat-title" id="chat-title" title="${esc(t('chat.rename_hint'))}">${esc(t('chat.new_conversation'))}</div>
+        <select class="select" id="model-select" title="${esc(t('chat.model_select'))}"></select>
         <select class="select" id="machine-select" hidden
-          title="Machine qui répond. Automatique : cette machine si elle est libre, sinon la moins occupée de tes machines qui prêtent ce modèle."></select>
+          title="${esc(t('chat.machine_select'))}"></select>
         <div class="chips">
-          <button class="chip" data-flag="knowledge_enabled" title="Utiliser tes bibliothèques de connaissance">${icon('book')}Bibliothèques</button>
-          <button class="chip" data-flag="peer_libraries_enabled" title="Chercher aussi dans les bibliothèques de mes machines et de mes amis (ta question part chez eux)">${icon('network')}Chez les autres</button>
-          <button class="chip" data-flag="conversations_enabled" title="Se souvenir de tes autres conversations">${icon('memory')}Mémoire</button>
-          <button class="chip" data-flag="web_search_enabled" title="Chercher sur le web quand ta question le demande (validation avant l'envoi, ou pour la session)">${icon('globe')}Web</button>
-          <button class="chip" data-flag="think" title="Laisser le modèle réfléchir avant de répondre (plus lent, souvent meilleur)">${icon('think')}Réflexion</button>
+          <button class="chip" data-flag="knowledge_enabled" title="${esc(t('chat.libraries_title'))}">${icon('book')}${esc(t('chat.libraries'))}</button>
+          <button class="chip" data-flag="peer_libraries_enabled" title="${esc(t('chat.peers_chip_title'))}">${icon('network')}${esc(t('chat.peers_chip'))}</button>
+          <button class="chip" data-flag="conversations_enabled" title="${esc(t('chat.memory_title'))}">${icon('memory')}${esc(t('chat.memory'))}</button>
+          <button class="chip" data-flag="web_search_enabled" title="${esc(t('chat.web_title'))}">${icon('globe')}${esc(t('chat.web'))}</button>
+          <button class="chip" data-flag="think" title="${esc(t('chat.think_title'))}">${icon('think')}${esc(t('chat.thinking'))}</button>
         </div>
       </header>
       <div id="chat-banner"></div>
       <div id="cluster-prep" hidden></div>
       <div class="messages" id="messages"><div class="messages-inner" id="messages-inner"></div></div>
       <footer class="composer">
-        <div class="edit-bar" id="edit-bar" hidden>${icon('edit')}<span>Modification de ton dernier
-          message : l'envoyer remplace la suite de la conversation.</span>
-          <button class="link-btn" id="edit-cancel" type="button">Annuler</button></div>
+        <div class="edit-bar" id="edit-bar" hidden>${icon('edit')}<span>${esc(t('chat.edit_bar'))}</span>
+          <button class="link-btn" id="edit-cancel" type="button">${esc(t('ui.cancel'))}</button></div>
         <div class="composer-box">
-          <textarea id="composer" rows="1" placeholder="Écris ton message…"></textarea>
-          <button class="send" id="send" title="Envoyer (Entrée)">${icon('send')}</button>
+          <textarea id="composer" rows="1" placeholder="${esc(t('chat.placeholder'))}"></textarea>
+          <button class="send" id="send" title="${esc(t('chat.send_title'))}">${icon('send')}</button>
         </div>
-        <div class="hint">Entrée pour envoyer · Maj+Entrée pour aller à la ligne · Échap pour arrêter la réponse</div>
+        <div class="hint">${esc(t('chat.hint'))}</div>
       </footer>
     </div>`);
   container.append(chat);
@@ -125,7 +125,7 @@ export function mountChat(container) {
     if (state.modelsLoaded) fillModels();
   });
   on('node:loaded', () => { if (state.modelsLoaded) fillModels(); });   // libellés VRAM
-  el.model.innerHTML = '<option value="">Chargement des modèles…</option>';
+  el.model.innerHTML = `<option value="">${esc(t('chat.loading_models'))}</option>`;
   showWelcome();
 }
 
@@ -175,22 +175,26 @@ function fillModels() {
   };
   // Chaque modèle une fois, même s'il est sur plusieurs machines : la machine se choisit à côté
   // Sans mode automatique (prêté seulement par un ami…), l'option dit qui le prête
-  group(remote.length ? 'Modèles · la machine qui répond se choisit seule' : 'Sur cette machine',
+  group(t(remote.length ? 'chat.group_auto' : 'chat.group_here'),
     entries.map(e => [e.name, e.auto ? `${e.name} · ${bytes(e.size)}`
       : `${e.name} · ${e.machines.map(m => m.label).join(', ')} · ${bytes(e.size)}`]));
-  group('Réparti entre mes machines · cartes graphiques réunies', cluster.map(m => [m.id,
-    `${m.label} · ${bytes(m.size)} · avec ${m.machines.join(', ')}${m.complete ? '' : ' · en partie en mémoire vive'}`]));
-  group('Cloud · validation avant envoi', cloud.map(m => [m.id, `${m.label}${m.has_key ? '' : ' · clé manquante'}`]));
+  group(t('chat.group_cluster'), cluster.map(m => [m.id,
+    t(m.complete ? 'chat.cluster_option' : 'chat.cluster_option_partial',
+      { label: m.label, size: bytes(m.size), machines: m.machines.join(', ') })]));
+  group(t('chat.group_cloud'), cloud.map(m => [m.id,
+    m.has_key ? m.label : t('chat.cloud_no_key', { label: m.label })]));
   selectModel(wanted);
   // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un
+  const phone = isPhone();
+  const none = integrated() ? (phone ? 'chat.no_model_phone' : 'chat.no_model_pc')
+    : (phone ? 'chat.no_model_phone_ollama' : 'chat.no_model_pc_ollama');
   el.banner.innerHTML = progressBar(installing) + (local.length ? '' : remote.length ? `
-    <div class="banner info">${icon('network')}<div style="flex:1">Aucun modèle sur ${here()} : tes réponses
-    seront calculées par tes machines appairées qui prêtent les leurs.</div>
-    <button class="btn sm" data-install>${icon('plus')}Installer un modèle ici</button></div>` : `
-    <div class="banner warn wrap">${icon('warn')}<div class="banner-text">Aucun modèle sur ${here()} pour
-    répondre${integrated() ? '' : ' (ou Ollama ne répond pas : AIODOS réessaie tout seul toutes les 8 secondes)'}.</div>
-    <div class="banner-actions"><button class="btn sm primary" data-install>${icon('plus')}Installer un modèle</button>
-    <button class="btn sm" id="models-retry">${icon('retry')}Réessayer</button></div></div>`);
+    <div class="banner info">${icon('network')}<div style="flex:1">${esc(t(phone
+      ? 'chat.no_model_remote_phone' : 'chat.no_model_remote_pc'))}</div>
+    <button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install_here'))}</button></div>` : `
+    <div class="banner warn wrap">${icon('warn')}<div class="banner-text">${esc(t(none))}</div>
+    <div class="banner-actions"><button class="btn sm primary" data-install>${icon('plus')}${esc(t('chat.install'))}</button>
+    <button class="btn sm" id="models-retry">${icon('retry')}${esc(t('chat.retry'))}</button></div></div>`);
   el.banner.querySelector('#models-retry')?.addEventListener('click', () => emit('models:reload'));
   el.banner.querySelector('[data-install]')?.addEventListener('click', chooseModel);
   el.banner.querySelector('[data-install-cancel]')?.addEventListener('click', cancelInstall);
@@ -207,7 +211,7 @@ function selectModel(id) {
   const keyed = state.models.find(m => m.group === 'cloud' && m.has_key)?.id;
   const usable = values.filter(v => v && (!/^cloud:/.test(v) || v === keyed));
   if (!values.includes(value) && !here && !usable.length) {
-    if (!values.includes('')) el.model.prepend(new Option('Aucun modèle prêt pour l’instant', ''));
+    if (!values.includes('')) el.model.prepend(new Option(t('chat.no_model_ready'), ''));
     el.model.value = '';
   } else {
     el.model.value = values.includes(value) ? value : (here || usable[0] || values[0] || '');
@@ -222,11 +226,11 @@ function fillMachines(wanted) {
   el.machine.innerHTML = '';
   if (!entry) { el.machine.hidden = true; return; }
   const vram = vramTotal();
-  if (entry.auto) el.machine.append(new Option('Automatique', entry.auto));
+  if (entry.auto) el.machine.append(new Option(t('chat.automatic'), entry.auto));
   for (const m of entry.machines) {
     const slow = m.local ? vram && m.size > vram * 0.92 : m.slow;
-    const hint = slow ? (m.local ? ' · lent (dépasse la VRAM)' : ' · lent (dépasse sa VRAM)') : '';
-    el.machine.append(new Option(`${m.label}${hint}`, m.id));
+    const text = slow ? t(m.local ? 'chat.slow_here' : 'chat.slow_there', { label: m.label }) : m.label;
+    el.machine.append(new Option(text, m.id));
   }
   el.machine.hidden = entry.machines.length < 2;
   const values = [...el.machine.options].map(o => o.value);
@@ -252,12 +256,14 @@ function showPreparation(ev) {
   const box = $('#cluster-prep');
   if (!ev || ev.model !== selectedModel() || ev.state === 'none') { box.hidden = true; return; }
   box.hidden = false;
+  box.dataset.state = ev.state;
   box.className = `banner ${ev.state === 'error' ? 'warn' : 'info'}`;
   box.innerHTML = ev.state === 'ready'
-    ? `${icon('check')}<div>Modèle réparti prêt sur tes machines.</div>`
-    : ev.state === 'error' ? `${icon('warn')}<div>Préparation impossible : ${esc(ev.error || '')}</div>`
-    : `${icon('network')}<div>Préparation du modèle réparti pendant que tu écris : ${esc(ev.status || 'cartes demandées…')}</div>`;
-  if (ev.state === 'ready') setTimeout(() => { if (box.innerHTML.includes('prêt')) box.hidden = true; }, 6000);
+    ? `${icon('check')}<div>${esc(t('chat.cluster_ready'))}</div>`
+    : ev.state === 'error' ? `${icon('warn')}<div>${esc(t('chat.cluster_failed', { error: tt(ev.error_t, ev.error || '') }))}</div>`
+    : `${icon('network')}<div>${esc(t('chat.cluster_preparing', { status: tt(ev.status_t, ev.status || '') || t('chat.cluster_cards') }))}</div>`;
+  // Toujours « prêt » six secondes plus tard (pas une autre préparation entre-temps) : rangé
+  if (ev.state === 'ready') setTimeout(() => { if (box.dataset.state === 'ready') box.hidden = true; }, 6000);
 }
 
 async function rememberModel() {
@@ -268,14 +274,14 @@ async function rememberModel() {
 }
 
 function setTitle(title) {
-  el.title.textContent = title || 'Nouvelle conversation';
+  el.title.textContent = title || t('chat.new_conversation');
   document.title = title ? `${title} — AIODOS` : 'AIODOS';
 }
 
 async function renameCurrent() {
   const conv = state.currentConversation;
   if (!conv) return;
-  const title = await ask('Renommer la conversation', 'Nouveau titre :', conv.title);
+  const title = await ask(t('chat.rename_title'), t('chat.rename_label'), conv.title);
   if (!title || title === conv.title) return;
   try {
     await patch(`/conversations/${conv.id}`, { title });
@@ -303,7 +309,7 @@ function newConversation() {
  *  une réponse en retard ne ramène pas une conversation quittée entre-temps. */
 async function openConversation(id, { settled = false } = {}) {
   if (busy) {
-    toast('Une réponse est en cours : arrête-la (Échap) avant de changer de conversation.');
+    toast(t('chat.answer_running'));
     return;
   }
   const mine = ++opening;
@@ -343,8 +349,8 @@ function showWelcome() {
   const welcome = h(`
     <div class="welcome">
       <img src="/logo.png?v=serpents" alt="">
-      <h1>Que fait-on aujourd'hui&nbsp;?</h1>
-      <p>Tout tourne sur ta machine. Le web et le cloud ne servent qu'avec ton accord.</p>
+      <h1>${esc(t('chat.welcome_title'))}</h1>
+      <p>${esc(t('chat.welcome_text'))}</p>
     </div>`);
   el.list.append(welcome);
 }
@@ -353,7 +359,7 @@ function showWelcome() {
 function appendUser(text, id = null) {
   el.list.querySelector('.welcome')?.remove();
   const node = h(`<div class="msg user">
-      <div class="turn-actions turn-only"><button class="icon-btn" data-act="edit" title="Modifier ce message">${icon('edit')}</button></div>
+      <div class="turn-actions turn-only"><button class="icon-btn" data-act="edit" title="${esc(t('chat.edit_message'))}">${icon('edit')}</button></div>
       <div class="bubble">${esc(text)}</div></div>`);
   if (id) node.dataset.id = id;
   el.list.append(node);
@@ -448,14 +454,14 @@ function appendAssistant(model, here = false) {
       <img class="avatar" src="/logo.png?v=serpents" alt="">
       <div class="body">
         <details class="thinking" hidden>
-          <summary>${icon('think')}<span class="label">Réflexion</span><span class="faint time"></span></summary>
+          <summary>${icon('think')}<span class="label">${esc(t('chat.thinking'))}</span><span class="faint time"></span></summary>
           <div class="thinking-body"></div>
         </details>
         <div class="md content"><div class="typing"><i></i><i></i><i></i></div></div>
         <div class="meta">
           <span class="model-tag">${esc(label)}</span>
           <span class="sources"></span>
-          <span class="actions"><button class="icon-btn" data-act="copy" title="Copier la réponse">${icon('copy')}</button><button class="icon-btn turn-only" data-act="regenerate" title="Régénérer la réponse (avec le modèle choisi)">${icon('retry')}</button></span>
+          <span class="actions"><button class="icon-btn" data-act="copy" title="${esc(t('chat.copy_answer'))}">${icon('copy')}</button><button class="icon-btn turn-only" data-act="regenerate" title="${esc(t('chat.regenerate'))}">${icon('retry')}</button></span>
         </div>
       </div>
     </div>`);
@@ -476,7 +482,7 @@ function appendAssistant(model, here = false) {
     if (seconds < 3 || !dots) return;
     let label = content.querySelector('.wait-label');
     if (!label) { label = h('<span class="wait-label faint"></span>'); content.append(label); }
-    label.textContent = statusText || `Le modèle se prépare… ${duration(seconds)}`;
+    label.textContent = statusText || t('chat.model_waking', { time: duration(seconds) });
   }, 1000);
   const stopWaiting = () => {
     clearInterval(waitTimer);
@@ -493,7 +499,7 @@ function appendAssistant(model, here = false) {
     route(ev) {                       // mode automatique : la machine choisie, ou qui prend le relais
       if (!model?.startsWith(AUTO)) return;
       node.querySelector('.model-tag').textContent =
-        `${modelName(ev.model)} · ${ev.machine || 'cette machine'}`;
+        `${modelName(ev.model)} · ${ev.machine || t('chat.this_machine')}`;
     },
     status(text) {                    // mise en place d'un modèle réparti (cluster/group.py)
       statusText = text;
@@ -539,11 +545,12 @@ function appendAssistant(model, here = false) {
           // Ni http ni https (javascript:, search-ms:…) : du texte, jamais un lien, comme
           // render.py le fait dans les réponses ; un changement futur de linkAction ne
           // rouvrirait pas la brèche
-          box.append(h(`<span class="source link-off" title="Lien désactivé : ${esc(s.url)}">`
+          box.append(h(`<span class="source link-off" title="${esc(t('render.link_off', { url: s.url }))}">`
             + `${icon('globe')}${esc(s.label || s.url)}</span>`));
         } else if (s.type === 'remote') {         // trouvé dans la bibliothèque d'une autre machine
-          box.append(h(`<span class="source remote" title="Bibliothèque « ${esc(s.collection)} », chez « ${esc(s.peer)} »">`
-            + `${icon('network')}${esc(s.label)} · chez ${esc(s.peer)}</span>`));
+          const where = { library: s.collection, peer: s.peer, label: s.label };
+          box.append(h(`<span class="source remote" title="${esc(t('chat.remote_source_title', where))}">`
+            + `${icon('network')}${esc(t('chat.remote_source', where))}</span>`));
         } else {
           const ico = s.type === 'conversation' ? 'memory' : 'file';
           box.append(h(`<span class="source" title="${esc(s.collection || '')}">${icon(ico)}${esc(s.label)}</span>`));
@@ -552,14 +559,14 @@ function appendAssistant(model, here = false) {
     },
     done(html, error) {
       stopThinking();
-      content.innerHTML = html || (error ? '' : '<p class="faint">(réponse vide)</p>');
+      content.innerHTML = html || (error ? '' : `<p class="faint">${esc(t('chat.empty_answer'))}</p>`);
       if (error) content.append(h(`<p style="color:var(--err)">⚠ ${esc(error)}</p>`));
       scrollBottom();
     },
     stopped() {
       stopThinking();
       content.querySelector('.typing')?.remove();
-      content.append(h('<p class="faint">(réponse interrompue)</p>'));
+      content.append(h(`<p class="faint">${esc(t('chat.interrupted'))}</p>`));
     },
     error(message) {
       stopThinking();
@@ -573,15 +580,15 @@ function onMessageClick(e) {
   if (copyCode) {
     const code = copyCode.closest('.code-block').querySelector('pre').innerText;
     navigator.clipboard.writeText(code).then(() => {
-      copyCode.textContent = 'Copié ✓';
-      setTimeout(() => { copyCode.textContent = 'Copier'; }, 1400);
+      copyCode.textContent = t('chat.code_copied');
+      setTimeout(() => { copyCode.textContent = t('render.copy'); }, 1400);   // celui de render.py
     });
     return;
   }
   const copyAll = e.target.closest('[data-act="copy"]');
   if (copyAll) {
     const text = copyAll.closest('.body').querySelector('.content').innerText;
-    navigator.clipboard.writeText(text).then(() => toast('Réponse copiée.', 'ok', 1800));
+    navigator.clipboard.writeText(text).then(() => toast(t('chat.answer_copied'), 'ok', 1800));
     return;
   }
   const again = e.target.closest('[data-act="regenerate"]');
@@ -618,7 +625,7 @@ function setBusy(on) {
   el.chat.classList.toggle('busy', on);
   el.send.classList.toggle('stop', on);
   el.send.innerHTML = icon(on ? 'stop' : 'send');
-  el.send.title = on ? 'Arrêter (Échap)' : 'Envoyer (Entrée)';
+  el.send.title = t(on ? 'chat.stop_title' : 'chat.send_title');
 }
 
 function stop() {
@@ -633,20 +640,19 @@ async function confirmOutgoing(text, model, pre) {
   let web = false;
   if (!allowed && pre.web_intent) {
     const r = await modal({
-      title: 'Lancer une recherche web ?', iconName: 'globe',
-      text: "Ta question semble demander une recherche sur le web, qui est désactivée. " +
-            "La lancer pour ce message ? Seule la requête ci-dessous partira vers DuckDuckGo.",
-      quote: text.slice(0, 300), confirm: 'Chercher sur le web', cancel: 'Répondre sans',
+      title: t('chat.web_off_title'), iconName: 'globe',
+      text: t('chat.web_off_text'),
+      quote: text.slice(0, 300), confirm: t('chat.web_search'), cancel: t('chat.answer_without'),
     });
     web = r.ok;
   } else if (allowed && pre.web_intent && session.webConsent) {
     web = true;
   } else if (allowed && pre.web_intent) {
     const r = await modal({
-      title: 'Envoyer cette recherche ?', iconName: 'globe',
-      text: 'La requête ci-dessous va être envoyée à DuckDuckGo. Aucune autre donnée ne quitte ta machine.',
-      quote: text.slice(0, 300), confirm: 'Envoyer', cancel: 'Répondre sans',
-      check: 'Ne plus demander pendant cette session',
+      title: t('chat.web_send_title'), iconName: 'globe',
+      text: t('chat.web_send_text'),
+      quote: text.slice(0, 300), confirm: t('chat.send'), cancel: t('chat.answer_without'),
+      check: t('chat.ask_no_more_session'),
     });
     web = r.ok;
     if (r.ok && r.checked) session.webConsent = true;
@@ -659,28 +665,24 @@ async function confirmOutgoing(text, model, pre) {
     const label = state.models.find(m => m.id === model)?.label || pre.cloud;
     if (!pre.cloud_has_key) {
       const r = await modal({
-        title: 'Clé API manquante', iconName: 'cloud',
-        text: `Il faut une clé API pour utiliser ${label}. Tu peux la saisir dans les Réglages.`,
-        confirm: 'Ouvrir les réglages',
+        title: t('chat.no_key_title'), iconName: 'cloud',
+        text: t('chat.no_key_text', { label }),
+        confirm: t('chat.open_settings'),
       });
       if (r.ok) emit('view:show', 'settings');
       return null;
     }
     if (pre.cloud_confirm && !session.cloudConsent.has(pre.cloud)) {
-      const leaving = ['ton message', "l'historique de cette conversation"];
+      const leaving = [t('chat.leaving_message'), t('chat.leaving_history')];
       // Ce que reçoit le cloud (pipeline.visible_libraries) : ni les bibliothèques gardées
       // sur ce PC, ni la mémoire des conversations
-      if (state.settings?.knowledge_enabled) {
-        leaving.push('la liste des fichiers de tes bibliothèques et les extraits utilisés pour '
-          + 'répondre (sauf les bibliothèques gardées sur ce PC, et ta mémoire des conversations)');
-      }
-      if (web) leaving.push('les résultats web');
+      if (state.settings?.knowledge_enabled) leaving.push(t('chat.leaving_libraries'));
+      if (web) leaving.push(t('chat.leaving_web'));
       const r = await modal({
-        title: 'Envoyer vers le cloud ?', iconName: 'cloud',
-        text: `Cette réponse sera calculée par ${label}, sur les serveurs de ${pre.cloud_host}.\n` +
-              `Quitteront ta machine : ${leaving.join(', ')}.`,
-        quote: text.slice(0, 400), confirm: 'Envoyer', cancel: 'Annuler',
-        check: 'Ne plus demander pour ce fournisseur pendant cette session',
+        title: t('chat.cloud_title'), iconName: 'cloud',
+        text: t('chat.cloud_text', { label, host: pre.cloud_host, leaving: leaving.join(', ') }),
+        quote: text.slice(0, 400), confirm: t('chat.send'), cancel: t('ui.cancel'),
+        check: t('chat.ask_no_more_provider'),
       });
       if (!r.ok) return null;
       if (r.checked) session.cloudConsent.add(pre.cloud);
@@ -696,21 +698,18 @@ async function confirmOutgoing(text, model, pre) {
 async function confirmPeers(text, pre) {
   if (!state.settings?.peer_libraries_enabled || !pre.consult?.length) return [];
   if (!pre.consult_allowed) {
-    toast('Les passages trouvés chez tes machines et tes amis ne vont ni au cloud, ni à un modèle '
-      + 'prêté par un ami : cette réponse s\'en passera.', 'info', 7000);
+    toast(t('chat.peers_refused'), 'info', 7000);
     return [];
   }
   const ids = pre.consult.map(m => m.node_id);
   const unasked = pre.consult.filter(m => m.friend && !session.peerConsent.has(m.node_id));
   if (!unasked.length) return ids;
+  const names = pre.consult.map(m => t('chat.quoted', { name: m.name })).join(', ');
   const r = await modal({
-    title: 'Chercher aussi chez tes amis ?', iconName: 'network',
-    text: `Ta question va partir chez ${pre.consult.map(m => `« ${m.name} »`).join(', ')} : chaque machine `
-      + 'cherche dans les bibliothèques qu\'elle t\'ouvre, et seuls les passages trouvés reviennent. AIODOS n\'y garde '
-      + 'pas ta question, mais chaque machine note dans son journal que tu as cherché, et combien de passages elle '
-      + 't\'a rendus.',
-    quote: text.slice(0, 300), confirm: 'Chercher chez eux', cancel: 'Répondre sans',
-    check: 'Ne plus redemander pour ces amis pendant cette session',
+    title: t('chat.peers_title'), iconName: 'network',
+    text: t('chat.peers_text', { names }),
+    quote: text.slice(0, 300), confirm: t('chat.peers_confirm'), cancel: t('chat.answer_without'),
+    check: t('chat.ask_no_more_friends'),
   });
   if (r.ok && r.checked) pre.consult.forEach(m => session.peerConsent.add(m.node_id));
   return r.ok ? ids : [];
@@ -751,9 +750,9 @@ async function sendNow(asText, replace) {
     return true;
   }
   if (!model) {
-    if (!state.modelsLoaded) toast('Les modèles se chargent, un instant…');
-    else if (integrated()) toast('Aucun modèle disponible : installe-en un (« Installer un modèle »).', 'err');
-    else toast('Aucun modèle disponible : vérifie qu\'Ollama est lancé.', 'err');
+    if (!state.modelsLoaded) toast(t('chat.models_loading'));
+    else if (integrated()) toast(t('chat.no_model_install'), 'err');
+    else toast(t('chat.no_model_ollama'), 'err');
     return false;
   }
   const go = await confirmOutgoing(text, model, pre);
@@ -781,7 +780,7 @@ async function sendNow(asText, replace) {
         dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
-          state.currentConversation = { id: ev.conversation_id, title: ev.title || 'Nouvelle conversation', model };
+          state.currentConversation = { id: ev.conversation_id, title: ev.title || t('chat.new_conversation'), model };
           prefs.set('lastConversation', ev.conversation_id);
         }
         if (ev.title) { state.currentConversation.title = ev.title; setTitle(ev.title); }
@@ -832,7 +831,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
     stopEditing(false);
     asked = appendUser(text);
   }
-  const done = appendWaiting(el.list, request.followup === 'edit' ? 'Je retouche la description…' : '');
+  const done = appendWaiting(el.list, request.followup === 'edit' ? t('chat.retouching') : '');
   scrollBottom(true);
   let made;
   try {
@@ -873,11 +872,12 @@ async function create(text, request, again = false, replace = null, askedNode = 
   done();
   if (seen !== displayed) {          // une autre conversation entre-temps : celle-ci reste à sa place
     refreshTree();
-    toast(`Création lancée dans « ${made.title || 'sa conversation'} ».`, 'info', 5000);
+    toast(made.title ? t('chat.creation_started', { title: made.title })
+      : t('chat.creation_started_untitled'), 'info', 5000);
     return;
   }
   if (state.currentConversation?.id !== made.conversation_id) {
-    state.currentConversation = { id: made.conversation_id, title: made.title || 'Nouvelle conversation',
+    state.currentConversation = { id: made.conversation_id, title: made.title || t('chat.new_conversation'),
       model: selectedModel() };
     prefs.set('lastConversation', made.conversation_id);
   }

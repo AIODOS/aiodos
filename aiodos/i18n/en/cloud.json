@@ -1,0 +1,4 @@
+{
+  "no_key": "No API key for {name} (see Settings).",
+  "http_error": "{name}: HTTP {status} {detail}"
+}

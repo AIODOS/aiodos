@@ -1,0 +1,9 @@
+{
+  "code_text": "text",
+  "copy": "Copy",
+  "link_off": "Link disabled: {url}",
+  "image_alt": "[image: {alt}]",
+  "image": "[image]",
+  "image_hidden": "Image not shown: {url}",
+  "image_link": "Image: {url}"
+}

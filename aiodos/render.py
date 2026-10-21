@@ -24,6 +24,8 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
+from aiodos.i18n import t
+
 _FORMATTER = HtmlFormatter(nowrap=True)
 
 
@@ -35,10 +37,11 @@ def _code_block(code: str, lang: str) -> str:
         except ClassNotFound:
             lexer = None
     body = highlight(code, lexer, _FORMATTER) if lexer else html.escape(code)
-    label = html.escape(lang or "texte")
+    label = html.escape(lang or t("render.code_text"))
     return ('<div class="code-block"><div class="code-head">'
             f'<span>{label}</span>'
-            '<button class="code-copy" type="button">Copier</button></div>'
+            f'<button class="code-copy" type="button">{html.escape(t("render.copy"))}</button>'
+            '</div>'
             f'<pre class="hl"><code>{body}</code></pre></div>\n')
 
 
@@ -104,7 +107,7 @@ def _link_open(self, tokens, idx, options, env):
         return self.renderToken(tokens, idx, options, env)
     # Ni le web ni un courriel : le texte reste, l'adresse se lit au survol, rien ne s'ouvre
     token.tag = "span"
-    token.attrs = {"class": "link-off", "title": f"Lien désactivé : {href}"}
+    token.attrs = {"class": "link-off", "title": t("render.link_off", url=href)}
     end = token.meta.get("closing")
     if end is not None:
         end.tag = "span"
@@ -119,14 +122,15 @@ def _image(self, tokens, idx, options, env):
     alt = self.renderInlineAsText(token.children or [], options, env).strip()
     if INLINE_IMAGE.fullmatch(src):
         return f'<img class="inline-image" src="{html.escape(src)}" alt="{html.escape(alt)}">'
-    label = html.escape(f"[image : {alt}]" if alt else "[image]")
+    label = html.escape(t("render.image_alt", alt=alt) if alt else t("render.image"))
     if token.meta.get("in_link"):            # le lien autour l'ouvre déjà
         return label
     if not src.lower().startswith(("http://", "https://")):
-        title = html.escape("Image non affichée : " + src)
+        title = html.escape(t("render.image_hidden", url=src))
         return f'<span class="link-off" title="{title}">{label}</span>'
     return (f'<a class="image-link" href="{html.escape(src)}" target="_blank" '
-            f'rel="noopener noreferrer" title="{html.escape("Image : " + src)}">{label}</a>')
+            f'rel="noopener noreferrer" title="{html.escape(t("render.image_link", url=src))}">'
+            f'{label}</a>')
 
 
 _md = (MarkdownIt("commonmark", {"html": False, "breaks": True})

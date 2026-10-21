@@ -41,7 +41,9 @@ from urllib3.exceptions import ConnectTimeoutError, NewConnectionError
 from urllib3.poolmanager import PoolManager
 from urllib3.util.connection import allowed_gai_family
 
-MAX_TRIED = 4                 # adresses essayées pour un nom (IPv6 puis IPv4…)
+from aiodos.i18n import t
+
+MAX_TRIED = 4                # adresses essayées pour un nom (IPv6 puis IPv4…)
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 # IPv6 que ipaddress.is_global dit publiques, mais qu'aucune page de l'Internet n'utilise
 # et qu'un système peut encore mener à son réseau : « compatibles IPv4 » (::a.b.c.d,
@@ -55,24 +57,20 @@ LOCAL_SUFFIXES = (".local", ".lan", ".home", ".home.arpa", ".internal", ".intran
 
 
 class BlockedAddress(Exception):
-    """Adresse refusée. Le message est toujours le même, sans hôte ni port : renvoyé à
-    l'autre machine en cas d'échec, il ne doit rien dire de ce qui existe sur notre réseau."""
-
-    MESSAGE = ("adresse refusée : introuvable ou hors de l'Internet public (réseau local, "
-               "cette machine). Seule une page demandée sur cette machine peut viser son "
-               "réseau local, par son adresse IP (http://192.168.1.20/…) ou son nom local "
-               "(http://nas.local/…).")
+    """Adresse refusée. Le message est toujours le même (web.blocked), sans hôte ni port :
+    renvoyé à l'autre machine en cas d'échec, il ne doit rien dire de ce qui existe sur notre
+    réseau."""
 
     def __init__(self, message=None):
-        super().__init__(message or self.MESSAGE)
+        super().__init__(message or t("web.blocked"))
 
 
-# La garde s'accroche à des fonctions internes d'urllib3 (_new_conn, _dns_host) : si une
-# version les change, elle ne s'appliquerait plus, sans bruit. On le vérifie avant toute
-# connexion (supported), et après (Guard.joined) : la lecture est alors refusée.
-GUARD_BYPASSED = ("lecture refusée : la garde des adresses ne s'applique pas avec cette "
-                  "version de requests ou d'urllib3. Mets AIODOS à jour, ou reviens à la "
-                  "version de ces paquets qu'il installe.")
+def guard_bypassed() -> str:
+    """La garde s'accroche à des fonctions internes d'urllib3 (_new_conn, _dns_host) : si une
+    version les change, elle ne s'appliquerait plus, sans bruit. On le vérifie avant toute
+    connexion (supported), et après (Guard.joined) : la lecture est alors refusée, avec ce
+    message."""
+    return t("web.guard_bypassed")
 
 
 def supported() -> bool:
@@ -190,7 +188,7 @@ class Guard:
 
     @property
     def joined(self) -> bool:
-        """Au moins une connexion est passée par la garde (cf. GUARD_BYPASSED)."""
+        """Au moins une connexion est passée par la garde (cf. guard_bypassed)."""
         with self._lock:
             return bool(self._sockets)
 
@@ -253,10 +251,11 @@ class _PinnedConnection:
         guard = self.guard or Guard(public_only=True)
         name, configured = getattr(self, "_dns_host", None), self.timeout
         if not name:
-            raise BlockedAddress(GUARD_BYPASSED)     # urllib3 a changé : rien ne part
+            raise BlockedAddress(guard_bypassed())   # urllib3 a changé : rien ne part
         try:
             found = guard.addresses(name, self.port)
         except SlowResolution as exc:
+            # i18n: tel quel (détail interne : web._failure le remplace par un message traduit)
             raise ConnectTimeoutError(self, "résolution du nom trop lente") from exc
         error = None
         for address in found:
@@ -277,6 +276,7 @@ class _PinnedConnection:
                 self.timeout = configured
             guard.connected(sock)
             return sock
+        # i18n: tel quel (détail interne : web._failure le remplace par un message traduit)
         raise error or ConnectTimeoutError(self, "délai total de la lecture dépassé")
 
 
@@ -322,7 +322,7 @@ class GuardedAdapter(requests.adapters.HTTPAdapter):
 
     def __init__(self, guard: Guard, **kwargs):
         if not supported():
-            raise BlockedAddress(GUARD_BYPASSED)
+            raise BlockedAddress(guard_bypassed())
         self.guard = guard
         super().__init__(**kwargs)
 

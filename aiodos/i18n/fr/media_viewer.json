@@ -1,0 +1,15 @@
+{
+  "frames": "{frames} images à {fps} i/s ({length})",
+  "seed": "graine {seed}",
+  "steps": "{n} pas",
+  "save_as": "Enregistrer sous…",
+  "open_folder": "Ouvrir le dossier",
+  "save": "Enregistrer",
+  "reuse": "Reprendre",
+  "see_conversation": "Voir la conversation",
+  "close": "Fermer",
+  "saved": "Enregistrée : {where}",
+  "delete_image": "Supprimer cette image ?",
+  "delete_video": "Supprimer cette vidéo ?",
+  "delete_text": "Le fichier est effacé de cette machine."
+}

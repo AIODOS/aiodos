@@ -9,6 +9,7 @@ La validation des envois sortants (web, cloud) est revérifiée ici : même si
 l'interface était contournée, rien ne part dans le cloud sans accord.
 """
 import asyncio
+import contextvars
 import logging
 import threading
 import time
@@ -20,6 +21,7 @@ from pydantic import BaseModel
 from aiodos import db, render, settings
 from aiodos.api.events import sse
 from aiodos.chat import conversations, creations, pending, pipeline
+from aiodos.i18n import t
 from aiodos.jobs.kinds import index
 from aiodos.network import placement
 from aiodos.services import cloud
@@ -73,13 +75,13 @@ def _flag(value, key):
 async def chat(body: ChatIn, request: Request):
     text = body.text.strip()
     if not text:
-        raise HTTPException(400, "Message vide.")
+        raise HTTPException(400, t("chat.empty_message"))
     provider = cloud.provider_of(body.model)
     if provider:
         if not cloud.has_key(provider):
-            raise HTTPException(400, f"Aucune clé API pour {cloud.PROVIDERS[provider]['label']}.")
+            raise HTTPException(400, t("chat.no_api_key", name=cloud.PROVIDERS[provider]["label"]))
         if settings.get("cloud_confirm") and not body.cloud_confirmed:
-            raise HTTPException(409, "L'envoi vers le cloud doit être validé.")
+            raise HTTPException(409, t("chat.cloud_not_confirmed"))
 
     executor = request.app.state.executor
     bus = request.app.state.bus
@@ -93,7 +95,7 @@ async def chat(body: ChatIn, request: Request):
         if not await asyncio.to_thread(conversations.get, conv_id):
             conv_id = None
     if conv_id is None and body.replace_from is not None:
-        raise HTTPException(creations.CHANGED_STATUS, creations.CHANGED)
+        raise HTTPException(creations.CHANGED_STATUS, creations.changed())
     # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation pour
     # se resynchroniser attend (pending) : l'écran voit ce que le nœud garde. Une
     # conversation neuve n'est créée qu'à l'acceptation (ask)
@@ -128,7 +130,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
             named = conversations.auto_title(cid, text)
         return cid, stopped, rows, asked, named
     if await request.is_disconnected():   # parti (Stop) avant l'acceptation : rien ne change
-        raise HTTPException(400, "Demande abandonnée.")
+        raise HTTPException(400, t("chat.abandoned"))
     try:
         conv_id, stopped, rows, user_message_id, title = await asyncio.to_thread(ask)
     except creations.CreationError as exc:
@@ -228,8 +230,10 @@ async def _answer(body, request, text, plan, conv_id, executor, bus):
 
     async def events():
         # L'interactif d'abord : placement.run suspend les unités GPU de fond le temps
-        # de la réponse, si elle est calculée ici
-        threading.Thread(target=worker, daemon=True, name="aiodos-chat").start()
+        # de la réponse, si elle est calculée ici. Le fil garde le contexte de la requête, sa
+        # langue surtout (consignes au modèle, erreurs, états) : un fil neuf ne le reçoit pas
+        threading.Thread(target=contextvars.copy_context().run, args=(worker,), daemon=True,
+                         name="aiodos-chat").start()
         last_render = 0.0
         try:
             yield sse({"type": "start", "conversation_id": conv_id,
