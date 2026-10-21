@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from aiodos import db, paths, settings
-from aiodos.engines import comfy_client, comfy_contract, comfy_graph, comfyui
+from aiodos.engines import comfy_client, comfy_contract, comfy_graph, comfyui, gpu_share
 from aiodos.jobs import pacing
 from aiodos.jobs.models import BACKGROUND, NORMAL, URGENT
 from aiodos.jobs.registry import UnitSpec, register_job_kind, register_portable
@@ -580,6 +580,7 @@ def _compute(order, halt, progress, local, remote):
         from aiodos.jobs.registry import Interrupted
         raise Interrupted("ComfyUI n'est pas ouvert sur ce PC.")
     pacing.wait_turn(halt, True)            # les conversations d'abord
+    gpu_share.before_unit()                 # la mémoire vidéo qu'AIODOS tient sans s'en servir
     folder = paths.engine_runs_dir() / order["run_uuid"]
     began = time.monotonic()
     files = (order.get("files") if remote else local.get("files")) or {}

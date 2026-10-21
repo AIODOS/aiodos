@@ -226,6 +226,22 @@ def test_a_lender_reports_the_stage_of_its_calculation(comfy):
     assert "app_id" not in json.dumps(order) and APP not in json.dumps(order)
 
 
+def test_the_gpu_goes_to_comfyui_before_a_unit(comfy, monkeypatch):
+    """Avant une unité : les modèles de conversation chargés se déchargent, sd-server
+    inoccupé s'arrête (engines/gpu_share.py)."""
+    from aiodos.engines import gpu_share
+    from aiodos.imaging import engine as images_engine
+    from aiodos.services import ollama
+    calls = []
+    monkeypatch.setattr(ollama, "unload_chat_models", lambda: calls.append("conv") or ["qwen3.5:9b"])
+    monkeypatch.setattr(images_engine, "yield_gpu", lambda: calls.append("sd") or True)
+    assert gpu_share.before_unit() == ["qwen3.5:9b", "sd-server"]
+    sha = put(APP, png())
+    submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}})
+    calls.clear()
+    assert run_all() == 1 and calls == ["conv", "sd"]
+
+
 def test_matching_a_machine_that_asks_for_work():
     """engines/lending.can_serve, chez le propriétaire : le moteur, ses classes, ses modèles
     (un modèle sans dossier se cherche dans tous) ; une annonce mal formée vaut un refus."""
