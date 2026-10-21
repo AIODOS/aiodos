@@ -1,0 +1,82 @@
+{
+  "interactions": [
+    {
+      "name": "info sans clé",
+      "request": {"method": "GET", "path": "/aiodos/v1/info", "headers": {}, "json": null},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
+                 "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+                 "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "none"}
+      },
+      "exact": ["object", "product", "api", "auth"]
+    },
+    {
+      "name": "info avec un défi : la preuve",
+      "request": {"method": "GET", "path": "/aiodos/v1/info?key_id={key_id}&challenge={challenge}",
+                  "headers": {}, "json": null},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
+                 "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+                 "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "none",
+                 "proof": "kzujpClJtfCeF66dvjiKZvhVjt_Gf-u5t_oCAAOeIks"}
+      },
+      "exact": ["object", "auth"]
+    },
+    {
+      "name": "info avec une clé valide",
+      "request": {"method": "GET", "path": "/aiodos/v1/info",
+                  "headers": {"Authorization": "Bearer {key}"}, "json": null},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
+                 "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+                 "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "valid",
+                 "app": {"id": "k3j7m2qa", "name": "PANDORA", "kind": "app",
+                         "scopes": ["chat", "embed"], "where": ["here", "mine"],
+                         "priority": "interactive", "expires": null},
+                 "limits": {"requests_per_minute": 120, "streams": 4, "max_body_bytes": 67108864}}
+      },
+      "exact": ["object", "auth", "app.kind"]
+    },
+    {
+      "name": "info avec une clé retirée",
+      "request": {"method": "GET", "path": "/aiodos/v1/info",
+                  "headers": {"Authorization": "Bearer {key}"}, "json": null},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
+                 "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+                 "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "revoked"}
+      },
+      "exact": ["auth"]
+    },
+    {
+      "name": "info avec une clé inconnue",
+      "request": {"method": "GET", "path": "/aiodos/v1/info",
+                  "headers": {"Authorization": "Bearer aiodos_app_zzzzzzzz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+                  "json": null},
+      "response": {
+        "status": 200, "headers": {"X-Aiodos-Api": "1"},
+        "json": {"object": "aiodos.info", "product": "aiodos", "version": "2.1.0", "api": 1,
+                 "instance": "Hk3v9QmZ", "features": ["access", "models", "chat", "embed", "open"],
+                 "access": {"apps": true, "requests": true, "approval_ui": true}, "auth": "invalid"}
+      },
+      "exact": ["auth"]
+    },
+    {
+      "name": "ancienne version d'AIODOS : la route est inconnue",
+      "server": "client",
+      "request": {"method": "GET", "path": "/aiodos/v1/info", "headers": {}, "json": null},
+      "response": {"status": 401, "headers": {},
+                   "json": {"error": "Clé d'accès d'AIODOS manquante ou invalide (Réglages → Autres outils)."}}
+    },
+    {
+      "name": "Ollama sur le port : la route est inconnue",
+      "server": "client",
+      "request": {"method": "GET", "path": "/aiodos/v1/info", "headers": {}, "json": null},
+      "response": {"status": 404, "headers": {}, "json": null}
+    }
+  ]
+}
