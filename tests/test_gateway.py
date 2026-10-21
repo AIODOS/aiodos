@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from aiodos import paths, settings
 from aiodos.api.server import create_app
+from aiodos.gateway import access, server
 from aiodos.knowledge import chunking, store
 from aiodos.network import client, peers, placement, remote_models
 from tests.conftest import _bag_of_words
@@ -521,7 +522,8 @@ def test_the_stdio_bridge_with_the_official_client(gateway):
     from mcp import Client, StdioServerParameters
     _library(DOCS)
     config = gateway.ui.get("/api/gateway", headers=UI).json()["mcp_stdio"]["mcpServers"]["aiodos"]
-    assert config["args"] == ["-m", "aiodos.gateway.mcp_stdio"]
+    assert config["args"] == ["-P", "-m", "aiodos.gateway.mcp_stdio"]
+    assert config["env"]["PYTHONSAFEPATH"] == "1"
     env = {**config["env"], "AIODOS_DATA_DIR": str(paths.data_dir()),
            "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")}
     server = StdioServerParameters(command=sys.executable, args=config["args"], env=env,
@@ -555,7 +557,7 @@ def test_the_stdio_bridge_relays_line_by_line(gateway):
     ]
     env = {**os.environ, "AIODOS_DATA_DIR": str(paths.data_dir()),
            "PYTHONPATH": str(paths.APP_ROOT), "PYTHONIOENCODING": "utf-8"}
-    done = subprocess.run([sys.executable, "-m", "aiodos.gateway.mcp_stdio"],
+    done = subprocess.run([sys.executable, *server.STDIO_ARGS],
                           input="".join(json.dumps(m) + "\n" for m in messages).encode(),
                           capture_output=True, env=env, cwd=paths.APP_ROOT, timeout=60)
     replies = [json.loads(line) for line in done.stdout.decode("utf-8").splitlines() if line]
@@ -564,6 +566,84 @@ def test_the_stdio_bridge_relays_line_by_line(gateway):
     assert replies[1]["result"]["structuredContent"]["passages"][0]["source"] == "budget.txt"
     assert replies[2]["result"]["protocolVersion"] == "2025-11-25"
     assert len(replies[3]["result"]["tools"]) == 3
+
+
+TRAP = "import pathlib\npathlib.Path(__file__).with_name('EXECUTE.txt').write_text('oui')\n"
+
+
+@pytest.mark.parametrize("old_config", [False, True])
+def test_the_stdio_bridge_ignores_the_modules_of_the_folder_it_is_launched_in(
+        gateway, tmp_path, old_config):
+    """Faille 3 de l'audit du 20/10/2026 : un assistant lance le pont depuis le projet
+    ouvert, qui contient un requests.py piégé. Avec la configuration affichée (-P), rien ne
+    s'exécute ; avec une configuration copiée avant (sans -P), le pont retire ce dossier de
+    sys.path avant d'importer requests, et le dit."""
+    import os
+    project = tmp_path / "projet-piege"
+    project.mkdir()
+    (project / "requests.py").write_text(TRAP, encoding="utf-8")
+    (project / "json.py").write_text(TRAP, encoding="utf-8")
+    config = gateway.ui.get("/api/gateway", headers=UI).json()["mcp_stdio"]["mcpServers"]["aiodos"]
+    args = ["-m", "aiodos.gateway.mcp_stdio"] if old_config else config["args"]
+    env = {**os.environ, **config["env"], "AIODOS_DATA_DIR": str(paths.data_dir())}
+    if old_config:
+        env.pop("PYTHONSAFEPATH")
+    done = subprocess.run([sys.executable, *args], input=b'{"jsonrpc": "2.0", "id": 1, '
+                          b'"method": "ping"}\n', capture_output=True, env=env, cwd=project,
+                          timeout=60)
+    assert not (project / "EXECUTE.txt").exists(), done.stderr
+    assert json.loads(done.stdout)["id"] == 1, done.stderr
+    assert ("sans -P" in done.stderr.decode("utf-8")) is old_config
+
+
+def test_the_stdio_bridge_keeps_the_key_on_this_machine(gateway, monkeypatch):
+    from aiodos.gateway import mcp_stdio
+    monkeypatch.setenv("AIODOS_MCP_URL", "https://ailleurs.example/mcp")
+    monkeypatch.delenv("AIODOS_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="AIODOS_KEY"):
+        mcp_stdio.target()
+    monkeypatch.setenv("AIODOS_KEY", "aiodos-sa-propre-cle")      # donnée exprès : soit
+    assert mcp_stdio.target() == ("https://ailleurs.example/mcp", "aiodos-sa-propre-cle")
+    monkeypatch.delenv("AIODOS_KEY")
+    monkeypatch.setenv("AIODOS_MCP_URL", "http://localhost:11435/mcp")
+    assert mcp_stdio.target()[1] == access.key()
+
+
+def test_a_request_too_large_is_refused_unread(gateway):
+    """64 Mio au plus (server.MAX_BODY) : refusé sur la taille annoncée, ou, envoyé en
+    morceaux, dès que la limite est passée."""
+    import httpx
+    from aiodos.gateway.server import Guard
+
+    async def app(scope, receive, send):        # l'application derrière les verrous
+        body = b""
+        while True:
+            message = await receive()
+            body += message.get("body", b"")
+            if not message.get("more_body"):
+                break
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": str(len(body)).encode()})
+    guarded = Guard(app, {"127.0.0.1:1"})
+    headers = {"Authorization": f"Bearer {access.key()}", "Host": "127.0.0.1:1"}
+
+    async def ask(content, size=None):
+        transport = httpx.ASGITransport(app=guarded)
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:1") as c:
+            sent = {**headers, **({"Content-Length": str(size)} if size is not None else {})}
+            return await c.post("/v1/chat/completions", content=content, headers=sent)
+
+    def pieces(total):
+        async def gen():
+            for _ in range(total // (1024 ** 2)):
+                yield b"x" * 1024 ** 2
+        return gen()
+    import anyio
+    assert anyio.run(ask, b"{}").text == "2"
+    refused = anyio.run(ask, b"{}", server.MAX_BODY + 1)
+    assert refused.status_code == 413 and "64 Mio" in refused.json()["error"]["message"]
+    assert anyio.run(ask, pieces(server.MAX_BODY + 1024 ** 2)).status_code == 413
+    assert anyio.run(ask, pieces(2 * 1024 ** 2)).text == str(2 * 1024 ** 2)
 
 
 def test_the_stdio_bridge_says_when_aiodos_is_closed(gateway):

@@ -32,6 +32,9 @@ HOST = "127.0.0.1"
 PORT_ATTEMPTS = 3           # port encore tenu par l'instance qui vient de s'arrêter
 PORT_RETRY_DELAY = 1
 LOCAL_ORIGINS = {"127.0.0.1", "localhost", "[::1]", "::1"}
+STDIO_ARGS = ("-P", "-m", "aiodos.gateway.mcp_stdio")     # pont stdio (stdio_config)
+# Corps d'une requête : de quoi porter des images en base64 ; au-delà, 413 sans tout lire
+MAX_BODY = 64 * 1024 ** 2
 
 
 def _origin_ok(origin: str) -> bool:
@@ -86,7 +89,44 @@ class Guard:
         if path != "/" and not access.check(_given_key(headers)):
             return await refusal(path, 401, "Clé d'accès d'AIODOS manquante ou invalide "
                                  "(Réglages → Autres outils).")(scope, receive, send)
-        return await self.app(scope, receive, send)
+        too_big = refusal(path, 413, f"Requête trop grosse : {MAX_BODY // 1024 ** 2} Mio au "
+                                     "plus.")
+        declared = headers.get(b"content-length")
+        if declared is not None:          # h11 ne laisse pas passer plus que la taille dite
+            if not declared.isdigit() or int(declared) > MAX_BODY:
+                return await too_big(scope, receive, send)
+            return await self.app(scope, receive, send)
+        body = await _read(receive)       # envoi en morceaux : lu ici, jusqu'à la limite
+        if body is None:
+            return await too_big(scope, receive, send)
+        return await self.app(scope, _replay(body, receive), send)
+
+
+async def _read(receive) -> bytes | None:
+    """Le corps envoyé en morceaux, ou None au-delà de MAX_BODY (ou client parti)."""
+    body = bytearray()
+    while True:
+        message = await receive()
+        if message["type"] != "http.request":
+            return None
+        body += message.get("body") or b""
+        if len(body) > MAX_BODY:
+            return None
+        if not message.get("more_body"):
+            return bytes(body)
+
+
+def _replay(body: bytes, receive):
+    """receive qui rend d'abord le corps déjà lu, puis la suite (déconnexion du client)."""
+    sent = False
+
+    async def replay():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return await receive()
+    return replay
 
 
 def create_gateway_app(node, port: int):
@@ -201,8 +241,13 @@ def _port() -> int:
 
 def stdio_config() -> dict:
     """Configuration d'un assistant qui lance un programme (Claude Desktop…), prête à
-    copier : le pont mcp_stdio.py relaie vers cette passerelle."""
-    env = {"PYTHONPATH": str(paths.APP_ROOT), "PYTHONIOENCODING": "utf-8"}
+    copier : le pont mcp_stdio.py relaie vers cette passerelle. -P (et PYTHONSAFEPATH, pour
+    un assistant qui réécrirait les arguments) : sans lui, « python -m » met en tête de
+    sys.path le dossier où l'assistant le lance, souvent le projet ouvert, et un requests.py
+    ou un dossier aiodos/ de ce projet s'exécuterait à la place du pont (faille 3 de l'audit
+    du 20/10/2026)."""
+    env = {"PYTHONPATH": str(paths.APP_ROOT), "PYTHONIOENCODING": "utf-8",
+           "PYTHONSAFEPATH": "1"}
     data_dir = paths.data_dir()
     if data_dir != paths.APP_ROOT / "data":
         env["AIODOS_DATA_DIR"] = str(data_dir)
@@ -211,4 +256,4 @@ def stdio_config() -> dict:
     if command.lower().endswith("pythonw.exe"):
         command = command[:-len("pythonw.exe")] + "python.exe"
     return {"mcpServers": {"aiodos": {
-        "command": command, "args": ["-m", "aiodos.gateway.mcp_stdio"], "env": env}}}
+        "command": command, "args": list(STDIO_ARGS), "env": env}}}

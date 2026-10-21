@@ -269,8 +269,13 @@ Pour VS Code, Continue, AnythingLLM et l'exemple `.mcp.json` de Claude Code, la 
 est bâtie sur les clés que décrit leur documentation, qui n'a pas d'exemple tout fait de ce cas.
 
 **Assistant qui lance un programme** (stdio : Claude Desktop…) : le pont
-`python -m aiodos.gateway.mcp_stdio` relaie vers la passerelle. Il lit lui-même l'adresse et
-la clé dans les réglages d'AIODOS, et relit une clé renouvelée. La configuration exacte, avec
+`python -P -m aiodos.gateway.mcp_stdio` relaie vers la passerelle. Il lit lui-même l'adresse et
+la clé dans les réglages d'AIODOS, et relit une clé renouvelée ; cette clé ne part que vers
+cette machine (une adresse `AIODOS_MCP_URL` ailleurs doit venir avec sa propre `AIODOS_KEY`).
+`-P` (et `PYTHONSAFEPATH`) compte : sans lui, Python cherche d'abord ses modules dans le
+dossier où l'assistant lance le pont, souvent le projet ouvert, et un `requests.py` ou un
+dossier `aiodos/` de ce projet s'exécuterait à sa place (faille corrigée le 21/10/2026 : une
+configuration copiée avant doit être recopiée). La configuration exacte, avec
 le chemin de Python et celui d'AIODOS sur ta machine, est prête à copier dans **Réglages →
 Autres outils** (« Assistant qui lance un programme »). Pour **Claude Desktop**, elle va dans
 `%APPDATA%\Claude\claude_desktop_config.json` (Settings → Developer → « Edit Config »), puis
@@ -281,8 +286,9 @@ distants de Claude Desktop passent par les serveurs d'Anthropic, qui ne joignent
 ```json
 {"mcpServers": {"aiodos": {
   "command": "C:\\…\\python.exe",
-  "args": ["-m", "aiodos.gateway.mcp_stdio"],
-  "env": {"PYTHONPATH": "C:\\…\\AIODOS", "PYTHONIOENCODING": "utf-8"}}}}
+  "args": ["-P", "-m", "aiodos.gateway.mcp_stdio"],
+  "env": {"PYTHONPATH": "C:\\…\\AIODOS", "PYTHONIOENCODING": "utf-8",
+          "PYTHONSAFEPATH": "1"}}}}
 ```
 
 AIODOS doit tourner, la passerelle ouverte. Après une mise à jour d'AIODOS installée à côté de
@@ -306,6 +312,8 @@ l'ancienne version, recopie la configuration affichée : le chemin d'AIODOS a pu
   Desktop de cette machine passe en principe par `host.docker.internal`, § 3).
 - Pas de CORS : un outil qui tourne dans le navigateur (extension, page web) ne peut pas
   l'utiliser.
+- Une requête fait au plus 64 Mio (de quoi porter des images en base64) : au-delà, 413, sans
+  que le reste soit lu.
 - Le nombre de jetons d'une réponse venue d'une machine appairée n'est connu que si elle a
   une version d'AIODOS qui le donne ; sinon 0.
 
