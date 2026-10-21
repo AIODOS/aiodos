@@ -65,7 +65,7 @@ from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
-from aiodos.node import android, identity, power, priority
+from aiodos.node import android, identity, keep_awake, power, priority
 from aiodos.services import extract, media
 
 log = logging.getLogger("aiodos.worker")
@@ -557,6 +557,7 @@ class Worker:
         def computed() -> float:
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
             return max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
+        awake = False
         try:
             mine = sharing.level(a.peer_id) == sharing.MINE
             spec = registry.TASKS.get(a.order["task"])
@@ -570,9 +571,13 @@ class Worker:
             if not welcomes(a.peer_id):
                 raise _NotNow()
             file = self._download(a, folder) if a.order.get("blob") else None
-            if a.order["payload"].get("engine") and a.order["payload"].get("inputs"):
-                # Un travail de moteur : ses entrées, par empreinte, avant le calcul
-                a.order["payload"]["files"] = self._download_inputs(a, folder)
+            if a.order["payload"].get("engine"):
+                # Un travail de moteur : pas de veille sur secteur pendant l'unité, et ses
+                # entrées, par empreinte, avant le calcul
+                keep_awake.hold("unité de moteur")
+                awake = True
+                if a.order["payload"].get("inputs"):
+                    a.order["payload"]["files"] = self._download_inputs(a, folder)
             # Un modèle Whisper qui manque se télécharge pour une de mes machines, jamais pour
             # un ami (services/media.py). Le calcul se fait dans ce thread : le contexte y est vu
             with media.downloads(mine):
@@ -626,6 +631,8 @@ class Worker:
             self._quiet(a, "work/fail", error=self._reason(a, exc), compute_s=computed())
             return f"échec : {exc}"
         finally:
+            if awake:
+                keep_awake.release("unité de moteur")
             shutil.rmtree(folder, ignore_errors=True)
 
     @staticmethod

@@ -145,6 +145,7 @@ DEFAULTS = {
     "engines_comfyui_enabled": False,
     "engines_comfyui_path": "",
     "engines_comfyui_url": "",
+    "keep_awake_jobs": True,          # sur secteur, pas de veille pendant un travail d'appli
 }
 
 

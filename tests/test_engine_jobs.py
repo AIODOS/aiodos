@@ -242,6 +242,29 @@ def test_the_gpu_goes_to_comfyui_before_a_unit(comfy, monkeypatch):
     assert run_all() == 1 and calls == ["conv", "sd"]
 
 
+def test_no_sleep_on_mains_while_a_unit_runs(comfy, monkeypatch):
+    """node/keep_awake.wanted : une unité de moteur en calcul (ou tenue pour une autre
+    machine), sur secteur, réglage actif ; sinon Windows fait comme d'habitude."""
+    from aiodos.node import keep_awake
+    assert not keep_awake.wanted()
+    sha = put(APP, png())
+    submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}})
+    unit = queue.claim_next(["gpu"], "local")
+    assert keep_awake.wanted()
+    monkeypatch.setenv("AIODOS_SIMULATE_POWER", "battery")
+    assert not keep_awake.wanted()
+    monkeypatch.setenv("AIODOS_SIMULATE_POWER", "ac")
+    settings.set_value("keep_awake_jobs", False)
+    assert not keep_awake.wanted()
+    settings.set_value("keep_awake_jobs", True)
+    queue.release_unit(unit["id"])
+    assert not keep_awake.wanted()
+    keep_awake.hold("unité de moteur")
+    assert keep_awake.wanted()
+    keep_awake.release("unité de moteur")
+    assert not keep_awake.wanted()
+
+
 def test_matching_a_machine_that_asks_for_work():
     """engines/lending.can_serve, chez le propriétaire : le moteur, ses classes, ses modèles
     (un modèle sans dossier se cherche dans tous) ; une annonce mal formée vaut un refus."""

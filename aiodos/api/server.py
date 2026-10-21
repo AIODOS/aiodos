@@ -20,7 +20,7 @@ from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
 from aiodos.jobs.executor import Executor
 from aiodos.jobs.kinds import reindex
 from aiodos.network.manager import NetworkManager
-from aiodos.node import identity
+from aiodos.node import identity, keep_awake
 from aiodos.updates.service import UpdateService
 
 
@@ -73,7 +73,9 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         await asyncio.to_thread(apps.purge_session_keys)   # « jusqu'à la fermeture »
         await app.state.gateway.apply()
         keeping = asyncio.create_task(retention.loop(), name="aiodos-garde-fichiers")
+        keep_awake.start()                     # pas de veille pendant un travail d'appli
         yield
+        keep_awake.stop()
         keeping.cancel()
         await app.state.gateway.shutdown()
         app.state.updates.stop()

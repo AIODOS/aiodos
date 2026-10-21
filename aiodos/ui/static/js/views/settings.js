@@ -131,6 +131,9 @@ const SECTIONS = [
         + 'quand une appli annule. Rien n’est installé ni téléchargé.' },
     { key: 'engines_comfyui_path', label: 'Dossier de ComfyUI', type: 'folder',
       help: 'Vide : trouvé seul (Comfy Desktop, version portable).' },
+    { key: 'keep_awake_jobs', label: 'Pas de mise en veille pendant un travail d’application (sur secteur)',
+      type: 'switch', help: 'Tant qu’une unité ComfyUI calcule, ici ou ailleurs pour ce PC, Windows ne met pas le PC '
+        + 'en veille (l’écran peut s’éteindre). Sur batterie, rien ne change.' },
     { key: 'engines_comfyui_url', label: 'Adresse de ComfyUI sur ce PC', type: 'text',
       help: 'Vide : http://127.0.0.1:8188, puis :8000 (celle de Comfy Desktop). Seule une adresse de ce PC est prise.' },
   ] },
