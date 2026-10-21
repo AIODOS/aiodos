@@ -12,7 +12,8 @@ const STATUS = {
   running: ['run', 'En cours'], queued: ['idle', 'En attente'], paused: ['warn', 'En pause'],
   done: ['ok', 'Terminé'], failed: ['err', 'Échec'], cancelled: ['idle', 'Annulé'],
 };
-const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry' };
+const KIND_ICONS = { index_paths: 'folder', index_urls: 'globe', index_conversation: 'memory', reindex: 'retry',
+  engine: 'image' };
 
 let root;
 const cards = new Map();             // job id → { el, shape }
@@ -181,7 +182,7 @@ function card(j) {
     <div class="job">
       <div class="top">
         ${icon(KIND_ICONS[j.kind] || 'layers')}
-        <span class="title" title="${esc(j.title)}">${esc(j.title)}</span>
+        <span class="title" title="${esc(j.title)}">${j.app_name ? `<b>${esc(j.app_name)}</b> · ` : ''}${esc(j.title)}</span>
         <span class="pill ${cls}">${label}</span>
         ${active ? `<select class="select" title="Priorité">${PRIORITIES.map(([v, l]) =>
           `<option value="${v}" ${v === j.priority ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}

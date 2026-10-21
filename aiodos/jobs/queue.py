@@ -365,12 +365,24 @@ def recover():
 
 
 # ------------------------------------------------------------------- lecture
-def _summary(row, remote) -> dict:
+def _summary(row, remote, names=None) -> dict:
     job = dict(row)
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
     job["remote"] = remote.get(job["id"], {})       # {machine: unités qu'elle calcule}
+    if job.get("owner_app"):                        # l'appli qui l'a déposé (vue Travaux)
+        names = _app_names([job["owner_app"]]) if names is None else names
+        job["app_name"] = names.get(job["owner_app"])
     return job
+
+
+def _app_names(ids) -> dict:
+    ids = sorted({i for i in ids if i})
+    if not ids:
+        return {}
+    return {r["id"]: r["name"] for r in db.query(
+        f"SELECT id, name FROM gateway_apps WHERE id IN ({','.join('?' * len(ids))})",
+        tuple(ids))}
 
 
 def remote_counts(job_id=None) -> dict:
@@ -390,11 +402,13 @@ def job_summary(job_id) -> dict | None:
 
 def list_jobs(limit=200) -> list:
     remote = remote_counts()
-    return [_summary(r, remote) for r in db.query(
+    rows = db.query(
         "SELECT * FROM jobs ORDER BY CASE status WHEN 'running' THEN 0 "
         "WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, "
         "CASE WHEN status IN ('running','queued','paused') THEN priority ELSE 0 END, "
-        "COALESCE(finished, created) DESC LIMIT ?", (limit,))]
+        "COALESCE(finished, created) DESC LIMIT ?", (limit,))
+    names = _app_names(r["owner_app"] for r in rows)
+    return [_summary(r, remote, names) for r in rows]
 
 
 def failed_units(job_id, limit=50) -> list:

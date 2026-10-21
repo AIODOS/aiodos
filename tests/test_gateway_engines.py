@@ -126,6 +126,9 @@ def test_a_comfyui_job_from_an_app(node):
     assert [f["id"] for f in left["files"]] == [files["files"][1]["id"]]
     listed = node.call("GET", "/aiodos/v1/jobs?client_ref=pandora:mood:5f2c9a", key=key).json()
     assert [j["id"] for j in listed["jobs"]] == [job["id"]]
+    # Dans la vue Travaux d'AIODOS : le nom de l'appli devant le libellé
+    [mine] = node.ui.get("/api/jobs", headers=UI).json()["jobs"]
+    assert (mine["app_name"], mine["title"]) == ("PANDORA", "Moods · Séq. 3")
 
 
 def test_events_stream_until_the_end(node):
