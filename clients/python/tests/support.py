@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
-"""Outils communs des essais : le contrat partagé, un port fermé, une attente."""
+# aiodos-client 0.2.0
+"""Outils communs des essais : le contrat partagé, un port fermé, une attente, le graphe des
+travaux ComfyUI du contrat."""
 
+import copy
 import json
 import socket
 import time
@@ -11,6 +13,7 @@ CONTRACT = Path(__file__).resolve().parents[2] / "contract"
 SOURCE = Path(__file__).resolve().parents[1] / "src" / "aiodos_client"
 
 APP = {"app": "PANDORA", "app_id": "arkane.pandora", "version": "3.2.0"}
+COMFY = ("chat", "embed", "engines:comfyui")
 
 
 def load_contract(name):
@@ -50,7 +53,11 @@ def json_type(value):
 
 def assert_shape(example, actual, where="réponse"):
     """La règle du contrat : chaque clé de l'exemple existe dans la réponse, avec le même type
-    JSON, récursivement (pour une liste, son premier élément quand les deux en ont)."""
+    JSON, récursivement (pour une liste, son premier élément quand les deux en ont) ; null
+    vaut pour tout type, d'un côté comme de l'autre (comme tests/test_gateway_apps._shape,
+    côté serveur : « mine » vaut null ou un nombre selon les cercles servis)."""
+    if example is None or actual is None:
+        return
     assert json_type(actual) == json_type(example), f"{where} : {actual!r} au lieu de {example!r}"
     if isinstance(example, dict):
         for key, value in example.items():
@@ -63,4 +70,31 @@ def assert_shape(example, actual, where="réponse"):
 def at_path(value, dotted):
     for part in dotted.split("."):
         value = value[int(part)] if isinstance(value, list) else value[part]
+    return value
+
+
+def job_request():
+    """Le corps de « travail déposé » (clients/contract/jobs.json), {sha256} à remplir."""
+    return copy.deepcopy(interaction("jobs.json", "travail déposé")["request"]["json"])
+
+
+def graph():
+    """Le graphe au format API du contrat (LoadImage « @in:ref0 », SaveImage « 9 »)."""
+    return job_request()["graph"]
+
+
+def items():
+    return job_request()["items"]
+
+
+def fill(value, **found):
+    """Les {sha256}, {job_id}, {file_id}… du contrat remplacés, partout."""
+    if isinstance(value, str):
+        for name, real in found.items():
+            value = value.replace("{" + name + "}", str(real))
+        return value
+    if isinstance(value, list):
+        return [fill(v, **found) for v in value]
+    if isinstance(value, dict):
+        return {k: fill(v, **found) for k, v in value.items()}
     return value

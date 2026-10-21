@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le coffre de la clé d'accès de l'appli : get(), set(clé), delete().
 
 - `Keystore.dpapi(chemin)` (Windows) : la clé chiffrée par DPAPI pour le compte de

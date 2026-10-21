@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le transport : hôte non local refusé avant tout envoi, aucune redirection suivie, aucun
 proxy, lecture SSE, délais d'inactivité et de chargement, annulation réelle d'un flux."""
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Trouver AIODOS sur ce PC (docs/api-applications.md § 1 et § 4.4).
 
 - Le fichier de découverte `gateway.json` : `%LOCALAPPDATA%\\AIODOS\\gateway.json` sous Windows,

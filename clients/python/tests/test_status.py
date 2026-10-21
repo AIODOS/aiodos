@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """status() dans tous les états du tableau (docs/api-applications.md § 6), sans jamais lever ;
 wait_ready()."""
 
@@ -232,7 +232,7 @@ def test_ready(ready):
     assert status.ready and status.state == "ready"
     assert status.scopes == ("chat", "embed") and status.where == ("here", "mine")
     assert status.url == client._resolve()[0].url
-    assert status.serves("chat") and not status.serves("jobs")
+    assert status.serves("chat") and status.serves("jobs") and not status.serves("recipes")
 
 
 def test_status_never_raises(fake, make_client, tmp_path, monkeypatch):

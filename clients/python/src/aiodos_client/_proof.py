@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """La preuve d'identité d'AIODOS (docs/api-applications.md § 5.1).
 
 AIODOS arrêté, n'importe quel programme pourrait écouter sur le port et recueillir les clés.

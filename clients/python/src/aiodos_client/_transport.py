@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le transport vers la passerelle : http.client directement, sur cette machine seulement.
 
 - L'hôte est vérifié avant tout envoi : 127.0.0.1, localhost ou [::1], sinon l'erreur
   `non_local_url`. http.client ne lit aucun proxy dans l'environnement et ne suit aucune
   redirection : une réponse 3xx est une erreur `protocol`.
-- Une connexion par requête, fermée à la fin.
+- Une connexion par requête, fermée à la fin. Un corps peut être un fichier ouvert (une
+  entrée de travail de 100 Mo) : il part par blocs, sans être lu d'avance en mémoire.
+- Une réponse se lit entière (read_body), par morceaux (chunks : le contenu d'un fichier),
+  ou en événements SSE (events, messages : avec le nom de chaque événement).
 - La lecture n'attend jamais plus de 0,1 s d'affilée (select) : elle compte elle-même
   l'inactivité, remise à zéro à chaque octet reçu (morceaux du flux et commentaires
   « : aiodos loading N » compris), et voit aussitôt un arrêt demandé.
@@ -36,6 +39,7 @@ CANCEL_POLL = 0.1               # cadence du fil de surveillance
 CONNECT_TIMEOUT = 5.0
 MAX_BODY = 256 * 1024 * 1024    # une réponse JSON (embeddings d'un gros lot compris)
 MAX_LINE = 16 * 1024 * 1024     # une ligne d'un flux SSE
+BLOCK = 256 * 1024              # envoi d'un corps-fichier, lecture d'un contenu
 
 
 def as_cancel(cancel):
@@ -234,7 +238,7 @@ class _Connection(http.client.HTTPConnection):
     l'en-tête Host restant « localhost:port »."""
 
     def __init__(self, endpoint, gate, connect_timeout):
-        super().__init__(endpoint.host, endpoint.port, timeout=connect_timeout)
+        super().__init__(endpoint.host, endpoint.port, timeout=connect_timeout, blocksize=BLOCK)
         self._gate = gate
         self.raw = None
 
@@ -307,6 +311,11 @@ class Exchange:
     def cancelled(self) -> bool:
         return self._gate.cancelled
 
+    def touch(self):
+        """Remet à zéro le délai d'inactivité : le temps que l'appli passe sur un événement
+        (ranger un fichier…) n'est pas du silence d'AIODOS."""
+        self._gate.touch()
+
     def send(self, method, path, headers=None, body=None):
         """Envoie la requête et lit la ligne d'état et les en-têtes de la réponse."""
         if self._cancel is not None and self._cancel():
@@ -370,10 +379,32 @@ class Exchange:
                 return
             pending += piece
 
+    def chunks(self, size=BLOCK):
+        """Le corps de la réponse par morceaux, tels qu'ils arrivent. Une coupure en route
+        finit simplement la suite : à l'appelant de compter (Content-Length)."""
+        resp = self.response
+        while True:
+            try:
+                piece = resp.read1(size)
+            except Exception as exc:
+                raise self._translate(exc) from exc
+            if self._gate.cancelled:
+                raise errors.make("cancelled", self.lang)
+            if not piece:
+                return
+            yield piece
+
     def events(self):
         """Les événements du flux SSE, dans l'ordre : ("comment", texte) pour une ligne
         « : … », ("data", texte) pour un événement (ses lignes « data: » réunies)."""
+        for kind, _, value in self.messages():
+            yield ("comment" if kind == "comment" else "data"), value
+
+    def messages(self):
+        """Les événements du flux SSE avec leur nom : ("comment", None, texte) pour une ligne
+        « : … », ("event", nom, données) pour un événement (« message » sans « event: »)."""
         data = []
+        name = None
         first = True
         for raw in self._lines():
             if first:
@@ -382,21 +413,23 @@ class Exchange:
             line = raw.decode("utf-8", "replace").rstrip("\r\n")
             if not line:
                 if data:
-                    yield "data", "\n".join(data)
-                    data = []
+                    yield "event", name or "message", "\n".join(data)
+                data, name = [], None
                 continue
             if line.startswith(":"):
-                yield "comment", line[1:].strip()
+                yield "comment", None, line[1:].strip()
                 continue
             field, _, value = line.partition(":")
             if value.startswith(" "):
                 value = value[1:]
             if field == "data":
                 data.append(value)
+            elif field == "event":
+                name = value or None
         if self._gate.cancelled:                        # fin due à l'arrêt demandé
             raise errors.make("cancelled", self.lang)
         if data:
-            yield "data", "\n".join(data)
+            yield "event", name or "message", "\n".join(data)
 
     def _translate(self, exc):
         if isinstance(exc, errors.AiodosError):
@@ -444,7 +477,8 @@ class Exchange:
 
 def request(endpoint, method, path, *, headers=None, body=None, timeout=30.0,
             connect_timeout=CONNECT_TIMEOUT, cancel=None, lang="fr", limit=MAX_BODY):
-    """Une requête complète : la réponse lue en entier (Response)."""
+    """Une requête complète : la réponse lue en entier (Response). `body` : des octets, ou
+    un fichier ouvert en binaire (avec son Content-Length dans `headers`)."""
     with Exchange(endpoint, timeout=timeout, connect_timeout=connect_timeout, cancel=cancel,
                   lang=lang) as exchange:
         resp = exchange.send(method, path, headers, body)

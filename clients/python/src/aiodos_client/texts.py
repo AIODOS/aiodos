@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Les textes des états et des codes d'erreur, en français (par défaut) et en anglais.
 
 Les messages des états sont ceux conseillés par docs/api-applications.md § 6, mot pour mot ;
@@ -124,6 +124,32 @@ ERRORS = {
         "engine_unavailable": "Le moteur est en panne ou démarre encore.",
         "approval_unavailable": "AIODOS tourne sans fenêtre : ouvre-le pour autoriser l'appli.",
         "http": "Réponse inattendue d'AIODOS (HTTP {status}).",
+        # les travaux ComfyUI : du client
+        "hash_mismatch": "Le fichier reçu d'AIODOS ne correspond pas à son empreinte (SHA-256) : "
+                         "il a été écarté.",
+        "job_failed": "Le travail a échoué : aucune unité n'a abouti.",
+        "sensitive_denied": "Données sensibles : ni ce PC ni mes machines ne sont permis à "
+                            "l'appli.",
+        # les travaux ComfyUI : de la passerelle (messages de secours)
+        "graph_not_api": "Graphe au format de l'éditeur : il faut le format API.",
+        "graph_invalid": "Graphe mal formé.",
+        "patch_invalid": "Retouche invalide.",
+        "forbidden_value": "Valeur refusée (chemin, adresse ou annotation de dossier).",
+        "forbidden_node": "Nœud refusé.",
+        "input_missing": "Entrée absente.",
+        "input_hash_mismatch": "L'empreinte du fichier reçu ne correspond pas.",
+        "input_too_large": "Entrée trop lourde : 100 Mo au plus.",
+        "graph_too_large": "Graphe trop gros.",
+        "engine_not_found": "Moteur inconnu.",
+        "job_not_found": "Travail introuvable.",
+        "file_not_found": "Fichier introuvable.",
+        "input_not_found": "Entrée introuvable.",
+        "model_unavailable": "Aucune machine permise n'a ces modèles.",
+        "model_unresolved": "Modèle non résolu.",
+        "model_ambiguous": "Même nom de modèle dans plusieurs dossiers.",
+        "job_not_cancellable": "Ce travail est déjà fini.",
+        "job_not_pausable": "Ce travail est déjà fini.",
+        "quota_exceeded": "Quota de cette application dépassé.",
     },
     "en": {
         "unreachable": "Connection refused ({host}): AIODOS is not running, or is not open to "
@@ -191,6 +217,30 @@ ERRORS = {
         "approval_unavailable": "AIODOS is running without a window: open it to authorize the "
                                 "app.",
         "http": "Unexpected response from AIODOS (HTTP {status}).",
+        "hash_mismatch": "The file received from AIODOS does not match its hash (SHA-256): it "
+                         "was discarded.",
+        "job_failed": "The job failed: no unit succeeded.",
+        "sensitive_denied": "Sensitive data: neither this PC nor my machines are allowed for "
+                            "the app.",
+        "graph_not_api": "Editor-format graph: the API format is required.",
+        "graph_invalid": "Malformed graph.",
+        "patch_invalid": "Invalid patch.",
+        "forbidden_value": "Value refused (path, address or folder annotation).",
+        "forbidden_node": "Node refused.",
+        "input_missing": "Missing input.",
+        "input_hash_mismatch": "The received file's hash does not match.",
+        "input_too_large": "Input too large: 100 MB at most.",
+        "graph_too_large": "Graph too large.",
+        "engine_not_found": "Unknown engine.",
+        "job_not_found": "Job not found.",
+        "file_not_found": "File not found.",
+        "input_not_found": "Input not found.",
+        "model_unavailable": "No allowed machine has these models.",
+        "model_unresolved": "Unresolved model.",
+        "model_ambiguous": "Same model name in several folders.",
+        "job_not_cancellable": "This job has already finished.",
+        "job_not_pausable": "This job has already finished.",
+        "quota_exceeded": "This application's quota is exceeded.",
     },
 }
 
@@ -218,6 +268,10 @@ HINTS = {
         "not_supported": "Mets AIODOS à jour.",
         "client_too_old": "Mets à jour aiodos-client.",
         "no_model": "Installe un modèle dans AIODOS.",
+        "hash_mismatch": "Télécharge le fichier de nouveau.",
+        "job_failed": "Lis l'erreur de chaque unité (job.units[…].error).",
+        "graph_not_api": "Exporte le graphe au format API dans ComfyUI.",
+        "input_too_large": "Allège le fichier : 100 Mo au plus par entrée.",
     },
     "en": {
         "unreachable": "Start AIODOS, or connect the app: it will open AIODOS to applications.",
@@ -241,6 +295,10 @@ HINTS = {
         "not_supported": "Update AIODOS.",
         "client_too_old": "Update aiodos-client.",
         "no_model": "Install a model in AIODOS.",
+        "hash_mismatch": "Download the file again.",
+        "job_failed": "Read each unit's error (job.units[…].error).",
+        "graph_not_api": "Export the graph in API format in ComfyUI.",
+        "input_too_large": "Make the file lighter: 100 MB at most per input.",
     },
 }
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """Le coffre de la clé : DPAPI (Windows), fichier en 0600, mémoire ; jamais la clé dans repr."""
 
 import os

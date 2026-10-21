@@ -1,7 +1,7 @@
 # aiodos-client (Python)
 
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- aiodos-client 0.1.0 -->
+<!-- aiodos-client 0.2.0 -->
 
 > **In English, in short.** `aiodos-client` is the zero-dependency Python library (3.10 to
 > 3.14) that applications such as PANDORA use to talk to the local AIODOS gateway
@@ -10,6 +10,9 @@
 > 6-digit code; through AIODOS's helper program when the gateway is closed), keeps it with
 > DPAPI, checks AIODOS's identity proof before ever sending the key, and streams chat
 > (OpenAI or Anthropic message formats, tools, images, reasoning) with real cancellation.
+> Since 0.2.0 it also hands ComfyUI jobs (API-format graphs) to AIODOS, which replays them on
+> the ComfyUI of this PC and of the user's other machines: inputs sent once by hash, live
+> progress (SSE, auto-reconnect), pause/resume/cancel, resumable downloads with hash checks.
 > Errors carry stable codes; messages come in French and English. `FakeAiodos` replays the
 > shared contract for tests. Apache-2.0: it can be included in a GPL-3.0 application.
 
@@ -21,19 +24,19 @@ intégrateurs, [docs/integrer-aiodos.md](../../docs/integrer-aiodos.md).
 ## Installer
 
 ```
-pip install aiodos-client==0.1.0
+pip install aiodos-client==0.2.0
 ```
 
 Aucune dépendance : la bibliothèque standard seulement. Pour PANDORA, épingler la version
 **et l'empreinte** dans `requirements.txt`, puis installer avec `--require-hashes` :
 
 ```
-aiodos-client==0.1.0 \
+aiodos-client==0.2.0 \
     --hash=sha256:<empreinte de la roue publiée sur PyPI>
 ```
 
 L'empreinte se lit sur la page du paquet sur PyPI, ou se calcule sur la roue téléchargée
-(`pip download aiodos-client==0.1.0 --no-deps -d roue`, puis `pip hash roue/*.whl`). On peut
+(`pip download aiodos-client==0.2.0 --no-deps -d roue`, puis `pip hash roue/*.whl`). On peut
 aussi copier `src/aiodos_client/` dans l'appli, avec `LICENSE` et `NOTICE`.
 
 Pour PyInstaller : tous les imports sont en tête de module, rien à ajouter dans
@@ -103,7 +106,10 @@ load_timeout=900)`
 | `chat(messages, model=None, …)` | une conversation, toujours en flux : `ChatResult` |
 | `embed(texts, model=None)` | les vecteurs, sur ce PC (`Vectors`, avec `model` : à garder avec eux) ; sans modèle, celui des bibliothèques d'AIODOS |
 | `open_in_aiodos(page, model=None)` | ramène la fenêtre d'AIODOS sur `applications`, `models`, `jobs` ou `gallery` |
-| `comfy`, `jobs()`, `job(id)`, `inputs`, `engines()` | livraison 2 : `NotSupported` (voir plus bas) |
+| `engines()` | les moteurs des machines permises (`EngineList` de `Engine` : `here`, `machines`, `models`, `has_model()`) |
+| `comfy.tokenize()`, `comfy.plan()`, `comfy.submit()`, `comfy.run()` | les travaux ComfyUI (voir « Travaux ComfyUI ») |
+| `jobs(active=True, client_ref=None, status=None)`, `job(id)` | ses travaux (`Job`), retrouvés après un redémarrage |
+| `inputs.put(data, type=None)` | une entrée envoyée une fois, par son empreinte ; rend son SHA-256 |
 
 - **L'adresse** : `url`, puis `AIODOS_URL`, puis le fichier de découverte
   (`%LOCALAPPDATA%\AIODOS\gateway.json`), puis `http://127.0.0.1:11435`. Un hôte autre que
@@ -217,18 +223,123 @@ d'OpenAI avec son objet `aiodos`, forme d'Ollama, forme d'OAuth).
 | `InvalidRequest` : `ContextTooLong` (`.needed`, `.limit`), `ToolsUnavailable`, `VisionUnsupported`, `LocalOnly`, `Unsupported`, `UnsupportedMediaType` | `invalid_request`, `context_length_exceeded`, `tools_unavailable`, `vision_unsupported`, `local_only`, `unsupported_parameter`, `unsupported_media_type` |
 | `ModelNotFound`, `NoMachine`, `FileTooLarge`, `NotSupported` | `model_not_found`, `no_machine`, `file_too_large`, `not_supported` |
 | `RateLimited` (`Busy`), `EngineUnavailable`, `PeerFailed` (`EngineFailed`) | `rate_limited`, `busy`, `engine_unavailable`, `peer_failed`, `engine_failed` |
+| `InvalidRequest` : `GraphInvalid` (`.node`, `.graph`), `ForbiddenValue` (`.node`, `.input`, `.reason`), `ForbiddenNode` (`.node_class`), `InputMissing` (`.input`), `InputHashMismatch` (`.sha256`) | `graph_invalid`, `graph_not_api`, `patch_invalid`, `forbidden_value`, `forbidden_node`, `input_missing`, `input_hash_mismatch` |
+| `FileTooLarge` : `InputTooLarge`, `GraphTooLarge` | `input_too_large` (aussi avant l'envoi), `graph_too_large` |
+| `NotFound` : `JobNotFound`, `FileNotFound`, `InputNotFound`, `EngineNotFound` | `job_not_found`, `file_not_found`, `input_not_found`, `engine_not_found` |
+| `ModelUnavailable` (`.models`, `.machine`), `ModelUnresolved`, `ModelAmbiguous` (`.candidates`) | `model_unavailable`, `model_unresolved`, `model_ambiguous` |
+| `JobNotCancellable`, `JobNotPausable`, `QuotaExceeded` (`.quota`) | `job_not_cancellable`, `job_not_pausable`, `quota_exceeded` |
+
+`EngineUnavailable` vaut aussi pour 409 (aucune machine permise n'a ComfyUI ouvert et
+accordé), `NotFound` pour ce qui est à une autre appli ; `QuotaExceeded` n'est pas un
+`RateLimited` : attendre ne suffit pas toujours, il faut récupérer ou supprimer.
 
 Un code inconnu de cette version donne un `AiodosError` qui le porte tel quel.
 
-## La livraison 2
+## Travaux ComfyUI
 
-`ai.comfy` (`plan`, `object_info`, `template`, `recipes`, `recipe_for`, `tokenize`,
-`submit`, `run`), `ai.jobs()`, `ai.job(id)` et `Job`, `File`, `ai.inputs.put()`,
-`ai.engines()` existent déjà : tant que `features` n'annonce pas `engines.comfyui`, `jobs`,
-`inputs`, `files` ou `engines`, ils lèvent `NotSupported` sans rien essayer. Le repli de
-l'appli (le ComfyUI de ce PC) se branche sur cette erreur, et son code n'aura pas à changer.
-Si AIODOS les annonce déjà, c'est ce client qui est à mettre à jour : `NotSupported` aussi,
-avec ce conseil (`detail["client"]`).
+AIODOS ne remplace pas le ComfyUI de l'appli : il rejoue ses graphes **au format API**
+(« Exporter (API) »), déjà remplis, dans le ComfyUI de ce PC et dans celui des autres
+machines de l'utilisateur qui l'ont (chacun accordé dans AIODOS, Réglages → Moteurs des
+applications), et garde les fichiers pour l'appli jusqu'à ce qu'elle les récupère. Droit :
+`engines:comfyui`, demandé avec `connect()`. Référence : § 5.7 de
+[api-applications.md](../../docs/api-applications.md).
+
+**Exemple : PANDORA, quatre variations d'un mood** (bloquant, depuis un QThread)
+
+```python
+from aiodos_client import Aiodos, Keystore, errors
+
+ai = Aiodos(app="PANDORA", app_id="arkane.pandora", version=VERSION, lang="fr",
+            keystore=Keystore.dpapi(r"%LOCALAPPDATA%\PANDORA\aiodos.key"))
+if ai.status().state != "ready":
+    ai.connect(scopes=["chat", "engines:comfyui"], purpose="Textes, moods et vidéos de PANDORA",
+               on_code=self.code.emit, cancel=self.isInterruptionRequested)
+try:
+    api, inputs = ai.comfy.tokenize(api, {ref_node: png_bytes})   # @in: dans le LoadImage
+    job = ai.comfy.submit(graph=api, inputs=inputs,
+                          items=[{"seed": base_seed + i, "set": [[text_node, "text", p]]}
+                                 for i, p in enumerate(prompts)],
+                          label=f"Mood · {plan}", client_ref=f"pandora:mood:{uid}",
+                          sensitive=has_actor_photo)                # ce PC et mes machines
+except errors.NotSupported:
+    return self.run_on_local_comfyui()        # repli : le ComfyUI de ce PC, comme avant
+for ev in job.watch(cancel=self.isInterruptionRequested):
+    self.progress.emit(ev.job.progress.percent or 0, ev.job.progress.message)
+paths = job.download(dest_dir, stem=plan)   # « plan_1.png », « plan_2.png »… vérifiés
+```
+
+**Exemple : PANDORA, reprise au lancement**
+
+```python
+for job in ai.jobs(active=None):                      # les siens, les plus récents d'abord
+    if job.client_ref and job.client_ref.startswith("pandora:") and job.files(unfetched=True):
+        job.download(project_dir_for(job.client_ref))  # repris là où il s'était arrêté
+```
+
+**Déposer** : `comfy.submit(graph=None, graphs=None, recipe=None, items=None, repeat=None,
+inputs=None, models="auto", where=None, priority="normal", label=None, client_ref=None,
+bounds=None, strict=False, sensitive=False, cancel=None)` rend un `Job` (« queued »).
+- Un fichier ne se donne que par un jeton : `@in:<id>` (une entrée de `inputs`), `@seed` (la
+  graine de l'élément), `@model:<clé>` (avec `models={clé: {"folder", "name"}}` ; par
+  défaut, AIODOS relève lui-même les noms de modèles).
+- `inputs` : `{id: octets, chemin, ou {"sha256": …}}`. Le client calcule les empreintes,
+  demande à AIODOS ce qu'il a déjà (`HEAD`), envoie le reste (`PUT`, un fichier part par
+  blocs) ; 100 Mo au plus par entrée, vérifiés avant tout envoi (`InputTooLarge`).
+  `inputs.put(data, type=None)` le fait pour une seule entrée.
+- `comfy.tokenize(graph, {nœud: octets})` met les jetons dans l'entrée de fichier des
+  `LoadImage`, `LoadImageMask` (`image`), `LoadVideo` (`file`) et `LoadAudio` (`audio`)
+  donnés, et rend (copie du graphe, entrées).
+- Une unité par élément d'`items` (`{graph, label, seed, set: [[nœud, entrée, valeur]]}`),
+  ou `repeat={"count", "vary": [{"node", "input", "step"}]}`, ou une par graphe.
+- `where` resserre le lieu de calcul (en-tête `X-Aiodos-Where` ; plus large que l'accord :
+  `WhereDenied`) ; `sensitive=True` le limite à ce PC et à mes machines, dans ce que l'accord
+  permet. `priority` : `high`, `normal` ou `low`.
+- Le même `client_ref` rend le même travail (idempotence) : redéposer après un plantage ne
+  calcule rien deux fois.
+- `comfy.plan(...)` (mêmes arguments) : le pré-vol, rien n'est mis en file (`Plan` : `ok`,
+  `where_effective`, `missing` [{folder, name, machine}], `units`).
+- `comfy.run(...)` : `submit`, `wait`, `download` → les chemins (dans `dest_dir`, ou un
+  dossier temporaire neuf) ; `EngineFailed` si aucune unité n'a abouti (l'erreur de ComfyUI
+  dans le message), `Cancelled` si le travail a été annulé.
+
+**Suivre** : `Job` porte les champs de l'objet travail, au dernier état connu : `id`,
+`status` (`queued`, `in_progress`, `pausing`, `paused`, `cancelling`, `completed`, `failed`,
+`cancelled`), `label`, `client_ref`, `progress` (`percent`, `message`, `done`, `failed`,
+`machines`…), `units` (`Unit` : `status`, `stage`, `machine`, `place`, `files`, `error`),
+`files` (`File`), `error`, `cancelled_by`, `where_effective`, `pause_info` (le champ
+`pause`, `pause()` étant la commande), `data` (l'objet tel quel) ; `finished`.
+- `job.watch(cancel=None, timeout=None)` itère sur des `JobEvent` : `job` (un nouvel état),
+  `file` (chaque fichier pas encore récupéré, une fois : `ev.file`), `end` (`ev.status`) ;
+  `ev.job` est le travail à jour. Coupé, le suivi reprend seul et relit l'état complet ;
+  tant qu'AIODOS ne répond pas, un événement `unreachable`, puis de nouveaux essais. Si
+  `cancel()` devient vrai, le travail est **annulé dans AIODOS** et `Cancelled` est levée ;
+  au-delà de `timeout`, `Timeout` (le travail continue).
+- `job.wait(timeout=None, cancel=None)`, `job.refresh()`.
+- Les commandes rendent le travail à jour : `pause(when="after_current")` (ou `"now"` : le
+  calcul en cours s'arrête dans ComfyUI, l'unité repartira), `resume()`, `cancel()` (ce
+  calcul seulement, jamais ceux de l'utilisateur ; les fichiers déjà rendus restent),
+  `retry_failed()`, `delete(files=False)` (un travail fini).
+
+**Les fichiers** : `job.files` (dernier état), `job.files(unfetched=False)` (relus dans
+AIODOS), `job.download(dest_dir, stem=None, on_file=None, cancel=None)` (rend `Downloads`,
+une liste de `Path` avec `.files` et `.job`).
+- `File.save(path)` écrit en flux dans `<nom>.part`, reprend un transfert coupé par `Range`
+  (dans le même appel, ou au suivant), vérifie le SHA-256 du tout, puis renomme ; un fichier
+  déjà là et identique n'est pas retéléchargé. `File.content()` rend les octets (vérifiés),
+  `content(start, end)` une plage ; `File.delete()`.
+- Un fichier servi jusqu'à son dernier octet est **récupéré** : AIODOS le garde encore
+  7 jours (`fetched`, `expires_at`) ; jamais récupéré, il n'est jamais effacé seul.
+
+**Pas encore servis** (`NotSupported`, sans rien essayer) : les recettes (`recipe=`,
+`comfy.recipes()`, `comfy.recipe_for()`), l'`object_info` et les gabarits relayés
+(`comfy.object_info()`, `comfy.template()`), les liens signés (`File.link()`), la priorité
+d'un travail déposé (`Job.set_priority()`) et les signalements (`Job.report()`).
+
+Tant que `features` n'annonce pas `engines.comfyui`, `jobs` (`jobs.pause` pour la pause),
+`inputs`, `files` ou `engines`, chaque fonction lève `NotSupported` sans rien essayer : le
+repli de l'appli (le ComfyUI de ce PC) se branche sur cette erreur. Une fonction qu'AIODOS
+annonce mais que ce client ne sait pas encore servir lève `NotSupported` avec le conseil de
+mettre aiodos-client à jour (`detail["client"]`).
 
 ## Le faux AIODOS, pour les essais
 
@@ -257,6 +368,13 @@ with FakeAiodos(interval=0.05) as fake:
   `apps`, `requests`, `approval_ui`, `other_account`, `features` règlent le reste.
 - `add_key()`, `revoke(clé)`, `expire_key(clé)` ; `override(chemin, réponse)` sert une
   réponse du contrat telle quelle.
+- Les travaux ComfyUI, en mémoire (droit `engines:comfyui` : `add_key(scopes=("chat",
+  "engines:comfyui"))`) : chaque unité dure `job_delay` secondes (0,05 ; `job_delay=None` :
+  seulement par `advance(job_id=None, steps=1)`) et rend un petit PNG (`fake.png()`) ;
+  `fail_unit(index, code=…)`, `cut_events(after=1)` (le flux se coupe), `cut_content(after=16)`
+  (un téléchargement se coupe), `comfyui=False` (ComfyUI fermé), `comfy_models`,
+  `comfy_peers=[{"name": "Portable"}]` (mes autres machines) ; `job_record()`,
+  `inputs_of(clé)`. `features=fake.L1_FEATURES` imite une version d'AIODOS sans les travaux.
 - Il garde ce qu'il reçoit : `log`, `seen_keys` (même refusées), `token_polls`,
   `stream_closed` (le client a fermé un flux).
 
@@ -269,8 +387,12 @@ py -3.14 -m pytest clients/python/tests -q
 Ils rejouent le contrat (`clients/contract/`), le vecteur de la preuve, tous les états de
 `status()`, `connect()` passerelle ouverte et fermée (avec un faux programme d'aide), les
 refus d'hôtes non locaux et de redirection, l'annulation réelle d'un flux, l'absence de la
-clé dans les `repr`, les messages et le journal, le coffre DPAPI (Windows) et le fichier. Ils
-ne voient jamais le vrai AIODOS.
+clé dans les `repr`, les messages et le journal, le coffre DPAPI (Windows) et le fichier.
+Pour les travaux ComfyUI : chaque réponse de `jobs.json` comprise, puis de bout en bout
+(tokenize, submit, watch, download), pause, reprise, annulation (aussi depuis `watch`), flux
+coupé et repris, AIODOS qui ne répond plus puis revient, téléchargement coupé et repris,
+fichier corrompu écarté, `client_ref`, échecs et relance, mes autres machines, et rien d'une
+appli visible d'une autre. Ils ne voient jamais le vrai AIODOS.
 
 ## Licence
 

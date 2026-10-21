@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# aiodos-client 0.1.0
+# aiodos-client 0.2.0
 """La clé n'apparaît jamais : ni dans un repr ou un str, ni dans un message d'erreur, ni dans
 le journal (même à DEBUG), sur tout un parcours ; le device_code non plus."""
 
