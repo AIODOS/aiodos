@@ -158,6 +158,9 @@ class Executor:
                     last_lease_check = time.monotonic()
                     for job_id, finished in await asyncio.to_thread(leases.expire):
                         await asyncio.to_thread(self.settle, job_id, finished)
+                    # Travaux d'applis qu'aucune machine n'a pris avant leur échéance
+                    for job_id, finished in await asyncio.to_thread(queue.expire_waiting):
+                        await asyncio.to_thread(self.settle, job_id, finished)
             except Exception:
                 log.exception("Erreur dans la boucle de l'exécuteur")
             try:

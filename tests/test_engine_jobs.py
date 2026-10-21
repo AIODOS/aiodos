@@ -179,6 +179,53 @@ def test_a_failing_unit_says_why(comfy):
     assert "engine_error" in row["error"] and "nœud 1" in row["error"]
 
 
+def test_units_no_machine_takes_fail_at_the_deadline(comfy):
+    """bounds.wait_s : une unité qu'aucune machine n'a prise avant l'échéance échoue
+    (no_machine) ; celle déjà remise suit son cours."""
+    sha = put(APP, png())
+    job_id, _ = submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}},
+                               "repeat": {"count": 2, "vary": []}})
+    taken = queue.claim_next(["gpu"], "local")                  # une remise, pas finie
+    db.execute("UPDATE jobs SET wait_until=? WHERE id=?", (db.now() - 1, job_id))
+    assert queue.expire_waiting() == [(job_id, False)]
+    rows = {r["id"]: r for r in db.query("SELECT id, status, error FROM units WHERE job_id=?",
+                                         (job_id,))}
+    assert rows[taken["id"]]["status"] == "running"
+    [left] = [r for i, r in rows.items() if i != taken["id"]]
+    assert left["status"] == "failed" and left["error"].startswith("no_machine")
+    assert queue.expire_waiting() == []
+
+
+def test_a_lender_reports_the_stage_of_its_calculation(comfy):
+    """L'étape d'un calcul fait ailleurs arrive avec le renouvellement du bail : seulement
+    pour l'unité tenue par cette machine, et seulement une étape connue."""
+    from aiodos.jobs import leases
+    from aiodos.network import peers, work
+    peers.save("machine-b", "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    sha = put(APP, png())
+    job_id, _ = submit(comfy, {"graph": GRAPH, "inputs": {"ref0": {"sha256": sha}}},
+                       where=("here", "mine"))
+    unit = leases.claim_remote(["gpu"], "machine-b", lambda u: True, circle="mine")
+    assert unit is not None
+
+    class Manager:
+        def changed(self):
+            pass
+    reply = work.renew(Manager(), "machine-b", {"unit": unit["id"],
+                                                "progress": {"stage": "running"}})
+    assert reply == {"ok": True, "state": "running"}
+    row = db.query_one("SELECT progress FROM units WHERE id=?", (unit["id"],))
+    assert json.loads(row["progress"])["stage"] == "running"
+    work.renew(Manager(), "machine-b", {"unit": unit["id"], "progress": {"stage": "<b>"}})
+    row = db.query_one("SELECT progress FROM units WHERE id=?", (unit["id"],))
+    assert json.loads(row["progress"])["stage"] == "running"      # une étape inconnue : rien
+    order = work._order(type("M", (), {"executor": type("E", (), {
+        "publish_job": staticmethod(lambda *a, **k: None)})()})(), "machine-b", unit,
+        {unit["task"]: {}}, False)["unit"]
+    assert "local" not in order["payload"] and order["payload"]["inputs"][0]["sha256"] == sha
+    assert "app_id" not in json.dumps(order) and APP not in json.dumps(order)
+
+
 def test_matching_a_machine_that_asks_for_work():
     """engines/lending.can_serve, chez le propriétaire : le moteur, ses classes, ses modèles
     (un modèle sans dossier se cherche dans tous) ; une annonce mal formée vaut un refus."""

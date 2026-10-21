@@ -135,7 +135,8 @@ def _stage(stages, status):
 
 def _unit_error(text: str) -> dict:
     code = text.split(" ", 1)[0] if text.split(" ", 1)[0] in (
-        "engine_error", "engine_timeout", "output_invalid", "output_too_large") else "engine_error"
+        "engine_error", "engine_timeout", "output_invalid", "output_too_large",
+        "no_machine") else "engine_error"
     return {"code": code, "message": text[:300]}
 
 
@@ -229,6 +230,9 @@ def _prepare(app_id: str, body: dict, where: list) -> dict:
                               owner_app=app_id, label=params["label"], reach=reach,
                               public_id=public_id, client_ref=params["client_ref"])
     input_store.link(job_id, app_id, [v["sha256"] for v in params["inputs"].values()])
+    # Une unité qu'aucune machine n'a prise avant bounds.wait_s échoue (no_machine)
+    db.execute("UPDATE jobs SET wait_until=? WHERE id=?",
+               (db.now() + float(params["bounds"]["wait_s"]), job_id))
     return db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))
 
 

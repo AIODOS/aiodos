@@ -50,6 +50,7 @@ from pathlib import Path
 from aiodos import db, settings
 from aiodos.engines import lending
 from aiodos.jobs import leases, queue, registry
+from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import MAX_ATTEMPTS, QUEUED, RUNNING
 from aiodos.knowledge import store
 from aiodos.network import envelope, peers, route, sharing, wire
@@ -497,6 +498,11 @@ def renew(manager, sender, payload):
     state = leases.renew(unit_id, sender)
     if state == "resumed":
         manager.changed()
+    progress = payload.get("progress")
+    if state in leases.STATES_GOING and isinstance(progress, dict) \
+            and progress.get("stage") in engine_kind.STAGES:
+        # L'étape d'un calcul de moteur, pour l'appli qui suit son travail (elle seule)
+        queue.set_progress(unit_id, {"stage": progress["stage"], "at": db.now()})
     return {"ok": state in leases.STATES_GOING, "state": state}
 
 

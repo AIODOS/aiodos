@@ -552,6 +552,29 @@ def compute(order, file, options, stop=None):
     def progress(stage, **info):
         if unit_id:
             queue.set_progress(unit_id, {"stage": stage, "at": db.now()})
+        else:                               # repart avec le prochain renouvellement du bail
+            with _stages_lock:
+                _stages[order["run_uuid"]] = stage
+    try:
+        return _compute(order, halt, progress, local, remote)
+    finally:
+        with _stages_lock:
+            _stages.pop(order.get("run_uuid"), None)
+
+
+_stages = {}                      # run_uuid -> étape d'une unité calculée ici pour une autre
+_stages_lock = threading.Lock()
+STAGES = ("sending_inputs", "waiting_engine", "running", "receiving", "checking")
+
+
+def stage_of(run_id) -> str | None:
+    """L'étape d'une unité calculée ici pour une autre machine (network/worker.py la joint
+    au renouvellement de son bail)."""
+    with _stages_lock:
+        return _stages.get(run_id)
+
+
+def _compute(order, halt, progress, local, remote):
     found = instance_here()
     if found is None:
         from aiodos.jobs.registry import Interrupted

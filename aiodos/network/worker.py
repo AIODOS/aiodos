@@ -60,6 +60,7 @@ from aiodos.engines import lending as engine_lending
 from aiodos.imaging import engine as images_engine
 from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
+from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
@@ -515,9 +516,14 @@ class Worker:
         every = max(5.0, float(a.order.get("lease_s") or leases.LEASE_S) / 3)
         while True:
             await asyncio.sleep(every)
+            asked = {"unit": a.order["id"]}
+            payload = a.order.get("payload") or {}
+            if payload.get("engine"):         # l'étape du calcul, pour l'appli qui attend
+                stage = engine_kind.stage_of(payload.get("run_uuid"))
+                if stage:
+                    asked["progress"] = {"stage": stage}
             try:
-                reply = await asyncio.to_thread(self._call, a, "work/renew",
-                                                {"unit": a.order["id"]}, 8)
+                reply = await asyncio.to_thread(self._call, a, "work/renew", asked, 8)
             except PeerError:
                 continue
             if not reply.get("ok"):

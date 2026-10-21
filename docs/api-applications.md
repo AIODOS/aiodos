@@ -509,7 +509,10 @@ l'a déjà envoyé, 404 sinon. Une entrée est gardée tant qu'un travail en cou
   `waiting_machine`, `sending_inputs`, `waiting_engine` (la file de ComfyUI : ses travaux
   d'abord), `running`, `receiving`, `checking`.
 - Une unité en échec porte `error: {"code": "engine_error" | "engine_timeout" |
-  "output_invalid" | "output_too_large", "message"}` (le message de ComfyUI et le nœud).
+  "output_invalid" | "output_too_large" | "no_machine", "message"}` (le message de ComfyUI et
+  le nœud ; `no_machine` : aucune machine ne l'a prise avant `bounds.wait_s`, 24 h par
+  défaut). L'étape d'une unité calculée par une de mes machines arrive avec le
+  renouvellement de son bail (toutes les 30 s).
 - `GET /aiodos/v1/jobs?active=1|0&client_ref=…&limit=…` : ses travaux ; retrouvés après un
   redémarrage de l'appli comme d'AIODOS.
 

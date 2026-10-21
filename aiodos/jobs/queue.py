@@ -23,6 +23,8 @@ from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, MAX_HANDO
                                 PAUSED, QUEUED, RECOVER_GRACE, RUNNING, SKIPPED)
 
 NO_PROGRESS = "Aucune machine n'a pu la finir : elle a été remise trop de fois."
+NO_MACHINE = ("no_machine : aucune machine n'a pu la prendre avant l'échéance du travail "
+              "(machine éteinte, ComfyUI fermé, ou un modèle qui manque).")
 
 
 def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=None,
@@ -194,6 +196,22 @@ def fail_unit(unit_id, error: str, compute_s: float):
                       (QUEUED, error, db.now(), unit_id))
             return job_id, False
         return job_id, _fail_locked(c, unit_id, job_id, error, compute_s)
+
+
+def expire_waiting(now: float | None = None) -> list:
+    """Les unités qu'aucune machine n'a prises avant l'échéance de leur travail
+    (jobs.wait_until : bounds.wait_s d'un travail d'appli) échouent, no_machine ; celles déjà
+    remises une fois suivent leur cours. → [(travail, terminé ?)]."""
+    now = db.now() if now is None else now
+    rows = db.query(
+        "SELECT u.id, u.job_id FROM units u JOIN jobs j ON j.id = u.job_id WHERE u.status=? "
+        "AND u.handouts=0 AND j.wait_until IS NOT NULL AND j.wait_until < ? AND j.status IN "
+        "(?, ?)", (QUEUED, now, QUEUED, RUNNING))
+    out = []
+    for row in rows:
+        with db.transaction() as c:
+            out.append((row["job_id"], _fail_locked(c, row["id"], row["job_id"], NO_MACHINE, 0.0)))
+    return out
 
 
 def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
