@@ -97,6 +97,9 @@ DEFAULTS = {
     "share_max_temp": 40,             # téléphone : température maximale de la batterie (°C)
     "share_max_gpu": 100,
     # --- Travail de fond (jobs/pacing.py, docs/arriere-plan.md) ---
+    # Toute la file en pause (jobs/queue.py) : « » non, « after_current » (les unités en
+    # cours finissent), « now » (elles s'arrêtent, rendues sans compter d'essai)
+    "queue_pause": "",
     "battery_mode": "eco",            # sur batterie : eco (ménagé) | pause | normal
     "close_to_tray": True,            # Windows : fermer la fenêtre la cache (ui/tray.py)
     # --- Gros modèles répartis entre mes machines (docs/gros-modeles.md) ---

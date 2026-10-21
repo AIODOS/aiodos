@@ -1,20 +1,31 @@
 """File de tâches persistante (SQLite) : création, attribution, suivi.
 
-Ordre de passage : priorité du travail, puis ordre d'arrivée (FIFO). Une
-unité peut aussi être confiée à une autre machine pour un temps limité (bail,
-cf. leases.py) ; le temps de calcul de chaque unité est mesuré (compute_s),
-c'est la base de la réciprocité entre machines.
-La file survit aux redémarrages : « lancé le soir, récupéré le matin ».
+Ordre de passage : priorité du travail, puis l'appli qui a le moins d'unités en cours (une
+appli qui dépose 500 images ne bloque pas les autres, ni les travaux d'AIODOS), puis ordre
+d'arrivée (FIFO). Une unité peut aussi être confiée à une autre machine pour un temps limité
+(bail, cf. leases.py) ; le temps de calcul de chaque unité est mesuré (compute_s), c'est la
+base de la réciprocité entre machines.
+
+La file se comporte comme un torrent (docs/conception/partage-puissance.md § 2.5) : elle
+survit à la fermeture d'AIODOS et au redémarrage du PC ; un travail, ou toute la file, se
+met en pause « après l'unité en cours » (rien ne se perd) ou « tout de suite » (le calcul en
+cours s'arrête, l'unité est rendue sans compter d'essai) ; l'annulation atteint aussi les
+autres machines (leases.renew). Seul un vrai échec du calcul compte un essai : un arrêt
+d'AIODOS (interrupts), une machine qui disparaît (lost, leases.expire) ou une unité que
+personne ne finit (handouts) ont leurs propres compteurs (models.py).
 """
 import json
 
-from aiodos import db, i18n
+from aiodos import db, i18n, settings
 from aiodos.jobs import registry
-from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, NORMAL,
-                               PAUSED, QUEUED, RUNNING, SKIPPED)
+from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, MAX_HANDOUTS,
+                                MAX_INTERRUPTS, NORMAL, PAUSE_AFTER, PAUSE_MODES, PAUSE_NOW,
+                                PAUSED, QUEUED, RECOVER_GRACE, RUNNING, SKIPPED)
 
-
-def create_job(kind, params, priority=NORMAL, owner_node="local") -> int:
+def create_job(kind, params, priority=NORMAL, owner_node="local", *, owner_app=None,
+               label=None, reach=None) -> int:
+    """owner_app : l'appli qui dépose le travail (gateway/), None pour AIODOS ; reach : les
+    cercles où ses unités peuvent se calculer (« here,mine »…), None : les règles d'avant."""
     spec = registry.JOB_KINDS[kind]
     title, units, info = spec.split(params)
     if isinstance(title, list):        # i18n.lazy : traduit dans la langue de qui le lit
@@ -25,15 +36,17 @@ def create_job(kind, params, priority=NORMAL, owner_node="local") -> int:
     with db.transaction() as c:
         job_id = c.execute(
             "INSERT INTO jobs(kind, title, priority, status, params, owner_node, total, "
-            "skipped, result, created, finished) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "skipped, result, created, finished, owner_app, label, reach) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (kind, title, priority, status, json.dumps(params, ensure_ascii=False),
              owner_node, len(units), int(info.get("skipped", 0)),
-             json.dumps(info, ensure_ascii=False), now, None if units else now)).lastrowid
+             json.dumps(info, ensure_ascii=False), now, None if units else now, owner_app,
+             label, reach)).lastrowid
         c.executemany(
-            "INSERT INTO units(job_id, task, resource, payload, status, created, local_only) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO units(job_id, task, resource, payload, status, created, local_only, "
+            "reach, queued_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(job_id, u.task, u.resource, json.dumps(u.payload, ensure_ascii=False),
-              QUEUED, now, 0 if _portable(u.task) else 1) for u in units])
+              QUEUED, now, 0 if _portable(u.task) else 1, reach, now) for u in units])
     return job_id
 
 
@@ -64,25 +77,66 @@ def not_here(resources) -> tuple:
             f"NOT IN ({','.join('?' * len(blocked))})", tuple(blocked))
 
 
+def in_circle(circle: str) -> tuple:
+    """(condition SQL, paramètres) : seulement les unités qui peuvent se calculer dans ce
+    cercle (units.reach ; NULL : les règles d'avant, sans restriction de plus)."""
+    return (" AND (u.reach IS NULL OR instr(',' || u.reach || ',', ?) > 0)",
+            (f",{circle},",))
+
+
+def fair_order() -> tuple:
+    """(terme de l'ORDER BY suivi d'une virgule, paramètres) qui classe, à priorité égale,
+    l'appli qui a le moins d'unités en cours d'abord (« aiodos » pour les travaux d'AIODOS
+    lui-même) ; vide quand rien n'est en cours (un entier seul y désignerait une colonne)."""
+    running = db.query("SELECT COALESCE(j.owner_app, '') AS app, COUNT(*) AS n "
+                       "FROM units u JOIN jobs j ON j.id = u.job_id "
+                       "WHERE u.status = 'running' GROUP BY COALESCE(j.owner_app, '')")
+    if not running:
+        return "", ()
+    cases = " ".join("WHEN ? THEN ?" for _ in running)
+    params = tuple(v for r in running for v in (r["app"], r["n"]))
+    return f"CASE COALESCE(j.owner_app, '') {cases} ELSE 0 END, ", params
+
+
+# ------------------------------------------------------------- pause de la file
+def queue_pause() -> str:
+    """Toute la file en pause : « », PAUSE_AFTER ou PAUSE_NOW."""
+    value = settings.get("queue_pause") or ""
+    return value if value in PAUSE_MODES else ""
+
+
+def pause_all(when: str = PAUSE_AFTER):
+    settings.set_value("queue_pause", when if when in PAUSE_MODES else PAUSE_AFTER)
+
+
+def resume_all():
+    settings.set_value("queue_pause", "")
+
+
 def claim_next(resources, node) -> dict | None:
-    """Réserve la prochaine unité exécutable sur l'une de ces ressources (cf. not_here)."""
-    if not resources:
+    """Réserve la prochaine unité exécutable ici sur l'une de ces ressources (cf. not_here,
+    in_circle) ; rien quand toute la file est en pause."""
+    if not resources or queue_pause():
         return None
     placeholders = ",".join("?" * len(resources))
     skip, skipped = not_here(resources)
+    circle, circled = in_circle("here")
+    fair, fairness = fair_order()
     row = db.query_one(
         f"""SELECT u.id, u.job_id, u.task, u.resource, u.payload, u.attempts
             FROM units u JOIN jobs j ON j.id = u.job_id
             WHERE u.status = 'queued' AND j.status IN ('queued', 'running')
-              AND u.resource IN ({placeholders}){skip}
-            ORDER BY j.priority, j.created, j.id, u.id LIMIT 1""", (*resources, *skipped))
+              AND u.resource IN ({placeholders}){skip}{circle}
+            ORDER BY j.priority, {fair}j.created, j.id, u.id LIMIT 1""",
+        (*resources, *skipped, *circled, *fairness))
     if row is None:
         return None
     now = db.now()
     with db.transaction() as c:
         claimed = c.execute(
-            "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1 "
-            "WHERE id=? AND status=?", (RUNNING, now, node, row["id"], QUEUED)).rowcount
+            "UPDATE units SET status=?, started=?, node=?, attempts=attempts+1, "
+            "handouts=handouts+1, place='here', progress=NULL WHERE id=? AND status=?",
+            (RUNNING, now, node, row["id"], QUEUED)).rowcount
         if not claimed:
             return None
         started = c.execute("UPDATE jobs SET status=?, started=COALESCE(started, ?) "
@@ -111,35 +165,76 @@ def finish_unit(unit_id, result: dict, compute_s: float):
     with db.transaction() as c:
         job_id = c.execute("SELECT job_id FROM units WHERE id=?", (unit_id,)).fetchone()[0]
         c.execute("UPDATE units SET status=?, result=?, finished=?, compute_s=?, "
-                  "lease_until=NULL WHERE id=?",
+                  "lease_until=NULL, progress=NULL WHERE id=?",
                   (status, json.dumps(result, ensure_ascii=False), db.now(),
                    compute_s, unit_id))
         c.execute(f"UPDATE jobs SET {counter} = {counter} + 1 WHERE id=?", (job_id,))
         return job_id, _complete_if_last(c, job_id)
 
 
+def _fail_locked(c, unit_id, job_id, error, compute_s) -> bool:
+    c.execute("UPDATE units SET status=?, error=?, finished=?, compute_s=?, "
+              "lease_until=NULL, progress=NULL WHERE id=?",
+              (FAILED, error, db.now(), compute_s, unit_id))
+    c.execute("UPDATE jobs SET failed = failed + 1 WHERE id=?", (job_id,))
+    return _complete_if_last(c, job_id)
+
+
 def fail_unit(unit_id, error: str, compute_s: float):
     """Unité en échec : nouvel essai si possible. → (job_id, travail terminé ?)"""
     with db.transaction() as c:
-        row = c.execute("SELECT job_id, attempts FROM units WHERE id=?", (unit_id,)).fetchone()
+        row = c.execute("SELECT job_id, attempts, handouts FROM units WHERE id=?",
+                        (unit_id,)).fetchone()
         job_id = row["job_id"]
-        if row["attempts"] < MAX_ATTEMPTS:
-            c.execute("UPDATE units SET status=?, error=?, node=NULL, lease_until=NULL "
-                      "WHERE id=?", (QUEUED, error, unit_id))
+        if row["attempts"] < MAX_ATTEMPTS and row["handouts"] < MAX_HANDOUTS:
+            c.execute("UPDATE units SET status=?, error=?, node=NULL, lease_until=NULL, "
+                      "queued_at=?, place=NULL, progress=NULL WHERE id=?",
+                      (QUEUED, error, db.now(), unit_id))
             return job_id, False
-        c.execute("UPDATE units SET status=?, error=?, finished=?, compute_s=?, "
-                  "lease_until=NULL WHERE id=?",
-                  (FAILED, error, db.now(), compute_s, unit_id))
-        c.execute("UPDATE jobs SET failed = failed + 1 WHERE id=?", (job_id,))
-        return job_id, _complete_if_last(c, job_id)
+        return job_id, _fail_locked(c, unit_id, job_id, error, compute_s)
 
 
-def release_unit(unit_id):
-    """Remet une unité en file sans compter d'essai : ce n'est pas elle qui a
-    échoué, c'est le moteur (Ollama) qui était injoignable."""
-    db.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, "
-               "attempts=MAX(attempts - 1, 0) WHERE id=? AND status=?",
-               (QUEUED, unit_id, RUNNING))
+def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
+    """Remet en file une unité en cours sans compter d'essai : ce n'est pas elle qui a
+    échoué (moteur injoignable, pause « tout de suite », machine qui la rend…).
+    interrupt : AIODOS s'arrête pendant son calcul ici (interrupts + 1 ; au-delà de
+    MAX_INTERRUPTS, l'essai compte : une unité qui fait planter AIODOS finit en échec). node :
+    seulement si elle est confiée à cette machine. D'un travail annulé, elle est annulée ;
+    remise trop de fois, elle échoue. → (travail, terminé ?) ou None si elle n'était pas en
+    cours."""
+    with db.transaction() as c:
+        row = c.execute(
+            "SELECT u.job_id, u.interrupts, u.handouts, u.node, j.status AS job_status "
+            "FROM units u JOIN jobs j ON j.id = u.job_id WHERE u.id=? AND u.status=?",
+            (unit_id, RUNNING)).fetchone()
+        if row is None or (node is not None and row["node"] != node):
+            return None
+        job_id, now = row["job_id"], db.now()
+        if row["job_status"] == CANCELLED:
+            c.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, finished=?, "
+                      "progress=NULL, attempts=MAX(attempts - 1, 0) WHERE id=?",
+                      (CANCELLED, now, unit_id))
+            return job_id, False
+        if row["handouts"] >= MAX_HANDOUTS:
+            return job_id, _fail_locked(c, unit_id, job_id, i18n.t("jobs.no_progress"), 0.0)
+        interrupts = row["interrupts"] + (1 if interrupt else 0)
+        given_back = 0 if interrupt and interrupts > MAX_INTERRUPTS else 1
+        c.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, queued_at=?, "
+                  "place=NULL, progress=NULL, interrupts=?, "
+                  "attempts=MAX(attempts - ?, 0) WHERE id=?",
+                  (QUEUED, now, interrupts, given_back, unit_id))
+        return job_id, False
+
+
+def interrupt_units(unit_ids) -> list:
+    """AIODOS s'arrête : les unités en calcul ici sont rendues sans compter d'essai
+    (interrupts + 1). → [(travail, terminé ?)]"""
+    settled = []
+    for unit_id in unit_ids:
+        outcome = release_unit(unit_id, interrupt=True)
+        if outcome:
+            settled.append(outcome)
+    return settled
 
 
 def finalize_job(job_id):
@@ -162,23 +257,52 @@ def finalize_job(job_id):
 
 
 # ------------------------------------------------------------ commandes usager
-def cancel_job(job_id):
+def cancel_job(job_id, by: str = "aiodos"):
+    """Annule : les unités en file ; celles confiées ailleurs (leur machine l'apprend à son
+    prochain renouvellement et arrête, leur résultat est refusé) ; celles en calcul ici, leur
+    arrêt est levé par l'exécuteur (Executor._halt_withdrawn). Les résultats déjà rendus
+    restent. by : qui a annulé (aiodos, app, revoked)."""
+    now = db.now()
     with db.transaction() as c:
-        c.execute("UPDATE units SET status=? WHERE job_id=? AND status=?",
-                  (CANCELLED, job_id, QUEUED))
-        c.execute("UPDATE jobs SET status=?, finished=COALESCE(finished, ?) "
+        c.execute("UPDATE units SET status=?, finished=? WHERE job_id=? AND status=?",
+                  (CANCELLED, now, job_id, QUEUED))
+        c.execute("UPDATE units SET status=?, lease_until=NULL, finished=?, progress=NULL "
+                  "WHERE job_id=? AND status=? AND lease_until IS NOT NULL",
+                  (CANCELLED, now, job_id, RUNNING))
+        c.execute("UPDATE jobs SET status=?, cancelled_by=COALESCE(cancelled_by, ?), "
+                  "pause_mode=NULL, finished=COALESCE(finished, ?) "
                   "WHERE id=? AND status IN (?, ?, ?)",
-                  (CANCELLED, db.now(), job_id, QUEUED, RUNNING, PAUSED))
+                  (CANCELLED, by, now, job_id, QUEUED, RUNNING, PAUSED))
 
 
-def pause_job(job_id):
-    db.execute("UPDATE jobs SET status=? WHERE id=? AND status IN (?, ?)",
-               (PAUSED, job_id, QUEUED, RUNNING))
+def pause_job(job_id, when: str = PAUSE_AFTER):
+    """Pause « après l'unité en cours » (rien ne se perd) ou « tout de suite » (le calcul
+    en cours s'arrête, ici et ailleurs, l'unité est rendue sans compter d'essai). Une pause
+    « après » peut devenir « tout de suite »."""
+    when = when if when in PAUSE_MODES else PAUSE_AFTER
+    db.execute("UPDATE jobs SET status=?, pause_mode=? WHERE id=? AND status IN (?, ?, ?)",
+               (PAUSED, when, job_id, QUEUED, RUNNING, PAUSED))
 
 
 def resume_job(job_id):
-    db.execute("UPDATE jobs SET status = CASE WHEN started IS NULL THEN ? ELSE ? END "
-               "WHERE id=? AND status=?", (QUEUED, RUNNING, job_id, PAUSED))
+    """Reprise : le travail reprend son rang (sa date de création ne change pas)."""
+    db.execute("UPDATE jobs SET status = CASE WHEN started IS NULL THEN ? ELSE ? END, "
+               "pause_mode=NULL WHERE id=? AND status=?", (QUEUED, RUNNING, job_id, PAUSED))
+
+
+def halted_now(job_ids) -> set:
+    """Parmi ces travaux, ceux dont le calcul en cours doit s'arrêter : annulés, supprimés,
+    en pause « tout de suite » (eux, ou toute la file)."""
+    ids = sorted(job_ids)
+    if not ids:
+        return set()
+    if queue_pause() == PAUSE_NOW:
+        return set(ids)
+    rows = db.query(f"SELECT id, status, pause_mode FROM jobs WHERE id IN "
+                    f"({','.join('?' * len(ids))})", tuple(ids))
+    alive = {r["id"] for r in rows if r["status"] != CANCELLED
+             and not (r["status"] == PAUSED and r["pause_mode"] == PAUSE_NOW)}
+    return set(ids) - alive
 
 
 def set_priority(job_id, priority: int):
@@ -187,8 +311,9 @@ def set_priority(job_id, priority: int):
 
 def retry_failed(job_id):
     with db.transaction() as c:
-        n = c.execute("UPDATE units SET status=?, attempts=0, error=NULL, node=NULL "
-                      "WHERE job_id=? AND status=?", (QUEUED, job_id, FAILED)).rowcount
+        n = c.execute("UPDATE units SET status=?, attempts=0, handouts=0, lost=0, "
+                      "interrupts=0, error=NULL, node=NULL, queued_at=? "
+                      "WHERE job_id=? AND status=?", (QUEUED, db.now(), job_id, FAILED)).rowcount
         if n:
             c.execute("UPDATE jobs SET status=?, failed=failed-?, error=NULL, finished=NULL "
                       "WHERE id=?", (RUNNING, n, job_id))
@@ -206,10 +331,17 @@ def clear_finished() -> int:
 
 
 def recover():
-    """Au démarrage : les unités interrompues par un arrêt repartent en file
-    (y compris celles confiées à une autre machine : leur résultat tardif sera refusé)."""
-    db.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL WHERE status=?",
-               (QUEUED, RUNNING))
+    """Au démarrage, après un arrêt brutal (l'arrêt propre a déjà rendu ses unités,
+    interrupt_units) :
+    - les unités qui calculaient ici repartent en file, sans compter d'essai (interrupts + 1) ;
+    - celles confiées à une autre machine gardent leur machine, avec un bail de grâce
+      (RECOVER_GRACE) : elle se raccroche à son prochain renouvellement, ou livre son
+      résultat ; sinon l'unité revient en file à l'échéance (leases.expire)."""
+    now = db.now()
+    local = db.query("SELECT id FROM units WHERE status=? AND lease_until IS NULL", (RUNNING,))
+    interrupt_units([r["id"] for r in local])
+    db.execute("UPDATE units SET lease_until=? WHERE status=? AND lease_until IS NOT NULL",
+               (now + RECOVER_GRACE, RUNNING))
 
 
 # ------------------------------------------------------------------- lecture
@@ -261,3 +393,9 @@ def failed_units(job_id, limit=50) -> list:
 def counts() -> dict:
     return {r["status"]: r["n"] for r in db.query(
         "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status")}
+
+
+def running_here() -> int:
+    """Unités en calcul sur ce PC (la question à la fermeture d'AIODOS)."""
+    return db.query_one("SELECT COUNT(*) AS n FROM units WHERE status=? AND "
+                        "lease_until IS NULL", (RUNNING,))["n"]

@@ -67,5 +67,16 @@
   "pacing_ac": "Plugged in: background work runs at full speed, at low priority.",
   "pacing_normal": "On battery: background work runs at full speed (setting).",
   "pacing_pause": "On battery: background work waits for power to return.",
-  "pacing_eco": "On battery: background work eased (one unit at a time per resource, breaks between batches, fewer computing threads)."
+  "pacing_eco": "On battery: background work eased (one unit at a time per resource, breaks between batches, fewer computing threads).",
+  "lease_lost": "The machines that were computing it disappeared too many times.",
+  "no_progress": "No machine could finish it: it was handed out too many times.",
+  "pause_mode_invalid": "Pause: “after_current” or “now”.",
+  "pause_all": "Pause everything",
+  "resume_all": "Resume everything",
+  "pause_after": "After the current unit",
+  "pause_now": "Right now (the computation in progress is lost)",
+  "pause_all_after": "Whole queue: after the current unit",
+  "pause_all_now": "Whole queue: right now (the computation in progress is lost)",
+  "queue_resumed": "The queue resumes.",
+  "queue_paused": "Queue paused."
 }

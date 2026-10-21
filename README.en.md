@@ -320,6 +320,8 @@ aiodos/
 │   ├── answer.py      answer by this machine or by a paired machine, according to the place
 │   └── engine.py      answer by the built-in engine, without Ollama (llama.cpp router)
 ├── jobs/              task queue: jobs split into units (BOINC model)
+│                      that behaves like a torrent: pauses, resumption without loss
+│                      (docs/file-de-travaux.md)
 │   ├── queue.py       persistence, priorities, retries, resumption
 │   ├── executor.py    execution according to resources (GPU, embeddings, CPU, network)
 │   ├── pacing.py      pace of background work: conversations first, battery eased

@@ -4,7 +4,7 @@ import { $, h, esc, duration, ago } from '../dom.js';
 import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
-import { toast, errorToast, confirmDanger } from '../ui.js';
+import { toast, errorToast, confirmDanger, menu } from '../ui.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PRIORITIES = [1, 2, 3];                      // libellés : jobs.priority_1…3
@@ -29,6 +29,7 @@ export function mountJobs(container) {
         <div><h1>${esc(t('jobs.title'))}</h1>
           <div class="sub">${esc(t('jobs.intro'))}</div></div>
         <div class="grow"></div>
+        <button class="btn" id="jobs-pause-all">${icon('pause')}${esc(t('jobs.pause_all'))}</button>
         <button class="btn" id="jobs-clear">${icon('trash')}${esc(t('jobs.clear_finished'))}</button>
       </div>
       <div class="stats" id="jobs-stats"></div>
@@ -37,6 +38,7 @@ export function mountJobs(container) {
     </div></div>`);
   container.append(root);
   $('#jobs-clear', root).onclick = clearFinished;
+  $('#jobs-pause-all', root).onclick = e => pauseAll(e.currentTarget);
   on('jobs:changed', () => { if (state.view === 'jobs') render(); });
   on('executor:changed', () => { if (state.view === 'jobs') renderSlots(); });
   on('view:shown', view => { if (view === 'jobs') render(); });
@@ -47,6 +49,7 @@ export async function loadJobs() {
   const data = await get('/jobs');
   state.jobs = new Map(data.jobs.map(j => [j.id, j]));
   state.executor = data.executor;
+  state.queuePause = data.queue_pause || '';
   emit('jobs:changed');
   emit('executor:changed');
 }
@@ -207,7 +210,7 @@ function card(j) {
     });
   }
   if (j.status === 'paused') button('play', 'jobs.resume', () => act(j, 'resume'));
-  else if (active) button('pause', 'jobs.pause', () => act(j, 'pause'));
+  else if (active) button('pause', 'jobs.pause', e => pauseMenu(e.currentTarget, j));
   if (active) button('x', 'jobs.cancel', () => cancel(j), 'danger');
   if (!active && j.failed) button('retry', 'jobs.retry_failed', () => act(j, 'retry'));
   if (!active) button('trash', 'jobs.remove', () => act(j, 'delete'), 'danger');
@@ -290,3 +293,41 @@ async function clearFinished() {
     toast(removed ? t('jobs.cleared', { n: removed }) : t('jobs.nothing_to_clear'), 'ok');
   } catch (e) { errorToast(e); }
 }
+
+// Pause « après l'unité en cours » (rien ne se perd) ou « tout de suite » (le calcul en cours
+// s'arrête, ici et chez les autres machines ; l'unité est rendue sans compter d'essai).
+// [mode, libellé pour un travail, libellé pour toute la file, icône]
+const PAUSES = [
+  ['after_current', 'jobs.pause_after', 'jobs.pause_all_after', 'pause'],
+  ['now', 'jobs.pause_now', 'jobs.pause_all_now', 'stop'],
+];
+
+function pauseMenu(anchor, j) {
+  menu(anchor, PAUSES.map(([when, label, , ico]) => ({
+    label: t(label), icon: ico,
+    action: async () => {
+      try { await post(`/jobs/${j.id}/pause`, { when }); } catch (e) { errorToast(e); }
+    },
+  })));
+}
+
+async function pauseAll(anchor) {
+  const paused = !!state.queuePause;
+  if (paused) {
+    try { await post('/jobs/resume_all'); toast(t('jobs.queue_resumed'), 'ok'); } catch (e) { errorToast(e); }
+  } else {
+    menu(anchor, PAUSES.map(([when, , label, ico]) => ({
+      label: t(label), icon: ico,
+      action: async () => {
+        try { await post('/jobs/pause_all', { when }); toast(t('jobs.queue_paused'), 'ok'); } catch (e) { errorToast(e); }
+      },
+    })));
+    return;
+  }
+  loadJobs();
+}
+
+on('jobs:changed', () => {
+  const btn = root && $('#jobs-pause-all', root);
+  if (btn) btn.innerHTML = `${icon(state.queuePause ? 'play' : 'pause')}${esc(t(state.queuePause ? 'jobs.resume_all' : 'jobs.pause_all'))}`;
+});

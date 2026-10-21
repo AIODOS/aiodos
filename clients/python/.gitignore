@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# aiodos-client 0.1.0 : ce que laisse la construction de la roue (pip wheel, tools/publish_clients.py)
+*.egg-info/
+build/
+dist/

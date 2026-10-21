@@ -4,5 +4,9 @@
   "details": "Details: {path}",
   "start_failed": "AIODOS could not start: {error}",
   "tray_open": "Open AIODOS",
-  "tray_quit": "Quit AIODOS"
+  "tray_quit": "Quit AIODOS",
+  "quit_running": {
+    "one": "{n} computation in progress on this PC. Quit anyway?\n\nIt will resume the next time AIODOS starts, without counting as a failure; the computing already done is lost.",
+    "other": "{n} computations in progress on this PC. Quit anyway?\n\nThey will resume the next time AIODOS starts, without counting as failures; the computing already done is lost."
+  }
 }

@@ -4,5 +4,9 @@
   "details": "Détails : {path}",
   "start_failed": "AIODOS n'a pas pu démarrer : {error}",
   "tray_open": "Ouvrir AIODOS",
-  "tray_quit": "Quitter AIODOS"
+  "tray_quit": "Quitter AIODOS",
+  "quit_running": {
+    "one": "{n} calcul en cours sur ce PC. Quitter quand même ?\n\nIl reprendra au prochain lancement d'AIODOS, sans être compté comme un échec ; le calcul déjà fait est perdu.",
+    "other": "{n} calculs en cours sur ce PC. Quitter quand même ?\n\nIls reprendront au prochain lancement d'AIODOS, sans être comptés comme des échecs ; le calcul déjà fait est perdu."
+  }
 }

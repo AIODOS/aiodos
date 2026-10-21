@@ -536,7 +536,13 @@ class Worker:
             except PeerError:
                 continue
             if not reply.get("ok"):
-                a.stop.set()       # reprise ou annulée chez le propriétaire : inutile de continuer
+                # Chez le propriétaire : annulée, mise en pause « tout de suite », ou partie
+                # ailleurs (state) : inutile de continuer ; elle est rendue sans essai
+                if reply.get("state"):
+                    log.info("Unité %s arrêtée : %s chez son propriétaire", a.order["id"],  # i18n: tel quel (journal)
+                             {"paused": "pause", "cancelled": "annulée"}.get(
+                                 reply["state"], "reprise"))
+                a.stop.set()
             elif not await asyncio.to_thread(welcomes, a.peer_id):
                 a.stop.set()       # téléphone débranché ou sorti du Wi-Fi : l'unité est rendue
 

@@ -306,6 +306,26 @@ def test_who_answered_is_said(node):
     assert reply.headers["X-Aiodos-Api"] == "1"
 
 
+def test_the_catalogue_names_the_models_of_aiodos(node):
+    """« default » : le modèle des conversations d'AIODOS et celui de ses bibliothèques, qu'une
+    appli sans préférence prend (des vecteurs d'un même modèle d'un appel à l'autre)."""
+    key = node.connect()
+    settings.set_value("default_model", LOCAL)
+    chat = node.call("GET", "/aiodos/v1/models?kind=chat", key=key).json()["models"]
+    assert [m["id"] for m in chat if m["default"]] == [LOCAL]
+    for chosen in (f"auto:{LOCAL}", f"peer:ami01:{LOCAL}"):         # le mode automatique…
+        settings.set_value("default_model", chosen)
+        chat = node.call("GET", "/aiodos/v1/models?kind=chat", key=key).json()["models"]
+        assert [m["id"] for m in chat if m["default"]] == [LOCAL], chosen
+    for chosen in ("absent:7b", f"cloud:{LOCAL}", ""):
+        settings.set_value("default_model", chosen)
+        chat = node.call("GET", "/aiodos/v1/models?kind=chat", key=key).json()["models"]
+        assert chat and not any(m["default"] for m in chat), chosen
+    settings.set_value("embed_model", EMBEDDING.removesuffix(":latest"))      # nom sans étiquette
+    embed = node.call("GET", "/aiodos/v1/models?kind=embed", key=key).json()["models"]
+    assert [m["id"] for m in embed if m["default"]] == [EMBEDDING]
+
+
 def test_an_app_never_unloads_a_model(node):
     key = node.connect()
     before = len(node.ollama.requests)
@@ -388,6 +408,19 @@ def test_another_live_instance_keeps_its_discovery_file(tmp_path, monkeypatch):
     other["running"] = False                             # elle s'est arrêtée : on reprend
     target.write_text(json.dumps(other), encoding="utf-8")
     assert discovery.write({"pid": os.getpid(), "running": True})
+
+
+def test_only_the_usual_data_folder_writes_the_real_file(tmp_path, monkeypatch):
+    """Un nœud lancé avec un autre dossier de données (nœud d'essai, --data-dir) n'écrit pas
+    le vrai gateway.json : les applis du PC y trouveraient lui au lieu d'AIODOS."""
+    from aiodos import instance, paths
+    monkeypatch.delenv(discovery.ENV, raising=False)
+    monkeypatch.delenv(instance.NO_DIALOG_ENV, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    assert discovery.path() is None                      # AIODOS_DATA_DIR : un dossier d'essai
+    monkeypatch.setattr(paths, "installed_data_dir", lambda: tmp_path)
+    found = discovery.path()                             # l'instance du dossier habituel
+    assert found is not None and found.name == "gateway.json"
 
 
 def test_the_log_has_no_content(node):

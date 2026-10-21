@@ -374,7 +374,10 @@ def lease(manager, sender, payload):
             return False
         return True
 
-    unit = leases.claim_remote(payload.get("resources"), sender, acceptable)
+    # Une unité ne part que dans les cercles qui lui sont permis (units.reach : travaux des
+    # applis, unités qu'un ami a perdues deux fois)
+    unit = leases.claim_remote(payload.get("resources"), sender, acceptable,
+                               circle="friends" if friend else "mine")
     if unit is None:
         if friend:
             _friend_counted(sender)
@@ -468,7 +471,10 @@ def _max_blob(sender) -> int:
 
 def renew(manager, sender, payload):
     """Bail prolongé. Un ami ne garde pas une unité indéfiniment en renouvelant sans rien
-    rendre : au-delà de _friend_lease_max, elle lui est reprise comme s'il avait échoué."""
+    rendre : au-delà de _friend_lease_max, elle lui est reprise comme s'il avait échoué.
+    state dit à la machine où en est l'unité (leases.renew) : running, resumed (son bail
+    avait échu, elle se raccroche), paused, cancelled, reassigned ; « ok » reste pour les
+    machines d'une version précédente, qui ne lisent que lui."""
     unit_id = _unit_id(payload)
     if sharing.is_friend(sender):
         unit = leases.held(unit_id, sender)
@@ -478,8 +484,11 @@ def renew(manager, sender, payload):
                 _friend_failed_unit(manager, sender, unit_id,
                                     t("work.too_long", name=_peer_name(sender),
                                       minutes=longest // 60))
-                return {"ok": False}
-    return {"ok": leases.renew(unit_id, sender)}
+                return {"ok": False, "state": "reassigned"}
+    state = leases.renew(unit_id, sender)
+    if state == "resumed":
+        manager.changed()
+    return {"ok": state in leases.STATES_GOING, "state": state}
 
 
 def blob(manager, sender, payload):

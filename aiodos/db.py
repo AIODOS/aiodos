@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -292,6 +292,39 @@ MIGRATIONS = {
         program    TEXT
     );
     CREATE INDEX IF NOT EXISTS ix_gateway_log_app ON gateway_log(app_id, at);
+    """,
+    # La file comme un torrent (docs/conception/partage-puissance.md § 2.5, livraison L2a) :
+    # pause « après l'unité en cours » ou « tout de suite », annulation qui atteint les autres
+    # machines, reprise sans perte après un redémarrage. Les travaux des applis (L2b) y ont
+    # déjà leurs colonnes : numéro public, appli, libellé, référence de l'appli, cercles.
+    # Unités : cercles permis, entrée en file, disparitions (lost), arrêts d'AIODOS pendant
+    # le calcul (interrupts), remises (handouts), lieu et avancement du calcul.
+    21: """
+    ALTER TABLE jobs ADD COLUMN public_id TEXT;
+    ALTER TABLE jobs ADD COLUMN owner_app TEXT;
+    ALTER TABLE jobs ADD COLUMN label TEXT;
+    ALTER TABLE jobs ADD COLUMN client_ref TEXT;
+    ALTER TABLE jobs ADD COLUMN reach TEXT;
+    ALTER TABLE jobs ADD COLUMN pause_mode TEXT;
+    ALTER TABLE jobs ADD COLUMN cancelled_by TEXT;
+    ALTER TABLE jobs ADD COLUMN wait_until REAL;
+    ALTER TABLE units ADD COLUMN reach TEXT;
+    ALTER TABLE units ADD COLUMN queued_at REAL;
+    ALTER TABLE units ADD COLUMN lost INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE units ADD COLUMN interrupts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE units ADD COLUMN handouts INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE units ADD COLUMN place TEXT;
+    ALTER TABLE units ADD COLUMN progress TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_jobs_public ON jobs(public_id) WHERE public_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_jobs_ref ON jobs(owner_app, client_ref)
+        WHERE client_ref IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS ix_jobs_owner_app ON jobs(owner_app, created);
+    CREATE TABLE IF NOT EXISTS engine_durations (
+        signature TEXT NOT NULL,
+        machine   TEXT NOT NULL,
+        seconds   TEXT NOT NULL,
+        PRIMARY KEY (signature, machine)
+    );
     """,
 }
 

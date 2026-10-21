@@ -287,10 +287,29 @@ def _bring_back(form):
     form.Activate()
 
 
+def _quit_asked():
+    """« Quitter AIODOS » (menu de l'icône) : s'il y a des calculs en cours sur ce PC, une
+    question d'abord. Ils seraient rendus à la file sans compter d'essai et repris au prochain
+    lancement (jobs/queue.py, interrupt_units) ; seul le calcul déjà fait est perdu."""
+    try:
+        from aiodos.jobs import queue
+        running = queue.running_here()
+    except Exception:
+        running = 0
+    if running:
+        from System.Windows.Forms import (DialogResult, MessageBox, MessageBoxButtons,
+                                          MessageBoxIcon)
+        text = t("window.quit_running", n=running)
+        answer = MessageBox.Show(text, "AIODOS", MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+        if answer != DialogResult.Yes:
+            return
+    close()
+
+
 def _keep_running(form):
     """Fil graphique : l'icône, puis la fermeture qui cache la fenêtre."""
     from System.Windows.Forms import CloseReason
-    icon = tray.Tray(paths.LOGO_ICO, on_open=show, on_quit=close)
+    icon = tray.Tray(paths.LOGO_ICO, on_open=show, on_quit=_quit_asked)
     try:
         icon.create()
     except Exception:              # pas d'icône : la fenêtre se ferme comme avant
