@@ -4,7 +4,8 @@ application trouve la passerelle d'AIODOS, et dans quel état elle est.
 - Windows : %LOCALAPPDATA%\\AIODOS\\gateway.json ; ailleurs : $XDG_STATE_HOME/aiodos/
   (~/.local/state/aiodos/). AIODOS_DISCOVERY_FILE en donne un autre ; « - » coupe l'écriture
   (les essais s'en servent pour ne jamais toucher au vrai fichier).
-- Jamais écrit par un nœud lancé par les essais (AIODOS_NO_DIALOG).
+- Jamais écrit par un nœud lancé par les essais (AIODOS_NO_DIALOG), ni par une instance qui
+  n'utilise pas le dossier de données habituel (nœud d'essai, --data-dir).
 - Écrit au démarrage, à chaque ouverture, fermeture ou changement de port de la passerelle,
   et à l'arrêt (running: false) ; d'un coup (fichier temporaire, puis os.replace).
 - Jamais dedans : une clé, le jeton ou le port de l'interface, une commande, un nom de
@@ -32,7 +33,7 @@ def path() -> Path | None:
         return None
     if chosen:
         return Path(chosen)
-    if os.environ.get(instance.NO_DIALOG_ENV):
+    if os.environ.get(instance.NO_DIALOG_ENV) or not _default_data_dir():
         return None
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA")
@@ -41,6 +42,19 @@ def path() -> Path | None:
         return Path(base) / "AIODOS" / "gateway.json"
     state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
     return Path(state) / "aiodos" / "gateway.json"
+
+
+def _default_data_dir() -> bool:
+    """Cette instance utilise-t-elle le dossier de données habituel (celui de la copie
+    installée, ou data/ à côté du code) ? Un nœud d'essai lancé avec un autre dossier
+    (--data-dir, AIODOS_DATA_DIR) n'écrit pas le fichier ; la version lancée par le lanceur
+    des mises à jour, elle, reçoit le dossier habituel."""
+    from aiodos import paths
+    default = paths.installed_data_dir() or (paths.APP_ROOT / "data")
+    try:
+        return paths.data_dir().resolve() == Path(default).resolve()
+    except OSError:
+        return False
 
 
 def content(*, running: bool, state: str, url: str, apps: bool, requests: bool,

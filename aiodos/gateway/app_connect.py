@@ -41,7 +41,9 @@ _LAUNCHERS = {"py.exe", "pyw.exe"}       # le lanceur de Python intercalé en d�
 
 # ------------------------------------------------------------ programme d'aide
 def _emit(out, data: dict):
-    out.write(json.dumps(data, ensure_ascii=False) + "\n")
+    # En ASCII (accents échappés) : la sortie d'un programme lancé par une appli peut être
+    # en cp1252, qui ne sait pas écrire « → »
+    out.write(json.dumps(data, ensure_ascii=True) + "\n")
     out.flush()
 
 
