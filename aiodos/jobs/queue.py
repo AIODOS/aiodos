@@ -12,12 +12,14 @@ met en pause « après l'unité en cours » (rien ne se perd) ou « tout de suit
 cours s'arrête, l'unité est rendue sans compter d'essai) ; l'annulation atteint aussi les
 autres machines (leases.renew). Seul un vrai échec du calcul compte un essai : un arrêt
 d'AIODOS (interrupts), une machine qui disparaît (lost, leases.expire) ou une unité que
-personne ne finit (handouts) ont leurs propres compteurs (models.py).
+personne ne finit (handouts) ont leurs propres compteurs (models.py). En fin de partie, une
+unité en calcul peut avoir un doublon (endgame.py) : la fin sans résultat d'un des deux calculs
+ne la remet pas en file tant que l'autre tourne, et seul le premier résultat entre.
 """
 import json
 
 from aiodos import db, i18n, settings
-from aiodos.jobs import registry
+from aiodos.jobs import endgame, registry
 from aiodos.jobs.models import (CANCELLED, DONE, FAILED, MAX_ATTEMPTS, MAX_HANDOUTS,
                                 MAX_INTERRUPTS, NORMAL, PAUSE_AFTER, PAUSE_MODES, PAUSE_NOW,
                                 PAUSED, QUEUED, RECOVER_GRACE, RUNNING, SKIPPED)
@@ -172,26 +174,36 @@ def finish_unit(unit_id, result: dict, compute_s: float):
                   (status, json.dumps(result, ensure_ascii=False), db.now(),
                    compute_s, unit_id))
         c.execute(f"UPDATE jobs SET {counter} = {counter} + 1 WHERE id=?", (job_id,))
+        endgame.forget(c, unit_id)        # fin de partie : l'autre calcul s'arrête
         return job_id, _complete_if_last(c, job_id)
 
 
 def _fail_locked(c, unit_id, job_id, error, compute_s) -> bool:
     c.execute("UPDATE units SET status=?, error=?, finished=?, compute_s=?, "
-              "lease_until=NULL, progress=NULL WHERE id=?",
+              "lease_until=NULL, progress=NULL, taken=NULL WHERE id=?",
               (FAILED, error, db.now(), compute_s, unit_id))
     c.execute("UPDATE jobs SET failed = failed + 1 WHERE id=?", (job_id,))
+    endgame.forget(c, unit_id)
     return _complete_if_last(c, job_id)
 
 
-def fail_unit(unit_id, error: str, compute_s: float):
-    """Unité en échec : nouvel essai si possible. → (job_id, travail terminé ?)"""
+def fail_unit(unit_id, error: str, compute_s: float, node: str | None = None):
+    """Unité en échec : nouvel essai si possible. → (job_id, travail terminé ?) Fin de partie
+    (endgame.py) : si un doublon tourne encore, il prend la suite sans rien compter. node :
+    la machine dont le calcul a échoué (l'exécuteur d'ici) ; si ce n'est pas elle qui a le
+    calcul principal, seul son doublon s'arrête."""
     with db.transaction() as c:
-        row = c.execute("SELECT job_id, attempts, handouts FROM units WHERE id=?",
+        row = c.execute("SELECT job_id, attempts, handouts, node FROM units WHERE id=?",
                         (unit_id,)).fetchone()
         job_id = row["job_id"]
+        if node is not None and row["node"] != node:
+            endgame.drop(unit_id, node)
+            return job_id, False
+        if endgame.promote(c, unit_id, db.now(), error):
+            return job_id, False
         if row["attempts"] < MAX_ATTEMPTS and row["handouts"] < MAX_HANDOUTS:
             c.execute("UPDATE units SET status=?, error=?, node=NULL, lease_until=NULL, "
-                      "queued_at=?, place=NULL, progress=NULL WHERE id=?",
+                      "queued_at=?, place=NULL, progress=NULL, taken=NULL WHERE id=?",
                       (QUEUED, error, db.now(), unit_id))
             return job_id, False
         return job_id, _fail_locked(c, unit_id, job_id, error, compute_s)
@@ -220,39 +232,45 @@ def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
     échoué (moteur injoignable, pause « tout de suite », machine qui la rend…).
     interrupt : AIODOS s'arrête pendant son calcul ici (interrupts + 1 ; au-delà de
     MAX_INTERRUPTS, l'essai compte : une unité qui fait planter AIODOS finit en échec). node :
-    seulement si elle est confiée à cette machine. D'un travail annulé, elle est annulée ;
-    remise trop de fois, elle échoue. → (travail, terminé ?) ou None si elle n'était pas en
-    cours."""
+    seulement si elle est confiée à cette machine ; si cette machine n'en calcule qu'un
+    doublon (fin de partie, endgame.py), seul le doublon s'arrête. D'un travail annulé, elle
+    est annulée ; si un doublon tourne encore, il prend la suite sans rien compter ; remise
+    trop de fois, elle échoue. → (travail, terminé ?) ou None si elle n'était pas en cours."""
     with db.transaction() as c:
         row = c.execute(
             "SELECT u.job_id, u.interrupts, u.handouts, u.node, j.status AS job_status "
             "FROM units u JOIN jobs j ON j.id = u.job_id WHERE u.id=? AND u.status=?",
             (unit_id, RUNNING)).fetchone()
         if row is None or (node is not None and row["node"] != node):
-            return None
+            job_id = endgame.drop(unit_id, node) if node is not None else None
+            return None if job_id is None else (job_id, False)
         job_id, now = row["job_id"], db.now()
         if row["job_status"] == CANCELLED:
             c.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, finished=?, "
-                      "progress=NULL, attempts=MAX(attempts - 1, 0) WHERE id=?",
+                      "progress=NULL, taken=NULL, attempts=MAX(attempts - 1, 0) WHERE id=?",
                       (CANCELLED, now, unit_id))
+            endgame.forget(c, unit_id)
+            return job_id, False
+        if endgame.promote(c, unit_id, now):
             return job_id, False
         if row["handouts"] >= MAX_HANDOUTS:
             return job_id, _fail_locked(c, unit_id, job_id, i18n.t("jobs.no_progress"), 0.0)
         interrupts = row["interrupts"] + (1 if interrupt else 0)
         given_back = 0 if interrupt and interrupts > MAX_INTERRUPTS else 1
         c.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, queued_at=?, "
-                  "place=NULL, progress=NULL, interrupts=?, "
+                  "place=NULL, progress=NULL, taken=NULL, interrupts=?, "
                   "attempts=MAX(attempts - ?, 0) WHERE id=?",
                   (QUEUED, now, interrupts, given_back, unit_id))
         return job_id, False
 
 
-def interrupt_units(unit_ids) -> list:
+def interrupt_units(unit_ids, node: str | None = None) -> list:
     """AIODOS s'arrête : les unités en calcul ici sont rendues sans compter d'essai
-    (interrupts + 1). → [(travail, terminé ?)]"""
+    (interrupts + 1). node : ce nœud (l'exécuteur), dont un calcul n'est peut-être qu'un
+    doublon (release_unit). → [(travail, terminé ?)]"""
     settled = []
     for unit_id in unit_ids:
-        outcome = release_unit(unit_id, interrupt=True)
+        outcome = release_unit(unit_id, interrupt=True, node=node)
         if outcome:
             settled.append(outcome)
     return settled
@@ -357,8 +375,11 @@ def recover():
     - les unités qui calculaient ici repartent en file, sans compter d'essai (interrupts + 1) ;
     - celles confiées à une autre machine gardent leur machine, avec un bail de grâce
       (RECOVER_GRACE) : elle se raccroche à son prochain renouvellement, ou livre son
-      résultat ; sinon l'unité revient en file à l'échéance (leases.expire)."""
+      résultat ; sinon l'unité revient en file à l'échéance (leases.expire) ;
+    - les doublons (fin de partie) : ceux d'ici sont oubliés, ceux d'ailleurs gardent de même
+      leur machine, et prennent la place d'un calcul principal d'ici (endgame.recover)."""
     now = db.now()
+    endgame.recover(now)
     local = db.query("SELECT id FROM units WHERE status=? AND lease_until IS NULL", (RUNNING,))
     interrupt_units([r["id"] for r in local])
     db.execute("UPDATE units SET lease_until=? WHERE status=? AND lease_until IS NOT NULL",

@@ -36,6 +36,13 @@ savent calculer (une image, si je l'accepte) leur reste ouverte jusqu'au bout : 
 un bail échu y compte un essai, un autre ami passe d'abord pendant FRIEND_RETRY_OTHERS, et
 après MAX_ATTEMPTS essais elle échoue avec un message qui le dit (sinon elle attendrait
 pour toujours). Un ami qui ne rend que des échecs est mis de côté.
+
+Fin de partie (jobs/endgame.py) : une machine qui ne trouve plus rien en file reçoit le
+doublon d'une unité qui tarde ailleurs, filtré par le même acceptable. Le premier résultat
+valable gagne ; l'autre machine l'apprend à son renouvellement (« done ») et son résultat, s'il
+arrive, est refusé poliment, sans échec compté ni mise de côté. Seul le gagnant est compté pour
+la réciprocité. Ses doublons comptent dans ce que détient un ami (FRIEND_MAX_HELD), et dans la
+taille de résultat qu'une machine peut m'envoyer (result_limit).
 Appelées dans un thread par le serveur réseau (cf. p2p_app.HANDLERS).
 """
 import hashlib
@@ -50,7 +57,7 @@ from pathlib import Path
 from aiodos import db, i18n, settings
 from aiodos.engines import lending
 from aiodos.i18n import t
-from aiodos.jobs import leases, queue, registry
+from aiodos.jobs import endgame, leases, queue, registry
 from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import MAX_ATTEMPTS, QUEUED, RUNNING
 from aiodos.knowledge import store
@@ -124,9 +131,10 @@ def _friend_counted(sender):
 
 
 def _held_by(node_id) -> int:
+    """Unités que détient cette machine en ce moment, ses doublons compris (fin de partie)."""
     row = db.query_one("SELECT COUNT(*) AS n FROM units WHERE node=? AND status=? "
                        "AND lease_until IS NOT NULL", (node_id, RUNNING))
-    return row["n"] if row else 0
+    return (row["n"] if row else 0) + endgame.held_by(node_id)
 
 
 def _is_video(model) -> bool:
@@ -154,14 +162,16 @@ def result_limit(node_id) -> int:
     """Taille d'un résultat que cette machine peut m'envoyer en ce moment (0 : rien de
     particulier ; network/body_limit.py). Plus que la taille d'un message ordinaire
     seulement si elle calcule pour moi (bail en cours, ou échu sans que l'unité ait été
-    redonnée : son résultat est encore accepté) une image ou une vidéo, à la taille de ce
-    qu'elle produit ; ou, si c'est une de mes machines, l'index d'un très long document
-    (MINE_RESULT). Un ami qui indexe pour moi n'envoie qu'un message ordinaire : au-delà,
-    il rend l'unité en échec sans l'envoyer (result_max dans l'ordre), elle revient ici."""
+    redonnée : son résultat est encore accepté ; ou un doublon, en fin de partie) une image
+    ou une vidéo, à la taille de ce qu'elle produit ; ou, si c'est une de mes machines,
+    l'index d'un très long document (MINE_RESULT). Un ami qui indexe pour moi n'envoie qu'un
+    message ordinaire : au-delà, il rend l'unité en échec sans l'envoyer (result_max dans
+    l'ordre), elle revient ici."""
     best = 0
     mine = None
-    for r in db.query("SELECT task, json_extract(payload, '$.model') AS model FROM units "
-                      "WHERE node=? AND status IN (?, ?)", (node_id, RUNNING, QUEUED)):
+    for r in [*db.query("SELECT task, json_extract(payload, '$.model') AS model FROM units "
+                        "WHERE node=? AND status IN (?, ?)", (node_id, RUNNING, QUEUED)),
+              *endgame.held_tasks(node_id)]:
         if r["task"] != "generate_image" and mine is None:
             mine = sharing.level(node_id) == sharing.MINE
         best = max(best, _unit_result(r["task"], r["model"], bool(mine)))
@@ -384,6 +394,11 @@ def lease(manager, sender, payload):
     unit = leases.claim_remote(payload.get("resources"), sender, acceptable,
                                circle="friends" if friend else "mine")
     if unit is None:
+        # Fin de partie : plus rien en file pour elle, le doublon d'une unité qui tarde
+        # ailleurs, aux mêmes règles (jobs/endgame.py)
+        unit = endgame.claim_remote(payload.get("resources"), sender, acceptable,
+                                    leases.LEASE_S, circle="friends" if friend else "mine")
+    if unit is None:
         if friend:
             _friend_counted(sender)
         if ollama["models"] == {}:
@@ -432,8 +447,9 @@ def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB)
     """L'ordre de calcul envoyé à la machine qui a obtenu l'unité."""
     spec = registry.TASKS[unit["task"]]
     # Un travail de moteur : l'ordre complet, sans ce qui ne quitte jamais ce PC (l'appli,
-    # le travail, les chemins de ses entrées, qui se demandent par empreinte : blob)
-    payload = registry.payload_for(unit, here=False) if spec.expand else unit["payload"]
+    # le travail, les chemins de ses entrées, qui se demandent par empreinte : blob) ; un
+    # doublon, sous son propre run_uuid (endgame.payload_for)
+    payload = endgame.payload_for(unit, here=False) if spec.expand else unit["payload"]
     order = {"id": unit["id"], "task": unit["task"], "resource": unit["resource"],
              "payload": {k: v for k, v in payload.items() if k != spec.file_key},
              "options": options[unit["task"]], "lease_s": leases.LEASE_S, "blob": None,
@@ -459,7 +475,11 @@ def _order(manager, sender, unit, options, friend, caps=None, max_blob=MAX_BLOB)
         sharing.log_sent(sender, unit["id"], unit["task"],
                          unit["payload"].get("source") or unit["payload"].get("url") or "?",
                          blob.get("name") or unit["payload"].get("url"), blob.get("size"))
-    log.info("Unité %s (%s) confiée à %s", unit["id"], unit["task"], _peer_name(sender))
+    if unit.get("copy"):
+        log.info("Doublon de l'unité %s (%s) confié à %s (fin de partie)", unit["id"],
+                 unit["task"], _peer_name(sender))
+    else:
+        log.info("Unité %s (%s) confiée à %s", unit["id"], unit["task"], _peer_name(sender))
     manager.executor.publish_job(unit["job_id"], force=True)
     return {"unit": order}
 
@@ -481,11 +501,13 @@ def renew(manager, sender, payload):
     """Bail prolongé. Un ami ne garde pas une unité indéfiniment en renouvelant sans rien
     rendre : au-delà de _friend_lease_max, elle lui est reprise comme s'il avait échoué.
     state dit à la machine où en est l'unité (leases.renew) : running, resumed (son bail
-    avait échu, elle se raccroche), paused, cancelled, reassigned ; « ok » reste pour les
-    machines d'une version précédente, qui ne lisent que lui."""
+    avait échu, elle se raccroche), paused, cancelled, reassigned, done (faite, en fin de
+    partie par une autre machine : elle la rend sans essai ni reproche) ; « ok » reste pour
+    les machines d'une version précédente, qui ne lisent que lui. Un doublon n'a pas plus de
+    temps chez un ami qu'une unité, et ne dit pas l'étape de l'unité (celle du principal)."""
     unit_id = _unit_id(payload)
     if sharing.is_friend(sender):
-        unit = leases.held(unit_id, sender)
+        unit = leases.held(unit_id, sender) or endgame.held(unit_id, sender)
         if unit is not None:
             longest = _friend_lease_max(unit)
             if db.now() - float(unit["started"] or db.now()) > longest:
@@ -498,7 +520,8 @@ def renew(manager, sender, payload):
         manager.changed()
     progress = payload.get("progress")
     if state in leases.STATES_GOING and isinstance(progress, dict) \
-            and progress.get("stage") in engine_kind.STAGES:
+            and progress.get("stage") in engine_kind.STAGES \
+            and endgame.held(unit_id, sender) is None:
         # L'étape d'un calcul de moteur, pour l'appli qui suit son travail (elle seule)
         queue.set_progress(unit_id, {"stage": progress["stage"], "at": db.now()})
     return {"ok": state in leases.STATES_GOING, "state": state}
@@ -507,8 +530,10 @@ def renew(manager, sender, payload):
 def blob(manager, sender, payload):
     """Un morceau du fichier de l'unité confiée à cette machine (et d'aucun autre). Un
     fichier facultatif (l'image de départ d'une retouche) ne part jamais chez un ami, même
-    s'il le demande : l'ordre est parti sans lui (_order ; audit du 20/10/2026)."""
-    unit = leases.held(_unit_id(payload), sender)
+    s'il le demande : l'ordre est parti sans lui (_order ; audit du 20/10/2026). Une machine
+    qui en calcule le doublon (fin de partie) le lit de même."""
+    unit_id = _unit_id(payload)
+    unit = leases.held(unit_id, sender) or endgame.held(unit_id, sender)
     spec = registry.TASKS.get(unit["task"]) if unit else None
     if spec is not None and spec.expand and payload.get("sha256"):
         return _input_chunk(unit, payload)
@@ -566,6 +591,10 @@ def result(manager, sender, payload):
     compute_s = max(0.0, min(float(payload.get("compute_s") or 0), 86400.0))
     unit = leases.take_back(unit_id, sender)
     if unit is None:
+        # Fin de partie : faite par une autre machine (ou son résultat entre en ce moment) ;
+        # refusé poliment, rien n'est reproché à celle-ci
+        if endgame.finished(unit_id):
+            return {"accepted": False, "reason": t("work.done_elsewhere")}
         return {"accepted": False, "reason": t("work.taken_back")}
     spec = registry.TASKS[unit["task"]]
     friend = sharing.is_friend(sender)
@@ -690,10 +719,14 @@ def _friend_failed_unit(manager, sender, unit_id, message, compute_s=0.0,
     la mise de côté n'en tiennent compte, et l'unité ne lui revient pas. Le dire à tort ne lui
     sert à rien : c'est rendre l'unité sans pouvoir la reprendre. Pour une image ou une
     vidéo, dont la limite est taillée pour ce qu'elles produisent, ce n'est pas crédible :
-    un échec comme un autre (sinon il ferait échouer mes images sans jamais être écarté)."""
+    un échec comme un autre (sinon il ferait échouer mes images sans jamais être écarté).
+    Un doublon (fin de partie) compte de même, mais seule sa ligne s'en va : l'unité continue
+    avec l'autre calcul (endgame.drop)."""
     unit = leases.held(unit_id, sender)
-    if unit is None:
+    copy = endgame.held(unit_id, sender) if unit is None else None
+    if unit is None and copy is None:
         return {"ok": False}
+    unit = unit or copy
     blamed = not (too_big and not _unit_result(unit["task"], unit["payload"].get("model"),
                                                mine=False))
     _friend_counted(sender)
@@ -714,6 +747,12 @@ def _friend_failed_unit(manager, sender, unit_id, message, compute_s=0.0,
         peers.set_aside(sender, reason)
         log.warning("« %s » mise de côté : %s", _peer_name(sender), reason)
         manager.changed()
+    if copy is not None:
+        job_id = endgame.drop(unit_id, sender)
+        if job_id is not None:
+            manager.executor.publish_job(job_id, force=True)
+            manager.executor.wake()
+        return {"ok": job_id is not None}
     if not _kept_for_me(unit, _Mine()):
         settled = leases.fail(unit_id, sender,
                               t("work.nobody_can", message=message)[:500],

@@ -10,7 +10,11 @@ La file comme un torrent (docs/conception/partage-puissance.md § 2.5) :
   continue), « resumed » (son bail avait échu sans que l'unité soit redonnée : elle se
   raccroche et continue), « paused » (pause « tout de suite » : elle arrête et rend l'unité
   sans essai), « cancelled » (travail annulé : son résultat sera refusé), « reassigned »
-  (l'unité est partie ailleurs) ;
+  (l'unité est partie ailleurs), « done » (elle est faite, en fin de partie par une autre
+  machine : elle arrête et la rend, sans essai ni reproche) ;
+- en fin de partie (endgame.py), une machine peut calculer le doublon d'une unité : ses
+  renouvellement, résultat, échec et unité rendue passent par endgame, et seul le premier
+  résultat valable entre ;
 - sans nouvelles à l'échéance (expire), l'unité revient en file en gardant sa machine.
   Chez une de mes machines, sans compter d'essai mais une disparition (lost) : à
   LOST_MINE_ONLY, elle ne part plus que chez mes machines ; à MAX_LOST, elle échoue ; tant
@@ -22,9 +26,9 @@ La file comme un torrent (docs/conception/partage-puissance.md § 2.5) :
 import json
 
 from aiodos import db, i18n
-from aiodos.jobs import queue
-from aiodos.jobs.models import (CANCELLED, FAILED, LOST_MINE_ONLY, MAX_ATTEMPTS, MAX_LOST,
-                                PAUSE_NOW, PAUSED, QUEUED, RUNNING)
+from aiodos.jobs import endgame, queue
+from aiodos.jobs.models import (CANCELLED, DONE, FAILED, LOST_MINE_ONLY, MAX_ATTEMPTS,
+                                MAX_LOST, PAUSE_NOW, PAUSED, QUEUED, RUNNING, SKIPPED)
 
 LEASE_S = 90          # durée d'un bail ; la machine qui calcule le renouvelle toutes les ~30 s
 SCAN = 200            # unités examinées à la fois (les premières de la file)
@@ -95,16 +99,19 @@ def held(unit_id, node) -> dict | None:
 
 def renew(unit_id, node, lease_s=LEASE_S) -> str:
     """Le bail prolongé, et ce que la machine doit faire (cf. le début du module) : running,
-    resumed, paused, cancelled ou reassigned."""
+    resumed, paused, cancelled, reassigned ou done."""
     row = db.query_one("SELECT u.status, u.node, u.lease_until, u.place, j.status AS job_status, "
                        "j.pause_mode FROM units u JOIN jobs j ON j.id = u.job_id WHERE u.id=?",
                        (unit_id,))
     if row is None or row["status"] == CANCELLED or row["job_status"] == CANCELLED:
         return "cancelled"
-    if row["node"] != node:
-        return "reassigned"
+    if row["status"] in (DONE, SKIPPED):
+        return "done"
     paused_now = (queue.queue_pause() == PAUSE_NOW
                   or row["job_status"] == PAUSED and row["pause_mode"] == PAUSE_NOW)
+    if row["node"] != node:
+        # Son doublon (fin de partie), s'il en a un ; sinon l'unité est partie ailleurs
+        return endgame.renew(unit_id, node, row["status"], paused_now, lease_s)
     now = db.now()
     if row["status"] == RUNNING and row["lease_until"] is not None:
         if paused_now:
@@ -135,34 +142,38 @@ def renew(unit_id, node, lease_s=LEASE_S) -> str:
 def take_back(unit_id, node) -> dict | None:
     """Un résultat arrive de `node` : on reprend l'unité pour l'intégrer, si elle
     lui est toujours confiée, ou si elle est revenue en file après un bail échu
-    sans avoir été redonnée, et si son travail n'est pas annulé. None : résultat à refuser
-    (unité reprise, annulée…)."""
+    sans avoir été redonnée, et si son travail n'est pas annulé. L'unité est marquée (taken) :
+    en fin de partie, plus aucun autre résultat n'est pris ; un doublon passe par
+    endgame.take_back. None : résultat à refuser (unité reprise, annulée, faite ailleurs…)."""
     with db.transaction() as c:
         taken = c.execute(
-            "UPDATE units SET status=?, lease_until=NULL WHERE id=? AND node=? "
+            "UPDATE units SET status=?, lease_until=NULL, taken=? WHERE id=? AND node=? "
             "AND ((status=? AND lease_until IS NOT NULL) OR status=?) "
             "AND job_id IN (SELECT id FROM jobs WHERE status != ?)",
-            (RUNNING, unit_id, node, RUNNING, QUEUED, CANCELLED)).rowcount
+            (RUNNING, db.now(), unit_id, node, RUNNING, QUEUED, CANCELLED)).rowcount
         if not taken:
-            return None
+            return endgame.take_back(unit_id, node)
         return _unit(c.execute("SELECT * FROM units WHERE id=?", (unit_id,)).fetchone())
 
 
 def release(unit_id, node) -> int | None:
     """La machine rend l'unité sans l'avoir faite (son utilisateur est revenu, son moteur
     est indisponible, pause « tout de suite »…) : retour en file sans compter d'essai (d'un
-    travail annulé : annulée). → id du travail, ou None si l'unité ne lui était plus confiée."""
+    travail annulé : annulée). Son doublon (fin de partie) : seule sa ligne s'en va. → id du
+    travail, ou None si l'unité ne lui était plus confiée."""
     if held(unit_id, node) is None:
-        return None
+        return endgame.drop(unit_id, node)
     outcome = queue.release_unit(unit_id, node=node)
     return outcome[0] if outcome else None
 
 
 def fail(unit_id, node, error, compute_s=0.0):
-    """La machine signale un échec du calcul. → (travail, terminé ?) ou None."""
+    """La machine signale un échec du calcul (de son doublon : l'unité continue avec l'autre
+    calcul, endgame.drop). → (travail, terminé ?) ou None."""
     with db.transaction():
         if held(unit_id, node) is None:
-            return None
+            job_id = endgame.drop(unit_id, node)
+            return None if job_id is None else (job_id, False)
         return queue.fail_unit(unit_id, error, compute_s)
 
 
@@ -170,9 +181,12 @@ def expire(now=None) -> list:
     """Baux échus : l'unité revient en file en gardant sa machine (cf. le début du module).
     Chez une de mes machines, sans compter d'essai mais une disparition ; chez un ami (ou un
     inconnu), comme avant la file en torrent, l'essai compte (le dernier essai ne part jamais
-    chez un ami, et l'ami ne la fait pas échouer : règles de l'audit du 20/10). → [(travail,
-    terminé ?)] pour prévenir l'interface."""
+    chez un ami, et l'ami ne la fait pas échouer : règles de l'audit du 20/10). En fin de
+    partie (endgame.py), un doublon échu s'en va simplement, et un doublon encore vivant prend
+    la place du calcul principal échu, sans rien compter. → [(travail, terminé ?)] pour
+    prévenir l'interface."""
     now = now or db.now()
+    endgame.expire(now)
     touched = []
     # Les erreurs gardées pour l'unité, dans la langue du nœud (i18n/*/jobs.json)
     expired, vanished = i18n.t("jobs.lease_expired"), i18n.t("jobs.lease_lost")
@@ -181,7 +195,10 @@ def expire(now=None) -> list:
         lost = r["lost"] + 1
         foreign = r["place"] in FOREIGN
         with db.transaction() as c:
-            if foreign and r["attempts"] >= MAX_ATTEMPTS:
+            if c.execute("SELECT 1 FROM units WHERE id=? AND status=? AND lease_until < ?",
+                         (r["id"], RUNNING, now)).fetchone() and endgame.promote(c, r["id"], now):
+                n, finished = 1, False
+            elif foreign and r["attempts"] >= MAX_ATTEMPTS:
                 n = c.execute("UPDATE units SET status=?, lease_until=NULL, error=?, finished=?, "
                               "lost=? WHERE id=? AND status=? AND lease_until < ?",
                               (FAILED, expired, now, lost, r["id"], RUNNING, now)).rowcount

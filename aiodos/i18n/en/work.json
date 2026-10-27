@@ -15,6 +15,7 @@
   "input_not_yours": "This input does not belong to the unit entrusted to you.",
   "input_gone": "This input is no longer there.",
   "taken_back": "Unit taken back or cancelled in the meantime.",
+  "done_elsewhere": "Unit already done by another machine: this result is no longer needed, and nothing is held against you.",
   "check_impossible": "The owner can't check it for now: unit put back in the queue.",
   "sample_mismatch": "a result doesn't match the computation redone here ({error})",
   "result_refused": "Result from “{name}” refused: {error}",

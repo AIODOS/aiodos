@@ -25,15 +25,21 @@ une pause « tout de suite » (du travail, ou de toute la file) l'arrête et la 
 Sur batterie en « attendre le secteur », une unité en cours est rendue de même au lot
 suivant (pacing.wait_turn rend toute unité qui a un arrêt) : refaite plus tard, au retour
 du secteur, ou par une de mes machines qui la demande.
+
+Fin de partie (endgame.py) : quand plus rien en file ne revient à ce PC, une place libre
+prend le doublon d'une unité qui tarde ailleurs. Son résultat n'entre que s'il est le
+premier (endgame.win, entre le calcul et l'intégration) ; faite ailleurs, l'unité lève son
+arrêt (endgame.beaten, à chaque tour), qu'elle soit le doublon ou le calcul principal.
 """
 import asyncio
+import functools
 import logging
 import threading
 import time
 
 import requests
 
-from aiodos.jobs import leases, pacing, queue, registry
+from aiodos.jobs import endgame, leases, pacing, queue, registry
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.node import places, priority
 from aiodos.services import ollama
@@ -54,19 +60,21 @@ def engine_down(exc) -> bool:
     return url.startswith(ollama.base())
 
 
-def _run_unit(task, payload, stop=None) -> tuple:
+def _run_unit(task, payload, stop=None, claim=None) -> tuple:
     """Une unité de la file (thread de fond), et le temps passé à attendre ou à se reposer
     (jobs/pacing.py) : il ne compte pas dans le temps de calcul. stop : son arrêt (travail
     annulé ou supprimé, AIODOS qui s'arrête), transmis au calcul ; déjà levé, l'unité ne
     commence pas (Interrupted). Appelée sans arrêt (hors de l'exécuteur), run_local l'est
-    aussi."""
+    aussi. claim : le résultat est-il encore attendu (registry.run_local, fin de partie) ?"""
     if stop is not None and stop.is_set():
         raise registry.Interrupted()
     before = pacing.waited()
     if stop is None:
         result = registry.run_local(task, payload)
-    else:
+    elif claim is None:
         result = registry.run_local(task, payload, stop)
+    else:
+        result = registry.run_local(task, payload, stop, claim)
     return result, pacing.waited() - before
 
 
@@ -114,7 +122,7 @@ class Executor:
         # Rendues tout de suite, sans compter d'essai : le processus peut s'arrêter avant
         # que leur calcul ait fini de s'interrompre (queue.recover rattrape un arrêt brutal)
         try:
-            await asyncio.to_thread(queue.interrupt_units, list(self._halts))
+            await asyncio.to_thread(queue.interrupt_units, list(self._halts), self.node_id)
         except Exception:
             log.exception("Unités en cours non rendues à l'arrêt")
         if self._task:
@@ -191,8 +199,12 @@ class Executor:
 
     async def _fill(self):
         while True:
-            unit = await asyncio.to_thread(queue.claim_next, self.free_resources(),
-                                           self.node_id)
+            free = self.free_resources()
+            unit = await asyncio.to_thread(queue.claim_next, free, self.node_id)
+            if unit is None:
+                # Fin de partie : plus rien en file pour ce PC, le doublon d'une unité qui
+                # tarde ailleurs
+                unit = await asyncio.to_thread(endgame.claim_local, free, self.node_id)
             if unit is None:
                 return
             self.busy[unit["resource"]] += 1
@@ -207,15 +219,24 @@ class Executor:
     async def _halt_withdrawn(self):
         """Lève l'arrêt des unités en cours ici dont le travail a été annulé ou supprimé
         depuis : sans lui, elles iraient au bout, et leur résultat entrerait dans les
-        bibliothèques (ou la galerie) d'un travail annulé."""
-        watched = {job_id for job_id, halt in self._halts.values() if not halt.is_set()}
+        bibliothèques (ou la galerie) d'un travail annulé. De même pour celles faites
+        ailleurs, ou parties ailleurs, en fin de partie (endgame.beaten)."""
+        watched = {unit_id: job_id for unit_id, (job_id, halt) in self._halts.items()
+                   if not halt.is_set()}
         if not watched:
             return
-        withdrawn = await asyncio.to_thread(_withdrawn, watched)
+        withdrawn = await asyncio.to_thread(_withdrawn, set(watched.values()))
+        beaten = await asyncio.to_thread(endgame.beaten, watched, self.node_id)
         for unit_id, (job_id, halt) in list(self._halts.items()):
-            if job_id in withdrawn and not halt.is_set():
+            if halt.is_set():
+                continue
+            if job_id in withdrawn:
                 log.info("Unité %s arrêtée : son travail %s a été annulé ou supprimé",
                          unit_id, job_id)
+                halt.set()
+            elif unit_id in beaten:
+                log.info("Unité %s arrêtée : faite par une autre machine (fin de partie)",
+                         unit_id)
                 halt.set()
 
     async def _execute(self, unit):
@@ -224,33 +245,40 @@ class Executor:
         if pacing.stopping().is_set():       # AIODOS s'arrête déjà : elle ne commencera pas
             halt.set()
         self._halts[unit["id"]] = (unit["job_id"], halt)
+        # Ce nœud ne rend que son propre calcul (release_unit, fail_unit : node), qui peut
+        # n'être qu'un doublon, ou l'être devenu (fin de partie, endgame.py)
+        mine = self.node_id
         try:
-            # L'ordre complet d'une unité de moteur s'assemble ici (registry.payload_for)
-            payload = await asyncio.to_thread(registry.payload_for, unit)
-            result, waited = await priority.run(_run_unit, unit["task"], payload, halt)
+            # L'ordre complet d'une unité de moteur s'assemble ici (registry.payload_for ; un
+            # doublon garde son propre run_uuid, endgame.payload_for)
+            payload = await asyncio.to_thread(endgame.payload_for, unit)
+            claim = functools.partial(endgame.win, unit["id"], mine)
+            result, waited = await priority.run(_run_unit, unit["task"], payload, halt, claim)
             job_id, finished = await asyncio.to_thread(
                 queue.finish_unit, unit["id"], result or {},
                 max(0.0, time.perf_counter() - started - waited))
         except registry.Interrupted:
-            # Arrêt d'AIODOS, travail annulé, attente du secteur : rien n'a échoué
-            await asyncio.to_thread(queue.release_unit, unit["id"])
+            # Arrêt d'AIODOS, travail annulé, attente du secteur, unité faite ailleurs : rien
+            # n'a échoué
+            await asyncio.to_thread(queue.release_unit, unit["id"], False, mine)
             job_id, finished = unit["job_id"], False
         except Exception as exc:
             if halt.is_set():
                 # Après l'arrêt, l'erreur en vient (connexion coupée, programme arrêté) :
                 # l'unité n'a pas échoué, et un travail annulé ne compte pas d'échec
-                await asyncio.to_thread(queue.release_unit, unit["id"])
+                await asyncio.to_thread(queue.release_unit, unit["id"], False, mine)
                 job_id, finished = unit["job_id"], False
             elif engine_down(exc):
                 log.info("Ollama injoignable : unité %s remise en file, nouvel essai dans %s s",
                          unit["id"], ENGINE_RETRY_DELAY)
-                await asyncio.to_thread(queue.release_unit, unit["id"])
+                await asyncio.to_thread(queue.release_unit, unit["id"], False, mine)
                 self.cooldown[unit["resource"]] = time.monotonic() + ENGINE_RETRY_DELAY
                 job_id, finished = unit["job_id"], False
             else:
                 log.warning("Unité %s (%s) en échec : %s", unit["id"], unit["task"], exc)
                 job_id, finished = await asyncio.to_thread(
-                    queue.fail_unit, unit["id"], str(exc)[:500], time.perf_counter() - started)
+                    queue.fail_unit, unit["id"], str(exc)[:500],
+                    time.perf_counter() - started, mine)
         finally:
             self.busy[unit["resource"]] -= 1
             self._halts.pop(unit["id"], None)

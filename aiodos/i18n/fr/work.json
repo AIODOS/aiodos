@@ -15,6 +15,7 @@
   "input_not_yours": "Cette entrée n'est pas celle de l'unité qui t'est confiée.",
   "input_gone": "Cette entrée n'est plus là.",
   "taken_back": "Unité reprise ou annulée entre-temps.",
+  "done_elsewhere": "Unité déjà faite par une autre machine : ce résultat n'est plus attendu, rien ne t'est reproché.",
   "check_impossible": "Vérification impossible pour l'instant chez le propriétaire : unité remise en file.",
   "sample_mismatch": "un résultat ne correspond pas au calcul refait ici ({error})",
   "result_refused": "Résultat de « {name} » refusé : {error}",

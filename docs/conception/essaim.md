@@ -296,7 +296,8 @@ l'ouverture.
    partie ; d'abord pour ce qui existe déjà (travaux de fond, images entre mes machines),
    puis pour les conversations. *Places à 60 % et annoncées : faites le 27/10. La file
    tirée par les machines libres existait déjà (« la file comme un torrent »,
-   partage-puissance.md § 2.5) ; reste la fin de partie.*
+   partage-puissance.md § 2.5) ; fin de partie : faite le 27/10 (partage-puissance.md
+   § 2.7, `jobs/endgame.py`).*
 3. **Conversations en essaim** entre mes machines et mes amis : plusieurs questions (§ 5.2),
    lecture (§ 5.4), plan-contrat (§ 5.3), chef de chantier et vérificateur (§ 8).
 4. **Le réseau public qui calcule** : route publique dans le compagnon, clé jetable,

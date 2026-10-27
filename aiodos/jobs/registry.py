@@ -165,10 +165,16 @@ def conditional_tasks() -> list:
     return [name for name, spec in TASKS.items() if spec.here is not None]
 
 
-def run_local(name, payload, stop=None) -> dict:
-    """Exécution complète sur ce nœud : calcul puis intégration."""
+def run_local(name, payload, stop=None, claim=None) -> dict:
+    """Exécution complète sur ce nœud : calcul puis intégration. claim() : appelé entre les
+    deux (l'exécuteur, jobs/endgame.win) ; faux, le résultat n'est plus attendu (en fin de
+    partie, l'unité a été faite ailleurs) : il n'entre pas (Interrupted)."""
     spec = TASKS[name]
     options = spec.options() if spec.options else {}
     file = payload.get(spec.file_key) if spec.file_key else None
     output = spec.compute(payload, file, options, stop)
-    return spec.assimilate(payload, output) if spec.assimilate else output
+    if not spec.assimilate:
+        return output
+    if claim is not None and not claim():
+        raise Interrupted()
+    return spec.assimilate(payload, output)

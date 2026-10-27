@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -402,6 +402,23 @@ MIGRATIONS = {
         SELECT 'lend_power', value FROM settings
         WHERE key = 'share_max_gpu' AND CAST(value AS INTEGER) BETWEEN 10 AND 99;
     DELETE FROM settings WHERE key = 'share_max_gpu';
+    """,
+    # Fin de partie (jobs/endgame.py, docs/conception/partage-puissance.md § 2.7) : le doublon
+    # d'une unité en calcul, avec sa machine, son lieu, son départ, son bail (NULL : calculé
+    # ici) et son propre run_uuid ; le calcul principal reste dans units. taken : l'instant où
+    # le premier résultat d'une unité a commencé d'entrer, après quoi aucun autre ne la prend.
+    26: """
+    CREATE TABLE IF NOT EXISTS unit_copies (
+        unit_id     INTEGER NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+        node        TEXT NOT NULL,
+        place       TEXT NOT NULL,
+        started     REAL NOT NULL,
+        lease_until REAL,
+        run_uuid    TEXT,
+        PRIMARY KEY (unit_id, node)
+    );
+    CREATE INDEX IF NOT EXISTS ix_unit_copies_node ON unit_copies(node);
+    ALTER TABLE units ADD COLUMN taken REAL;
     """,
 }
 
