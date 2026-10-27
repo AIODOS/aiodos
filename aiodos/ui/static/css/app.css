@@ -724,9 +724,11 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 
 /* ---------------------------------------------------- fenêtres, menus, toasts */
 .modal-back { position: fixed; inset: 0; background: rgba(2, 5, 4, .66); display: grid; place-items: center; z-index: 50; animation: fade .12s; }
-/* Une fenêtre longue (choix d'un modèle sur un téléphone) défile, ses boutons restent en bas */
-.modal { width: min(520px, calc(100vw - 40px)); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px);
-  overflow-y: auto; background: var(--panel); border: 1px solid var(--line-2); border-radius: 16px; padding: 22px;
+/* Une fenêtre longue (choix d'un modèle sur un téléphone) défile, ses boutons restent en bas.
+   Les marges dans des variables : la barre des boutons les reprend, sinon elle déborde */
+.modal { --pad-y: 22px; --pad-x: 22px; width: min(520px, calc(100vw - 40px));
+  max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 16px; padding: var(--pad-y) var(--pad-x);
   box-shadow: 0 24px 60px rgba(0, 0, 0, .5); }
 .modal h3 { margin: 0 0 8px; font-size: 16.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .modal .text { color: var(--muted); white-space: pre-wrap; }
@@ -739,8 +741,9 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .modal .choice input { margin-top: 3px; }
 .modal .choice b { display: block; font-weight: 500; }
 .modal .choice small { color: var(--muted); font-size: 12.5px; }
-.modal .buttons { display: flex; justify-content: flex-end; gap: 10px; margin: 20px -22px -22px;
-  padding: 12px 22px 22px; position: sticky; bottom: -22px; background: var(--panel); }
+.modal .buttons { display: flex; justify-content: flex-end; gap: 10px;
+  margin: 20px calc(-1 * var(--pad-x)) calc(-1 * var(--pad-y));
+  padding: 12px var(--pad-x) var(--pad-y); position: sticky; bottom: calc(-1 * var(--pad-y)); background: var(--panel); }
 .modal .input, .modal .textarea { margin-top: 12px; }
 /* Charte et conditions d'utilisation (views/legal.js) : à accepter à la première ouverture,
    par-dessus tout le reste ; à relire depuis Réglages → À propos */
@@ -927,7 +930,7 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
   .copy-row { flex-wrap: wrap; gap: 4px 10px; }
   .copy-row .copy-label { width: 100%; }
   #consult-q { min-width: 0; flex-basis: 100%; }
-  .modal { padding: 18px 16px; }
+  .modal { --pad-y: 18px; --pad-x: 16px; }
   .modal .buttons { flex-wrap: wrap; }
   #toasts { left: 10px; right: 10px; bottom: 72px; }
   body.keyboard #toasts { bottom: 10px; }
