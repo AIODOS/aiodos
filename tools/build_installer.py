@@ -46,7 +46,9 @@ ouvert à d'autres comptes. Inno Setup doit être dans un dossier à l'abri des 
 
 Sans Whisper (transcription audio et vidéo : 640 Mo de plus), à venir en option. Ollama
 reste nécessaire pour converser : l'installeur propose de le télécharger depuis ollama.com
-s'il manque. Les essais de cet outil : tests/test_build_installer.py.
+s'il manque. La page d'accueil (logo, présentation) et la charte et les conditions
+d'utilisation à accepter : installer_pages.py et aiodos.iss. Les essais de cet outil :
+tests/test_build_installer.py et tests/test_legal.py.
 """
 # os et sys sont gelés dans Python : jamais pris dans le dépôt, même avant le contrôle
 import os
@@ -110,6 +112,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import companion_build  # noqa: E402
 import engine_release  # noqa: E402
+import installer_pages  # noqa: E402
 from aiodos.updates import engines as engine_kinds  # noqa: E402
 from aiodos.updates import install, private  # noqa: E402
 
@@ -473,9 +476,12 @@ def make_app(stage: Path, commit: str, number: str):
     git("archive", "--format=zip", f"--output={archive}", commit, "--", *SOURCE)
     with zipfile.ZipFile(archive) as z:
         z.extractall(app)
+    # terms : la version de la charte et des conditions que l'installeur fait accepter
+    # (aiodos/legal : AIODOS ne les redemande pas à la première ouverture)
     (app / "installation.json").write_text(json.dumps(
         {"version": number, "commit": commit, "built": int(time.time()),
-         "data": "%LOCALAPPDATA%\\AIODOS\\data"}, indent=1), encoding="utf-8")
+         "data": "%LOCALAPPDATA%\\AIODOS\\data",
+         "terms": installer_pages.terms_version(app)}, indent=1), encoding="utf-8")
 
 
 def precompile(stage: Path):
@@ -563,9 +569,15 @@ def shortcut_icon(stage: Path) -> str:
 def compile_installer(stage: Path, number: str, out: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     script = ROOT / "tools" / "installer" / "aiodos.iss"
+    # La charte et les conditions à accepter, et les images de l'assistant (installer_pages)
+    pages = installer_pages.prepare(stage, stage / "app" / "assets" / "logo.png")
     done = subprocess.run([str(iscc()), "/Qp", f"/DAppVersion={number}",
                            f"/DStage={stage}", f"/DOutDir={out}", f"/DRepo={ROOT}",
-                           f"/DIcon={shortcut_icon(stage)}", str(script)],
+                           f"/DIcon={shortcut_icon(stage)}",
+                           f"/DLegalFr={pages['legal']['fr']}", f"/DLegalEn={pages['legal']['en']}",
+                           f"/DWizardImages={','.join(map(str, pages['large']))}",
+                           f"/DWizardSmallImages={','.join(map(str, pages['small']))}",
+                           str(script)],
                           env=companion_build.private_temp(os.environ, stage.parent / "temp"))
     if done.returncode != 0:
         raise BuildError(f"Inno Setup a échoué (code {done.returncode})")

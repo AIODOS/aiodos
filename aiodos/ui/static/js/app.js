@@ -13,6 +13,7 @@ import { loadNode } from './views/node.js';
 import { mountLibraryTabs, lastTab } from './views/library-tabs.js';
 import { mountNetwork, loadNetwork, answerPairRequest, answerIntroduction } from './views/network.js';
 import { mountSettings } from './views/settings.js';
+import { checkTerms } from './views/legal.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
 import { loadGateway } from './views/gateway.js';
 import { loadApps } from './views/gateway-apps.js';
@@ -192,6 +193,7 @@ async function boot() {
   loadNode();                               // en parallèle : les libellés VRAM suivront
   loadNetwork();
   await loadSettings();
+  checkTerms();                             // charte et conditions, tant qu'elles ne sont pas acceptées
   announceUpdate();                         // « AIODOS a été mis à jour », une fois
   showRequests();                           // une appli a demandé l'accès avant l'ouverture
   await loadModels();

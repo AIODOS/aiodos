@@ -1,0 +1,16 @@
+{
+  "about": "About",
+  "about_version": "AIODOS {version}",
+  "license": "Free and open software, under the Apache 2.0 license, published by 22eme Arkane and the project's contributors.",
+  "read_charter": "Charter",
+  "read_terms": "Terms of use",
+  "accepted_version": "Version {version} of the charter and terms, accepted.",
+  "welcome": "Welcome to AIODOS",
+  "intro": "AIODOS runs AI on your own machines and makes them work together: your PCs, your phone and, if you want, those of your friends and of the network. Before you start, read the charter and the terms of use.",
+  "changed": "The charter and the terms of use have changed",
+  "changed_intro": "Read the new version: you need to accept it to keep using AIODOS.",
+  "agree": "I have read and accept the charter and the terms of use",
+  "continue": "Accept and continue",
+  "close": "Close",
+  "outdated": "The charter and terms have just changed: read the new version."
+}

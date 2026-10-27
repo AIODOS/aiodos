@@ -120,6 +120,8 @@ DEFAULTS = {
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
+    # --- Charte et conditions d'utilisation (aiodos/legal) : dernière version acceptée ---
+    "terms_accepted": 0,
     # --- AIODOS ouvert aux autres outils (gateway/, docs/autres-outils.md) : API compatible
     # OpenAI et Ollama, serveur MCP, sur 127.0.0.1 seulement ; désactivé par défaut ---
     "gateway_enabled": False,

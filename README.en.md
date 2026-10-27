@@ -449,6 +449,10 @@ keep the license and the author notices, and flag the modified files. Each contr
 also grants their possible patents on the code they bring. Contributions are accepted
 under this same license.
 
+Using AIODOS and its network follows the [charter](aiodos/legal/en/charter.md) and the
+[terms of use](aiodos/legal/en/terms.md): accepted at installation (at first launch on
+Android), and readable again in Settings → About.
+
 [Ollama]: https://ollama.com
 [llama.cpp]: https://github.com/ggml-org/llama.cpp
 [stable-diffusion.cpp]: https://github.com/leejet/stable-diffusion.cpp

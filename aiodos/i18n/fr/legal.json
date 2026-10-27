@@ -1,0 +1,16 @@
+{
+  "about": "À propos",
+  "about_version": "AIODOS {version}",
+  "license": "Logiciel libre et gratuit, sous licence Apache 2.0, édité par 22ème Arkane et les contributeurs du projet.",
+  "read_charter": "Charte d'utilisation",
+  "read_terms": "Conditions d'utilisation",
+  "accepted_version": "Version {version} de la charte et des conditions, acceptée.",
+  "welcome": "Bienvenue dans AIODOS",
+  "intro": "AIODOS fait tourner l'IA sur tes propres machines et les fait travailler ensemble : tes PC, ton téléphone et, si tu le veux, ceux de tes amis et du réseau. Avant de commencer, lis la charte d'utilisation et les conditions d'utilisation.",
+  "changed": "La charte et les conditions d'utilisation ont changé",
+  "changed_intro": "Lis la nouvelle version : il faut l'accepter pour continuer à utiliser AIODOS.",
+  "agree": "J'ai lu et j'accepte la charte d'utilisation et les conditions d'utilisation",
+  "continue": "Accepter et continuer",
+  "close": "Fermer",
+  "outdated": "La charte et les conditions viennent de changer : relis la nouvelle version."
+}

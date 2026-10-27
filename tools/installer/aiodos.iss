@@ -1,7 +1,11 @@
 ; Installeur Windows d'AIODOS (Inno Setup 6). Construit par tools/build_installer.py, qui
 ; prépare les fichiers (Python embarqué, code, compagnon, moteurs) et passe :
 ;   /DAppVersion=…  /DStage=…  /DOutDir=…  /DRepo=…  /DIcon=… (icône des raccourcis, nommée
-;   d'après son contenu : Windows garde en cache l'icône d'un chemin déjà vu)
+;   d'après son contenu : Windows garde en cache l'icône d'un chemin déjà vu), et ce que
+;   prépare tools/installer_pages.py : /DLegalFr=… /DLegalEn=… (la charte et les conditions
+;   d'utilisation, en RTF), /DWizardImages=… /DWizardSmallImages=… (le logo, de 100 à 250 %).
+; L'assistant, sombre comme AIODOS : l'accueil (logo et présentation), puis la charte et les
+; conditions d'utilisation, à accepter pour installer (demandé par l'auteur le 27/10/2026).
 ; Installation pour l'utilisateur seul, sans droits administrateur, dans
 ; %LOCALAPPDATA%\Programs\AIODOS ; les données vont dans %LOCALAPPDATA%\AIODOS
 ; (aiodos/paths.py, installation.json) et survivent à une nouvelle installation.
@@ -24,6 +28,9 @@
 #endif
 #ifndef OutDir
   #define OutDir "dist"
+#endif
+#ifndef LegalFr
+  #error "LegalFr n'est pas défini : construire avec tools/build_installer.py"
 #endif
 #ifndef Repo
   #define Repo ".."
@@ -48,10 +55,12 @@ OutputBaseFilename=AIODOS-Setup-{#AppVersion}
 SetupIconFile={#Repo}\assets\logo.ico
 UninstallDisplayIcon={app}\app\assets\{#Icon}
 UninstallDisplayName=AIODOS
-LicenseFile={#Repo}\LICENSE
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
+WizardStyle=modern dark
+DisableWelcomePage=no
+WizardImageFile={#WizardImages}
+WizardSmallImageFile={#WizardSmallImages}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Windows 10 1809 et plus : WebView2 (fenêtre d'AIODOS) et pythonnet
@@ -62,8 +71,28 @@ ShowLanguageDialog=no
 
 [Languages]
 ; La langue de Windows choisit ; ni française ni anglaise : la première, l'anglais
-Name: "en"; MessagesFile: "compiler:Default.isl"
-Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
+; La charte et les conditions d'utilisation (aiodos/legal), à accepter : à la place de la
+; licence Apache 2.0, qu'elles citent et qui est installée avec AIODOS (LICENSE)
+Name: "en"; MessagesFile: "compiler:Default.isl"; LicenseFile: "{#LegalEn}"
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"; LicenseFile: "{#LegalFr}"
+
+[Messages]
+; L'accueil : le texte de présentation, à côté du logo
+fr.WelcomeLabel1=Bienvenue dans AIODOS
+fr.WelcomeLabel2=AIODOS fait tourner l'intelligence artificielle sur tes propres machines et les fait travailler ensemble : tes PC, ton téléphone et, si tu le veux, ceux de tes amis et du réseau.%n%nConverse avec des modèles ouverts, interroge tes documents, crée des images et des vidéos, sans abonnement ni cloud : tes données restent chez toi. Un modèle trop gros pour une seule machine se répartit entre plusieurs.%n%nCet assistant va installer [name/ver] sur ton ordinateur.
+en.WelcomeLabel1=Welcome to AIODOS
+en.WelcomeLabel2=AIODOS runs artificial intelligence on your own machines and makes them work together: your PCs, your phone and, if you want, those of your friends and of the network.%n%nChat with open models, search your documents, create images and videos, with no subscription and no cloud: your data stays with you. A model too large for one machine is split across several.%n%nThis wizard will install [name/ver] on your computer.
+; La page de licence : la charte et les conditions d'utilisation
+fr.WizardLicense=Charte et conditions d'utilisation
+fr.LicenseLabel=Lis-les avant de continuer.
+fr.LicenseLabel3=La charte dit l'esprit dans lequel on utilise AIODOS ensemble ; les conditions d'utilisation, ses règles. Il faut les accepter pour installer AIODOS.
+fr.LicenseAccepted=J'&accepte la charte et les conditions d'utilisation
+fr.LicenseNotAccepted=Je &refuse
+en.WizardLicense=Charter and terms of use
+en.LicenseLabel=Please read them before continuing.
+en.LicenseLabel3=The charter sets out the spirit in which we use AIODOS together; the terms of use, its rules. You must accept them to install AIODOS.
+en.LicenseAccepted=I &accept the charter and the terms of use
+en.LicenseNotAccepted=I &do not accept
 
 [CustomMessages]
 fr.OllamaTask=Télécharger et installer Ollama, le moteur des conversations (depuis ollama.com, environ 1 Go)

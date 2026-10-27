@@ -738,6 +738,35 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .modal .choice small { color: var(--muted); font-size: 12.5px; }
 .modal .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .modal .input, .modal .textarea { margin-top: 12px; }
+/* Charte et conditions d'utilisation (views/legal.js) : à accepter à la première ouverture,
+   par-dessus tout le reste ; à relire depuis Réglages → À propos */
+.terms-back { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(52, 209, 166, .10), transparent 60%), rgba(2, 5, 4, .86);
+  animation: fade .12s; }
+.terms { width: min(760px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 18px; padding: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .55); }
+.terms-head { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+.terms-head h2 { margin: 0 0 6px; font-size: 19px; font-weight: 600; }
+.terms-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.terms-logo { width: 64px; height: 64px; border-radius: 14px; flex: none; }
+.terms-text { flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 18px 4px 14px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--bg-2, var(--bg)); font-size: 13.5px; }
+.terms-text:focus { outline: none; border-color: var(--line-2); }
+.terms-text section + section { margin-top: 28px; padding-top: 6px; border-top: 1px solid var(--line); }
+.terms-text h1 { color: var(--cyan); }
+.terms .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; font-size: 13.5px; cursor: pointer; }
+.terms .check input { margin-top: 3px; }
+.terms .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.about { display: flex; gap: 14px; align-items: center; }
+.about-logo { width: 52px; height: 52px; border-radius: 12px; flex: none; }
+.about .hint { margin: 4px 0 0; }
+.about + .row-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+@media (max-width: 640px) {
+  .terms { padding: 16px; }
+  .terms-logo { width: 48px; height: 48px; }
+  .terms-text { padding: 2px 12px 2px 10px; }
+}
 /* Carte d'accord d'une application (views/gateway-request.js) : longue, elle défile */
 .modal.gateway-request { width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
 .modal.gateway-request .warn { color: var(--amber, #ffc46b); margin-top: 8px; }

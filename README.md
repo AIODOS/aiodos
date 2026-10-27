@@ -454,6 +454,10 @@ condition de garder la licence et les mentions d'auteur, et de signaler les fich
 modifiés. Chaque contributeur accorde aussi ses brevets éventuels sur le code qu'il apporte.
 Les contributions sont acceptées sous cette même licence.
 
+L'usage d'AIODOS et de son réseau suit la [charte d'utilisation](aiodos/legal/fr/charter.md)
+et les [conditions d'utilisation](aiodos/legal/fr/terms.md) : acceptées à l'installation (à
+la première ouverture sur Android), relisibles dans Réglages → À propos.
+
 [Ollama]: https://ollama.com
 [llama.cpp]: https://github.com/ggml-org/llama.cpp
 [stable-diffusion.cpp]: https://github.com/leejet/stable-diffusion.cpp

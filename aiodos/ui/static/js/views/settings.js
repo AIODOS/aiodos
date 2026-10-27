@@ -17,6 +17,7 @@ import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
 import { modelsCard, bindModels, loadImageModels, mountModels } from './settings-models.js';
 import { mountNode, refreshNode } from './node.js';
+import { mountAbout } from './legal.js';
 
 // Titres, libellés, aides et choix sont des clés de textes (i18n/*/settings.json), traduites
 // à l'affichage. Le choix d'une liste : [valeur, clé de son libellé].
@@ -140,6 +141,7 @@ export function mountSettings(container) {
           <select class="select" id="set-language" aria-label="${esc(t('settings.language'))}"></select></label></div>
       <div class="settings" id="settings-machine"></div>
       <div class="settings" id="settings-form"></div>
+      <div class="settings" id="settings-about"></div>
     </div></div>`);
   container.append(root);
   mountLanguage($('#set-language', root));
@@ -147,6 +149,10 @@ export function mountSettings(container) {
   const machine = h(fold({ id: 'settings-machine', title: t('node.title'), iconName: 'node' }));
   $('#settings-machine', root).append(machine);
   mountNode($('.fold-body', machine));
+  // À propos, en dernier : la version, la licence, la charte et les conditions (legal.js)
+  const about = h(fold({ id: 'settings-about', title: t('legal.about'), iconName: 'info' }));
+  $('#settings-about', root).append(about);
+  mountAbout($('.fold-body', about));
   keepFolds(root);
   machine.addEventListener('toggle', () => { if (machine.open) refreshNode(); });
   on('node:loaded', () => {
