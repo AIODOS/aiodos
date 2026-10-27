@@ -14,6 +14,13 @@
   "web": "Web",
   "think_title": "Laisser le modèle réfléchir avant de répondre (plus lent, souvent meilleur)",
   "thinking": "Réflexion",
+  "permissions": "Autorisations",
+  "permissions_title": "Ce que l'assistant peut utiliser pour te répondre",
+  "permissions_count": "{n}/{total}",
+  "permissions_active": {
+    "one": "{n} autorisation active sur {total}",
+    "other": "{n} autorisations actives sur {total}"
+  },
   "edit_bar": "Modification de ton dernier message : l'envoyer remplace la suite de la conversation.",
   "placeholder": "Écris ton message…",
   "send_title": "Envoyer (Entrée)",

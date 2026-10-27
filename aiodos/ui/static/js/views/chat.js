@@ -1,4 +1,5 @@
-// Conversation : choix du modèle, options, messages en streaming, validations.
+// Conversation : choix du modèle, messages en streaming, validations. Les autorisations
+// (bibliothèques, web…) sont dans chat-permissions.js.
 import { get, post, put, patch, streamChat, openExternal, inNativeWindow } from '../api.js';
 import { $, h, esc, bytes, duration, linkAction, linkKind } from '../dom.js';
 import { t, tt } from '../i18n.js';
@@ -11,9 +12,8 @@ import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated 
 import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
+import { mountPermissions } from './chat-permissions.js';
 
-const FLAGS = ['knowledge_enabled', 'conversations_enabled', 'web_search_enabled', 'think',
-  'peer_libraries_enabled'];
 let el = {};
 let busy = false;
 let creating = false;      // une création d'image en route vers le nœud
@@ -33,16 +33,6 @@ export function mountChat(container) {
         <button class="icon-btn chat-list-toggle" id="chat-list-toggle" title="${esc(t('chat.list_toggle'))}">${icon('menu')}</button>
         <button class="icon-btn chat-new-btn" id="chat-new-btn" title="${esc(t('chat.new_conversation'))}">${icon('plus')}</button>
         <div class="chat-title" id="chat-title" title="${esc(t('chat.rename_hint'))}">${esc(t('chat.new_conversation'))}</div>
-        <select class="select" id="model-select" title="${esc(t('chat.model_select'))}"></select>
-        <select class="select" id="machine-select" hidden
-          title="${esc(t('chat.machine_select'))}"></select>
-        <div class="chips">
-          <button class="chip" data-flag="knowledge_enabled" title="${esc(t('chat.libraries_title'))}">${icon('book')}${esc(t('chat.libraries'))}</button>
-          <button class="chip" data-flag="peer_libraries_enabled" title="${esc(t('chat.peers_chip_title'))}">${icon('network')}${esc(t('chat.peers_chip'))}</button>
-          <button class="chip" data-flag="conversations_enabled" title="${esc(t('chat.memory_title'))}">${icon('memory')}${esc(t('chat.memory'))}</button>
-          <button class="chip" data-flag="web_search_enabled" title="${esc(t('chat.web_title'))}">${icon('globe')}${esc(t('chat.web'))}</button>
-          <button class="chip" data-flag="think" title="${esc(t('chat.think_title'))}">${icon('think')}${esc(t('chat.thinking'))}</button>
-        </div>
       </header>
       <div id="chat-banner"></div>
       <div id="cluster-prep" hidden></div>
@@ -53,6 +43,12 @@ export function mountChat(container) {
         <div class="composer-box">
           <textarea id="composer" rows="1" placeholder="${esc(t('chat.placeholder'))}"></textarea>
           <button class="send" id="send" title="${esc(t('chat.send_title'))}">${icon('send')}</button>
+        </div>
+        <div class="composer-tools">
+          <span class="grow"></span>
+          <select class="select" id="model-select" title="${esc(t('chat.model_select'))}"></select>
+          <select class="select" id="machine-select" hidden
+            title="${esc(t('chat.machine_select'))}"></select>
         </div>
         <div class="hint">${esc(t('chat.hint'))}</div>
       </footer>
@@ -65,21 +61,18 @@ export function mountChat(container) {
   };
   $('#edit-cancel').onclick = () => stopEditing();
 
-  chat.querySelectorAll('.chip').forEach(chip => { chip.onclick = () => toggleFlag(chip.dataset.flag); });
   // La liste des conversations, avec ☰ ou « Discussions » touché à nouveau dans la barre du
   // bas : sur un écran étroit (téléphone), elle s'ouvre par-dessus ; sur un ordinateur, elle se
-  // replie pour laisser toute la place à la conversation (« + » en démarre alors une autre)
+  // replie pour laisser toute la place à la conversation (« + » en démarre alors une autre).
+  // À l'ouverture d'AIODOS, elle est fermée, sur l'ordinateur comme sur le téléphone
   const phone = matchMedia('(max-width: 760px)');
   const showList = shown => {
     if (container.classList.contains('show-list') === shown) return;
     container.classList.toggle('show-list', shown);
     emit('chat:list-shown', shown);
   };
-  const collapse = folded => {
-    container.classList.toggle('list-collapsed', folded);
-    prefs.set('chatListCollapsed', folded);
-  };
-  collapse(!!prefs.get('chatListCollapsed', false));
+  const collapse = folded => container.classList.toggle('list-collapsed', folded);
+  collapse(true);
   const toggleList = () => (phone.matches ? showList(!container.classList.contains('show-list'))
     : collapse(!container.classList.contains('list-collapsed')));
   $('#chat-list-toggle').onclick = toggleList;
@@ -114,12 +107,12 @@ export function mountChat(container) {
   el.list.addEventListener('auxclick', onReplyLink);   // clic du milieu : sans passer par click
   mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
   mountAttach(chat, el.input);              // trombone, fichier glissé, image collée
+  mountPermissions(chat.querySelector('.composer-tools'));   // sous la saisie, avant le modèle
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
   on('chat:as-text', answerAsText);
   on('chat:renamed', title => setTitle(title));
-  on('settings:loaded', syncChips);
   on('models:loaded', fillModels);
   on('model-install', ev => {            // avancement d'une installation (model-install.js)
     installing = ev;
@@ -131,21 +124,7 @@ export function mountChat(container) {
   showWelcome();
 }
 
-// ------------------------------------------------------------------ en-tête
-function syncChips() {
-  document.querySelectorAll('.chat-head .chip').forEach(chip => {
-    chip.classList.toggle('on', !!state.settings?.[chip.dataset.flag]);
-  });
-}
-
-async function toggleFlag(flag) {
-  if (!state.settings || !FLAGS.includes(flag)) return;
-  try {
-    state.settings = await put('/settings', { [flag]: !state.settings[flag] });
-    syncChips();
-  } catch (e) { errorToast(e); }
-}
-
+// ------------------------------------------- modèle et machine (sous la saisie)
 function vramTotal() {
   return Math.max(0, ...(state.node?.gpus || []).map(g => g.vram_total));
 }
