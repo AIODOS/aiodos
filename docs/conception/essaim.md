@@ -52,6 +52,20 @@ sont **occupées**.
 - Le nombre de places borne aussi ce qu'un inconnu peut demander à ma machine : c'est une
   protection autant qu'une règle de partage.
 
+**Décision de l'auteur (27/10)** : les places dépendent de la puissance de chaque machine,
+sans jamais la prendre toute : **60 % de sa puissance par défaut, réglable par
+l'utilisateur**. Application proposée :
+
+- **Calcul** (processeur, carte graphique) : au plus 60 % des cœurs et du temps de calcul de
+  la carte ; les places se déduisent de la vitesse mesurée dans cette limite.
+- **Mémoire de la carte graphique** : un modèle y tient ou n'y tient pas ; 60 % de 8 Go
+  (4,8 Go) exclurait qwen3.5:9b (5,6 Go). La limite y porte donc sur le **temps** de calcul,
+  pas sur la mémoire, et la carte est rendue dès que l'utilisateur s'en sert (jeu, image).
+- **Mémoire vive** : au moins 40 % laissés libres à l'utilisateur.
+- **Téléphone** : en plus des règles existantes (en charge, batterie ≥ 80 %, température
+  ≤ 40 °C).
+- Un seul réglage « Puissance prêtée », qui remplace `share_max_gpu` (100 % aujourd'hui).
+
 ## 4. Une décision reposée sans cesse
 
 Le choix des machines **ne se fait pas une fois pour toutes à l'envoi**. Comme un client
@@ -196,7 +210,7 @@ relais : décision du 27/10). Rien n'est gardé par celui qui calcule.
 ## 11. Limites, honnêtement
 
 - Une **question courte** ne gagne presque rien : elle va à la plus rapide (§ 5.1). Mesuré
-  le 27/10 : sur trois questions courtes, l'essaim était 1,5 à 25 fois plus lent qu'une
+  le 27/10 : sur trois questions courtes, l'essaim était 1 à 14 fois plus lent qu'une
   réponse d'un trait (le plan coûte plus que la réponse).
 - La **cohérence** d'une réponse écrite à plusieurs repose sur le contrat : c'est le pari à
   mesurer.
@@ -210,9 +224,52 @@ relais : décision du 27/10). Rien n'est gardé par celui qui calcule.
 `tools/bench_essaim.py` compare, question par question, une réponse d'un trait et la même
 réponse en essaim (plan-contrat puis parties en parallèle), sur un llama-server à plusieurs
 places qui joue les machines : temps total, temps jusqu'au premier mot, et un juge qui
-compare les deux réponses à l'aveugle dans les deux ordres. Premier essai le 27/10 sur les
-questions courtes seulement (perturbé par une compilation en parallèle) ; la mesure des
-longues réponses reste à faire, PC au repos.
+compare les deux réponses à l'aveugle dans les deux ordres.
+
+### Première mesure (27/10/2026)
+
+PC au repos, qwen3.5:9b sur la RTX 4070 Laptop, un llama-server à 8 places qui joue 8
+machines (elles se partagent donc **une seule** carte), plan-contrat en JSON borné.
+Résultats dans `tools/bench_essaim_results.json`.
+
+| | D'un trait | En essaim |
+|---|---|---|
+| Temps, 12 longues questions (médiane) | 100 à 200 s | 26 à 50 s (**×2,85** en médiane) |
+| Longueur de la réponse (médiane) | 1 703 jetons | 617 jetons |
+| Vitesse à longueur égale (jetons/s, médiane) | 15,9 | 16,9 |
+| Premier mot affiché (médiane) | 0,7 s | 27 s |
+| Juge à l'aveugle | préférée 11 fois sur 12 | 1 égalité |
+| 3 questions courtes | — | 0,07 à 0,95 fois la vitesse d'un trait |
+
+Ce que cela dit :
+
+- **Le plan est le goulot** : 25 s en médiane (un JSON contraint, écrit mot à mot), contre
+  11 s pour toutes les parties ensemble. Tant que le plan est lent, l'essaim ne gagne rien
+  à longueur égale.
+- **Les parties sont trop courtes** : l'essaim répond en 600 jetons là où une réponse d'un
+  trait en écrit 1 700 ; le juge préfère la plus complète. Le gain apparent (×2,85) vient
+  surtout de là.
+- **Le premier mot arrive trop tard** (27 s au lieu de 0,7 s) : rien ne s'affiche pendant
+  le plan.
+- Les 8 « machines » se partageaient une seule carte : sur de vraies machines séparées,
+  chaque partie irait à pleine vitesse. Cette mesure est donc défavorable à l'essaim sur
+  ce point, favorable sur un autre (aucun aller-retour réseau).
+
+### Ce qu'il faut changer : le plan en flux
+
+1. **Un plan minuscule, en texte, lu pendant qu'il s'écrit** : une ligne par partie (titre,
+   but, longueur), pas de JSON ; chaque partie part chez un ouvrier **dès que sa ligne est
+   écrite**, sans attendre la fin du plan. Le contrat (termes, faits) tient en quelques
+   lignes avant les parties.
+2. **Le premier mot tout de suite** : la machine qui écrit le plan enchaîne elle-même sur la
+   première partie, affichée en direct pendant que les autres écrivent la suite.
+3. **Des parties à la bonne longueur** : le plan fixe une longueur totale proche d'une
+   réponse d'un trait, répartie entre les parties.
+4. **Le plan par un modèle rapide** (petit modèle, ou la machine la plus rapide libre), le
+   chef de chantier vérifiant à la fin.
+
+Objectif de la prochaine mesure : à longueur égale, l'essaim plus rapide qu'une réponse
+d'un trait, le premier mot en moins de 3 s, et le juge sans préférence nette.
 
 ## 13. Étapes proposées
 
@@ -226,13 +283,18 @@ longues réponses reste à faire, PC au repos.
    limites par clé, prêt aux inconnus activé par défaut (décisions du 27/10).
 5. **Code en essaim** avec essais (§ 5.5).
 6. **Images et vidéos par le code** (§ 5.6), puis **diffusion en tuiles** (§ 5.7).
+7. **Le chantier en direct dans l'appli** (accepté le 27/10) : pour chaque demande, les
+   fragments, les machines qui les calculent, leur avancement, la fin de partie.
 
-## 14. Encore ouvert
+## 14. Décidé et encore ouvert
 
-- Le chef de chantier (§ 8) : la proposition convient-elle ?
-- Combien de places par défaut pour un PC, un téléphone ? Faut-il les régler à la main ?
-- À partir de quelle longueur de réponse l'essaim s'active-t-il (après mesure) ?
-- L'appli montre-t-elle le chantier en direct (quelles machines font quoi) ?
+- **Chef de chantier** (§ 8) : la proposition est acceptée (27/10).
+- **Places** : selon la puissance, 60 % par défaut, réglable (§ 3, 27/10).
+- **Chantier en direct** dans l'appli : oui (§ 13, étape 7).
+- **Ouvert** : à partir de quelle longueur de réponse l'essaim s'active-t-il ? L'auteur n'a
+  pas d'avis : la mesure (§ 12) tranchera, et le chef de chantier peut aussi décider
+  demande par demande (estimer la longueur dans le plan, et répondre d'un trait sous le
+  seuil).
 
 ## Sources
 

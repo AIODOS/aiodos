@@ -1,0 +1,758 @@
+[
+ {
+  "summary": {
+   "when": "2026-10-27 14:08",
+   "machines": 8,
+   "speedup_median_long": 2.849266918257633,
+   "speedup_median_short": 0.5279139715013375,
+   "first_word_whole": 0.6578216500056442,
+   "first_word_swarm": 27.341658899997128,
+   "swarm_better": 0,
+   "equal": 1,
+   "whole_better": 11
+  },
+  "results": [
+   {
+    "question": "Explique comment fonctionne la photosynthèse, de la lumière jusqu'au sucre.",
+    "whole": {
+     "answer": "# La Photosynthèse : Du Photon au Sucre\n\nLa photosynthèse est le processus biologique fondamental par lequel les plantes, les algues et certaines bactéries convertissent l'énergie lumineuse en énergie chimique. Ce mécanisme permet non seulement la survie de ces organismes, mais aussi la production d'oxygène pour l'atmosphère terrestre et la formation de la base de la chaîne alimentaire.\n\nVoici une explication détaillée du fonctionnement de ce processus, de l'absorption de la lumière jusqu'à la synthèse du sucre.\n\n---\n\n## 1. Les Conditions Nécessaires et le Lieu du Processus\n\nAvant d'aborder les étapes chimiques, il est important de définir le contexte :\n*   **L'équation globale :**\n    $$6CO_2 + 6H_2O + \\text{énergie lumineuse} \\rightarrow C_6H_{12}O_6 (\\text{glucose}) + 6O_2$$\n*   **Le lieu :** Ce processus a lieu principalement dans les **chloroplastes**, des organites présents dans les cellules végétales.\n*   **La clé :** La **chlorophylle**, un pigment vert qui absorbe la lumière (principalement dans le bleu et le rouge, en réfléchissant le vert), est localisée dans les thylakoïdes.\n\n---\n\n## 2. La Phase Lumineuse (Réactions Light-Dependent)\n\nCette étape se déroule dans les **thylakoïdes** (membranes internes empilées en grana). Elle nécessite directement la présence de lumière.\n\n### A. Absorption de la lumière\nQuand les photons lumineux frappent la chlorophylle, ils transfèrent leur énergie aux électrons de la molécule. Ces électrons deviennent \"excités\" (ont plus d'énergie) et sont éjectés de la chlorophylle.\n\n### B. La chaîne de transport d'électrons\nCes électrons excités voyagent à travers une série de protéines appelées la **chaîne de transport d'électrons** le long de la membrane du thylakoïde.\n*   En traversant cette chaîne, l'énergie des électrons est utilisée pour pomper des protons ($H^+$) de la stroma vers l'intérieur du thylakoïde, créant un gradient de concentration.\n*   L'eau ($H_2O$) est alors scindée (photolyse) pour remplacer les électrons perdus par la chlorophylle. Cette réaction libère des protons ($H^+$), des électrons et, crucialement, de l'**oxygène ($O_2$)** comme sous-produit rejeté dans l'air.\n\n### C. Synthèse d'ATP et de NADPH\n1.  **ATP (Adénosine Triphosphate) :** Les protons accumulés retournent vers la stroma à travers une enzyme appelée **ATP synthase**. Ce flux génère de l'ATP, la \"monnaie énergétique\" de la cellule.\n2.  **NADPH :** À la fin de la chaîne, les électrons sont transférés à une molécule accepteur appelée NADP+, qui le combine avec des protons pour former le **NADPH**.\n\n**Résultat de la phase lumineuse :** Production d'**ATP** et de **NADPH** (porteurs d'énergie et d'électrons), tout en libérant de l'oxygène.\n\n---\n\n## 3. La Phase Sombres (Cycle de Calvin)\n\nCette étape se déroule dans la **stroma** (le fluide entourant les thylakoïdes). Contrairement au nom, elle ne se produit pas nécessairement la nuit, mais elle n'a pas besoin de lumière directe car elle utilise l'énergie stockée (ATP et NADPH) produite lors de la phase précédente.\n\n### A. Fixation du carbone\nLe dioxyde de carbone ($CO_2$) provenant de l'air entre dans la feuille et diffuse vers la stroma. Il entre en réaction avec une molécule à 5 atomes de carbone appelée **RuBP** (ribulose-1,5-bisphosphate), catalysée par l'enzyme **Rubisco**.\n*   Cette réaction forme une molécule instable à 6 atomes de carbone qui se scinde immédiatement en deux molécules à 3 atomes de carbone (3-PGA).\n\n### B. Réduction\nUtilisant l'énergie de l'**ATP** et les électrons du **NADPH** produits lors de la phase lumineuse, les enzymes convertissent les molécules de 3-PGA en **G3P** (glycéraldéhyde-3-phosphate).\n*   Le G3P est le premier véritable sucre produit.\n*   Une partie du G3P est utilisée pour régénérer le RuBP (nécessitant encore de l'ATP) afin que le cycle puisse continuer à capturer plus de $CO_2$.\n\n### C. Formation du glucose\nLa grande majorité du G3P sort du cycle de Calvin pour être utilisée par la plante.\n*   Deux molécules de G3P peuvent se combiner pour former une molécule de **fructose**, qui est ensuite convertie en **glucose** ($C_6H_{12}O_6$).\n*   Le glucose peut être :\n    *   Stocké sous forme d'**amidon** (pour l'hiver ou la nuit).\n    *   Converti en cellulose pour la structure de la plante.\n    *   Utilisé comme carburant immédiat par la plante via la respiration cellulaire.\n\n---\n\n## Résumé du Flux d'Énergie et de Matière\n\n| Étape | Lieu | Entrées | Sorties clés | Rôle |\n| :--- | :--- | :--- | :--- | :--- |\n| **Phase Lumineuse** | Thylakoïdes | Lumière, $H_2O$, $ADP$, $NADP^+$ | $O_2$, $ATP$, $NADPH$, $H^+$ | Conversion de l'énergie lumineuse en énergie chimique (ATP/NADPH). |\n| **Cycle de Calvin** | Stroma | $CO_2$, $ATP$, $NADPH$ | Glucose (via G3P), $ADP$, $NADP^+$$ | Fixation du carbone inorganique en sucre organique. |\n\n## Conclusion\n\nLa photosynthèse est un processus élégant en deux temps. D'abord, elle capte l'énergie du soleil et la stocke temporairement dans des liaisons chimiques (ATP et NADPH) tout en libérant l'oxygène vital. Ensuite, elle utilise ces réserves pour transformer le dioxyde de carbone atmosphérique en glucides complexes, fournissant ainsi la matière organique nécessaire à la vie sur Terre.",
+     "tokens": 1509,
+     "first": 0.6882838000019547,
+     "seconds": 74.48352219999651
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nLa photosynthèse est le processus par lequel les plantes transforment l'énergie solaire en énergie chimique. Il a lieu au sein des chloroplastes, organites cellulaires contenant la chlorophylle, pigment essentiel à cette conversion vitale.\n\n## Réactions lumineuses\n\nAu cœur du chloroplaste, la chlorophylle capte l'énergie de la lumière visible. Cette énergie excite des électrons, déclenchant une chaîne de transport qui génère de l'ATP et du NADPH. Ces deux molécules énergisantes, essentielles pour les étapes suivantes, sont produites directement lors de la conversion de l'eau et de la lumière, préparant le terrain pour la fixation du dioxyde de carbone.\n\n## Cycle de Calvin\n\nLe cycle de Calvin, qui a lieu dans le stroma, utilise l'ATP et le NADPH générés précédemment. Il fixe le dioxyde de carbone atmosphérique pour construire des molécules organiques. Grâce à des enzymes, ces composés intermédiaires sont transformés pour former finalement le glucose (C6H12O6), stockant ainsi l'énergie chimique issue de la lumière.",
+     "parts": 3,
+     "plan_seconds": 22.881461899989517,
+     "tokens": 622,
+     "longest_part": 96,
+     "first": 24.654025399970124,
+     "seconds": 33.14129309999407,
+     "contract": {
+      "fil": "La photosynthèse convertit l'énergie lumineuse en énergie chimique stockée dans le glucose grâce à des réactions lumineuses et un cycle enzymatique.",
+      "termes": [
+       "chloroplaste",
+       "chlorophylle",
+       "ATP",
+       "NADPH",
+       "glucose",
+       "dioxyde de carbone"
+      ],
+      "faits": [
+       "Se produit dans les chloroplastes des plantes.",
+       "Lumière visible absorbée par la chlorophylle.",
+       "Réactions lumineuses produisent ATP et NADPH.",
+       "Cycle de Calvin utilise l'ATP et le NADPH.",
+       "Produit final est le glucose (C6H12O6).",
+       "Libération d'oxygène comme sous-produit."
+      ],
+      "ton": "Pédagogique et clair"
+     },
+     "outline": [
+      "Introduction",
+      "Réactions lumineuses",
+      "Cycle de Calvin"
+     ]
+    },
+    "speedup": 2.2474537120583817,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Compare Python, Rust et Go pour écrire un serveur web : forces, faiblesses, cas d'usage.",
+    "whole": {
+     "answer": "Voici une comparaison structurée et détaillée de **Python**, **Rust** et **Go (Golang)** pour le développement de serveurs web. Ces trois langages dominent actuellement l'écosystème backend, mais ils répondent à des besoins très différents.\n\n---\n\n# Comparatif : Python vs Rust vs Go pour les Serveurs Web\n\nLe choix du langage dépend principalement de trois facteurs : la **vitesse d'exécution**, la **sécurité/maintenabilité**, et la **facilité de développement**.\n\n## 1. Vue d'ensemble rapide\n\n| Caractéristique | Python | Go (Golang) | Rust |\n| :--- | :--- | :--- | : |\n| **Type de langage** | Dynamique, interprété | Statique, compilé (JIT/C) | Statique, compilé (Système) |\n| **Modèle de concurrence** | Threads (GIL limitant), AsyncIO | Goroutines (Multiplexage léger) | Threads + Canaux (Chose) |\n| **Performance** | Moyenne (limité par l'interpréteur) | Très élevée (proche du C) | Extrêmement élevée (souvent supérieur à Go) |\n| **Courbe d'apprentissage** | Très faible | Faible à Modérée | Raide (gestion de la mémoire complexe) |\n| **Gestion de la mémoire** | Garbage Collector (Auto) | Garbage Collector (Auto) | Propriétaire (Manual Borrowing Checker) |\n| **Écosystème Web** | Vaste (Django, Flask, FastAPI) | Croissant (Gin, Echo, Fiber) | Mûr mais moins grand (Actix, Warp, Axum) |\n\n---\n\n## 2. Analyse détaillée par langage\n\n### 🐍 Python\nLe langage de l'IA, du Data Science et du développement rapide.\n\n#### ✅ Forces\n*   **Productivité extrême** : Syntaxe claire, bibliothèques riches (`requests`, `pydantic`, `sqlalchemy`).\n*   **Écosystème dominant** : La plus grande bibliothèque du monde (`pip`). Idéal pour l'intégration avec du ML ou du Data.\n*   **Débogage facile** : Outils de debugging puissants et dynamique.\n*   **Frameworks matures** : Django (batteries incluses), FastAPI (performance moderne), Flask (micro-framework).\n*   **Asynchronie efficace** : Avec `asyncio` et `uvloop`, Python peut gérer beaucoup de connexions simultanées.\n\n#### ❌ Faiblesses\n*   **Performance limitée** : L'interpréteur Python et le GIL (Global Interpreter Lock) ralentissent les calculs CPU intensifs et l'usage multi-cœurs pur.\n*   **Taille des binaires** : Les applications sont souvent accompagnées de leur environnement virtuel, rendant le déploiement un peu lourd.\n*   **Sécurité mémoire** : Le Garbage Collector (GC) peut provoquer des pauses imprévisibles (stop-the-world), ce qui est critique pour les serveurs à très haute disponibilité.\n*   **Types dynamiques** : Les erreurs de type ne sont souvent détectées qu'à l'exécution (bien que `mypy` et `pydantic` atténuent cela).\n\n#### 🎯 Cas d'usage idéaux\n*   **APIs backend** avec logique complexe ou intégration de services externes.\n*   **Serving de modèles d'IA/ML** (FastAPI est le standard ici).\n*   **Prototypage rapide** et MVP (Minimum Viable Product).\n*   **Outils d'administration** ou scripts internes à l'entreprise.\n\n---\n\n### ⚡ Go (Golang)\nLe langage du cloud, du microservices et de la scalabilité horizontale.\n\n#### ✅ Forces\n*   **Simplicité et Concurrence** : Les *Goroutines* et les *Channels* permettent de gérer des milliers de connexions avec très peu de code.\n*   **Compilation native** : Binaire unique, statique, sans dépendances externes. Déploiement trivial (`./app`).\n*   **Performance solide** : Très proche de C/C++, gestion de mémoire automatique sans GC bloquant (Goroutines sont très légères).\n*   **Standard Library** : Surprenamment complète (HTTP client/server inclus, JSON, SQL drivers).\n*   **Sécurité** : Type statique fort, détection d'erreurs à la compilation.\n\n#### ❌ Faiblesses\n*   **Abstraction limitée** : Pas de classes, pas d'héritage. La programmation orientée objet est possible mais \"à la main\".\n*   **Écosystème de librairies tiers** : Moins mature que Python ou JS. On s'appuie souvent sur `go.mod` mais le choix est parfois plus restreint.\n*   **Flexibilité syntaxique** : Pas de décorateurs, pas de mixins, pas de métaprogrammation facile.\n*   **Gestion des erreurs** : Le pattern `if err != nil` est omniprésent et peut rendre le code verbeux pour les débutants.\n\n#### 🎯 Cas d'usage idéaux\n*   **Microservices** et architectures distribuées (Kubernetes est écrit en Go).\n*   **APIs RESTful** nécessitant une haute scalabilité (ex: Twitter, Docker, CoreOS).\n*   **CLI tools** et outils d'infrastructure.\n*   **Systèmes temps réel** où la latence du GC Python est inacceptable.\n\n---\n\n### 🛡️ Rust\nLe langage de la performance maximale, de la sécurité mémoire et du contrôle total.\n\n#### ✅ Forces\n*   **Performance maximale** : Souvent plus rapide que Go et Python, car il compile en natif avec une optimisation agressive.\n*   **Sécurité mémoire garantie** : Le compilateur empêche les \"dangling pointers\", les fuites de mémoire et les accès hors bornes sans Garbage Collector (Zero-cost abstractions).\n*   **Concurrence sûre** : Le système de \"Ownership\" et de \"Lifetimes\" élimine les risques de races conditions (data races) par construction.\n*   **Contrôle fin** : Accès direct au matériel, idéal pour les drivers, le système d'exploitation ou les performances critiques.\n\n#### ❌ Faiblesses\n*   **Courbe d'apprentissage raide** : La compilation peut échouer avec des erreurs complexes à comprendre (le \"Compiler Error Hell\").\n*   **Vitesse de développement lente** : Le temps de compilation est plus long (bien que `cargo check` et la compilation incrémentiale aident).\n*   **Écosystème web moins grand** : Moins de frameworks \"tout-en-un\" comparé à Python. La configuration des routes et des bases de données demande parfois plus de travail manuel.\n*   **Interopérabilité** : L'intégration avec des bibliothèques Python ou Java est plus difficile que pour Go.\n\n#### 🎯 Cas d'usage idéaux\n*   **Serveurs de haute performance** (ex: Rocket API, Axum) où chaque milliseconde compte.\n*   **Outils système** (Wasm, drivers, noyau).\n*   **Applications nécessitant une sécurité critique** (banque, crypto, aviation).\n*   **Transpilation de WebAssembly** pour le frontend ou le serveur.\n\n---\n\n## 3. Comparaison technique spécifique aux serveurs web\n\n### Gestion des connexions\n*   **Python** : Utilise `asyncio` (basé sur des threads bloquants par défaut, mais `async` pour la non-blocage). Excellent pour les I/O lourds (bases de données, appels API externes).\n*   **Go** : Utilise des Goroutines. Chaque requête peut avoir sa propre thread légère. Excellent pour gérer des milliers de connexions simultanées (WebSockets, streaming).\n*   **Rust** : Utilise le système de threads standard ou des runtimes personnalisés (comme `tokio`). Combine la légèreté de Go avec la sécurité mémoire de Rust.\n\n### Gestion de la mémoire\n*   **Python** : Garbage Collector mark-and-sweep. Peut entraîner des pics",
+     "tokens": 1800,
+     "first": 0.6518002999946475,
+     "seconds": 178.88272620001226
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nLe choix entre Python, Rust et Go pour un serveur web dépend d'un arbitrage stratégique entre productivité de développement et exigences de performance système.\n\n## Python\n\nPython excelle par sa syntaxe intuitive et son écosystème, favorisant un développement rapide idéal pour le prototypage ou l'intégration d'IA. Cependant, son interprétation lente et le GIL limitent les performances aux alentours de 1000 requêtes par seconde, restant moins adapté aux charges lourdes.\n\n## Rust\n\nRust offre des performances exceptionnelles (~50 000 req/s) grâce à sa gestion mémoire sûre et l'absence de garbage collector. Sa principale faiblesse réside dans sa courbe d'apprentissage complexe, ce qui le destine aux systèmes critiques exigeant sécurité et fiabilité absolue.\n\n## Go\n\nGo excelle par sa concurrencité native et son déploiement simplifié. Sa vitesse (~20k req/s) et sa compilation rapide en font le standard idéal pour les architectures microservices et les environnements cloud-native nécessitant une scalabilité robuste.\n\n## Conclusion\n\nConclusion : Python pour le prototypage, Rust pour la performance critique, et Go pour l'architecture cloud scalable.",
+     "parts": 5,
+     "plan_seconds": 33.98528940000688,
+     "tokens": 808,
+     "longest_part": 71,
+     "first": 37.06321220000973,
+     "seconds": 50.447595100005856,
+     "contract": {
+      "fil": "Comparer Python, Rust et Go pour le développement de serveurs web en analysant leurs forces, faiblesses et cas d'usage idéaux.",
+      "termes": [
+       "Serveur web",
+       "Python",
+       "Rust",
+       "Go",
+       "Performance",
+       "Développement rapide"
+      ],
+      "faits": [
+       "Python : ~1000 req/s, GIL limitant le multithreading CPU.",
+       "Rust : ~50000 req/s, mémoire sûre sans GC.",
+       "Go : ~20000 req/s, compilation rapide et déploiement simple.",
+       "Python : Idéal pour prototypage et intégration IA.",
+       "Rust : Choisi pour les systèmes critiques et haute sécurité.",
+       "Go : Standard pour les microservices et cloud-native."
+      ],
+      "ton": "Objectif, concis et comparatif."
+     },
+     "outline": [
+      "Introduction",
+      "Python",
+      "Rust",
+      "Go",
+      "Conclusion"
+     ]
+    },
+    "speedup": 3.5459118684528033,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Donne un plan d'entraînement de 8 semaines pour courir un premier 10 km.",
+    "whole": {
+     "answer": "Voici un plan d'entraînement complet, structuré et sécurisé pour préparer votre premier 10 km (10K) sur une période de **8 semaines**.\n\nCe plan est conçu pour les débutants complets. Il alterne progression de distance, récupération active et renforcement musculaire pour éviter les blessures et maximiser vos performances à la ligne d'arrivée.\n\n---\n\n# 🏃‍♂️ Plan d'Entraînement : Votre Premier 10 km (8 Semaines)\n\n### 📋 Principes Fondamentaux\n*   **La règle du 80/20 :** 80 % de votre temps de course doit être fait à un rythme \"conversational\" (vous pouvez parler sans haleter). Seuls les séances spécifiques sont un peu plus rapides.\n*   **Le repos est crucial :** N'oubliez jamais les jours de récupération. Les muscles se renforcent au repos, pas pendant l'effort.\n*   **Écoutez votre corps :** Une légère gêne musculaire est normale, mais une douleur aiguë (articulaire, tendon) est un signal d'arrêt immédiat.\n\n### 📅 Structure Hebdomadaire Typique\n*   **Lundi :** Repos ou étirements légers / Yoga doux.\n*   **Mardi :** Séance d'entraînement (Course continue).\n*   **Mercredi :** Récupération active (Marche rapide, vélo, natation) ou Renforcement musculaire.\n*   **Jeudi :** Séance d'entraînement (Course continue ou intervalles légers).\n*   **Vendredi :** Repos ou Renforcement musculaire.\n*   **Samedi :** Sortie longue (la séance la plus importante de la semaine) ou activité loisir.\n*   **Dimanche :** Repos total.\n\n---\n\n## 🗓️ Semaine par Semaine\n\n### Semaine 1 : L'Acclimatation\n*L'objectif est de prendre l'habitude de courir tout en marchant.*\n*   **Mardi :** 20 min (Courir 1 min / Marcher 2 min).\n*   **Jeudi :** 15 min (Courir 1 min / Marcher 2 min).\n*   **Samedi :** 30 min (Courir 1 min / Marcher 2 min).\n*   *Note :* Ne cherchez pas à courir sans marcher cette semaine.\n\n### Semaine 2 : Prise de vitesse\n*Augmentez légèrement le temps de course continu.*\n*   **Mardi :** 25 min (Courir 2 min / Marcher 2 min).\n*   **Jeudi :** 20 min (Courir 2 min / Marcher 2 min).\n*   **Samedi :** 40 min (Courir 2 min / Marcher 2 min).\n\n### Semaine 3 : Consolidation\n*On commence à tenir plus longtemps sans marcher.*\n*   **Mardi :** 30 min (Courir 3 min / Marcher 1 min).\n*   **Jeudi :** 25 min (Courir 3 min / Marcher 1 min).\n*   **Samedi :** 45 min (Courir 3 min / Marcher 1 min).\n\n### Semaine 4 : Transition (Rupture de la glace)\n*Première vraie séance sans marche.*\n*   **Mardi :** 35 min (Course continue, rythme lent).\n*   **Jeudi :** 30 min (Course continue, rythme lent).\n*   **Samedi :** 50 min (Course continue, rythme lent).\n*   *Objectif hebdo :* Environ 1h15 à 1h30 de course totale.\n\n### Semaine 5 : Augmentation du volume\n*On augmente légèrement la distance.*\n*   **Mardi :** 40 min (Course continue).\n*   **Jeudi :** 35 min (Course continue).\n*   **Samedi :** 55 min (Course continue).\n*   *Objectif hebdo :* Environ 1h30 de course totale.\n\n### Semaine 6 : Le Seuil\n*Approche de la distance cible.*\n*   **Mardi :** 45 min (Course continue).\n*   **Jeudi :** 40 min (Course continue).\n*   **Samedi :** 60 min (Course continue).\n*   *Objectif hebdo :* Environ 1h45 de course totale.\n\n### Semaine 7 : La Semaine de Pointe (Tapering)\n*Réduction légère du volume pour arriver frais le jour J.*\n*   **Mardi :** 40 min (Course continue).\n*   **Jeudi :** 35 min (Course continue).\n*   **Samedi :** **SÉANCE SPÉCIALE :** Courir 8 km à votre rythme de course habituel (lent mais constant).\n*   *Objectif hebdo :* Environ 2h15 de course totale.\n\n### Semaine 8 : La Semaine de la Course\n*Préparation mentale et physique finale.*\n\n| Jour | Activité | Détails |\n| :--- | :--- | :--- |\n| **Lundi** | Repos | Étirements légers uniquement. |\n| **Mardi** | Entraînement | 30 min de course lente (récupération). |\n| **Mercredi** | Repos | Étirements, préparation mentale. |\n| **Jeudi** | Entraînement | 25 min de course lente (optionnel, sinon repos). |\n| **Vendredi** | Repos | Préparation du matériel (chaussures, vêtement). |\n| **Samedi** | **LA JOURNÉE J** | **Le 10 km officiel !** |\n| **Dimanche** | Repos | Célébration ! |\n\n---\n\n## 💡 Conseils pour la Semaine de la Course (Semaine 8)\n\n1.  **Le jour J :** Ne vous forcez pas à courir vite. Votre objectif est de finir, pas de battre un record. Gardez un rythme régulier. Si vous avez besoin de marcher quelques instants, c'est tout à fait acceptable.\n2.  **Matériel :**\n    *   Portez toujours vos **chaussures de course** (ne courez jamais avec des baskets de ville).\n    *   Prévoyez un vêtement respirant (évitez le coton qui garde la transpiration).\n    *   Prenez un petit encas 2h avant la course (banane, toast, etc.).\n3.  **Hydratation :** Buvez de l'eau avant la course et prenez des gels énergétiques ou une boisson isotonique si la course dépasse 60 minutes (généralement inutile pour un premier 10 km si la météo est clémente).\n4.  **Après la course :** Ne sautez pas la célébration ! Mangez bien, hydratez-vous et étirez-vous doucement.\n\n## 🏋️‍♂️ Renforcement Musculaire (À faire 2 fois par semaine)\n*Intégrez ces exercices lors de vos séances de repos ou de récupération active :*\n*   **Fentes (squats lunges) :** 3 séries de 10 répétitions.\n*   **Planche (Plank) :** 3 séries de 30 secondes.\n*   **Montées de genoux :** 3 séries de 20 secondes.\n*   **Gainage du bas du corps :** 3 séries de 15 répétitions.\n\nBonne chance pour votre premier 10 km ! La clé est la régularité et la patience. Courage ! 🎉",
+     "tokens": 1672,
+     "first": 0.8853241000033449,
+     "seconds": 202.37481770000886
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nBienvenue dans ce programme progressif de 8 semaines pour courir votre premier 10 km en sécurité et avec plaisir.\n\n## Semaines 1-2\n\nCommencez par des allures douces mêlant marche et course, augmentant chaque semaine le temps de course à pied progressivement.\n\n## Semaines 3-4\n\nSemaines 3-4 : Augmentez la distance courue en continu tout en maintenant un rythme confortable.\n\n## Semaines 5-6\n\nIntégrez des séances de fractionné légères pour stimuler la performance sans surcharger l'organisme.\n\n## Semaines 7-8\n\nSemaines 7-8 : réduisez le volume, privilégiez les récupérations et réalisez le 10 km avec confiance !\n\n## Conclusion\n\nCourage pour votre premier 10 km, écoutez votre corps et célébrez chaque victoire !",
+     "parts": 6,
+     "plan_seconds": 33.24744770000689,
+     "tokens": 735,
+     "longest_part": 30,
+     "first": 37.00580250000348,
+     "seconds": 42.89202229998773,
+     "contract": {
+      "fil": "Un programme progressif sur 8 semaines pour passer de débutant à la réalisation d'un premier 10 km en alternant entraînement et récupération.",
+      "termes": [
+       "Sprint",
+       "Fond",
+       "Repos",
+       "Échauffement",
+       "Raffraîchissement",
+       "Course"
+      ],
+      "faits": [
+       "Durée totale : 8 semaines",
+       "Objectif : 10 km",
+       "Fréquence : 3 à 4 séances par semaine",
+       "Repos : 1 jour complet tous les 7 jours",
+       "Échauffement : 10 minutes avant chaque séance",
+       "Raffraîchissement : 10 minutes après chaque séance"
+      ],
+      "ton": "Encourageant, clair et structuré"
+     },
+     "outline": [
+      "Introduction",
+      "Semaines 1-2",
+      "Semaines 3-4",
+      "Semaines 5-6",
+      "Semaines 7-8",
+      "Conclusion"
+     ]
+    },
+    "speedup": 4.718239123457389,
+    "votes": [
+     "B",
+     "B"
+    ],
+    "swarm_score": 0
+   },
+   {
+    "question": "Quelles sont les causes de la Révolution française ?",
+    "whole": {
+     "answer": "# Les Causes de la Révolution française (1789)\n\nLa Révolution française n'est pas le résultat d'un événement isolé, mais la conséquence d'une accumulation de tensions profondes durant le XVIIIe siècle. Historiens et sociologues s'accordent généralement à identifier trois catégories principales de causes : les causes **structurelles** (institutionnelles), les causes **sociales** et les causes **économiques**, aggravées par un contexte politique de crise.\n\n---\n\n## 1. Les Causes Structurelles : Un Système de Gouvernance Obsolète\n\nLe régime politique de l'Ancien Régime, hérité du Moyen Âge, présentait des faiblesses intrinsèques qui empêchaient toute réforme profonde.\n\n*   **Le système de l'absolutisme royal :** Le Roi était considéré comme le représentant de la Nation (\"L'État, c'est moi\"). Bien que l'idée de monarchie absolue de droit divin commençait à perdre du terrain face aux Lumières, le pouvoir restait trop centralisé et peu adaptable aux nouvelles exigences administratives.\n*   **L'absence de représentation politique réelle :** Le **Parlement de Paris** (cour de justice, pas une assemblée élue) possédait le privilège de \"remontrances\" (pouvoir de censurer les édits royaux). Le Roi, pour contourner ces obstacles, était obligé de convoquer des États Généraux (une assemblée représentant les trois ordres) à la dernière minute, sans préparation, ce qui créait une instabilité chronique.\n*   **L'incapacité de la monarchie à réformer :** Sous Louis XVI, les ministres (comme Turgot, Necker ou Malesherbes) ont tenté des réformes fiscales pour moderniser l'État mais ont été systématiquement bloqués par la noblesse et le clergé. La monarchie s'est trouvée piégée dans un cercle vicieux : elle ne pouvait pas toucher aux privilèges sans provoquer une révolte immédiate.\n\n## 2. Les Causes Sociales : Inégalités et Conflit des Ordres\n\nLa société française était divisée en trois ordres (la structure corporative), créant un fossé abyssal entre la majorité de la population et l'élite.\n\n*   **La structure corporative (les trois ordres) :**\n    *   **Le Premier Ordre (Clergé) :** Environ 0,5% de la population. Possédait de vastes richesses (10% des terres) et était exempt d'impôts.\n    *   **Le Second Ordre (Noblesse) :** Environ 1,5% de la population. Possédait le tiers des terres, les meilleurs bénéfices fonciers et des privilèges fiscaux, mais assumait peu de charges publiques (sauf la noblesse d'épée au service du roi).\n    *   **Le Tiers État :** Comprend le reste de la population (bourgeoisie, artisans, paysans, prolétaires). Il représente 98% de la population mais supporte l'ensemble des charges de l'État.\n*   **La mobilité sociale bloquée :** Malgré l'émergence d'une bourgeoisie riche et éduquée (avocats, médecins, propriétaires terriens), celle-ci était juridiquement inférieure à la noblesse. Elle ne pouvait accéder aux hauts grades de l'armée ou aux plus hautes charges administratives sans exception royale.\n*   **La crise identitaire :** Sous l'influence des idées des **Lumières** (Voltaire, Rousseau, Montesquieu), le Tiers État a développé une conscience de classe. La bourgeoisie réclamait une égalité juridique et politique, tandis que le peuple rural restait attaché aux traditions mais souffrait de l'oppression seigneuriale.\n\n## 3. Les Causes Économiques : La Crise de 1788-1789\n\nC'est sans doute le facteur déclencheur immédiat. La France au XVIIIe siècle était une société de subsistance, très sensible aux aléas climatiques et aux prix.\n\n*   **Les mauvaises récoltes (1788-1789) :** Un hiver rigoureux suivi d'un été pluvieux a détruit les récoltes de céréales (blé). Le prix du pain, aliment de base pour 80% des Français, a explosé (le pain représentait jusqu'à 80% du budget des pauvres).\n*   **La dette publique écrasante :** Les guerres, notamment la guerre de Sept Ans (1756-1763) et surtout le soutien financier à la **Révolution américaine** (1775-1783), ont vidé les caisses de l'État.\n*   **L'inefficacité du système fiscal :**\n    *   La noblesse et le clergé étaient **exempts d'impôts directs** (taille, gabelle, aides).\n    *   Le Tiers État supportait tout le poids fiscal.\n    *   L'État était obligé d'emprunter à taux d'intérêt élevés, créant un endettement spiralé qui a rendu le pays insolvable.\n*   **L'échec des réformes fiscales :** Les tentatives de Turgot (1774) et de Necker (1781) pour taxer les privilégiés ont échoué politiquement, laissant l'État sans ressources pour payer ses dettes et assurer la sécurité alimentaire.\n\n## 4. Le Déclencheur Politique\n\nL'accumulation de ces crises a conduit Louis XVI à une décision désespérée : convoquer les **États Généraux** le 5 mai 1789 pour trouver un nouveau mode d'impôt.\n\n*   **Le vote par ordre vs vote par tête :** Le clergé et la noblesse voulaient voter par ordre (1 voix par ordre), ce qui leur garantissait la victoire contre le Tiers État (2 voix). Le Tiers État a demandé de voter par tête (chaque député ayant 1 voix), ce qui aurait permis la majorité.\n*   **La prise de la Bastille (14 juillet 1789) :** Face à l'hostilité du Roi et du Parlement de Paris, le Tiers État s'est proclamé **Assemblée nationale**. La peur d'une dissolution de l'assemblée et le besoin de munitions pour se défendre ont poussé le peuple de Paris à s'armer et à s'emparer de la Bastille, marquant le début de la Révolution.\n\n---\n\n### Conclusion\n\nLa Révolution française est donc le résultat de l'effondrement simultané de trois piliers :\n1.  **Politique :** Un régime absolutiste incapable de réformes.\n2.  **Social :** Des inégalités juridiques et économiques flagrantes entre les ordres.\n3.  **Économique :** Une crise de subsistance aiguë aggravée par une dette insoutenable.\n\nCes facteurs ont transformé une crise de gestion en une crise de légitimité du pouvoir royal, forçant la société française à chercher de nouvelles formes de gouvernement.",
+     "tokens": 1566,
+     "first": 1.1203075999801513,
+     "seconds": 97.53060689999256
+    },
+    "swarm": {
+     "answer": "## Contexte économique\n\nLes dettes de la monarchie, aggravées par les guerres, provoquent un déficit de 300 millions en 1786, obligeant le roi à convoquer les États généraux pour résoudre cette crise financière.\n\n## Structure sociale\n\nSous l'Ancien Régime, la société se divise en trois ordres inégaux où le Tiers État, écrasé par les impôts, refuse de payer sans représentation.\n\n## Idées nouvelles\n\nLes philosophes des Lumières propagent les idées de liberté, d'égalité et de souveraineté populaire, inspirant le peuple à réclamer une société nouvelle.",
+     "parts": 3,
+     "plan_seconds": 26.617002300015884,
+     "tokens": 581,
+     "longest_part": 51,
+     "first": 28.654474100010702,
+     "seconds": 34.462873700016644,
+     "contract": {
+      "fil": "La Révolution française résulte de l'intersection entre une crise financière aiguë, une crise sociale structurelle et l'éveil des idées des Lumières.",
+      "termes": [
+       "Ancien Régime",
+       "Crise financière",
+       "Tiers État",
+       "Lumières",
+       "Privileges",
+       "Assemblées"
+      ],
+      "faits": [
+       "Déficit annuel de 300 millions de livres en 1786",
+       "Impôts inégaux (taille pour les roturiers)",
+       "Grève de la faim à Paris en mai 1789",
+       "Prise de la Bastille le 14 juillet 1789",
+       "Déclaration des droits de l'homme et du citoyen (août 1789)",
+       "Abolition des privilèges (Nuit du 4 août 1789)"
+      ],
+      "ton": "Pédagogique et neutre"
+     },
+     "outline": [
+      "Contexte économique",
+      "Structure sociale",
+      "Idées nouvelles"
+     ]
+    },
+    "speedup": 2.8300195668228754,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Comment préparer un voyage de deux semaines au Japon avec un petit budget ?",
+    "whole": {
+     "answer": "# Guide Complet pour un Voyage de Deux Semaines au Japon à Petit Budget\n\nLe Japon est souvent perçu comme une destination onéreuse, mais avec une préparation minutieuse et une stratégie adaptée, il est tout à fait possible de y passer deux semaines sans vider ses poches. Le secret réside dans l'équilibre entre les zones touristiques (plus chères) et les régions moins fréquentées, ainsi que dans l'optimisation des transports et de la nourriture.\n\nVoici une structure détaillée pour organiser votre aventure.\n\n---\n\n## 1. La Préparation Administrative et Financière\n\nAvant même de réserver les vols, assurez-vous d'avoir les bases solides.\n\n*   **Passeport et Visa :**\n    *   Vérifiez la validité de votre passeport (doit couvrir la durée du séjour + quelques mois).\n    *   **Exonération de visa :** Les citoyens de l'Union Européenne et de nombreux autres pays peuvent séjourner au Japon jusqu'à 90 jours sans visa.\n    *   **Assurance voyage :** Indispensable. Le Japon a un système de santé excellent mais coûteux. Une carte européenne d'assurance maladie (CEAM) ne fonctionne pas. Prévoyez une assurance couvrant les frais médicaux, l'annulation et les bagages.\n\n*   **Devises :**\n    *   Le Japon utilise l'**Yen Japonais (JPY)**.\n    *   Évitez les changeurs à l'aéroport (taux très défavorables).\n    *   **Stratégie idéale :** Retirez des Yens directement aux distributeurs (ATM) au Japon. Les banques **7-Eleven ATMs** (acceptant les cartes Visa/Mastercard internationales) offrent souvent le meilleur taux et sont partout.\n    *   **Cartes :** Emportez une carte de crédit (Visa ou Mastercard) et une carte de débit pour les retraits. Les paiements par carte sont omniprésents, mais les petites stations de métro, les temples et certains restaurants ne les acceptent pas toujours.\n\n---\n\n## 2. Transport : L'Élément Clé du Budget\n\nLes transports représentent souvent la part la plus lourde du budget. Voici comment les optimiser.\n\n### A. Arrivée et Déplacements Internationaux\n*   **Vols :** Comparez les vols vers **Narita (NRT)** ou **Haneda (HND)**. Haneda est souvent plus proche de Tokyo et moins cher.\n*   **Aérobus (Narita Express ou Limousine Bus) :** Pour éviter des frais exorbitants en taxi, prenez le train ou le bus depuis l'aéroport jusqu'à votre quartier d'hébergement.\n\n### B. Transports en Ville\n*   **Passes JR (Japan Rail Pass) :** Pour un voyage de 14 jours à petit budget, le pass JR classique est probablement **déconseillé** car trop cher pour les trajets courts et les déplacements urbains.\n*   **La meilleure solution :** Achetez des cartes de transport régionales (ex: **Suica** ou **Pasmo**) rechargeables via l'application mobile (Apple Pay, Google Pay) ou à la borne automatique. Elles sont valables partout sur le réseau métro et train local.\n*   **Bus vs Train :** Pour les longs trajets (Tokyo -> Kyoto/Osaka), privilégiez le **Shinkansen** seulement si vous avez un bon plan (ex: aller-retour dans la même semaine). Sinon, le train local (Yamabiko ou Koshien) est beaucoup moins cher (environ 1/4 du prix du Shinkansen) et permet de voir le pays.\n\n### C. Transports Inter-régions\n*   **Trains locaux :** Pour explorer des zones rurales (ex: le Kansai rural, la région de Nara), utilisez les trains locaux au lieu du Shinkansen.\n*   **Bus interurbains :** Des compagnies comme Willer Express ou Japan Bus offrent des tarifs compétitifs pour relier Tokyo, Kyoto et Osaka.\n\n---\n\n## 3. Hébergement : Dormir comme un Local\n\nL'hébergement est le second poste de dépense.\n\n*   **Capsules (Capsule Hotels) & Ryokans économiques :** Parfaits pour les hommes d'affaires ou les voyageurs seuls, ils coûtent entre 2000 et 4000 JPY.\n*   **Business Hotels :** (ex: APA Hotel, Toyoko Inn, Dormy Inn). Ils offrent souvent des salles de bain partagées (pour réduire le prix) et sont très propres. Comptez entre 3000 et 5000 JPY.\n*   **Hôtels avec \"Soto-Yu\" :** Certains hôtels moins chers n'ont pas de bain privé dans la chambre mais proposent un bain public (soto-yu) propre et sécurisé.\n*   **Airbnb / Minpaku (Loyers) :** Très populaire au Japon. Idéal pour les groupes ou les couples cherchant une cuisine et une kitchenette pour cuisiner.\n*   **Conseil :** Réservez tôt. Les prix explosent en haute saison (printemps pour les cerisiers, automne pour les feuilles colorées).\n\n---\n\n## 4. Alimentation : Le Trésor Caché\n\nLa nourriture au Japon est délicieuse à tous les prix. L'astuce est de savoir où manger.\n\n*   **Conbini (Magasins de dépannage) :** 7-Eleven, FamilyMart, Lawson.\n    *   *Budget :* 100 - 300 JPY par repas.\n    *   *Qualité :* Surprenante. On y trouve des onigiris frais, des sandwiches, des frites, des soupe instantanée et même des hot-dogs haut de gamme.\n*   **Supermarchés :** (ex: AEON, Ito-Yokado, U-Fody).\n    *   Achetez des **kits de repas (Fukuhin)** ou des plats préparés frais (sushi, sashimi, tempuraki) à l'étage alimentaire. C'est sain, varié et très économique.\n    *   *Astuce :* Le \"Marufuku\" (vente en gros) propose souvent des repas familiaux ou des lots de 3-4 plats à moitié prix.\n*   **Ramen-Ya :** Cherchez les stands de ramen avec de la file d'attente. Le prix tourne autour de 800-1000 JPY.\n*   **Street Food :** Les stands de \"Takoyaki\", \"Okonomiyaki\" ou \"Taiyaki\" sont parfaits pour un repas léger.\n*   **À éviter :** Les restaurants touristiques situés directement en face des temples ou des attractions majeures (prix x3 et qualité moyenne).\n\n---\n\n## 5. Itinéraire Suggéré pour 14 Jours (Optimisé)\n\nPour éviter de trop bouger et gaspiller du temps/argent, concentrez-vous sur 2 ou 3 régions clés.\n\n**Option A : Le Classique Économe (Grands axes)**\n*   **Jours 1-4 : Tokyo.** Explorez les quartiers populaires (Nakano, Koenji, Shimokitazawa) plutôt que les zones touristiques chères (Shibuya, Shinjuku). C'est moins cher et plus authentique.\n*   **Jours 5-7 : Kyoto et Nara.** Prenez le train local (Kodama/Sakura) depuis Tokyo. Nara est proche de Kyoto et offre de superbes temples à faible coût d'entrée.\n*   **Jours 8-10 : Osaka.** La ville du \"gastronome\". Manger à Osaka coûte moins cher qu'à Tokyo. Visitez Dotonbori.\n*   **Jours 11-14 : Retour vers Tokyo ou exploration régionale.** Si vous avez encore du temps, faites un petit détour vers Hiroshima (très bon rapport qualité/prix) ou la région de Miyajima avant de repartir.\n\n**Option B : Le Détour Naturel (Plus calme et moins cher)**\n*   Commencez à **Hakone** ou **Karuizawa** (si vous y êtes en été).\n*   Faites un arrêt à **",
+     "tokens": 1800,
+     "first": 0.639029500016477,
+     "seconds": 114.3153972
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nLe Japon reste accessible pour deux semaines si vous planifiez minutieusement chaque étape de votre séjour.\n\n## Logistique\n\nVérifiez votre besoin de visa (exemption pour 90 jours) et privilégiez les mois hors pics. Réservez votre billet d'avion et le Pass JR Pass dès maintenant pour sécuriser les meilleurs tarifs et optimiser votre mobilité.\n\n## Logement\n\nPour dormir bon marché, privilégiez les auberges de jeunesse ou les hôtels capsule. Ces options offrent un dortoir économique tout en vous permettant de découvrir une culture unique et d'économiser sur vos frais d'hébergement.\n\n## Nourriture\n\nPour manger économe, privilégiez les supermarchés et les convenience stores. Les onigiris et les bento y sont peu chers et délicieux. Évitez les restaurants touristiques pour économiser sans sacrifier le goût.\n\n## Conclusion\n\nAvec ces astuces, votre voyage de rêve est réalisable sans se ruiner.",
+     "parts": 5,
+     "plan_seconds": 32.336859200004255,
+     "tokens": 655,
+     "longest_part": 54,
+     "first": 35.62470260000555,
+     "seconds": 47.1369885999884,
+     "contract": {
+      "fil": "Préparer un voyage de deux semaines au Japon à petit budget en combinant transport, logement et nourriture économes.",
+      "termes": [
+       "Budget total",
+       "Transport",
+       "Logement",
+       "Nourriture",
+       "Visa",
+       "Saison"
+      ],
+      "faits": [
+       "Budget recommandé : 600-800 € par personne",
+       "Transport : Pass JR Pass ou trains locaux",
+       "Logement : Hôtels capsule ou auberges de jeunesse",
+       "Nourriture : Convenience stores et supermarchés",
+       "Visa : Exemption pour 90 jours (tourisme)",
+       "Saison : Éviter les pics de printemps/automne"
+      ],
+      "ton": "Pragmatique et encourageant"
+     },
+     "outline": [
+      "Introduction",
+      "Logistique",
+      "Logement",
+      "Nourriture",
+      "Conclusion"
+     ]
+    },
+    "speedup": 2.4251739577616576,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Explique le fonctionnement d'un réseau pair-à-pair comme BitTorrent.",
+    "whole": {
+     "answer": "# Fonctionnement des réseaux pair-à-pair (P2P) : L'exemple de BitTorrent\n\nLes réseaux **pair-à-pair (P2P)** représentent une architecture de communication décentralisée où tous les participants, appelés **nœuds** ou **pairs**, jouent simultanément le rôle de client (demandeur) et de serveur (fournisseur). Contrairement aux modèles traditionnels client-serveur où un serveur central doit héberger l'intégralité des données, le réseau P2P répartit la charge entre tous les utilisateurs connectés.\n\n**BitTorrent** est l'algorithme et le protocole le plus célèbre implémentant ce modèle. Voici une explication détaillée de son fonctionnement, de sa structure et de ses mécanismes clés.\n\n---\n\n## 1. Les Concepts Fondamentaux\n\nAvant de plonger dans le protocole, il est essentiel de comprendre les rôles et les objets de données :\n\n*   **Le Swarmer (Pair) :** Un nœud participant au téléchargement ou au partage. Un *swarmer* peut télécharger une partie du fichier tout en la partageant avec d'autres.\n*   **Le Seed (Graine) :** Un pair qui possède déjà le fichier complet et le diffuse vers le réseau sans rien télécharger.\n*   **Le Leech (Lèche-botte) :** Un terme parfois péjoratif pour désigner un pair qui télécharge activement mais partage peu (ou rien). Dans BitTorrent bien conçu, tout le monde est techniquement un *swarmer* dès qu'il partage des segments.\n*   **Le Torrent (Fichier .torrent) :** Ce n'est pas le fichier média lui-même, mais un fichier métadonnées contenant :\n    *   Le nom du fichier à télécharger.\n    *   L'adresse de la liste de distribution (**Tracker**) ou le mode de décentralisation (DHT).\n    *   La liste des segments (chunks) dont le fichier est composé.\n    *   La liste des pairs connus (optional).\n*   **Le Chunk :** Le fichier est découpé en milliers de petits morceaux (par défaut 16 Ko à 1 Mo). BitTorrent ne transfère jamais le fichier entier d'un coup, mais ces morceaux indépendants.\n\n---\n\n## 2. Le Processus de Téléchargement Étape par Étape\n\nLe fonctionnement de BitTorrent se déroule en plusieurs phases logiques :\n\n### Étape 1 : L'Initialisation (Le \"Handshake\")\nLorsqu'un utilisateur lance un téléchargement :\n1.  Le client génère ou télécharge un fichier `.torrent`.\n2.  Le client contacte un **Tracker** (un serveur central qui maintient la liste des pairs actifs) ou utilise un protocole décentralisé comme le **DHT** (Distributed Hash Table) si aucun tracker n'est disponible.\n3.  Le client interroge la liste des pairs et établit des connexions TCP avec plusieurs d'entre eux pour commencer le téléchargement.\n\n### Étape 2 : La Distribution des Segments (Piece Selection)\nC'est ici que la magie du P2P opère. Le fichier n'est pas envoyé séquentiellement (bloc 1, puis bloc 2...).\n*   Le client reçoit des paquets de données provenant de différents pairs.\n*   Ces paquets sont aléatoires ou stratégiquement choisis (algorithme de sélection de pièces).\n*   Dès qu'un client reçoit et vérifie qu'un segment (piece) est correct, il peut immédiatement commencer à le transmettre à d'autres pairs.\n*   **Résultat :** La vitesse de téléchargement dépend de la vitesse de partage du réseau, pas seulement de la vitesse du serveur source.\n\n### Étape 3 : La Vérification et l'Intégrité\nPour garantir que le fichier n'est pas corrompu :\n*   Chaque segment possède une empreinte cryptographique (**Hash** SHA-1 ou SHA-256).\n*   Le client vérifie l'intégrité de chaque segment reçu en calculant son hash.\n*   Si le segment est valide, il est écrit sur le disque dur.\n*   Si le segment est invalide, il est ignoré et le client demande ce segment à un autre pair.\n*   Le téléchargement ne s'achève qu'une fois que tous les segments sont vérifiés.\n\n### Étape 4 : Le Partage (Swarming)\nDès que le client possède une partie du fichier, il devient un nœud actif dans le réseau :\n*   Il répond aux demandes des autres pairs pour les segments qu'il possède.\n*   Il ne transmet qu'une partie de sa bande passante à la fois (pour ne pas saturer sa propre connexion).\n*   Il peut être connecté à des milliers d'autres pairs simultanément.\n\n---\n\n## 3. Mécanismes d'Optimisation et de Sécurité\n\nBitTorrent inclut plusieurs algorithmes cruciaux pour assurer l'équilibre du réseau :\n\n### L'Algorithme Tit-for-Tat (Donner pour Recevoir)\nC'est le principe fondateur de la réciprocité.\n*   Le client alloue sa bande passante proportionnellement à la quantité de données qu'il reçoit.\n*   Si vous téléchargez vite mais ne partagez pas, le réseau détectera cela et réduira la vitesse de réponse des autres pairs à votre égard.\n*   Cela incite tous les utilisateurs à devenir des *seeds* (graines) pour maintenir la viabilité du fichier.\n\n### Gestion des Connexions (TCP vs UDP)\n*   **TCP :** Utilisé pour le transfert de données principal car il garantit l'ordre et l'intégrité des paquets.\n*   **UTP (Universal Transfer Protocol) / QUIC :** Souvent utilisé pour les connexions entrantes (download) afin d'éviter que le logiciel de téléchargement ne ralentisse le navigateur web ou les autres applications (gestion de la QoS).\n\n### Résilience sans Tracker (DHT et Peering)\nLes premiers réseaux P2P dépendaient entièrement des trackers. Si un tracker tombait en panne, le téléchargement était bloqué.\n*   **DHT (Distributed Hash Table) :** Permet aux pairs de se trouver mutuellement sans serveur central. Ils forment un réseau maillé où chaque nœud fait office de serveur pour les autres.\n*   **Peers Exchange (PEX) :** Les pairs échangent dynamiquement leurs listes d'adresses IP avec les pairs qu'ils rencontrent, enrichissant ainsi la liste de distribution localement.\n\n---\n\n## 4. Avantages et Inconvénients\n\n### Avantages\n*   **Décentralisation :** Pas de point de défaillance unique (Single Point of Failure). Le réseau survit même si de nombreux nœuds quittent la connexion.\n*   **Évolutivité :** La capacité du réseau augmente avec le nombre d'utilisateurs (plus il y a de monde, plus le fichier se télécharge vite).\n*   **Résilience :** Les fichiers peuvent survivre même si les serveurs originaux tombent en panne.\n\n### Inconvénients\n*   **Problème du \"Free Rider\" :** Certains utilisateurs téléchargent sans partager, ce qui peut étouffer le réseau s'ils deviennent majoritaires.\n*   **Sécurité et Contenu Illicite :** La facilité de partage a historiquement été exploitée pour la distribution de contenus protégés par le droit d'auteur ou malveillants (malware, phishing).\n*   **Consommation de Bande Passante :** Les utilisateurs doivent ouvrir une partie de leur connexion pour partager, ce qui peut gêner d'autres activités si le logiciel n'est pas bien configuré.\n\n## Conclusion\n\nLe réseau BitTorrent est un exemple parfait de l'architecture **Pair-à-Pair** moderne. Il transforme chaque utilisateur en une resserve de stockage et de bande passante, utilisant des algorithmes de sélection de segments et de réciprocité pour optimiser l'efficacité globale. Bien que souvent associé au partage de fichiers illégaux, la technologie elle-même est neutre et largement utilisée dans le domaine scientifique (distribution de jeux vidéo open source, mises à jour logicielles, sauvegardes cloud) pour sa robustesse et son indépendance vis-à-vis des infrastructures centralisées.",
+     "tokens": 1787,
+     "first": 1.119749099976616,
+     "seconds": 164.86302629997954
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nLe modèle pair-à-pair, illustré par BitTorrent, repose sur la décentralisation. Un fichier .torrent sert de manifeste pour initier le téléchargement et l'échange de fragments entre pairs, sans dépendre de serveur central de stockage.\n\n## Mécanisme\n\nLe fichier est découpé en milliers de **tasseaux**. Un **tracker** centralise les adresses des **pairs** sans stocker les données. Les utilisateurs échangent alors ces fragments directement entre eux dans le **swarm**. Ce système de **téléchargement** et de **partage** simultané assure la robustesse du réseau, rendant la vitesse dépendante du nombre de participants actifs.\n\n## Avantages\n\nGrâce à cette architecture décentralisée, le réseau offre une grande résilience face aux pannes et réduit les coûts de stockage. L'indépendance vis-à-vis des serveurs centraux garantit une disponibilité continue tant que des pairs actifs partagent simultanément des données au sein du swarm.",
+     "parts": 3,
+     "plan_seconds": 22.023476900008973,
+     "tokens": 557,
+     "longest_part": 86,
+     "first": 23.98417020001216,
+     "seconds": 34.59646810000413,
+     "contract": {
+      "fil": "BitTorrent repose sur la décentralisation où chaque utilisateur partage des fragments de fichiers avec d'autres.",
+      "termes": [
+       "pair",
+       "tasseau",
+       "tracker",
+       "swarm",
+       "téléchargement",
+       "partage"
+      ],
+      "faits": [
+       "Un fichier est divisé en milliers de tasseaux.",
+       "Les pairs échangent des fragments sans serveur central.",
+       "Le tracker coordonne les connexions mais ne stocke pas de données.",
+       "La vitesse dépend du nombre de pairs actifs.",
+       "Le partage simultanément est obligatoire pour rester dans le swarm.",
+       "Les connexions P2P sont plus résilientes aux pannes."
+      ],
+      "ton": "pédagogique et neutre"
+     },
+     "outline": [
+      "Introduction",
+      "Mécanisme",
+      "Avantages"
+     ]
+    },
+    "speedup": 4.765313783575493,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Rédige un guide pour bien démarrer un potager sur un balcon.",
+    "whole": {
+     "answer": "# Guide Complet pour Démarrer un Potager de Balcon\n\nCultiver son propre potager sur un balcon est une excellente initiative pour se reconnecter à la nature, améliorer la qualité de l'air et bénéficier de produits frais. Contrairement aux idées reçues, il est tout à fait possible d'avoir un jardin productif même en hauteur et dans des espaces restreints.\n\nVoici les étapes structurées pour bien démarrer votre projet.\n\n---\n\n## 1. L'Étape Préliminaire : Évaluer son Espace\n\nAvant d'acheter quoi que ce soit, il faut analyser les contraintes spécifiques à votre balcon.\n\n*   **L'exposition au soleil (Le facteur clé) :**\n    *   **Soleil direct (6h+ par jour) :** Idéal pour la plupart des légumes (tomates, poivrons, courgettes, aubergines).\n    *   **Mi-ombre (3-5h par jour) :** Convient aux épinards, radis, salades, oignons et betteraves.\n    *   **Ombre :** Limitez-vous aux herbes aromatiques (menthe, menthe poivrée, basilic) et aux salades tolérantes à l'ombre.\n    *   *Astuce :* Observez votre balcon à différentes heures de la journée. Si le vent est très fort, prévoyez des protections ou des plantes tampons.\n\n*   **Les contraintes réglementaires :**\n    *   Vérifiez votre bail ou vos règles de copropriété. Certains bâtiments interdisent l'arrosage direct (risque de dégâts sur la façade) ou l'utilisation de certains engrais.\n    *   Assurez-vous que le balcon peut supporter le poids des pots remplis d'eau (l'eau représente environ 80% du poids total).\n\n---\n\n## 2. Choisir les Supports et la Substrat\n\nSur un balcon, l'espace au sol est limité. Il faut opter pour des solutions verticales ou en hauteur.\n\n### Les Types de Supports\n1.  **Les Pots Classiques :** Polyvalents, légers. Choisissez des pots de minimum 15-20 cm de profondeur pour les radis, et plus de 40 cm pour les tomates.\n2.  **Les Paniers suspendus ou Filets :** Parfaits pour les tomates greffées, les courgettes et les haricots grimpants. Ils économisent de la place au sol.\n3.  **Les Bacs Profonds (Jardinière) :** Utiles si vous avez une terrasse en bois ou en béton où poser des pots individuels est difficile.\n4.  **Les Tours de Cultivation (Vertical Farming) :** Des structures cylindriques où l'on plante par couches. Économiques en eau et en place.\n5.  **Les Potagers en Bouteilles :** Une méthode écologique et esthétique pour les herbes et les petites salades.\n\n### Le Sol (Substrat)\n**Ne jamais utiliser de terre de jardin !** Elle est trop lourde et peut contenir des parasites ou des maladies.\n*   **Utilisez un terreau de qualité :** Privilégiez un mélange spécifique \"potager\" riche en matière organique.\n*   **Le drainage :** Assurez-vous que chaque pot a des trous de drainage. Un pot sans trous peut faire pourrir les racines en quelques jours.\n\n---\n\n## 3. Sélectionner les Plantes Adaptées\n\nPour débuter sans frustration, choisissez des cultures \"faciles\" qui ont des cycles de vie courts ou qui supportent bien la vie en pot.\n\n### Catégorie \"Débutant & Rapide\" (Idéal pour la motivation)\n*   **Salades (Laitue, Pissenlit) :** Se récoltent en 30-40 jours.\n*   **Radis :** Prêts en 25-30 jours.\n*   **Épinards :** Se ressemencent facilement.\n*   **Herbes aromatiques :** Basilic, menthe, ciboulette (attention à la menthe qui envahit, plantez-la seule).\n\n### Catégorie \"Productive\" (Demande plus d'espace et de soins)\n*   **Tomates :** Privilégiez les variatures \"cœur de boeuf\" ou \"kumato\". Choisissez des variétés déterminées (taille contrôlée) plutôt que indéterminées qui deviennent gigantesques.\n*   **Poivrons et Aubergines :** Demendent beaucoup de soleil et de chaleur.\n*   **Haricots et Pois :** Excellents pour la culture verticale (grimpants) car ils n'ont pas besoin de tuteurage lourd.\n\n### Ce qu'il vaut mieux éviter en débutant\n*   **Les courges (Melons, Pastèques) :** Très voraces en eau et en place.\n*   **Les pommes de terre :** Difficiles à cultiver en hauteur sans système de rempotage régulier.\n\n---\n\n## 4. Préparation et Plantation\n\n### Le Semis\nVous pouvez semer directement dans les pots ou prélever des plants chez un horticulteur.\n*   **Semis direct :** Pour les radis, salades, haricots, pois.\n*   **Plants achetés :** Pour les tomates, poivrons, aubergines (gagnez du temps sur la saison).\n\n### Le Tuteurage\nAvant même de planter certaines cultures comme les tomates ou les courgettes, installez votre tuteur (poteau en bois, bambou ou cage de tomate).\n*   *Règle d'or :* Tutez avant que la plante ne grandisse. C'est plus facile et cela renforce la plante.\n\n### La Rotation et la Paillage\n*   **Paillage :** Étalez de la paille, de la litière d'écurie ou des tontes de gazon hachées autour des plantes dans le pot. Cela garde l'humidité et protège les racines du froid.\n*   **Rotation :** Si vous réutilisez le même pot l'année prochaine, changez le terreau ou plantez une plante qui ne nécessite pas les mêmes nutriments (ex: après des tomates, plantez des légumineuses qui fixent l'azote).\n\n---\n\n## 5. Entretien Quotidien et Hebdomadaire\n\nLe potager de balcon demande souvent *plus* d'attention que celui de la terre ferme.\n\n*   **L'Arrosage :**\n    *   Les pots s'assèchent vite (vent et soleil). Arrosez généralement tous les jours en été, le matin de préférence.\n    *   Testez la terre avec votre doigt : si le premier centimètre est sec, il faut arroser.\n    *   Arrosez au pied de la plante, évitez de mouiller les feuilles pour limiter les maladies fongiques.\n*   **La Fertilisation :**\n    *   Le terreau se vide vite. Ajoutez de l'engrais liquide organique (corne de bœuf, purin d'ortie) toutes les 15 jours pendant la fructification.\n    *   Pour les tomates et poivrons, utilisez des engrais riches en potassium.\n*   **La Protection :**\n    *   **Oiseaux et Papillons :** Installez un filet anti-oiseau dès le début pour protéger les fruits. Utilisez du papier d'aluminium ou des paillons pour effrayer les oiseaux.\n    *   **Ravageurs courants :** Pucerons, cochenilles et limaces. Traitez-les manuellement (sécrateur) ou avec des produits bio spécifiques (savon potassique, huile de néme).\n\n---\n\n## 6. La Récolte et le Maintien de la Motivation\n\n*   **Récoltez régulièrement :** Cela stimule la production de nouvelles fleurs et fruits (surtout pour les tomates et les haricots). Ne laissez pas les fruits mûrir sur pied s'ils ne sont pas consommés ou s'ils attirent trop d'insectes.\n*   **Observez votre plante :** Un potager est un dialogue quotidien. Une feuille fanée indique souvent un problème d'arrosage ou une maladie. Agissez vite !\n\n### Conseils de sécurité alimentaire\n",
+     "tokens": 1800,
+     "first": 0.6801371999899857,
+     "seconds": 99.3730139999825
+    },
+    "swarm": {
+     "answer": "## Évaluation et Matériel\n\nAvant de semer, vérifiez que votre balcon reçoit au moins 4 heures de soleil. Prévoyez des bacs d'au moins 20 cm de profondeur et disposez une litière de protection contre les éclaboussures.\n\n## Préparation du Sol\n\nMélangez terreau, compost et argile expansée dans votre bac avant de planter. Préparez le sol deux semaines à l'avance pour garantir une bonne structure. N'oubliez pas de respecter l'espace de 50 cm du mur pour une ventilation idéale.\n\n## Choix des Cultures\n\nPrivilégiez les tomates pour des récoltes rapides, les herbes aromatiques et les radis. Variez les familles végétales dans votre bac pour éviter les maladies, en ne plantant pas les solanacées côte à côte.\n\n## Entretien Quotidien\n\nArrosez tous les 2 jours en été pour maintenir l'humidité. Taillez régulièrement les tiges de tomates et surveillez les parasites. Alternez les familles de légumes dans le bac pour éviter les maladies et assurer un potager équilibré.",
+     "parts": 4,
+     "plan_seconds": 23.779710000002524,
+     "tokens": 638,
+     "longest_part": 59,
+     "first": 26.519260900007794,
+     "seconds": 35.99009659999865,
+     "contract": {
+      "fil": "Ce guide pratique permet à tout balconnier de cultiver des légumes et aromates en respectant les contraintes d'espace et de lumière.",
+      "termes": [
+       "bac",
+       "litière",
+       "arrosage",
+       "rotation",
+       "luminosité",
+       "saison"
+      ],
+      "faits": [
+       "Choisir des bacs de min. 20 cm de profondeur",
+       "Préparer la terre 2 semaines avant",
+       "Arroser tous les 2 jours en été",
+       "Placer le potager à +50 cm du mur",
+       "Récolter les premières tomates en 60 jours",
+       "Éviter les solanacées en monoculture"
+      ],
+      "ton": "Encouragement, précis et accessible."
+     },
+     "outline": [
+      "Évaluation et Matériel",
+      "Préparation du Sol",
+      "Choix des Cultures",
+      "Entretien Quotidien"
+     ]
+    },
+    "speedup": 2.761121069066156,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Quels sont les avantages et les risques de l'énergie nucléaire ?",
+    "whole": {
+     "answer": "L'énergie nucléaire est l'un des sujets les plus débattus dans le paysage énergétique mondial. Elle représente un compromis complexe entre la nécessité de décarboner l'économie et les préoccupations concernant la sécurité et les déchets.\n\nVoici une analyse détaillée et structurée de ses avantages et de ses risques.\n\n---\n\n### 🟢 Les Avantages de l'Énergie Nucléaire\n\n#### 1. Production massive d'électricité bas-carbone\nC'est le point fort principal du nucléaire. Contrairement aux énergies fossiles (charbon, gaz, pétrole), la fission nucléaire ne libère **aucun gaz à effet de serre** (comme le CO₂) pendant la production d'électricité.\n*   **Impact climatique :** Elle permet de réduire considérablement l'empreinte carbone du mix électrique, jouant un rôle crucial dans la lutte contre le changement climatique, aux côtés des énergies renouvelables (éolien, solaire).\n*   **Stabilité :** Elle fournit une électricité constante, quelle que soit la météo, contrairement aux énergies intermittentes comme le solaire ou l'éolien.\n\n#### 2. Faible empreinte territoriale\nUne centrale nucléaire produit une quantité d'électricité équivalente à celle de plusieurs centrales à charbon ou d'un parc éolien immense, tout en occupant une surface beaucoup plus réduite au sol. Cela préserve les terres agricoles et les écosystèmes naturels.\n\n#### 3. Indépendance énergétique et sécurité\nPour les pays disposant de ressources limitées en hydrocarbures, le nucléaire permet de réduire la dépendance aux importations de combustibles fossiles, souvent situés dans des zones géopolitiquement instables. L'uranium est un minerel relativement abondant et distribué de manière plus homogène à l'échelle mondiale.\n\n#### 4. Compacité par rapport aux renouvelables\nBien que les énergies renouvelables soient idéales, elles nécessitent souvent de vastes surfaces (parcs solaires, éoliennes) pour produire la même puissance qu'une centrale nucléaire. Le nucléaire offre donc une **densité énergétique** très élevée.\n\n---\n\n### 🔴 Les Risques et Inconvénients de l'Énergie Nucléaire\n\n#### 1. La gestion des déchets radioactifs\nC'est le défi technique et éthique le plus persistant.\n*   **Durée de vie :** Les déchets de haute activité (combustible usé) restent radioactifs pendant des centaines de milliers, voire des millions d'années.\n*   **Stockage :** Il n'existe actuellement pas de solution de stockage définitif et incontestée à l'échelle mondiale (bien que la géologie profonde soit étudiée). Les déchets sont généralement stockés en attente de solutions futures, ce qui pose un problème de responsabilité intergénérationnelle.\n\n#### 2. Le risque d'accidents majeurs\nBien que les centrales modernes soient très sûres grâce à de multiples barrières de sécurité, les conséquences d'un accident majeur sont potentiellement catastrophiques.\n*   **Exemples historiques :** Tchernobyl (1986), Fukushima (2011) et Three Mile Island (1979).\n*   **Conséquences :** Ces accidents ont entraîné des évacuations de populations, la contamination de vastes zones et des coûts socio-économiques énormes. La peur de ces accidents freine souvent l'acceptation sociale du nucléaire.\n\n#### 3. La prolifération nucléaire et la sécurité\nL'uranium enrichi nécessaire à la production d'électricité peut être détourné pour fabriquer des armes nucléaires.\n*   Cela crée une tension géopolitique et nécessite des cadres de contrôle internationaux très stricts (Agence internationale de l'énergie atomique - AIEA).\n*   Le risque de cyberattaques sur les systèmes de contrôle des centrales est également une préoccupation croissante.\n\n#### 4. Coûts et délais de construction\n*   **Investissement initial :** La construction d'une centrale nucléaire demande des capitaux très importants et des années de travaux (souvent plus de 10 ans).\n*   **Surcoûts :** De nombreux projets ont connu des dépassements de budgets et des retards majeurs (ex: Flamanville en France, Olkiluoto en Finlande).\n*   **Fermure :** Les centrales ont une durée de vie limitée (généralement 40 à 60 ans), après quoi leur démantèlement est extrêmement coûteux et long.\n\n#### 5. Problèmes de déchets civils et de démantèlement\nOutre les déchets radioactifs à haute activité, il y a aussi les déchets de basse activité (filtres, gants, etc.) qui nécessitent des centres de stockage, bien que leur durée de dangerosité soit moindre. Le démantèlement d'une centrale en fin de vie est une opération complexe et onéreuse.\n\n---\n\n### ⚖️ Synthèse : Un compromis nécessaire ?\n\n| Critère | Énergie Nucléaire | Énergies Renouvelables (Solaire, Éolien) |\n| :--- | :--- | :--- |\n| **Émissions de CO₂** | Très faibles (proche de zéro) | Nul (pendant l'exploitation) |\n| **Stabilité du réseau** | Très haute (produit 24h/24) | Variable (dépend du temps et du vent) |\n| **Coût du kWh** | Moyen à élevé (selon le pays et l'ancienneté) | En baisse constante |\n| **Défis majeurs** | Déchets, accidents, coûts initiaux | Intermittence, surfaces, matériaux rares |\n| **Temps de construction** | Long (10+ ans) | Court (quelques mois à quelques ans) |\n\n**Conclusion :**\nL'énergie nucléaire n'est ni une panacée ni une fatalité. Elle est souvent présentée comme un **\"pont\"** ou un **complément** nécessaire dans la transition énergétique, permettant de maintenir le réseau électrique stable pendant que les capacités renouvelables se développent.\n\nCependant, son avenir dépendra de trois facteurs clés :\n1.  La preuve scientifique et technique de la sûreté des réacteurs de nouvelle génération (SMR).\n2.  La mise en place de solutions de stockage des déchets définitives.\n3.  La volonté politique et le consentement de la population à cohabiter avec cette technologie.\n\nEn résumé, c'est un outil puissant pour décarboner, mais qui doit être géré avec une extrême prudence et une transparence totale sur les risques associés.",
+     "tokens": 1432,
+     "first": 0.6134063000208698,
+     "seconds": 81.74230000001262
+    },
+    "swarm": {
+     "answer": "## Contexte\n\nL'énergie nucléaire fournit 10 % de l'électricité mondiale avec un bilan carbone neutre en exploitation.\n\n## Avantages\n\nL'énergie nucléaire assure une production stable, dense et sans émissions de CO₂ pendant le fonctionnement du réacteur.\n\n## Risques\n\nLes risques incluent des accidents rares mais graves, la production de déchets radioactifs à vie longue et des coûts de construction élevés.\n\n## Conclusion\n\nDéveloppement exigeant gestion rigoureuse des déchets et investissements en sûreté.",
+     "parts": 4,
+     "plan_seconds": 25.584889899997506,
+     "tokens": 532,
+     "longest_part": 29,
+     "first": 28.164056899986463,
+     "seconds": 31.85849089999101,
+     "contract": {
+      "fil": "L'énergie nucléaire offre une production électrique bas carbone mais présente des défis majeurs liés à la sécurité et aux déchets.",
+      "termes": [
+       "Réacteur",
+       "Combustible",
+       "Déchets radioactifs",
+       "Gestion des déchets",
+       "Sûreté nucléaire",
+       "Mix énergétique"
+      ],
+      "faits": [
+       "Production de 10 % de l'électricité mondiale.",
+       "Zéro émission de CO2 pendant le fonctionnement.",
+       "Demi-vie des déchets : plusieurs milliers d'années.",
+       "Risque d'accident majeur (ex: Fukushima, Tchernobyl).",
+       "Coût de construction élevé et long.",
+       "Recommandation : investissements dans la R&D et la sécurité."
+      ],
+      "ton": "Objectif, équilibré et factuel."
+     },
+     "outline": [
+      "Contexte",
+      "Avantages",
+      "Risques",
+      "Conclusion"
+     ]
+    },
+    "speedup": 2.5657932215501043,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Explique les bases de l'apprentissage automatique à un lycéen.",
+    "whole": {
+     "answer": "# Les Bases de l'Apprentissage Automatique : Un Guide pour Lycéens\n\nBienvenue dans le monde fascinant de l'**apprentissage automatique** (ou *Machine Learning* en anglais). C'est un pilier de l'intelligence artificielle moderne, responsable de la reconnaissance faciale de votre téléphone, des recommandations de vidéos sur YouTube ou de la traduction instantanée.\n\nVoici une explication structurée pour comprendre comment cela fonctionne, sans utiliser de jargon excessif.\n\n---\n\n## 1. La Différence Clé : Ordinateurs \"Classiques\" vs Apprentissage Automatique\n\nPour bien comprendre, comparons deux façons de demander quelque chose à un ordinateur :\n\n### 🤖 L'Approche Programmée (Classique)\nC'est comme donner une recette de cuisine précise à un ami :\n> \"Pour faire une omelette : casse l'œuf, verse le dans la poêle, fais cuire 2 minutes.\"\n*   **Le problème :** Si l'ami se brûle les doigts ou si la poêle manque de beurre, il ne sait pas s'adapter. Il suit la lettre de la recette.\n\n### 🧠 L'Approche par Apprentissage Automatique (Machine Learning)\nC'est comme montrer à un enfant des milliers d'images de chats et de chiens sans lui donner de règles complexes :\n> \"Voici 10 000 photos de chats et 10 000 de chiens. Tu vois les différences ? Maintenant, montre-moi cette nouvelle photo.\"\n*   **Le résultat :** L'enfant (le programme) apprend seul à reconnaître un chat en observant les données, sans que vous ayez à lui programmer spécifiquement \"une queue pointue\" ou \"des oreilles triangulaires\".\n\n**En résumé :**\n*   **IA Classique :** On lui dit *comment* résoudre le problème (règles fixes).\n*   **Apprentissage Automatique :** On lui donne des *données* et des *exemples*, et il trouve lui-même les règles.\n\n---\n\n## 2. Le Cycle de Vie d'un Modèle (Les 3 Étapes Fondamentales)\n\nTout système d'apprentissage automatique fonctionne selon un cycle en trois temps :\n\n### Étape 1 : L'Entraînement (Training)\nC'est la phase d'études.\n*   On nourrit l'algorithme avec un immense jeu de données (des millions d'exemples).\n*   L'ordinateur fait des calculs pour trouver des motifs cachés.\n*   *Exemple :* Pour enseigner à un robot à conduire, on lui montre 10 000 heures de vidéos de routes avec les panneaux, les piétons et les autres voitures.\n\n### Étape 2 : L'Évaluation (Evaluation)\nC'est la phase d'examens.\n*   On cache une partie des données (le test) que le modèle n'a jamais vues pendant l'entraînement.\n*   On vérifie s'il sait généraliser ce qu'il a appris à de nouvelles situations.\n*   *Si l'élève copie les réponses à l'examen, il a \"surajusté\" (overfitting) :* il a mémorisé les exemples mais ne comprend pas le concept.\n\n### Étape 3 : La Prédiction (Inference)\nC'est l'utilisation réelle.\n*   Le modèle est déployé dans le monde réel.\n*   Il reçoit de nouvelles données inconnues et fait ses prédictions instantanément.\n*   *Exemple :* Le filtre photo de votre caméra utilise le modèle entraîné pour détecter un visage et flouter l'arrière-plan, en temps réel.\n\n---\n\n## 3. Les Trois Grandes Familles de l'Apprentissage\n\nIl existe plusieurs méthodes, mais voici les trois plus courantes :\n\n| Type | Description | Analogie Humaine | Exemple Concret |\n| :--- | :--- | :--- | :--- |\n| **Apprentissage Supervisé** | On fournit les bonnes réponses pendant l'entraînement. | Un professeur qui corrige chaque devoir et dit : \"C'est la bonne réponse\". | Prédire le prix d'une maison en fonction de sa superficie et de son quartier. |\n| **Apprentissage Non Supervisé** | On donne les données brutes, sans réponse attendue. | Un bibliothécaire qui classe des livres par thème sans qu'on lui donne de catégories. | Regrouper des clients en segments selon leurs habitudes d'achat sans qu'on définisse les groupes à l'avance. |\n| **Apprentissage par Renforcement** | L'agent apprend par essai-erreur et récompenses. | Un enfant qui essaie de marcher : s'il tombe, c'est une punition (douleur) ; s'il avance, c'est une récompense (sourire). | Un robot qui apprend à tourner une poignée ou à jouer aux échecs contre lui-même. |\n\n---\n\n## 4. Les Concepts Mathématiques de Base (Pas peur des maths !)\n\nL'apprentissage automatique repose sur des concepts mathématiques, mais ils sont souvent intuitifs :\n\n*   **Les Données (Features) :** Ce sont les ingrédients. Pour reconnaître un chat, les ingrédients sont \"oreilles pointues\", \"moustaches\", \"queue\", etc.\n*   **La Fonction de Coût :** C'est un compteur d'erreurs. Plus elle est basse, plus le modèle est précis. L'objectif est de minimiser cette erreur.\n*   **L'Optimisation :** C'est le processus de réglage. On ajuste les paramètres (comme tourner les molettes d'un mixeur) pour trouver le réglage parfait qui donne le résultat le meilleur score possible.\n*   **Le Surajustement (Overfitting) :** Quand le modèle est trop \"parfait\" sur les données d'entraînement et échoue sur de nouvelles données (comme un étudiant qui récite par cœur un livre mais qui ne sait pas répondre à des questions nouvelles).\n\n---\n\n## 5. Pourquoi est-ce important pour l'avenir ?\n\nComme lycéen, comprendre l'apprentissage automatique est crucial car :\n\n1.  **C'est partout :** Il est dans les jeux vidéo, la navigation GPS, les assistants vocaux (Siri, Alexa).\n2.  **C'est un outil de création :** Il permet de générer du texte, de l'art, ou de coder plus vite.\n3.  **C'est un défi éthique :** Les biais dans les données peuvent entraîner des discriminations (ex: un système de recrutement qui rejette les femmes car entraîné sur des CV d'hommes). Comprendre comment ça marche est essentiel pour le réguler.\n\n## Conclusion\n\nL'apprentissage automatique n'est pas de la magie, c'est de la **statistique et des mathématiques appliquées** à grande échelle. C'est l'art d'enseigner à des machines à raisonner à partir de l'expérience, plutôt que de simplement suivre des ordres.\n\nSi vous souhaitez vous lancer, commencez par explorer des plateformes gratuites comme **Kaggle** ou **Google Colab**, et essayez de créer un simple modèle qui prédit si une personne va acheter un produit ou non !",
+     "tokens": 1554,
+     "first": 0.6638430000166409,
+     "seconds": 87.28555629999028
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nBienvenue ! Aujourd'hui, nous allons découvrir comment les ordinateurs « apprennent » comme des humains, en utilisant des données pour faire des prédictions. C'est une technologie fascinante qui transforme la façon dont nous interagissons avec le monde numérique. Prêts à plonger dans ce voyage ?\n\n## Le concept\n\nC'est exactement ça ! Tout comme vous apprenez à distinguer un chat grâce à des milliers de photos, l'ordinateur analyse d'énormes quantités de **données** pour construire un **modèle**. Ce processus d'**entraînement** lui permet de repérer des motifs invisibles pour nous et de faire des **prédictions** précises sans qu'on lui donne chaque règle à la main.",
+     "parts": 2,
+     "plan_seconds": 23.951680800004397,
+     "tokens": 513,
+     "longest_part": 87,
+     "first": 25.141336900007445,
+     "seconds": 30.4288380999933,
+     "contract": {
+      "fil": "L'apprentissage automatique est une technologie où les ordinateurs apprennent à partir de données pour prédire ou décider sans être explicitement programmés.",
+      "termes": [
+       "données",
+       "modèle",
+       "entraînement",
+       "prédiction",
+       "algorithme",
+       "erreur"
+      ],
+      "faits": [
+       "Un modèle nécessite des données d'entraînement pour fonctionner.",
+       "Plus les données sont nombreuses, meilleure est généralement la prédiction.",
+       "L'ordinateur ajuste ses paramètres pour réduire l'erreur.",
+       "Cela s'appelle l'apprentissage supervisé ou non supervisé.",
+       "Des exemples concrets incluent la reconnaissance faciale ou la recommandation de films.",
+       "C'est une sous-catégorie de l'intelligence artificielle."
+      ],
+      "ton": "Pédagogique, clair et encourageant."
+     },
+     "outline": [
+      "Introduction",
+      "Le concept"
+     ]
+    },
+    "speedup": 2.868514269692391,
+    "votes": [
+     "A",
+     "B"
+    ],
+    "swarm_score": -2
+   },
+   {
+    "question": "Comment négocier une augmentation de salaire ?",
+    "whole": {
+     "answer": "# Comment négocier une augmentation de salaire : Guide complet et structuré\n\nNégocier une augmentation de salaire est un moment clé dans la vie professionnelle. Ce n'est pas seulement une demande, mais une démonstration de la valeur que vous apportez à l'entreprise. Voici une méthode étape par étape, fondée sur des principes de négociation professionnelle, pour maximiser vos chances de succès.\n\n---\n\n## 1. La Préparation : La clé du succès\n\nUne négociation réussie repose à 80 % sur la préparation avant même l'entretien.\n\n### A. Analysez le marché\n*   **Étude des salaires :** Utilisez des outils comme Glassdoor, Payscale, ou les rapports sectoriels pour connaître la fourchette salariale moyenne pour votre poste, votre expérience et votre localisation.\n*   **Objectif réaliste :** Fixez une fourchette (ex: actuel + 15% à +20%), en sachant que l'objectif moyen se situe souvent vers le tiers supérieur de cette fourchette.\n\n### B. Identifiez vos leviers (Votre valeur ajoutée)\nRassemblez des preuves tangibles de votre performance. Une augmentation ne doit pas être perçue comme une demande de bienveillance, mais comme une reconnaissance de faits.\n*   **Chiffres clés :** Augmentation du chiffre d'affaires, économies réalisées, projets lancés avec succès.\n*   **Tâches supplémentaires :** Responsabilités nouvelles assumées sans augmentation précédente.\n*   **Compétences :** Certifications obtenues, maîtrise de nouveaux outils ou langues.\n\n### C. Planifiez le timing\n*   **L'entretiens annuels :** C'est le moment le plus évident, mais aussi parfois le plus risqué si vos résultats ne sont pas au top.\n*   **Après une réussite majeure :** Si vous venez de livrer un projet crucial ou de résoudre un problème complexe.\n*   **En période de recrutement :** Parfois, les entreprises sont plus ouvertes aux ajustements pour éviter de perdre un candidat convoité.\n\n---\n\n## 2. L'Élaboration du Plan d'Action\n\nAvant de demander l'entretien, préparez votre argumentaire.\n\n### Structure de l'argumentaire\n1.  **L'ouverture positive :** Exprimez votre engagement envers l'entreprise.\n2.  **La démonstration de valeur :** Présentez vos réalisations et les preuves de votre impact (utilisez la méthode STAR : Situation, Tâche, Action, Résultat).\n3.  **La demande claire :** Énoncez le montant ou le pourcentage souhaité avec confiance.\n4.  **L'ouverture à la discussion :** Montrez que vous êtes prêt à entendre leur point de vue.\n\n> **Exemple de script d'ouverture :**\n> *\"Je suis très investi dans la réussite de l'équipe et de l'entreprise. Au cours des dernières années, j'ai pris en charge [X] et contribué à [Y], générant [Z] de valeur. Étant donné le marché actuel et mes responsabilités élargies, je souhaiterais discuter d'un ajustement de salaire à [Montant] pour refléter ma contribution actuelle.\"*\n\n---\n\n## 3. L'Entretien : Conduite et Attitude\n\nLors de la rencontre, votre attitude est aussi importante que vos arguments.\n\n*   **Restez calme et professionnel :** Ne montrez pas de colère ni de désespoir si la réponse n'est pas immédiate.\n*   **Écoutez activement :** Laissez le manager s'exprimer. Notez ses objections (budgétaire, politique d'entreprise, cycle d'évaluation).\n*   **Soyez flexible mais ferme sur le principe :** Vous pouvez être flexible sur le *moment* ou la *forme* (prime, action, titre), mais restez ferme sur l'idée que votre rémunération doit être alignée sur le marché et votre valeur.\n*   **Évitez les comparaisons :** Ne comparez jamais votre salaire à celui d'un collègue (\"Jean gagne plus que moi\"). Cela révèle souvent une politique interne que vous ne devez pas violer.\n\n---\n\n## 4. Gérer la Réponse et les Contre-propos\n\nLa réalité est souvent que la première demande sera refusée ou contre-offerte. Voici comment réagir :\n\n### Si le refus est catégorique\nNe paniquez pas. Demandez des précisions : *\"Qu'est-ce qui freine cette décision ? Est-ce un problème budgétaire temporaire ?\"*\n*   **Proposez des alternatives :**\n    *   Une augmentation échelonnée sur 6 ou 12 mois.\n    *   Une prime une fois par an (bonus) en plus du salaire fixe.\n    *   Des jours de télétravail ou une meilleure flexibilité.\n    *   Un budget formation ou une certification à vos frais.\n\n### Si la contre-proposition est basse\nNe vous contentez pas de la contre-offre. Renégociez : *\"Je comprends votre position budgétaire, mais ma demande était basée sur [X]. À quel point devrais-je être performant pour atteindre [Montant cible] ?\"*\n\n---\n\n## 5. La Conclusion et le Suivi\n\nQue la négociation se termine par un accord ou un report, il faut clore l'entretien positivement.\n\n*   **Obtenez une réponse écrite :** Si un accord est trouvé (même provisoire), demandez une confirmation par email ou un document signé. C'est crucial pour éviter les malentendus futurs.\n*   **Remerciez :** Remerciez le manager pour le temps passé et l'écoute.\n*   **Réfléchissez si l'accord n'est pas satisfaisant :** Parfois, il faut évaluer si l'entreprise est prête à investir en vous. Si après plusieurs tentatives la réponse reste négative sans perspective claire, il peut être temps d'envisager une mobilité interne ou externe.\n\n---\n\n## Résumé des erreurs à éviter\n\n| À faire ✅ | À éviter ❌ |\n| :--- | :--- |\n| Demander une augmentation basée sur des faits et des chiffres. | Demander en se basant sur les besoins personnels (factures, loyer). |\n| Choisir le bon moment (réussite, entretien annuel). | Surprendre le manager par une demande spontanée sans contexte. |\n| Être ouvert aux alternatives (prime, flexibilité). | Insister uniquement sur le salaire fixe sans marge de manœuvre. |\n| Obtenir un accord écrit. | Accepter une promesse verbale sans trace. |\n\n### Conclusion\nNégocier une augmentation demande du courage et de la préparation, mais c'est un processus normal dans le monde des affaires. En démontrant clairement votre valeur et en restant professionnel, vous vous placez dans la position idéale pour obtenir une reconnaissance juste de vos efforts.",
+     "tokens": 1476,
+     "first": 0.6237657000019681,
+     "seconds": 125.15590189999784
+    },
+    "swarm": {
+     "answer": "## Préparation\n\nAvant l'entretien, réalisez un audit de votre valeur actuelle. Collectez des références salariales pour établir un objectif réaliste. Préparez trois arguments chiffrés solides afin de justifier votre demande avec preuves à l'appui.\n\n## Rencontre\n\nDemandez un entretien dédié en choisissant un moment calme. Présentez vos trois arguments chiffrés avec assurance. Écoutez ensuite la réponse de votre manager avant de proposer une contre-proposition si nécessaire.\n\n## Négociation\n\nFace à une contre-proposition, défendez fermement votre positionnement sans céder sur les faits établis. Si l'écart reste trop important, proposez une alternative concrète. Enfin, demandez impérativement un accord écrit pour sécuriser votre nouvelle rémunération et clore cette rencontre avec succès.",
+     "parts": 3,
+     "plan_seconds": 18.274539699981688,
+     "tokens": 498,
+     "longest_part": 63,
+     "first": 19.963589399965713,
+     "seconds": 26.3381107999885,
+     "contract": {
+      "fil": "Préparer, négocier et sécuriser une augmentation de salaire par des arguments factuels et une communication assertive.",
+      "termes": [
+       "audit",
+       "références",
+       "plafond",
+       "contre-proposition",
+       "écrit",
+       "rencontre"
+      ],
+      "faits": [
+       "Préparer 3 arguments chiffrés",
+       "Choisir un moment calme",
+       "Demander un entretien dédié",
+       "Fixer un objectif réaliste",
+       "Préparer une alternative",
+       "Obtenir un accord écrit"
+      ],
+      "ton": "professionnel et assertif"
+     },
+     "outline": [
+      "Préparation",
+      "Rencontre",
+      "Négociation"
+     ]
+    },
+    "speedup": 4.751893666574312,
+    "votes": [
+     "A",
+     "B"
+    ],
+    "swarm_score": -2
+   },
+   {
+    "question": "Raconte l'histoire d'Internet et explique comment il fonctionne.",
+    "whole": {
+     "answer": "# L'Histoire et le Fonctionnement d'Internet : Un Voyage Numérique\n\nInternet n'est pas un produit unique inventé par une seule personne, mais plutôt une infrastructure complexe née d'une vision stratégique, façonnée par la guerre froide et construite par des milliers d'ingénieurs et de chercheurs. Voici une exploration complète de son origine, de son évolution et de son fonctionnement technique.\n\n---\n\n## 📜 Partie 1 : L'Histoire d'Internet\n\n### 1. Les Origines (Années 1960) : La Naissance sous la Guerre Froide\nÀ l'origine, Internet est le résultat d'un projet américain appelé **ARPANET**, financé par l'avancement de la recherche (Advanced Research Projects Agency) du ministère de la Défense américain.\n*   **Le but :** Créer un réseau de communication décentralisé capable de survivre à une attaque nucléaire. Si un nœud du réseau était détruit, les autres pouvaient continuer à communiquer.\n*   **La première connexion :** En 1969, deux ordinateurs (à l'Université de Californie à Los Angeles et à l'Université de l'Utah) se sont connectés. Le premier message envoyé était \"LOGIN\", mais il s'est arrêté après \"LO\", donnant naissance à l'acronyme célèbre **LO**GIC.\n\n### 2. L'Évolution et le Protocole TCP/IP (Années 1970-1980)\nAu début, le réseau était fragmenté et utilisait différents protocoles incompatibles.\n*   **1974 :** Vinton Cerf et Bob Kahn (pionniers américains) publient le papier fondateur du **TCP/IP** (Transmission Control Protocol/Internet Protocol). C'est le langage universel qui permet aux ordinateurs de différents réseaux de \"se parler\".\n*   **1982 :** Le TCP/IP devient le standard officiel du réseau. On commence à utiliser le terme \"Internet\" (maillage de réseaux) pour décrire cette nouvelle interconnexion mondiale.\n\n### 3. La Révolution du Web (Années 1990)\nIl est crucial de distinguer **Internet** (l'infrastructure physique et logique) du **World Wide Web** (l'ensemble des pages web et sites).\n*   **1989-1991 :** Tim Berners-Lee, un physicien britannique travaillant au CERN (Genève), invente le Web avec trois composantes clés :\n    1.  Les **pages HTML** (structure du contenu).\n    2.  Les **balises d'adresse URL** (pour localiser les documents).\n    3.  Le navigateur **Mosaic**, puis **Netscape** (pour visualiser ces documents).\n*   **1993-1995 :** L'arrivée du Web rend Internet accessible au grand public, quitte à le transformer en un phénomène commercial massif.\n\n### 4. L'Explosion et l'Ère Moderne (Années 2000 à aujourd'hui)\n*   **Le haut débit et la mobilité :** L'adoption massive des smartphones et des réseaux 4G/5G a transformé Internet en outil quotidien.\n*   **L'économie numérique :** L'avènement des réseaux sociaux, du commerce électronique (Amazon, Alibaba) et des services en ligne (Netflix, cloud computing) a redéfini les modèles économiques mondiaux.\n*   **L'ère de l'IoT et de l'IA :** Aujourd'hui, Internet connecte non seulement des ordinateurs, mais aussi des objets (montres, voitures, machines industrielles) et alimente l'intelligence artificielle.\n\n---\n\n## ⚙️ Partie 2 : Comment Internet Fonctionne-T-il ?\n\nInternet n'est pas un ordinateur géant, mais un ensemble de réseaux interconnectés. Pour comprendre son fonctionnement, il faut imaginer un système postal mondial ultra-rapide.\n\n### 1. L'Infrastructure Physique (Le \"Câblage\")\nTout commence par le matériel :\n*   **Fibre optique :** Des câbles contenant des fibres de verre qui transmettent des données sous forme de **lumière** (impulsions lumineuses). C'est le \"backbone\" (colonne vertébrale) mondial.\n*   **Routeurs et Commutateurs :** Des appareils qui dirigent le flux de données d'un réseau à l'autre, comme des carrefours routiers pour les paquets de données.\n*   **Serveurs :** De gigantesques centres de données (data centers) qui hébergent le contenu (sites web, vidéos, emails).\n\n### 2. L'Adresse Unique : L'IP (Internet Protocol)\nPour que les données arrivent à bon port, chaque appareil connecté (votre téléphone, votre PC, un serveur) doit avoir une adresse unique.\n*   **Adresse IP :** C'est l'équivalent d'une adresse postale numérique (ex: `192.168.1.1` ou `142.250.190.46`).\n*   Sans cette adresse, le paquet de données ne sait pas où aller.\n\n### 3. Le Langage Universel : TCP/IP\nC'est le cœur logique d'Internet. Ce sont deux protocoles qui travaillent ensemble :\n*   **IP (Internet Protocol) :** S'occupe de l'acheminement. Il découpe les gros fichiers en petits paquets, ajoute l'adresse de l'expéditeur et du destinataire à chacun, et les envoie dans n'importe quel ordre possible.\n*   **TCP (Transmission Control Protocol) :** S'occupe de la fiabilité. Il vérifie que tous les paquets sont arrivés. Si un paquet est perdu ou endommagé, il demande qu'il soit réenvoyé. Il réassemble ensuite les paquets dans l'ordre correct pour reconstruire le fichier original.\n\n### 4. Le Routage : La Navigation dans le Réseau\nLes **routeurs** analysent les adresses IP dans chaque paquet de données. Ils consultent des tables de routage pour décider du chemin le plus rapide vers la destination.\n*   *Note :* Les données ne vont pas toujours en ligne droite ; elles peuvent prendre des détours par plusieurs pays pour optimiser la vitesse ou éviter des congestions.\n\n### 5. La Couche Application : Le Monde que nous voyons\nUne fois les données arrivées, elles doivent être interprétées par des applications spécifiques. C'est ici qu'interviennent les protocoles de haut niveau :\n*   **HTTP/HTTPS :** Pour charger les pages web (navigateurs comme Chrome, Safari).\n*   **SMTP/IMAP :** Pour envoyer et recevoir des emails.\n*   **DNS (Système de Noms de Domaine) :** C'est le \"annuaire\" d'Internet. Quand vous tapez `www.google.com`, le DNS traduit ce nom lisible en une adresse IP numérique que les routeurs comprennent.\n\n### 6. Le Modèle Client-Serveur\nLa plupart des interactions reposent sur ce modèle :\n1.  Vous (le **Client**) demandez quelque chose (ex: une page web).\n2.  La demande est envoyée via le TCP/IP.\n3.  Un ordinateur puissant (le **Serveur**) traite la demande et renvoie la réponse.\n4.  Votre navigateur affiche le résultat.\n\n---\n\n## 🌐 Conclusion : Un Écosystème Dynamique\n\nInternet est bien plus qu'une simple technologie ; c'est une infrastructure critique comparable aux réseaux électriques ou routiers. Sa force réside dans sa **décentralisation** : il n'y a pas un \"maître\" unique qui contrôle tout. Chaque ordinateur est un nœud égal capable de communiquer avec n'importe quel autre nœud dans le monde.\n\nDepuis ses humbles beginnings en laboratoire militaire américain, jusqu'à sa domination de la vie moderne, Internet continue d'évoluer, promettant une connectivité toujours plus rapide, sécurisée et intelligente.",
+     "tokens": 1734,
+     "first": 0.6022676000138745,
+     "seconds": 92.56204730001627
+    },
+    "swarm": {
+     "answer": "## Origines\n\nInternet naît en 1969 avec le lancement d'ARPANET, un projet militaire américain conçu pour sa robustesse. Ce réseau, initialement réservé aux institutions, évolue rapidement vers un système académique ouvert, posant les fondations d'un réseau mondial accessible à tous.\n\n## Architecture\n\nCette architecture repose sur des routeurs qui découpent les informations en paquets. Ces unités de données voyagent à travers un maillage de câbles avant d'être réassemblées à l'arrivée, le tout géré par les protocoles TCP/IP pour garantir l'acheminement fiable.\n\n## Évolution\n\nEn 1989, le World Wide Web naît, transformant Internet en un outil grand public. Cette innovation permet aux navigateurs de clients de consulter les données hébergées sur des serveurs, rendant le réseau accessible à tous.\n\n## Aujourd'hui\n\nAujourd'hui, plus d'un milliard d'utilisateurs naviguent grâce à un réseau mondial reliant les continents par des câbles sous-marins. Pour une connexion sécurisée, il est recommandé d'employer le protocole HTTPS lors de chaque échange de données sensibles.",
+     "parts": 4,
+     "plan_seconds": 27.459856599976774,
+     "tokens": 700,
+     "longest_part": 63,
+     "first": 30.221594499977073,
+     "seconds": 42.511055799986934,
+     "contract": {
+      "fil": "Internet est né d'un projet militaire américain devenu un réseau mondial ouvert grâce à des protocoles standardisés.",
+      "termes": [
+       "paquet",
+       "routeur",
+       "serveur",
+       "client",
+       "TCP/IP",
+       "ARPANET"
+      ],
+      "faits": [
+       "ARPANET lancé en 1969",
+       "WWW créé en 1989",
+       "1 milliard d'utilisateurs en 2008",
+       "Protocole TCP/IP standardisé",
+       "Câbles sous-marins pour la connexion",
+       "Recommandation : utiliser HTTPS"
+      ],
+      "ton": "pédagogique et factuel"
+     },
+     "outline": [
+      "Origines",
+      "Architecture",
+      "Évolution",
+      "Aujourd'hui"
+     ]
+    },
+    "speedup": 2.1773641128914214,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Quelles sont les étapes pour créer une petite entreprise en France ?",
+    "whole": {
+     "answer": "Voici un guide complet, structuré et précis des étapes pour créer une petite entreprise en France. Le processus a été simplifié ces dernières années, notamment grâce à la plateforme **Guichet Auto-Entrepreneur** (devenue le nouveau Guichet Unique), mais des choix stratégiques importants subsistent.\n\n---\n\n# Guide de Création d'Entreprise en France\n\nLa création d'entreprise en France s'articule autour de cinq phases majeures : le choix du statut, l'étude de faisabilité, les démarches administratives, la gestion immédiate et l'installation.\n\n## 1. Choisir le Statut Juridique et le Mode de Fiscalité\n\nAvant toute démarche administrative, il faut définir la nature de votre projet.\n\n### A. Le choix du statut juridique\n| Statut | Description | Idéal pour |\n| :--- | :--- | :--- |\n| **Micro-entrepreneur (Auto-entrepreneur)** | Régime simplifié. Revenus imposables (BNC, BIC, BNCI). Pas de capital social requis. | Débutants, freelances, artisans, vente en ligne. Faible risque. |\n| **SAS / SASU** | Société par actions. Gestion souple, image professionnelle forte. | Start-ups, projets nécessitant du capital, recherche d'investisseurs. |\n| **SARL / EURL** | Société à responsabilité limitée. Structure classique. | PME familiales ou associés. |\n| **EIRL** | Entreprise Individuelle à Responsabilité Limitée. | Cas particuliers (protection du patrimoine personnelle). |\n\n*Note : Pour un micro-entrepreneur, le statut est unique. Pour les sociétés (SAS, SARL), le choix est multiple.*\n\n### B. Le choix du régime fiscal et social\n*   **Régime Réel :** Vous déclarez votre chiffre d'affaires réel et déduisez vos charges (loyer, matériel, salaires). Obligatoire si le CA dépasse les plafonds du micro-entrepreneurs ou si vous êtes salarié de votre propre société.\n*   **Régime Réel Simplifié :** Variantes du régime réel adaptées aux artisans ou professions libérales.\n*   **Régime Réel Ordinaire :** Pour les structures plus complexes avec plusieurs employeurs ou activités variées.\n\n> **Conseil :** La majorité des créateurs débutants optent pour le statut de **micro-entrepreneur** en raison de sa simplicité et de ses charges sociales proportionnelles au chiffre d'affaires.\n\n---\n\n## 2. Étude de Faisabilité et Plan d'Affaires\n\nMême si le formulaire de création est en ligne, il est crucial de préparer votre dossier.\n\n1.  **Étude de marché :** Qui sont vos clients ? Quels sont vos concurrents ?\n2.  **Business Plan :** Prévisions de trésorerie (au moins 3 ans), budget de départ, stratégie de prix.\n3.  **Choix de l'activité :** Vérifiez si votre activité est **autorisée** ou **soumise à autorisation** (AFA) par le code NAF/APE.\n    *   *Autorisée :* Aucune procédure spéciale (ex : vente d'articles de bureau).\n    *   *Autorisation requise :* Nécessite un dossier au préfecture (ex : restaurant, hôtel, certain commerce de détail).\n4.  **Démarches préliminaires :** Achat de l'adresse (bail), recherche de nom commercial, dépôt du nom de marque (INPI) si nécessaire.\n\n---\n\n## 3. Les Démarches Administratives (Guichet Unique)\n\nC'est l'étape centrale. Tout se fait désormais principalement en ligne via le site **guichet-auto-entrepreneur.fr** (ou via votre compte *France Connect*).\n\n### Les étapes techniques :\n1.  **Création d'un compte** sur le portail de l'INPI ou le Guichet Unique.\n2.  **Remplissage du formulaire :**\n    *   Identification (via France Connect).\n    *   Choix de l'activité (code NAF/APE).\n    *   Choix du régime fiscal/social.\n    *   Dépôt du nom commercial.\n3.  **Validation :** Vous recevez un numéro d'instruction unique.\n4.  **Impression et signature :** Une fois validé en ligne, vous devez imprimer le formulaire, le signer et le déposer.\n    *   *Option 1 :* En ligne via **Impots.gouv.fr** (si éligible).\n    *   *Option 2 :* Par courrier recommandé avec accusé de réception.\n    *   *Option 3 :* En dépôt en mairie (selon les cas).\n\n### Délais :\nLe délai de réponse est généralement de **15 jours**. Si aucune réponse n'est reçue après ce délai, la création est réputée acceptée.\n\n---\n\n## 4. Les Obligations Post-Validation\n\nUne fois le numéro d'immatriculation obtenu (numéro SIRET), il ne faut pas oublier les dernières formalités :\n\n*   **L'Immatriculation au Registre du Commerce et des Sociétés (RCS) :** La créateur est désormais entré dans le commerce.\n*   **L'Affiliation à la Sécurité Sociale :** Ouverture d'un compte Urssaf pour déclarer vos premiers revenus.\n*   **L'Assurance Responsabilité Civile Professionnelle (RC Pro) :** Obligatoire pour certains métiers (artisans, consultants, etc.) et fortement recommandée pour tous.\n*   **L'Affiliation à la Mutualité Sociale Agricole (MSA) :** Si vous êtes agriculteur.\n*   **Le Déclaration URSSAF :** Première déclaration de revenus (souvent à faire pour le mois de création).\n*   **L'Installation :** Mise en place du site web, des outils de facturation, de la comptabilité.\n\n---\n\n## 5. Aides Financières et Accompagnement\n\nNe négligez pas le volet financier pour réduire votre risque de départ.\n\n### Aides financières :\n*   **Aides à l'installation :** Prêts d'honneur (Banque de France), prêts de la Caisse des Dépôts, aides régionales (ex: Bpifrance).\n*   **Fonds de commerce / Ateliers :** Pour reprendre une activité existante.\n*   **Crédit d'impôt recherche (CIR) :** Si votre activité inclut de la R&D.\n\n### Accompagnement gratuit :\n*   **Chambres de Commerce et d'Industrie (CCI) :** Conseils gratuits aux créateurs.\n*   **Bpifrance Entreprendre :** Réseau de conseillers pour monter son projet.\n*   **Guichet Auto-Entrepreneur :** La plateforme officielle gouvernementale.\n*   **Les maisons de l'emploi :** Pour l'accompagnement local.\n\n---\n\n## Résumé Chronologique Rapide\n\n1.  **Semaine 1 :** Étude de marché, choix du statut (ex: Micro-entrepreneur), définition du nom.\n2.  **Semaine 2 :** Remplissage du formulaire sur *guichet-auto-entrepreneur.fr*, validation en ligne.\n3.  **Semaine 3 (J+15) :** Impression et signature du formulaire, envoi (courrier ou Impots.gouv.fr).\n4.  **J+45 environ :** Réception du numéro SIRET et des lettres d'affiliation (Urssaf, Sécurité Sociale).\n5.  **Mois 1 :** Déclaration de revenus URSSAF, souscription d'assurance RC Pro, ouverture du compte bancaire pro, installation.\n\n## Points de Vigilance\n\n*   **Le Code de la Consommation :** Respectez les obligations d'information (prix TTC, délais de rétractation).\n*   **La Protection des Données :** Conformité RGPD si vous collectez des données clients.\n*   **La Santé et la Sécurité :** Obligatoire selon l'activité (ex: déclaration HAS en pharmacie, normes ERP en construction).\n*   **La Protection du Patrimoine :** En tant que micro-entrepreneur, votre patrimoine personnel est protégé en cas de dette professionnelle (sauf fraude), mais vos revenus sont soumis à impôt sur le revenu.\n\nCe guide",
+     "tokens": 1800,
+     "first": 0.6406705999979749,
+     "seconds": 137.2004927000089
+    },
+    "swarm": {
+     "answer": "## Préparation\n\nAvant toute chose, définissez votre statut juridique (auto-entrepreneur ou société) et rédigez un business plan. Une étude de marché solide est indispensable pour valider la pertinence de votre projet avant de passer à l'étape administrative.\n\n## Inscription\n\nDepuis le Guichet Unique, déposez vos documents pour obtenir votre numéro SIRET. Cette immatriculation officielle valide votre création, un processus généralement finalisé sous quelques jours ouvrables après dépôt complet de la demande.\n\n## Administratif\n\nOuvrez un compte bancaire professionnel et souscrivez à une assurance Responsabilité Civile Professionnelle obligatoire. Effectuez ensuite la déclaration immédiate auprès de l'URSSAF pour régulariser votre situation sociale avant de lancer toute activité.\n\n## Installation\n\nL'installation finalise le processus : location du local, achat du matériel et recrutement si besoin. Une fois ces éléments en place, le lancement des activités est effectif, concrétisant ainsi la création de votre entreprise.",
+     "parts": 4,
+     "plan_seconds": 22.524002799997106,
+     "tokens": 613,
+     "longest_part": 52,
+     "first": 24.696734500001185,
+     "seconds": 33.443450999999186,
+     "contract": {
+      "fil": "Créer une entreprise en France suit un processus structuré allant de l'idée à l'installation officielle.",
+      "termes": [
+       "SIRET",
+       "BNC",
+       "BIC",
+       "URSSAF",
+       "Guichet Unique",
+       "Statut"
+      ],
+      "faits": [
+       "Délai de création : 2 à 4 semaines.",
+       "Coût moyen : 500 à 2000 euros.",
+       "Assurance obligatoire : RC Pro.",
+       "Déclaration URSSAF : immédiate.",
+       "Imposition : BNC ou BIC.",
+       "Recommandation : Consulter un expert-comptable."
+      ],
+      "ton": "Informatif et direct"
+     },
+     "outline": [
+      "Préparation",
+      "Inscription",
+      "Administratif",
+      "Installation"
+     ]
+    },
+    "speedup": 4.102462174134249,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Quelle est la capitale de l'Australie ?",
+    "whole": {
+     "answer": "Bien que la plupart des gens pensent naturellement à Sydney ou à Melbourne, la capitale de l'Australie est **Canberra**.\n\nIl est important de noter que Canberra n'est pas seulement une ville, mais qu'elle constitue la capitale du territoire de l'ACT (*Australian Capital Territory*), qui a été spécifiquement créé pour l'abriter.\n\n### Pourquoi Canberra et non Sydney ?\nL'origine de ce choix remonte à la Fédération de l'Australie en 1901. À cette époque, une forte rivalité existait entre les deux plus grandes villes du pays : Sydney (au sud-est) et Melbourne (aussi au sud-est).\n*   Chaque ville prétendait être la capitale.\n*   Pour éviter que l'une ne domine l'autre, les autres États de l'Australie ont exigé que la capitale soit située **à l'intérieur d'un rayon de 100 milles marins (environ 185 km)** autour de l'embouchure du fleuve Murray (le point de rencontre des deux villes).\n*   Le gouvernement a donc organisé un concours architectural pour dessiner la ville. Le lauréat fut **William Wilkinson** avec le plan de **Lanyon et Barry**.\n*   La ville fut construite sur le site choisi, à cheval sur les collines de l'Act, et déclarée capitale en 1913.\n\n### Caractéristiques de Canberra\n*   **Architecture :** La ville a été conçue comme une ville-jardin avec une planification soignée, mettant l'accent sur les espaces verts, les lacs et une architecture monumentale moderne (comme la maison du Parlement et le Parlement lui-même).\n*   **Emplacement :** Elle est située dans le centre-sud de l'Australie, à environ 280 km au nord-ouest de Sydney et 660 km au sud-est de Melbourne.\n*   **Statut :** C'est une ville fermée, ce qui signifie que les frontières sont contrôlées par la police fédérale et que seuls les résidents autorisés et les visiteurs peuvent y entrer.\n\nEn résumé, si vous cherchez la capitale officielle de l'Australie pour y faire vos démarches administratives ou y assister aux cérémonies nationales, c'est bien **Canberra** qu'il faut viser.",
+     "tokens": 492,
+     "first": 0.5986149000236765,
+     "seconds": 28.027243300020928
+    },
+    "swarm": {
+     "answer": "## Introduction\n\nLa capitale de l'Australie est Canberra, contrairement à la croyance populaire attribuant ce rôle à Sydney ou Melbourne.\n\n## Histoire\n\nLe choix de Canberra fut officialisé en 1908, avant l'installation du gouvernement en 1927.\n\n## Géographie\n\nSituée dans le district de Canberra, elle est éloignée des côtes.\n\n## Conclusion\n\nCapitale politique et démographique, Canberra consolide son rôle national.",
+     "parts": 4,
+     "plan_seconds": 23.18701749999309,
+     "tokens": 492,
+     "longest_part": 28,
+     "first": 25.71323309998843,
+     "seconds": 29.372283900011098,
+     "contract": {
+      "fil": "La capitale de l'Australie est Canberra, située dans le district de Canberra, loin des côtes.",
+      "termes": [
+       "Canberra",
+       "Australie",
+       "Capitale",
+       "District de Canberra",
+       "Sydney",
+       "Melbourne"
+      ],
+      "faits": [
+       "Canberra est la capitale depuis 1927.",
+       "La population est d'environ 460 000 habitants.",
+       "Le siège du gouvernement y est installé.",
+       "Sydney et Melbourne sont les plus grandes villes.",
+       "Le choix fut fait en 1908.",
+       "Le plan d'urbanisme est d'William Wilkinson."
+      ],
+      "ton": "factuel et concis"
+     },
+     "outline": [
+      "Introduction",
+      "Histoire",
+      "Géographie",
+      "Conclusion"
+     ]
+    },
+    "speedup": 0.954207149686795,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   },
+   {
+    "question": "Traduis en anglais : « Le chat dort sur le canapé. »",
+    "whole": {
+     "answer": "\"The cat is sleeping on the sofa.\"",
+     "tokens": 9,
+     "first": 0.5614805999794044,
+     "seconds": 1.17809109998052
+    },
+    "swarm": {
+     "answer": "## Analyse\n\nOn décompose la phrase française pour obtenir la traduction anglaise.\n\n## Traduction\n\nLa phrase anglaise finale est « The cat is sleeping on the sofa. ».",
+     "parts": 2,
+     "plan_seconds": 15.724377999984426,
+     "tokens": 302,
+     "longest_part": 17,
+     "first": 16.71082659997046,
+     "seconds": 17.685261399979936,
+     "contract": {
+      "fil": "Traduction littérale et précise de la phrase française donnée.",
+      "termes": [
+       "chat",
+       "dort",
+       "sur",
+       "le",
+       "canapé",
+       "anglais"
+      ],
+      "faits": [
+       "Phrase source : « Le chat dort sur le canapé. »",
+       "Traduction cible : « The cat is sleeping on the sofa. »",
+       "Langue d'origine : Français",
+       "Langue cible : Anglais",
+       "Sujet : Animal domestique",
+       "Action : Sommeil"
+      ],
+      "ton": "Neutre et factuel"
+     },
+     "outline": [
+      "Analyse",
+      "Traduction"
+     ]
+    },
+    "speedup": 0.06661428821073895,
+    "votes": [
+     "=",
+     "="
+    ],
+    "swarm_score": 0
+   },
+   {
+    "question": "Combien font 17 fois 23 ?",
+    "whole": {
+     "answer": "Pour trouver le produit de 17 fois 23, nous pouvons effectuer la multiplication étape par étape :\n\n$$17 \\times 23$$\n\nNous pouvons décomposer 23 en $20 + 3$ pour simplifier le calcul :\n\n1.  Multiplions 17 par 20 :\n    $$17 \\times 20 = 340$$\n\n2.  Multiplions 17 par 3 :\n    $$17 \\times 3 = 51$$\n\n3.  Additionnons les deux résultats :\n    $$340 + 51 = 391$$\n\n**Réponse :**\n17 fois 23 font **391**.",
+     "tokens": 159,
+     "first": 0.5560595999995712,
+     "seconds": 8.83891799999401
+    },
+    "swarm": {
+     "answer": "## Énoncé du problème\n\nNous devons multiplier le nombre 17 par le nombre 23 pour obtenir leur produit.\n\n## Résultat final\n\nLe produit de 17 par 23 est donc le chiffre exact de 391.",
+     "parts": 2,
+     "plan_seconds": 14.52827320000506,
+     "tokens": 314,
+     "longest_part": 22,
+     "first": 15.4773423000006,
+     "seconds": 16.743103000015253,
+     "contract": {
+      "fil": "Présenter le résultat du calcul de 17 multiplié par 23 de manière directe et factuelle.",
+      "termes": [
+       "17",
+       "23",
+       "produit",
+       "multiplication",
+       "résultat",
+       "calcul"
+      ],
+      "faits": [
+       "Le produit de 17 et 23 est 391.",
+       "Le calcul est une simple multiplication arithmétique.",
+       "Aucune autre donnée n'est nécessaire pour répondre à la question."
+      ],
+      "ton": "Neutre, concis et pédagogique."
+     },
+     "outline": [
+      "Énoncé du problème",
+      "Résultat final"
+     ]
+    },
+    "speedup": 0.5279139715013375,
+    "votes": [
+     "=",
+     "B"
+    ],
+    "swarm_score": -1
+   }
+  ]
+ }
+]

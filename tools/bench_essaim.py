@@ -63,7 +63,9 @@ PLAN_SYSTEM = (
     "- « parties » : entre 2 et 8, dans l'ordre de lecture, chacune avec un « titre », son "
     "« contenu » (ce qu'elle couvre et seulement elle) et une longueur en « mots ». Une "
     "question simple appelle 2 parties courtes ; une introduction ou une conclusion n'est "
-    "une partie que si la réponse en a besoin.")
+    "une partie que si la réponse en a besoin.\n"
+    "Sois très bref : le plan doit s'écrire en quelques secondes (titres de quelques mots, "
+    "contenus d'une ligne, 6 termes et 6 faits au plus).")
 
 PART_SYSTEM = (
     "Tu écris UNE partie d'une réponse rédigée par plusieurs auteurs en même temps : les "
@@ -84,10 +86,12 @@ PLAN_SCHEMA = {
         "contrat": {
             "type": "object",
             "properties": {
-                "fil": {"type": "string"},
-                "termes": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
-                "faits": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
-                "ton": {"type": "string"},
+                "fil": {"type": "string", "maxLength": 160},
+                "termes": {"type": "array", "maxItems": 6,
+                           "items": {"type": "string", "maxLength": 60}},
+                "faits": {"type": "array", "maxItems": 6,
+                          "items": {"type": "string", "maxLength": 120}},
+                "ton": {"type": "string", "maxLength": 40},
             },
             "required": ["fil", "termes", "faits", "ton"],
         },
@@ -95,7 +99,8 @@ PLAN_SCHEMA = {
             "type": "array", "minItems": 2, "maxItems": 8,
             "items": {
                 "type": "object",
-                "properties": {"titre": {"type": "string"}, "contenu": {"type": "string"},
+                "properties": {"titre": {"type": "string", "maxLength": 60},
+                               "contenu": {"type": "string", "maxLength": 160},
                                "mots": {"type": "integer"}},
                 "required": ["titre", "contenu", "mots"],
             },
@@ -153,8 +158,8 @@ def _outline(parts, mine=None) -> str:
 def swarm(url, question, workers) -> dict:
     """Le plan-contrat, puis toutes les parties en même temps, assemblées dans l'ordre."""
     began = time.monotonic()
-    planned = ask(url, PLAN_SYSTEM, question, max_tokens=900, schema=PLAN_SCHEMA, temperature=0.3)
-    plan = json.loads(planned["text"])
+    planned = ask(url, PLAN_SYSTEM, question, max_tokens=1500, schema=PLAN_SCHEMA, temperature=0.3)
+    plan = json.loads(planned["text"])        # bornes du schéma : il ne peut plus déborder
     parts, contract = plan["parties"], plan["contrat"]
     plan_seconds = time.monotonic() - began
 
@@ -186,9 +191,13 @@ def judge(url, question, a, b) -> str:
     return verdict[:1] if verdict[:1] in ("A", "B", "=") else "?"
 
 
-def run(url, question, workers) -> dict:
+def run(url, question, workers) -> dict | None:
     alone = whole(url, question)
-    shared = swarm(url, question, workers)
+    try:
+        shared = swarm(url, question, workers)
+    except (ValueError, KeyError) as exc:      # plan illisible : noté, la mesure continue
+        print(f"plan illisible ({exc}) | {question[:50]}", flush=True)
+        return None
     # Deux ordres : l'essaim en B, puis en A ; +1 quand l'essaim est préféré
     first, second = judge(url, question, alone["answer"], shared["answer"]), \
         judge(url, question, shared["answer"], alone["answer"])
@@ -212,7 +221,8 @@ def main():
     parser.add_argument("--court", action="store_true", help="seulement les questions courtes")
     args = parser.parse_args()
     url = args.url.rstrip("/")
-    results = [run(url, q, args.machines) for q in (SHORT if args.court else QUESTIONS + SHORT)]
+    results = [r for q in (SHORT if args.court else QUESTIONS + SHORT)
+               if (r := run(url, q, args.machines)) is not None]
     long = [r for r in results if r["question"] in QUESTIONS]
     summary = {"when": time.strftime("%Y-%m-%d %H:%M"), "machines": args.machines,
                "speedup_median_long": statistics.median(r["speedup"] for r in long) if long else None,
