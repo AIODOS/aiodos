@@ -271,6 +271,13 @@ Ce que cela dit :
 Objectif de la prochaine mesure : à longueur égale, l'essaim plus rapide qu'une réponse
 d'un trait, le premier mot en moins de 3 s, et le juge sans préférence nette.
 
+Codé dans le banc d'essai (`--methode flux`, mesure prévue le 28/10 au matin), avec une
+variante du point 2 : plutôt que d'attendre la fin du plan, **une ouverture part à
+l'instant zéro** chez une autre machine (l'essentiel de la réponse en quelques phrases,
+sans chiffres précis pour ne contredire aucune partie), pendant que le plan s'écrit ;
+chaque partie part dès que sa ligne est écrite. Le premier mot affiché est celui de
+l'ouverture.
+
 ## 13. Étapes proposées
 
 1. **Mesurer** les longues réponses (§ 12) et décider du seuil où l'essaim vaut la peine.
