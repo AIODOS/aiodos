@@ -51,7 +51,12 @@
   "remaining": "~{time} left",
   "took": "in {time}",
   "indexed": "{n} indexed · {chunks} passages",
-  "details": "Details",
+  "percent": "{n}%",
+  "detail_units": "Units",
+  "detail_time": "Time",
+  "detail_machines": "Machines",
+  "detail_result": "Result",
+  "local_here": "{n} here",
   "skipped_types": "Skipped (no usable text, or type turned off in the settings): {types}",
   "cancel_title": "Cancel the task",
   "cancel_text": "“{title}”: units not processed yet will be dropped. What is already done is kept.",
@@ -79,5 +84,36 @@
   "pause_all_after": "Whole queue: after the current unit",
   "pause_all_now": "Whole queue: right now (the computation in progress is lost)",
   "queue_resumed": "The queue resumes.",
-  "queue_paused": "Queue paused."
+  "queue_paused": "Queue paused.",
+  "workers_title": "Machines at work",
+  "workers_none": "No machine is computing right now",
+  "workers_machines": {
+    "one": "{n} machine at work",
+    "other": "{n} machines at work"
+  },
+  "workers_units": {
+    "one": "{n} unit in progress",
+    "other": "{n} units in progress"
+  },
+  "workers_col_machine": "Machine",
+  "workers_col_computing": "Current work",
+  "workers_col_state": "State",
+  "workers_col_link": "Link",
+  "workers_col_speed": "Speed",
+  "workers_here": "This machine",
+  "workers_computing": "Computing",
+  "workers_idle": "Idle",
+  "workers_paused": "Queue paused",
+  "workers_unreachable": "Unreachable",
+  "workers_unreachable_hint": "Its units go back to the queue if it stays silent until their lease ends.",
+  "workers_per_unit": "~{time} per unit",
+  "workers_per_unit_title": {
+    "one": "Average over {n} unit computed for you",
+    "other": "Average over the {n} units computed for you"
+  },
+  "workers_network_off": "Network off: only this machine computes.",
+  "workers_idle_peers": {
+    "one": "{n} other machine online, with nothing to do right now.",
+    "other": "{n} other machines online, with nothing to do right now."
+  }
 }

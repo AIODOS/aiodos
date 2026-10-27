@@ -24,7 +24,7 @@ function busy(peer) {
   return sum(live.for_me) + (live.for_it || []).length + (live.chats_for_me || 0) + (live.chats_for_it || 0);
 }
 
-function link(peer) {
+export function link(peer) {           // aussi pour les machines au travail (jobs-workers.js)
   if (!peer.online) {
     return esc(peer.last_seen ? t('connected.offline_seen', { ago: ago(peer.last_seen) }) : t('connected.never_seen'));
   }

@@ -468,18 +468,63 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .slot { display: inline-flex; align-items: center; gap: 6px; }
 .slot i { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); display: inline-block; }
 .slot i.busy { background: var(--cyan); box-shadow: 0 0 8px rgba(52, 209, 166, .7); }
-.remote-where { display: inline-flex; align-items: center; gap: 4px; color: var(--cyan); }
-.jobs { display: flex; flex-direction: column; gap: 12px; }
-.job { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-.job .top { display: flex; align-items: center; gap: 10px; }
-.job .title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.job .select { width: auto; height: 30px; font-size: 12.5px; padding: 0 28px 0 10px; }
-.job .bar { margin: 12px 0 8px; }
-.job .foot { display: flex; align-items: center; gap: 12px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
-.job .foot .grow { flex: 1; }
-.job details { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
-.job details summary { cursor: pointer; }
-.job .failure { font-family: var(--mono); font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+/* Une ligne repliable par travail (js/fold.js) : titre, état, progression, commandes ; le détail
+   à l'ouverture */
+.jobs { display: flex; flex-direction: column; gap: 8px; }
+.jobs > details.fold + details.fold { margin-top: 0; }
+details.fold.job > summary { padding: 9px 12px 9px 16px; }
+details.fold.job > summary .fold-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.job-meta { display: flex; align-items: center; gap: 10px; flex: none; }
+.job-meta .bar { width: 110px; height: 5px; flex: none; }
+.job-pct { min-width: 3.4em; text-align: right; font-size: 12.5px; color: var(--muted); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.job-meta .actions { display: inline-flex; gap: 2px; }
+.job-meta .icon-btn { width: 30px; height: 30px; }
+details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 14px; }
+.facts.job-facts { grid-template-columns: 110px minmax(0, 1fr); gap: 6px 14px; font-size: 13px; }
+.job-fail { color: var(--err); }
+.job-notes:empty, .job-failures:empty { display: none; }
+.job-notes p { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+.job-notes p:last-child { margin-bottom: 0; }
+.job-controls { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.job-controls label { display: inline-flex; align-items: center; gap: 8px; }
+.job-controls .select { width: auto; height: 30px; font-size: 12.5px; padding: 0 28px 0 10px; }
+.job .failure { font-family: var(--mono); font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line);
+  color: var(--muted); overflow-wrap: anywhere; }
+/* Machines au travail (js/views/jobs-workers.js) : en bas de la vue, même pendant le défilement.
+   bottom négatif : collé au bord, sur la marge du bas de .page (sinon la liste passerait dessous) */
+.jobs-workers { position: sticky; bottom: -48px; z-index: 2; margin-top: 18px; padding-bottom: 14px;
+  background: var(--bg); }
+.jobs-workers > details.fold { box-shadow: 0 -10px 24px -6px var(--bg); }
+.jobs-workers > details.fold > .fold-body { max-height: 36vh; overflow-y: auto; padding: 4px 16px 10px; }
+.workers { width: 100%; border-collapse: collapse; font-size: 13px; }
+.workers th { text-align: left; color: var(--faint); font-weight: 500; font-size: 12px; padding: 8px;
+  border-bottom: 1px solid var(--line); white-space: nowrap; }
+.workers td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.workers tr:last-child td { border-bottom: 0; }
+.workers-name { white-space: nowrap; }
+.workers-name .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
+.workers-what { overflow-wrap: anywhere; }
+.workers-foot { margin: 8px 0 0; font-size: 12.5px; color: var(--faint); }
+@media (max-width: 760px) {
+  /* Téléphone : l'état, la progression et les boutons passent sous le titre */
+  details.fold.job > summary { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+  .job-meta { order: 1; flex: 1 1 100%; }
+  .job-meta .bar { flex: 1 1 auto; width: auto; }
+  .facts.job-facts { grid-template-columns: 84px minmax(0, 1fr); }
+  .facts.job-facts dt { margin-top: 0; }            /* deux colonnes gardées : en face de sa valeur */
+  .jobs-workers { bottom: -32px; }                  /* la marge du bas de .page sur téléphone */
+  /* Une fiche par machine : son nom, son état et son lien, puis ce qu'elle calcule */
+  .workers thead { display: none; }
+  .workers, .workers tbody { display: block; }
+  .workers tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 0;
+    border-bottom: 1px solid var(--line); }
+  .workers tr:last-child { border-bottom: 0; }
+  .workers td { display: block; padding: 0; border: 0; }
+  .workers td.workers-name { flex: 1 1 auto; white-space: normal; }
+  .workers td.workers-what { order: 1; flex: 1 1 100%; }
+  .workers td.workers-none { display: none; }
+}
 
 /* ------------------------------------------------------------------ machine */
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
