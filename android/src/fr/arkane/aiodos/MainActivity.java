@@ -58,14 +58,14 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.rgb(8, 12, 26));
+        root.setBackgroundColor(Color.rgb(6, 8, 7));
         root.setFitsSystemWindows(true);
         web = new WebView(this);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        web.setBackgroundColor(Color.rgb(8, 12, 26));
+        web.setBackgroundColor(Color.rgb(6, 8, 7));
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
@@ -99,7 +99,7 @@ public class MainActivity extends Activity {
         });
         web.setVisibility(View.GONE);
         status = new TextView(this);
-        status.setTextColor(Color.rgb(232, 236, 251));
+        status.setTextColor(Color.rgb(229, 239, 235));
         status.setTextSize(17);
         status.setGravity(Gravity.CENTER);
         status.setPadding(48, 48, 48, 48);

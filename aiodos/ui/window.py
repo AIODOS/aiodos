@@ -366,11 +366,11 @@ def waiting_page(problem: str | None = None) -> str:
     text = (f'<p class="err">{html.escape(problem)}</p><p>{details}</p>'
             if problem else f'<p>{html.escape(t("window.starting"))}<span class="dots"></span></p>')
     return f"""<!doctype html><html lang="{i18n.current()}"><head><meta charset="utf-8"><style>
-html, body {{ margin: 0; height: 100%; background: #080c1a; color: #e8ecfb;
+html, body {{ margin: 0; height: 100%; background: #060807; color: #e5efeb;
   font: 15px "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; }}
 main {{ text-align: center; max-width: 520px; padding: 24px; }}
 img {{ width: 96px; height: 96px; border-radius: 22px; }}
-p {{ color: #8e99c0; margin: 16px 0 0; }}
+p {{ color: #8ca39a; margin: 16px 0 0; }}
 .err {{ color: #ff9aa8; }}
 .dots::after {{ content: ""; animation: dots 1.4s steps(4) infinite; }}
 @keyframes dots {{ 0% {{ content: ""; }} 25% {{ content: "."; }} 50% {{ content: ".."; }} 75% {{ content: "..."; }} }}
@@ -386,7 +386,7 @@ def run(start, on_closed, quit_on_error: bool = False, hidden: bool = False):
     la montre (pywebview la crée tout de même, puis la cache : l'icône naît avec elle)."""
     window = webview.create_window(
         "AIODOS", html=waiting_page(), js_api=SEALED, width=1320, height=860,
-        min_size=(980, 640), background_color="#080c1a", text_select=True, hidden=hidden)
+        min_size=(980, 640), background_color="#060807", text_select=True, hidden=hidden)
     window.expose(*BRIDGE)               # des fonctions, pas un objet : cf. le pont, plus haut
     _state["window"] = window
     _open.append(window)
