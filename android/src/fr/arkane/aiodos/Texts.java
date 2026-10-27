@@ -15,7 +15,7 @@ import java.util.Locale;
  * (aiodos/node/android_app.py) ; elle est gardée pour le démarrage suivant, où la
  * notification s'affiche avant que Python ne réponde.
  */
-final class Texts {
+public final class Texts {
     private static final String PREFS = "aiodos";
     private static final String KEY = "langue";
     private static volatile Context app;
@@ -27,8 +27,9 @@ final class Texts {
         app = context.getApplicationContext();
     }
 
-    /** Appelée par le nœud : « fr », « en », ou null (la langue du téléphone). */
-    static void choose(String lang) {
+    /** Appelée par le nœud : « fr », « en », ou null (la langue du téléphone). Publique, comme
+     *  sa classe : Chaquopy ne voit que les membres publics (sinon « no attribute 'choose' »). */
+    public static void choose(String lang) {
         Context context = app;
         if (context == null) {
             return;
