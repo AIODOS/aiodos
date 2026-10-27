@@ -558,6 +558,34 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
   background: rgba(138, 217, 193, .08); border: 1px solid rgba(138, 217, 193, .3); font-size: 12.5px; color: #c9efe2; }
 
 /* -------------------------------------------------------------- réseau local */
+/* La vue Réseau en sections repliables (views/network.js) : un titre d'une ligne avec le
+   résumé de son état, et l'interrupteur principal sur cette ligne quand elle en a un */
+.net-folds { margin-top: 16px; }
+.net-folds .fold-sub .warn { color: var(--warn); }
+.net-folds .fold-sub .pill { height: 20px; vertical-align: 1px; }
+.net-folds .hint:last-child { margin-bottom: 0; }
+.net-folds .banner { margin: 8px 0 0; }
+.net-folds .phase-note { margin: 10px 0 0; }
+.net-sub { display: flex; align-items: center; gap: 8px; margin: 16px 0 4px; font-size: 14px; font-weight: 600; }
+.net-sub .icon { width: 16px; height: 16px; color: var(--muted); }
+.net-tools { margin: 0 0 10px; }
+.net-add { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.net-add .hint { margin-bottom: 10px; }
+.net-add .net-tools { margin: 0; }
+.net-add .input { flex: 1 1 200px; min-width: 0; max-width: 360px; }
+.net-grow { flex: 1; min-width: 0; }
+.net-text { flex: 1 1 220px; min-width: 0; }      /* trop étroit : les boutons passent dessous */
+.net-empty { padding: 14px; }
+.net-key { margin: 8px 0; }
+/* Au téléphone, le résumé passe sous le titre, en entier (ce qui attend ne se perd pas au bout
+   d'une ligne coupée) ; l'interrupteur et le chevron restent à droite du titre */
+@media (max-width: 760px) {
+  .net-folds details.fold > summary { flex-wrap: wrap; row-gap: 4px; }
+  .net-folds details.fold > summary .fold-sub { order: 1; flex: 1 1 100%; padding-left: 28px; white-space: normal; }
+  .net-folds details.fold > summary .net-switch { margin-left: auto; }
+  .net-folds details.fold > summary .net-switch + .fold-chev { margin-left: 0; }
+  .net-add .input { max-width: none; }
+}
 .peer-list { display: flex; flex-direction: column; gap: 8px; }
 .peer { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .peer.intro { border-color: var(--cyan); }
@@ -574,12 +602,25 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .peer-aside > div { flex: 1; }
 .peer-offline { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
 .peer-offline > div { flex: 1; }
+/* Une machine appairée : une ligne, son détail (profil, échanges) à l'ouverture */
+.peer-more > summary { list-style: none; cursor: pointer; }
+.peer-more > summary::-webkit-details-marker { display: none; }
+.peer-more > summary b { overflow-wrap: anywhere; }
+.peer-acts { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }   /* passent à la ligne ensemble */
+.peer-chev { display: inline-flex; color: var(--faint); transition: transform .15s; }
+.peer-chev .icon { width: 15px; height: 15px; }
+.peer-more[open] .peer-chev { transform: rotate(90deg); }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.on { background: var(--ok); box-shadow: 0 0 8px rgba(63, 214, 154, .6); }
 .pair-code { margin: 16px 0 4px; padding: 16px; text-align: center; border-radius: 12px; background: var(--bg-2);
   border: 1px solid var(--line-2); font: 600 36px/1 var(--mono); letter-spacing: .18em; color: #ddf7ee; }
 
 /* -------------------------------------------- machines connectées (en direct) */
+/* Le titre, et sur sa ligne le résumé (en ligne, qui prête, qui travaille) */
+.live-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 10px; }
+.live-head h2 { margin: 0; }
+.live-head .live-summary { margin: 0; }
+.card .live-off { margin: 0; }
 .live-summary { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 12px; }
 .live-nudge { margin: 4px 0 12px; }
 .live { width: 100%; border-collapse: collapse; font-size: 13px; }

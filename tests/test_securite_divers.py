@@ -425,7 +425,9 @@ def test_the_network_view_guards_with_the_interface_helpers(tmp_path):
     (js / "views").mkdir(parents=True)
     static = paths.STATIC_DIR / "js"
     (js / "dom-interface.js").write_bytes((static / "dom.js").read_bytes())
-    for name in ("state.js", "views/network.js"):
+    # La vue Réseau et ses modules (sections repliables, appairage, machines, Internet)
+    for name in ("state.js", "fold.js", "views/network.js", "views/network-pairing.js",
+                 "views/network-peers.js", "views/network-internet.js"):
         (js / name).write_bytes((static / name).read_bytes())
     for name, text in STUBS.items():
         (js / name).write_text(text, encoding="utf-8")

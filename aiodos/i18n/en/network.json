@@ -17,6 +17,13 @@
   "internet_key": "key {key}…",
   "internet_denied": "relay {relay} refuses this machine: its key must be on the relay's allowlist",
   "internet_title": "Connect my machines over the Internet",
+  "internet_fold": "Internet",
+  "internet_sub_ready": "ready",
+  "internet_sub_relays": "ready, relay {relays}",
+  "invitations_pending": {
+    "one": "{n} invitation in progress",
+    "other": "{n} invitations in progress"
+  },
   "invite_title": "Invite a friend",
   "invite_hint": "To pair the machine of a friend who isn't on your network. Create an invitation and send them the code (message, email); they paste it into their AIODOS with “Reply to an invitation”, then send you back their reply, which you paste here. You then each confirm the same 6-digit code. An invitation works only once, for 24 hours, and both sides need the Internet connection turned on.",
   "create_invitation": "Create an invitation",
@@ -55,6 +62,8 @@
   "public_key": "This machine's public key:",
   "public_none": "No other public node online for now.",
   "public_title": "Join the public network",
+  "public_fold": "Public network",
+  "public_sub_needs_internet": "turn on Internet first",
   "public_trial": "trial",
   "public_help": "A directory with no owner (the BitTorrent DHT), where AIODOS nodes find each other without an invitation. This machine joins it with a separate key, which doesn't link it to your paired machines, and through the relays: your IP address isn't given to strangers, but a stranger running their own relay could see it (a known limit of this trial). It only tells its AIODOS version and the models it can compute. Nothing is entrusted to strangers, and nothing is computed for them: that will come later, with your consent.",
   "local_off_internet": "No more discovery or direct path on your network: your paired machines are still reached over the Internet.",
@@ -62,8 +71,12 @@
   "local_visible_discovery": "This machine (“{name}”) is visible on your network, port {port}, automatic discovery on.",
   "local_visible": "This machine (“{name}”) is visible on your network, port {port}.",
   "starting": "Starting…",
-  "local_enabled": "Local network on",
-  "local_disabled": "Local network off",
+  "local_title": "Local network",
+  "local_sub_on": "on, port {port}",
+  "sub_off": "off",
+  "sub_starting": "starting…",
+  "sub_connecting": "connecting…",
+  "add_hint": "A machine on your network doesn't show up in “Detected machines”? Add it by its IP address.",
   "firewall_html": "When you turn it on, Windows will probably ask for firewall permission for Python: allow it for <b>private networks</b> only.",
   "profile_pending": "Profile not received yet.",
   "friend_profile": "reduced profile (this machine counts you among its friends)",
@@ -118,6 +131,19 @@
   "offload_on": "Your tasks can be handed to them.",
   "offload_off": "You don't hand your tasks to them.",
   "peers_title": "Paired machines",
+  "peers_sub": {
+    "one": "{n} machine, {online} online",
+    "other": "{n} machines, {online} online"
+  },
+  "peers_sub_none": "none yet",
+  "intros_pending": {
+    "one": "{n} introduction to confirm",
+    "other": "{n} introductions to confirm"
+  },
+  "set_aside_count": {
+    "one": "{n} set aside",
+    "other": "{n} set aside"
+  },
   "peers_hint": "Your machines and your friends'. Exchanges are encrypted, and each machine applies its own sharing rules (set in “This machine”). A friend only receives the libraries shared with your friends. {offload} A friend's machine also meets your other machines, and theirs meet yours, with your mutual agreement.",
   "intro_waiting": "introduced by “{presenter}” {ago} · waiting for your answer",
   "answer": "Answer",
@@ -172,7 +198,7 @@
   },
   "offline_hint": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network).",
   "offline_hint_peer_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); to reach it over the Internet, “Internet” must also be turned on there.",
-  "offline_hint_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); or turn on “Internet” above, to reach it even outside the local network.",
+  "offline_hint_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); or turn on “Internet” below, to reach it even outside the local network.",
   "internet_direct": "Internet: direct",
   "internet_relay": "Internet: through a relay",
   "quoted": "“{name}”",
@@ -202,8 +228,22 @@
   "consulted_title": "Searches by “{name}”",
   "consulted_text": "Its searches in the libraries you open to it, newest first, with the documents the passages it received come from. Its questions are not kept.",
   "visible_title": "Detected machines",
-  "visible_off": "Turn on the local network to see the other AIODOS machines on your network (over the Internet: “Invite a friend” or one of your machines, above).",
-  "visible_hint": "The AIODOS nodes announcing themselves on your network. If a machine doesn't show up, add it by its IP address.",
+  "visible_sub": {
+    "one": "{n} machine to pair",
+    "other": "{n} machines to pair"
+  },
+  "visible_sub_none": "none for now",
+  "visible_sub_off": "local network off",
+  "pairing_pending": {
+    "one": "{n} pairing in progress",
+    "other": "{n} pairings in progress"
+  },
+  "pairing_to_confirm": {
+    "one": "{n} pairing to confirm here",
+    "other": "{n} pairings to confirm here"
+  },
+  "visible_off": "Turn on the local network to see the other AIODOS machines on your network (over the Internet: “Invite a friend” or one of your machines, below).",
+  "visible_hint": "The AIODOS nodes announcing themselves on your network. If a machine doesn't show up, add it by its IP address in “Local network”.",
   "address_placeholder": "Address: 192.168.1.20 or 192.168.1.20:47701",
   "add": "Add",
   "pairing_code": "pairing in progress · code {code}",

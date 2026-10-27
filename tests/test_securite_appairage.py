@@ -360,7 +360,9 @@ def _run_network_js(tmp_path, script: str, *args) -> object:
     js = tmp_path / "js"
     (js / "views").mkdir(parents=True)
     static = paths.STATIC_DIR / "js"
-    for name in ("dom.js", "state.js", "views/network.js"):
+    # La vue Réseau et ses modules (sections repliables, appairage, machines, Internet)
+    for name in ("dom.js", "state.js", "fold.js", "views/network.js", "views/network-pairing.js",
+                 "views/network-peers.js", "views/network-internet.js"):
         (js / name).write_bytes((static / name).read_bytes())
     for name, text in STUBS.items():
         (js / name).write_text(text, encoding="utf-8")

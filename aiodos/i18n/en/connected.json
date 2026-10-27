@@ -78,6 +78,7 @@
   "title": "Connected machines",
   "hint": "Live: who is online, who lends their computing power, and what each machine does for the other. Updated about every 15 seconds.",
   "empty": "No paired machines: pair your machines below.",
+  "network_off": "Network off: turn on the local network or the Internet below to reach your machines.",
   "rail_no_peers": "No paired machines",
   "rail_online": {
     "one": "{n} machine online",
