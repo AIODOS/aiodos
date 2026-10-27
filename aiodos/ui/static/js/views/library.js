@@ -174,7 +174,7 @@ function renderContent() {
   }
   box.innerHTML = `
     <div class="toolbar">
-      <h2 style="margin:0;flex:1" id="lib-title">${esc(c.name)}</h2>
+      <h2 class="toolbar-title" id="lib-title">${esc(c.name)}</h2>
       <button class="btn sm" data-add="files">${icon('file')}${esc(t('library.add_files'))}</button>
       <button class="btn sm" data-add="folder">${icon('folder')}${esc(t('library.add_folder'))}</button>
       <button class="btn sm" data-add="urls">${icon('globe')}${esc(t('library.add_urls'))}</button>
@@ -183,7 +183,7 @@ function renderContent() {
     <div class="toolbar">
       <div class="segmented">${KIND_FILTERS.map(([k, label]) =>
         `<button data-kind="${k}" class="${k === kindFilter ? 'on' : ''}">${esc(t(label))}</button>`).join('')}</div>
-      <div style="flex:1"></div>
+      <div class="grow"></div>
       <button class="btn ghost sm" data-tree="open">${esc(t('library.expand_all'))}</button>
       <button class="btn ghost sm" data-tree="close">${esc(t('library.collapse_all'))}</button>
     </div>

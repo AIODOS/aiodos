@@ -468,6 +468,8 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .coll .name small { color: var(--faint); }
 .coll.disabled .name b { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--faint); }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.toolbar > .toolbar-title { margin: 0; flex: 1; }
+.toolbar > .grow { flex: 1; }
 .segmented { display: inline-flex; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
 .segmented button { border: 0; background: transparent; color: var(--muted); height: 28px; padding: 0 12px; border-radius: 7px; font-size: 12.5px; }
 .segmented button.on { background: var(--panel-3); color: var(--text); }
@@ -686,7 +688,7 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 /* ------------------------------------------------------------------ réglages */
 .settings { display: flex; flex-direction: column; gap: 10px; }   /* même largeur que les autres vues (.page-inner) */
 .settings details.fold + details.fold { margin-top: 0; }
-#settings-form { margin-top: 10px; }
+#settings-form, #settings-about { margin-top: 10px; }
 /* La langue, en tête des Réglages : enregistrée aussitôt */
 .lang-pick { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .lang-pick .select { width: auto; min-width: 180px; }
@@ -940,6 +942,24 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
   .img-grid { columns: 2 140px; }
   .create-bar .select { flex: 1 1 120px; }
   .creation-grid, .creation-grid.wide, .creation-grid.several { max-width: 100%; }
+
+  /* Une seule logique d'alignement (demandé par l'auteur le 27/10/2026) : le titre d'une page
+     ou d'une barre d'outils prend toute la ligne, ses boutons passent dessous et se partagent
+     la largeur ; plus de bouton seul à droite, ni d'espace vide à côté */
+  .page-head { align-items: stretch; gap: 10px; }
+  .page-head > div:first-child, .toolbar > .toolbar-title, .toolbar > .input { flex: 1 1 100%; min-width: 0; }
+  .page-head > .grow:empty, .toolbar > .grow:empty { display: none; }   /* les espaceurs */
+  .page-head > .btn, .page-actions, .page-actions > .btn, .toolbar > .btn, .row-buttons > .btn,
+  .modal .buttons > .btn { flex: 1 1 auto; justify-content: center; }
+  .toolbar > .segmented { flex: 1 1 100%; }
+  .toolbar > .segmented > button { flex: 1 1 0; }
+  .page-head > .lang-pick { flex: 1 1 100%; }
+  .lang-pick .select { flex: 1; min-width: 0; }
+  /* Compteurs : chaque ligne remplie, le dernier s'étend s'il est seul */
+  .stat { flex: 1 1 96px; min-width: 0; }
+  /* Ressources de cette machine : le libellé sur sa ligne, puis deux colonnes alignées */
+  .slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+  .slots > span:first-child { grid-column: 1 / -1; }
 }
 
 /* Sections repliables (js/fold.js) : un titre d'une ligne, le contenu à l'ouverture ;

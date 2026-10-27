@@ -11,7 +11,7 @@
   },
   "left_open_fix": "Déplace le dossier de données sur un disque qui garde les droits, ou corrige-les à la main.",
   "percent": "{n} %",
-  "gpu_use": "utilisation {n} %",
+  "gpu_use": "utilisation {n} %",
   "no_gpu": "Aucun GPU NVIDIA détecté",
   "idle_phone": "Non mesurable sur un téléphone",
   "in_use": "En cours d'utilisation",
