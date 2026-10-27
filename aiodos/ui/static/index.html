@@ -11,30 +11,25 @@
 <body>
   <div class="app">
     <!-- La barre de navigation, en bas : le logo, les vues, et les machines en ligne
-         (js/views/connected.js) ; sur un écran étroit (téléphone), les vues moins courantes
-         vont sous « Plus » (js/mobile.js). Les textes : data-t, posés par js/i18n.js -->
+         (js/views/connected.js). Les images sont un onglet des Bibliothèques, Cette machine
+         une section des Réglages (27/10/2026). Les textes : data-t, posés par js/i18n.js -->
     <nav class="rail" data-t-label="nav.main">
       <img class="rail-logo" src="/logo.png?v=serpents" alt="AIODOS">
       <div class="rail-views">
       <button class="rail-btn" data-view="chat" data-t-title="nav.chat_title"><span data-icon="chat"></span><span class="rail-label" data-t="nav.chat"></span></button>
       <button class="rail-btn" data-view="library" data-t-title="nav.library"><span data-icon="library"></span><span class="rail-label" data-t="nav.library"></span></button>
-      <button class="rail-btn" data-view="images" data-t-title="nav.images_title"><span data-icon="image"></span><span class="rail-label" data-t="nav.images"></span></button>
       <button class="rail-btn" data-view="jobs" data-t-title="nav.jobs">
         <span data-icon="jobs"></span><span class="rail-label" data-t="nav.jobs"></span><span class="rail-badge" id="jobs-badge" hidden></span>
       </button>
-      <button class="rail-btn" data-view="node" data-t-title="nav.node"><span data-icon="node"></span><span class="rail-label" data-t="nav.node"></span></button>
       <button class="rail-btn" data-view="network" data-t-title="nav.network"><span data-icon="network"></span><span class="rail-label" data-t="nav.network"></span><span class="rail-dot" id="net-dot" hidden></span></button>
       <button class="rail-btn" data-view="settings" data-t-title="nav.settings"><span data-icon="settings"></span><span class="rail-label" data-t="nav.settings"></span></button>
-      <button class="rail-btn rail-more" id="rail-more" data-t-title="nav.more"><span data-icon="more"></span><span class="rail-label" data-t="nav.more"></span></button>
       </div>
       <button class="rail-status" id="rail-status" hidden></button>
     </nav>
     <main>
       <section class="view" id="view-chat" hidden></section>
       <section class="view" id="view-library" hidden></section>
-      <section class="view" id="view-images" hidden></section>
       <section class="view" id="view-jobs" hidden></section>
-      <section class="view" id="view-node" hidden></section>
       <section class="view" id="view-network" hidden></section>
       <section class="view" id="view-settings" hidden></section>
     </main>

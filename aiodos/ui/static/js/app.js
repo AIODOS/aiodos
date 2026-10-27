@@ -1,7 +1,7 @@
 // Démarrage de l'interface : textes, vues, navigation, événements du nœud.
 import { get, listen } from './api.js';
 import { $, $$, esc, debounce, count, acceptsText, dropRefused } from './dom.js';
-import { browserLanguage, lang, offline, setTexts, t, translatePage } from './i18n.js';
+import { autoLanguage, lang, offline, setTexts, t, translatePage } from './i18n.js';
 import { hydrateIcons } from './icons.js';
 import { state, emit, on, prefs } from './state.js';
 import { toast } from './ui.js';
@@ -9,7 +9,8 @@ import { mountChat } from './views/chat.js';
 import { mountLibrary } from './views/library.js';
 import { mountJobs, loadJobs, jobTitle } from './views/jobs.js';
 import { mountImages } from './views/images.js';
-import { mountNode, loadNode } from './views/node.js';
+import { loadNode } from './views/node.js';
+import { mountLibraryTabs, lastTab } from './views/library-tabs.js';
 import { mountNetwork, loadNetwork, answerPairRequest, answerIntroduction } from './views/network.js';
 import { mountSettings } from './views/settings.js';
 import { announceUpdate, loadUpdates } from './views/updates.js';
@@ -20,30 +21,38 @@ import { mountRailStatus } from './views/connected.js';
 import { mountMobile } from './mobile.js';
 import { frenchSpacing } from './typo.js';
 
-const VIEWS = ['chat', 'library', 'images', 'jobs', 'node', 'network', 'settings'];
+const VIEWS = ['chat', 'library', 'images', 'jobs', 'network', 'settings'];
+// Les images et vidéos : un onglet des Bibliothèques (library-tabs.js)
+const SECTION = { images: 'library' };
 const ACTIVE = ['queued', 'running', 'paused'];
 
 function show(view) {
+  if (view === 'node') {           // Cette machine : la première section des Réglages
+    show('settings');
+    emit('settings:focus', 'machine');
+    return;
+  }
   if (!VIEWS.includes(view)) view = 'chat';
-  $$('.view').forEach(v => { v.hidden = v.id !== `view-${view}`; });
-  $$('.rail-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  const section = SECTION[view] || view;
+  $$('.view').forEach(v => { v.hidden = v.id !== `view-${section}`; });
+  $$('.rail-btn[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === section));
   state.view = view;
   prefs.set('view', view);
   emit('view:shown', view);
 }
 
-// Les textes, dans la langue des Réglages, sinon celle du navigateur (avant toute vue)
+// Les textes, dans la langue des Réglages, sinon celle de la machine (avant toute vue)
 async function loadTexts() {
   const prefer = navigator.languages?.length ? navigator.languages : [navigator.language || ''];
   const answer = await get(`/i18n?prefer=${encodeURIComponent(prefer.join(','))}`);
-  setTexts(answer.lang, answer.texts);
+  setTexts(answer.lang, answer.texts, answer.system);
 }
 
 async function loadSettings() {
   state.settings = await get('/settings');
   emit('settings:loaded');
   // La langue changée ailleurs (une autre fenêtre, un autre appareil) : tous les textes suivent
-  const wanted = ['fr', 'en'].includes(state.settings.language) ? state.settings.language : browserLanguage();
+  const wanted = ['fr', 'en'].includes(state.settings.language) ? state.settings.language : autoLanguage();
   if (wanted !== lang) location.reload();
 }
 
@@ -147,17 +156,17 @@ async function boot() {
   keepDrops();
   hydrateIcons();
   mountChat($('#view-chat'));
-  mountLibrary($('#view-library'));
-  mountImages($('#view-images'));
+  const panes = mountLibraryTabs($('#view-library'));
+  mountLibrary(panes.library);
+  mountImages(panes.images);
   mountJobs($('#view-jobs'));
-  mountNode($('#view-node'));
   mountNetwork($('#view-network'));
   mountSettings($('#view-settings'));
   // Toucher à nouveau la vue ouverte : au téléphone, « Discussions » ouvre ou ferme la liste
   $$('.rail-btn[data-view]').forEach(b => {
     b.onclick = () => {
-      const again = state.view === b.dataset.view;
-      show(b.dataset.view);
+      const again = (SECTION[state.view] || state.view) === b.dataset.view;
+      show(b.dataset.view === 'library' ? lastTab() : b.dataset.view);
       if (again) emit('rail:again', b.dataset.view);
     };
   });

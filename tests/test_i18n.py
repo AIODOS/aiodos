@@ -80,11 +80,15 @@ def test_the_guard_answers_in_the_language_asked(client):
     assert refused.status_code == 400 and refused.text == "Host refused."
 
 
-def test_interface_texts_follow_settings_then_browser(client):
-    answer = client.get("/api/i18n?prefer=de-DE,en-GB,fr", headers=AUTH).json()
-    assert answer["lang"] == "en" and answer["setting"] == "auto"
+def test_interface_texts_follow_settings_then_machine_then_browser(client, monkeypatch):
+    """« Automatique » : la langue de la machine (demandé par l'auteur le 27/10/2026), sinon
+    celle du navigateur, sinon l'anglais ; un choix des Réglages l'emporte sur tout."""
+    monkeypatch.setattr(language, "system", lambda: "en")
+    answer = client.get("/api/i18n?prefer=fr-CA", headers=AUTH).json()
+    assert answer["lang"] == "en" and answer["system"] == "en" and answer["setting"] == "auto"
     assert answer["texts"]["nav.settings"] == "Settings"
-    assert client.get("/api/i18n?prefer=fr-CA", headers=AUTH).json()["lang"] == "fr"
+    monkeypatch.setattr(language, "system", lambda: None)      # une langue qu'AIODOS ne parle pas
+    assert client.get("/api/i18n?prefer=de-DE,fr", headers=AUTH).json()["lang"] == "fr"
     assert client.get("/api/i18n?prefer=de", headers=AUTH).json()["lang"] == "en"
     assert client.put("/api/settings", json={"language": "fr"}, headers=AUTH).status_code == 200
     answer = client.get("/api/i18n?prefer=en-US", headers=AUTH).json()

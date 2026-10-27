@@ -7,6 +7,7 @@
 // dans les fonctions qui affichent. t() rend du texte brut, à échapper (esc) dans du HTML.
 let texts = null;
 export let lang = 'fr';
+let machine = null;              // la langue de la machine (GET /api/i18n), si AIODOS la parle
 
 // Le nœud injoignable : aucun texte n'a pu venir, ces deux phrases suffisent
 const OFFLINE = {
@@ -14,8 +15,9 @@ const OFFLINE = {
   en: 'Cannot reach the AIODOS node.',
 };
 
-export function setTexts(language, all) {
+export function setTexts(language, all, system = null) {
   lang = language === 'fr' ? 'fr' : 'en';
+  machine = system === 'fr' || system === 'en' ? system : null;
   texts = all || {};
   if (globalThis.document) document.documentElement.lang = lang;   // (essais sous Node.js : sans page)
 }
@@ -29,6 +31,10 @@ export function browserLanguage() {
   }
   return 'en';
 }
+
+/** La langue que donne le réglage « Automatique » : celle de la machine, sinon celle du
+ *  navigateur. */
+export const autoLanguage = () => machine || browserLanguage();
 
 export const offline = () => OFFLINE[texts ? lang : browserLanguage()];
 

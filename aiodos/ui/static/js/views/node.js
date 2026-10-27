@@ -1,6 +1,7 @@
 // Cette machine : profil du nœud, modèles, préférences de partage de puissance.
 import { get, post, put } from '../api.js';
 import { $, h, esc, bytes, duration, powerText } from '../dom.js';
+import { fold } from '../fold.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
@@ -12,34 +13,42 @@ import { chooseModel, here, integrated } from './model-install.js';
 const CAPS = { vision: 'node.cap_vision', thinking: 'node.cap_thinking', tools: 'node.cap_tools',
   embedding: 'node.cap_embedding' };
 const RESOURCE_ICONS = { gpu: 'image', embed: 'layers', cpu: 'cpu', net: 'globe' };
+// Le profil reste visible ; le reste en sections repliables (leur titre remplace celui de la carte)
+const PARTS = [['node-share', 'node.share_title', 'bolt'], ['node-background', 'node.background_title', 'cpu'],
+  ['node-models', 'node.models_title', 'layers'], ['node-network', 'node.network_title', 'network']];
 let root;
 let shareMobile = null;            // préférences dessinées pour un téléphone ?
 let trayRow = null;                // réglage de la zone de notification dessiné ?
 let autostart = null;              // démarrage avec l'appareil (node/autostart.py)
 
+/** Cette machine, dans sa section des Réglages (settings.js) : le profil, le partage, le travail
+ *  de fond, les modèles, le réseau. Rafraîchie tant que sa section est ouverte. */
 export function mountNode(container) {
   root = h(`
-    <div class="page"><div class="page-inner">
-      <div class="page-head">
-        <div><h1>${esc(t('node.title'))}</h1>
-          <div class="sub">${esc(t('node.intro'))}</div></div>
-      </div>
-      <div class="grid-2">
-        <div class="card" id="node-machine"></div>
-        <div class="card" id="node-share"></div>
-      </div>
-      <div class="card" id="node-background" style="margin-top:16px"></div>
-      <div class="card" id="node-models" style="margin-top:16px"></div>
-      <div class="card" id="node-network" style="margin-top:16px"></div>
-    </div></div>`);
+    <div class="node-panel">
+      <div class="sub node-intro">${esc(t('node.intro'))}</div>
+      <div class="card" id="node-machine"></div>
+      ${PARTS.map(([id, title, name]) => fold({ id, title: t(title), iconName: name,
+        body: `<div id="${id}"></div>` })).join('')}
+    </div>`);
   container.append(root);
-  on('view:shown', view => { if (view === 'node') { loadNode(); loadExecutor(); loadAutostart(); } });
+  on('view:shown', view => { if (view === 'settings' && shown()) refreshNode(); });
   on('settings:loaded', () => { renderShare(); renderBackground(); });
   on('network:loaded', () => { renderNetworkSummary(); renderShareStatus(); });
   on('executor:changed', () => { renderShareStatus(); renderBackgroundStatus(); });
   window.addEventListener('pywebviewready', renderBackground);
   // Fenêtre cachée ou réduite : rien à rafraîchir (le profil lance nvidia-smi)
-  setInterval(() => { if (state.view === 'node' && !document.hidden) { loadNode(); loadNetwork(); } }, 5000);
+  setInterval(() => { if (shown() && !document.hidden) { loadNode(); loadNetwork(); } }, 5000);
+}
+
+/** Visible : les Réglages ouverts, et la section Cette machine dépliée. */
+const shown = () => state.view === 'settings' && !!root?.closest('details')?.open;
+
+/** Tout relire : à l'ouverture de sa section, ou des Réglages. */
+export function refreshNode() {
+  loadNode();
+  loadExecutor();
+  loadAutostart();
 }
 
 export async function loadNode() {
