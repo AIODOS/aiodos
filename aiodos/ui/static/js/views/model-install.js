@@ -47,17 +47,19 @@ export async function chooseModel() {
   const offered = found.models.filter(m => !m.installed);
   if (!offered.length) { toast(t('model_install.all_installed')); return; }
   const device = t(found.phone ? 'node.this_phone' : 'node.this_pc');
+  // Plusieurs à la fois : ils s'installent l'un après l'autre (services/model_install.py)
   const r = await modal({
     title: t('model_install.title'), iconName: 'plus', confirm: t('model_install.install'),
-    text: `${t('model_install.intro', { device })} ${downloadText(found.phone)}`,
+    text: `${t('model_install.intro', { device })} ${downloadText(found.phone)} ${t('model_install.several')}`,
+    multiple: true,
     choices: offered.map(m => ({
       value: m.name,
       label: `${m.label}${m.recommended ? ` · ${t('model_install.recommended')}` : ''} · ${bytes(m.size)}`,
       help: [m.about, t('model_install.license', { license: m.license }), fitText(m, found.phone)].join(' '),
     })),
   });
-  if (!r.ok || !r.choice) return;
-  try { await post('/models/install', { name: r.choice }); }
+  if (!r.ok || !r.choices.length) return;
+  try { await post('/models/install', { names: r.choices }); }
   catch (e) { errorToast(e); }
 }
 
@@ -67,8 +69,9 @@ export function progressBar(ev) {
   const share = ev.total ? Math.min(100, Math.round((ev.completed / ev.total) * 100)) : 0;
   const amount = ev.total
     ? ` · ${esc(t('model_install.amount', { done: bytes(ev.completed), total: bytes(ev.total) }))}` : '';
+  const step = ev.steps > 1 ? ` · ${esc(t('model_install.step', { n: ev.step, total: ev.steps }))}` : '';
   return `<div class="banner info install-bar">${icon('plus')}<div style="flex:1">${
-    t('model_install.progress_html', { model: esc(ev.model), percent: share })}${amount}<div class="install-track"><i style="width:${share}%"></i></div></div>
+    t('model_install.progress_html', { model: esc(ev.model), percent: share })}${amount}${step}<div class="install-track"><i style="width:${share}%"></i></div></div>
     <button class="btn sm ghost" data-install-cancel>${esc(t('ui.cancel'))}</button></div>`;
 }
 
@@ -76,10 +79,23 @@ export async function cancelInstall() {
   try { await del('/models/install'); } catch (e) { errorToast(e); }
 }
 
-/** Fin d'une installation : un mot, puis la liste des modèles se relit. → vrai si fini. */
+/** Fin d'une installation : un mot, puis la liste des modèles se relit. → vrai si fini.
+ *  Dans une série, chaque modèle installé fait relire la liste : il sert déjà. */
+let seen = 0;
 export function finished(ev, reload) {
-  if (ev?.running || ev?.done === null || ev?.done === undefined) return false;
-  if (ev.done) {
+  const count = ev?.installed?.length || 0;
+  if (ev?.running) {
+    if (count > seen) reload();
+    seen = count;
+    return false;
+  }
+  seen = 0;
+  if (ev?.done === null || ev?.done === undefined) return false;
+  if ((ev.steps || 1) > 1) {            // une série : ce qui est installé, puis ce qui ne l'est pas
+    if (count) toast(t('model_install.installed_many', { models: ev.installed.join(', '), here: here() }), 'ok', 8000);
+    if (ev.error) toast(t('model_install.failed_many', { error: ev.error }), 'err', 10000);
+    reload();
+  } else if (ev.done) {
     toast(t(/^embeddinggemma/.test(ev.model) ? 'model_install.installed_embedding'
       : 'model_install.installed_chat', { model: ev.model, here: here() }), 'ok', 6000);
     reload();

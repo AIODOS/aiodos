@@ -45,5 +45,9 @@
   "about_embeddinggemma": "Range tes bibliothèques pour y chercher : indispensable pour elles, très léger.",
   "not_offered": "Ce modèle n'est pas proposé ici.",
   "status_preparing": "préparation",
-  "stopped": "Installation arrêtée."
+  "stopped": "Installation arrêtée.",
+  "several": "Tu peux en cocher plusieurs : ils s'installeront l'un après l'autre.",
+  "step": "{n} sur {total}",
+  "installed_many": "Installés sur {here} : {models}.",
+  "failed_many": "Pas installés : {error}"
 }

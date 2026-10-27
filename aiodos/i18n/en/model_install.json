@@ -45,5 +45,9 @@
   "about_embeddinggemma": "Indexes your libraries so you can search them: essential for them, and very light.",
   "not_offered": "This model is not offered here.",
   "status_preparing": "preparing",
-  "stopped": "Installation stopped."
+  "stopped": "Installation stopped.",
+  "several": "You can tick several: they will be installed one after the other.",
+  "step": "{n} of {total}",
+  "installed_many": "Installed on {here}: {models}.",
+  "failed_many": "Not installed: {error}"
 }

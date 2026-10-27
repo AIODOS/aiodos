@@ -27,8 +27,10 @@ export function modal(opts) {
       : opts.input !== undefined
         ? `<input class="input" value="${esc(opts.input)}" placeholder="${esc(opts.placeholder || '')}">`
         : '';
+    // multiple : des cases à cocher (plusieurs choix, rendus dans « choices »)
+    const kind = opts.multiple ? 'checkbox' : 'radio';
     const choices = opts.choices ? `<div class="choices">${opts.choices.map(c => `
-      <label class="choice"><input type="radio" name="modal-choice" value="${esc(c.value)}">
+      <label class="choice"><input type="${kind}" name="modal-choice" value="${esc(c.value)}">
         <span><b>${esc(c.label)}</b>${c.help ? `<small>${esc(c.help)}</small>` : ''}</span></label>`).join('')}</div>` : '';
     const back = h(`
       <div class="modal-back" role="dialog" aria-modal="true">
@@ -50,7 +52,9 @@ export function modal(opts) {
     const yes = back.querySelector('[data-act="yes"]');
     if (opts.choices) {               // rien de coché d'avance : le choix est délibéré
       yes.disabled = true;
-      back.querySelectorAll('.choice input').forEach(r => { r.onchange = () => { yes.disabled = false; }; });
+      back.querySelectorAll('.choice input').forEach(r => {
+        r.onchange = () => { yes.disabled = !back.querySelector('.choice input:checked'); };
+      });
     }
     // how : « yes », « no », ou « dismiss » (fermée sans répondre : Échap, clic à côté)
     const finish = (ok, how = ok ? 'yes' : 'no') => {
@@ -58,7 +62,8 @@ export function modal(opts) {
       document.removeEventListener('keydown', onKey, true);
       resolve({ ok, how, value: input ? input.value : undefined,
                 checked: !!back.querySelector('.check input')?.checked,
-                choice: back.querySelector('.choice input:checked')?.value });
+                choice: back.querySelector('.choice input:checked')?.value,
+                choices: [...back.querySelectorAll('.choice input:checked')].map(i => i.value) });
     };
     const onKey = e => {
       if (e.key === 'Escape') { e.preventDefault(); finish(false, 'dismiss'); }

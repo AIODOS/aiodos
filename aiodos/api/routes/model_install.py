@@ -12,7 +12,9 @@ router = APIRouter(prefix="/api/models/install")
 
 
 class InstallIn(BaseModel):
-    name: str
+    """Un modèle (name) ou plusieurs (names), installés l'un après l'autre."""
+    name: str = ""
+    names: list[str] = []
 
 
 @router.get("")
@@ -27,7 +29,7 @@ def install(body: InstallIn, request: Request):
     def changed():
         bus.publish({"type": "model_install", **model_install.progress()})
     try:
-        return model_install.start(body.name, changed=changed)
+        return model_install.start(body.names or [body.name], changed=changed)
     except model_install.InstallError as exc:
         raise HTTPException(409, str(exc))
 

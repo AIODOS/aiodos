@@ -127,6 +127,55 @@ def test_one_installation_at_a_time_and_only_what_is_offered(monkeypatch):
     assert model_install.progress()["done"] is True
 
 
+def _wait_until_done():
+    deadline = time.monotonic() + 5
+    while model_install.progress()["running"] and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return model_install.progress()
+
+
+def test_several_models_one_after_the_other(monkeypatch):
+    """Plusieurs modèles cochés ensemble (demandé par l'auteur le 27/10/2026) : installés l'un
+    après l'autre ; un échec n'empêche pas les suivants ; « Annuler » arrête la suite."""
+    pulled, events = [], []
+
+    def pull(name, progress=None, stop=None):
+        pulled.append(name)
+        if name == "qwen3.5:4b":
+            raise RuntimeError("file does not exist")
+        progress(1, 1, "success")
+        return True
+    monkeypatch.setattr(ollama, "pull", pull)
+    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [])
+    with pytest.raises(model_install.InstallError):          # un seul hors catalogue : rien
+        model_install.start(["qwen3.5:2b", "n-importe-quoi:70b"])
+    started = model_install.start(["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:2b", "qwen3.5:9b"],
+                                  changed=lambda: events.append(model_install.progress()))
+    assert started["steps"] == 3                               # en double : une seule fois
+    final = _wait_until_done()
+    assert pulled == ["qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b"]
+    assert final["installed"] == ["qwen3.5:2b", "qwen3.5:9b"] and final["done"] is False
+    assert "qwen3.5:4b" in final["error"] and final["queue"] == []
+    assert any(e["running"] and e["installed"] == ["qwen3.5:2b"] for e in events)
+
+    gate = threading.Event()
+
+    def slow(name, progress=None, stop=None):
+        pulled.append(name)
+        gate.wait(5)
+        return not stop.is_set()
+    monkeypatch.setattr(ollama, "pull", slow)
+    pulled.clear()
+    model_install.start(["qwen3.5:2b", "qwen3.5:9b"])
+    deadline = time.monotonic() + 5
+    while not pulled and time.monotonic() < deadline:          # le premier a commencé
+        time.sleep(0.01)
+    model_install.cancel()
+    gate.set()
+    final = _wait_until_done()
+    assert pulled == ["qwen3.5:2b"] and final["installed"] == [] and final["done"] is False
+
+
 def test_the_api_publishes_the_progress(monkeypatch):
     _device(monkeypatch, vram=8 * GB)
 

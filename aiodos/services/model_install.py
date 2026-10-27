@@ -5,7 +5,8 @@ qui tiennent sur cette machine (téléphone, PC avec ou sans carte graphique) et
 par Ollama (/api/pull), en suivant l'avancement. Seulement des licences libres, vérifiées
 dans le registre d'Ollama le 18/10/2026 (fiche et texte de licence de chaque modèle) :
 Apache-2.0 pour Qwen et Mistral, MIT pour Phi. Gemma 4 et Qwen 3.6 (Apache-2.0, 21/10/2026)
-ne s'installent que par le moteur intégré (llm/catalog.py). Un seul à la fois ; l'interface lit
+ne s'installent que par le moteur intégré (llm/catalog.py). Plusieurs peuvent être choisis
+ensemble : ils s'installent l'un après l'autre (une seule série à la fois) ; l'interface lit
 progress() et reçoit un événement à chaque étape.
 """
 import logging
@@ -52,8 +53,10 @@ CATALOG = [
 NAMES = {m["name"] for m in CATALOG}
 
 _lock = threading.Lock()
+# model : celui qui s'installe ; queue : ceux qui suivent ; installed : ceux de la série
+# déjà installés ; step et steps : sa place dans la série (1 sur 3…)
 _state = {"model": None, "running": False, "completed": 0, "total": 0, "status": "",
-          "error": None, "done": None}
+          "error": None, "done": None, "queue": [], "installed": [], "step": 0, "steps": 0}
 _stop = threading.Event()
 
 
@@ -122,18 +125,20 @@ def progress() -> dict:
         return dict(_state)
 
 
-def start(name: str, changed=None) -> dict:
-    """Lance l'installation (un seul à la fois). InstallError si le modèle n'est pas
-    proposé, ou si une autre installation est en cours."""
-    if name not in NAMES:
+def start(names, changed=None) -> dict:
+    """Lance l'installation d'un modèle ou d'une liste, l'un après l'autre (une série à la
+    fois). InstallError si un modèle n'est pas proposé, ou si une installation est en cours."""
+    names = [names] if isinstance(names, str) else list(dict.fromkeys(names))
+    if not names or any(name not in NAMES for name in names):
         raise InstallError(t("model_install.not_offered"))
     with _lock:
         if _state["running"]:
             raise InstallError(t("model_install.already_running", model=_state["model"]))
-        _state.update(model=name, running=True, completed=0, total=0,
-                      status=t("model_install.status_preparing"), error=None, done=None)
+        _state.update(model=names[0], running=True, completed=0, total=0,
+                      status=t("model_install.status_preparing"), error=None, done=None,
+                      queue=names[1:], installed=[], step=1, steps=len(names))
         _stop.clear()
-    threading.Thread(target=_run, args=(name, changed), daemon=True,
+    threading.Thread(target=_run, args=(names, changed), daemon=True,
                      name="aiodos-installation-modele").start()
     return progress()
 
@@ -142,8 +147,11 @@ def cancel():
     _stop.set()
 
 
-def _run(name: str, changed):
+def _run(names: list, changed):
+    """La série : un modèle après l'autre. Un échec n'arrête pas les suivants (un fichier
+    absent d'un seul modèle) ; « Annuler » arrête celui en cours et les suivants."""
     last = [0.0]
+    errors = []
 
     def advance(completed, total, status):
         with _lock:
@@ -152,17 +160,33 @@ def _run(name: str, changed):
             last[0] = time.monotonic()
             changed()
     try:
-        finished = ollama.pull(name, progress=advance, stop=_stop)
-        ollama.list_models(max_age=0)                          # la liste se relit
+        for step, name in enumerate(names, start=1):
+            if _stop.is_set():
+                errors.append(t("model_install.stopped"))
+                break
+            with _lock:
+                _state.update(model=name, completed=0, total=0, queue=names[step:], step=step,
+                              status=t("model_install.status_preparing"))
+            if changed and step > 1:
+                changed()
+            try:
+                finished = ollama.pull(name, progress=advance, stop=_stop)
+            except Exception as exc:
+                log.warning("Installation de %s impossible : %s", name, exc)
+                errors.append(f"{name} : {str(exc)[:300]}")
+                continue
+            ollama.list_models(max_age=0)                      # la liste se relit
+            # i18n: tel quel (journal)
+            log.info("Modèle %s %s", name, "installé" if finished else "pas installé (arrêt)")
+            if not finished:
+                errors.append(t("model_install.stopped"))
+                break
+            with _lock:
+                _state["installed"] = [*_state["installed"], name]
+            if changed and step < len(names):                  # déjà utilisable : la liste suit
+                changed()
         with _lock:
-            _state.update(done=bool(finished),
-                          error=None if finished else t("model_install.stopped"))
-        # i18n: tel quel (journal)
-        log.info("Modèle %s %s", name, "installé" if finished else "pas installé (arrêt)")
-    except Exception as exc:
-        log.warning("Installation de %s impossible : %s", name, exc)
-        with _lock:
-            _state.update(error=str(exc)[:300], done=False)
+            _state.update(done=not errors, error=" ; ".join(errors) or None, queue=[])
     finally:
         with _lock:
             _state["running"] = False
