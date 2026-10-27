@@ -117,6 +117,54 @@ def test_the_router_gives_its_key_to_each_model_server(ollama_dir, data_dir, mon
     assert "batch-size" not in sections["qwen3.5-9b"]
 
 
+def test_without_router_mode_one_llama_server_per_model(ollama_dir, data_dir, monkeypatch):
+    """Le llama.cpp d'Android refuse le mode routeur (« subprocess is not enabled on this
+    build », vu sur le S23 le 27/10/2026) : un llama-server par modèle (llm/direct.py), mêmes
+    réglages, même clé par l'environnement, au plus MODELS_MAX en marche."""
+    launched = []
+
+    class Launched:
+        def __init__(self, name, program, args, port, env=None):
+            self.args, self.env, self.port, self.alive = args, env, port, False
+            launched.append(self)
+
+        def start(self, timeout, ready=None):
+            if "--models-preset" in self.args:
+                raise engine.programs.EngineError(
+                    "llama-server s'est arrêté : E srv  llama_server: failed to initialize "
+                    "router models: subprocess is not enabled on this build")
+            self.alive = True
+            return self
+
+        def stop(self):
+            self.alive = False
+
+    monkeypatch.setattr(engine.programs, "folder", lambda: data_dir)
+    monkeypatch.setattr(engine.programs, "Process", Launched)
+    router = engine.Router()
+    chat, embed = models.find("qwen3.5:9b"), models.find("nomic-embed-text")
+    first = router.url(chat.id)
+    assert len(launched) == 2 and first == f"http://127.0.0.1:{launched[1].port}"
+    args = launched[1].args
+    assert args[args.index("--alias") + 1] == chat.id and "--mmproj" in args
+    assert "--embeddings" not in args and args[args.index("--fit") + 1] == "on"
+    assert launched[1].env == {"LLAMA_API_KEY": router.key} and router.key not in " ".join(args)
+    assert router.url(chat.id) == first and len(launched) == 2        # déjà prêt
+    router.url(embed.id)
+    embedding = launched[2].args
+    assert "--embeddings" in embedding
+    assert embedding[embedding.index("--ubatch-size") + 1] == str(engine.EMBED_CONTEXT)
+    assert router.status() == {chat.id: "loaded", embed.id: "loaded"}
+    assert router.unload(chat.id) and router.status() == {embed.id: "loaded"}
+    router._direct.limit = 1           # place pour un seul : le moins récemment servi s'arrête
+    router.url(chat.id)
+    assert router.status() == {chat.id: "loaded"} and not launched[2].alive
+    with pytest.raises(engine.EngineUnavailable):
+        router.url("absent")
+    router.stop()
+    assert router.status() == {} and not any(p.alive for p in launched)
+
+
 # ------------------------------------------------------------------ faux routeur
 class FakeRouter(BaseHTTPRequestHandler):
     seen = []
@@ -162,7 +210,7 @@ def router(ollama_dir, monkeypatch):
     server = ThreadingHTTPServer(("127.0.0.1", 0), FakeRouter)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
-    monkeypatch.setattr(integrated._router, "url", lambda: base)
+    monkeypatch.setattr(integrated._router, "url", lambda model_id=None: base)
     monkeypatch.setattr(integrated._router, "status", lambda: {"qwen3.5-9b": "loaded"})
     FakeRouter.seen = []
     yield base

@@ -19,6 +19,8 @@ plus ancien au-delà de MODELS_MAX, comme Ollama.
   Process.start : 401 sans elle), sinon il est arrêté. CORS reste ouvert : une page web peut
   joindre ces ports, sans la clé elle n'obtient rien.
 - Le programme est celui de llama.cpp livré avec AIODOS (cluster/engine.folder()).
+- Un llama-server qui ne sait pas être routeur (celui d'Android) : un llama-server par
+  modèle, lancé par AIODOS avec les mêmes réglages (llm/direct.py).
 """
 import hashlib
 import logging
@@ -31,7 +33,7 @@ import requests
 from aiodos import paths
 from aiodos.cluster import engine as programs
 from aiodos.i18n import t
-from aiodos.llm import context, models as registry
+from aiodos.llm import context, direct, models as registry
 
 log = logging.getLogger("aiodos.llm")
 
@@ -39,6 +41,7 @@ MODELS_MAX = 2                     # un modèle de conversation et un modèle d'
 CHAT_CONTEXT = context.LOW            # contexte d'une conversation : llm/context.py
 EMBED_CONTEXT = 2048
 START_TIMEOUT = 60
+EXTRA = ["--fit", "on"]               # pour chaque modèle, routeur ou llama-server seul
 NO_PROXY = {"http": None, "https": None}
 
 
@@ -46,19 +49,24 @@ class EngineUnavailable(RuntimeError):
     pass
 
 
+def options(m) -> list:
+    """Les réglages d'un modèle, [(clé, valeur)] : sa section des préréglages du routeur, ou
+    les arguments de son llama-server quand il tourne seul (llm/direct.py)."""
+    found = [("model", m.path)]
+    if m.mmproj:
+        found.append(("mmproj", m.mmproj))
+    if m.embedding:
+        found += [("embeddings", "true"), ("ctx-size", EMBED_CONTEXT),
+                  ("batch-size", EMBED_CONTEXT), ("ubatch-size", EMBED_CONTEXT)]
+    else:
+        found.append(("ctx-size", context.chat_context(m.name)))
+    return found
+
+
 def presets(models: list) -> str:
     """Le fichier de préréglages du routeur, une section par modèle."""
-    sections = []
-    for m in models:
-        lines = [f"[{m.id}]", f"model = {m.path}"]
-        if m.mmproj:
-            lines.append(f"mmproj = {m.mmproj}")
-        if m.embedding:
-            lines += ["embeddings = true", f"ctx-size = {EMBED_CONTEXT}",
-                      f"batch-size = {EMBED_CONTEXT}", f"ubatch-size = {EMBED_CONTEXT}"]
-        else:
-            lines.append(f"ctx-size = {context.chat_context(m.name)}")
-        sections.append("\n".join(lines))
+    sections = ["\n".join([f"[{m.id}]", *(f"{key} = {value}" for key, value in options(m))])
+                for m in models]
     return "\n\n".join(sections) + "\n"
 
 
@@ -68,15 +76,20 @@ class Router:
         self.process = None
         self.key = secrets.token_urlsafe(24)
         self._signature = None         # empreinte des préréglages du routeur en marche
+        self._direct = None            # llm/direct.Servers : llama-server sans mode routeur
 
     @property
     def headers(self) -> dict:
         return {"Authorization": f"Bearer {self.key}"}
 
-    def url(self) -> str:
-        """Adresse du routeur, lancé ou relancé s'il le faut (liste des modèles changée)."""
+    def url(self, model_id: str | None = None) -> str:
+        """Adresse qui sert ce modèle : le routeur, lancé ou relancé s'il le faut (liste des
+        modèles changée) ; ou, si llama-server ne sait pas être routeur, le llama-server de
+        ce modèle seul (llm/direct.py)."""
         with self._lock:
             models = registry.available()
+            if self._direct is not None:
+                return self._direct_url(models, model_id)
             text = presets(models)
             signature = hashlib.sha256(text.encode("utf-8")).hexdigest()
             if self.process is not None and self.process.alive and signature == self._signature:
@@ -91,20 +104,32 @@ class Router:
             port = programs.free_port()
             args = ["--models-preset", str(ini), "--models-max", str(MODELS_MAX),
                     "--models-autoload", "--host", "127.0.0.1", "--port", str(port),
-                    "--no-webui", "--fit", "on"]
+                    "--no-webui", *EXTRA]
             # La clé par l'environnement : les llama-server de chaque modèle en héritent
             process = programs.Process("llama-routeur", folder / f"{programs.SERVER}{programs.EXE}",
                                        args, port, env={programs.KEY_VARIABLE: self.key})
             try:
                 process.start(START_TIMEOUT, ready=lambda: programs.loaded(port))
             except programs.EngineError as exc:
-                raise EngineUnavailable(t("llm.engine_start_failed", error=exc)) from exc
+                if direct.NO_ROUTER not in str(exc):
+                    raise EngineUnavailable(t("llm.engine_start_failed", error=exc)) from exc
+                log.warning("llama-server sans mode routeur : un llama-server par modèle")
+                self._direct = direct.Servers(folder, self.key, MODELS_MAX, EXTRA)
+                return self._direct_url(models, model_id)
             self.process, self._signature = process, signature
             log.info("Moteur intégré prêt : %d modèle(s), port %d", len(models), port)
             return f"http://127.0.0.1:{port}"
 
+    def _direct_url(self, models: list, model_id: str | None) -> str:
+        try:
+            return self._direct.url(models, model_id, options)
+        except programs.EngineError as exc:
+            raise EngineUnavailable(t("llm.engine_start_failed", error=exc)) from exc
+
     def status(self) -> dict:
         """{identifiant: « loaded », « loading », « unloaded »…} ; {} si le routeur dort."""
+        if self._direct is not None:
+            return self._direct.status()
         with self._lock:
             if self.process is None or not self.process.alive:
                 return {}
@@ -118,6 +143,8 @@ class Router:
 
     def unload(self, model_id: str) -> bool:
         with self._lock:
+            if self._direct is not None:
+                return self._direct.unload(model_id)
             if self.process is None or not self.process.alive:
                 return False
             base = f"http://127.0.0.1:{self.process.port}"
@@ -135,6 +162,8 @@ class Router:
     def _stop(self):
         if self.process is not None:
             self.process.stop()
+        if self._direct is not None:
+            self._direct.stop()
         self.process, self._signature = None, None
 
 

@@ -90,7 +90,7 @@ def router(tmp_path, monkeypatch):
     with RouterStub(integrated._router.key, vision={rid(VISION)}, fim={rid(CODE)},
                     embedding={rid(EMBEDDING)}, strict={rid(STRICT)},
                     broken={rid(BROKEN)}) as stub, OllamaStub([OLLAMA_ONLY]) as ollama:
-        monkeypatch.setattr(integrated._router, "url", lambda: stub.url)
+        monkeypatch.setattr(integrated._router, "url", lambda model_id=None: stub.url)
         monkeypatch.setattr(integrated._router, "status", lambda: dict(stub.loaded))
         monkeypatch.setattr(integrated._router, "unload",
                             lambda model_id: stub.unloaded.append(model_id) or True)
@@ -430,7 +430,7 @@ def test_a_model_that_does_not_load_is_set_aside(tool):
 
 
 def test_an_engine_that_does_not_start_is_said_clearly(tool, monkeypatch):
-    def stopped():
+    def stopped(model_id=None):
         raise EngineUnavailable("Le moteur intégré ne démarre pas : llama-server s'est arrêté.")
     monkeypatch.setattr(integrated._router, "url", stopped)
     for path in ("/v1/chat/completions", "/api/chat"):

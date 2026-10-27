@@ -84,7 +84,14 @@ class Incompatible(RuntimeError):
 def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
     """Requête au routeur, sa réponse rendue même en erreur ; un modèle que llama.cpp ne
     sait pas charger est écarté (Incompatible)."""
-    url = _router.url()
+    try:
+        url = _router.url(model.id)
+    except engine.EngineUnavailable as exc:
+        # llama-server seul (llm/direct.py) : le modèle se charge au lancement du serveur
+        if "failed to load" in str(exc):
+            registry.mark_incompatible(model, str(exc))
+            raise Incompatible(t("llm.model_incompatible", name=model.name)) from exc
+        raise
     _used(model.id)
     response = requests.post(url + path, json={**body, "model": model.id}, stream=stream,
                              headers=_router.headers, timeout=timeout, proxies=NO_PROXY)
