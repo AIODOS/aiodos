@@ -117,7 +117,7 @@ les clés (mesurée en 2.2), le protocole scellé entre nœuds.
 |---|---|---|---|
 | Indexation d'une bibliothèque publique (passages → vecteurs) | Oui | Oui | Unités indépendantes, contenu public, résultat vérifiable (§ 5) |
 | Images et vidéos | Oui, avec l'accord de chaque création, demandeur anonyme | Oui (réglage à part) | Unités indépendantes ; la machine qui calcule lit forcément la description et voit l'image, mais pas qui la demande : une clé éphémère par création, et la demande passe par un relais (ta décision) |
-| Conversations (modèle prêté) | Non | Non au début | Le modèle lit toute la conversation ; une réponse ne se vérifie pas à bas prix |
+| Conversations (modèle prêté) | Oui, demandeur anonyme (révisé le 27/10/2026) | Oui, activé par défaut (révisé le 27/10/2026) | Le modèle lit toute la conversation, mais pas qui la demande ; réponse marquée « réseau public », contrôles au hasard : [conception/reseau-public-calcul.md](conception/reseau-public-calcul.md) |
 | Gros modèle découpé | Non | Non | Chaque tranche peut fausser le résultat sans que personne le voie |
 | Recherche dans une bibliothèque consultable par tous | — | Oui (si ouverte à tous) | Seuls des passages publics sortent |
 

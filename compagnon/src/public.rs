@@ -1,8 +1,8 @@
 //! Réseau public, phase 3.0 : un annuaire, sans rien confier (docs/phase3-reseau-public.md).
 //!
-//! Désactivé par défaut : AIODOS le démarre seulement quand l'utilisateur a choisi
-//! « Rejoindre le réseau public » (`PUT /net/v1/public`). Sans ce choix, rien ne tourne et
-//! rien n'est annoncé.
+//! AIODOS le démarre quand « Rejoindre le réseau public » est activé (`PUT /net/v1/public`),
+//! ce qui est le cas par défaut depuis le 27/10/2026 (décision de l'auteur). Réglage
+//! coupé : rien ne tourne et rien n'est annoncé.
 //!
 //! Un nœud public a sa **propre clé**, distincte de celle de la machine : ni ses amis ni
 //! les inconnus ne peuvent relier son identité publique à ses machines appairées. Son
