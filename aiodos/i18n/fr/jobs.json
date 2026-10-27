@@ -57,7 +57,12 @@
     "one": "{n} indexé · {chunks} passages",
     "other": "{n} indexés · {chunks} passages"
   },
-  "details": "Détails",
+  "percent": "{n} %",
+  "detail_units": "Unités",
+  "detail_time": "Durée",
+  "detail_machines": "Machines",
+  "detail_result": "Résultat",
+  "local_here": "{n} ici",
   "skipped_types": "Ignorés (pas de texte exploitable, ou type désactivé dans les réglages) : {types}",
   "cancel_title": "Annuler la tâche",
   "cancel_text": "« {title} » : les unités pas encore traitées seront abandonnées. Ce qui est déjà fait est conservé.",
@@ -85,5 +90,36 @@
   "pause_all_after": "Toute la file : après l’unité en cours",
   "pause_all_now": "Toute la file : tout de suite (le calcul en cours est perdu)",
   "queue_resumed": "La file reprend.",
-  "queue_paused": "File en pause."
+  "queue_paused": "File en pause.",
+  "workers_title": "Machines au travail",
+  "workers_none": "Aucune machine ne calcule en ce moment",
+  "workers_machines": {
+    "one": "{n} machine au travail",
+    "other": "{n} machines au travail"
+  },
+  "workers_units": {
+    "one": "{n} unité en cours",
+    "other": "{n} unités en cours"
+  },
+  "workers_col_machine": "Machine",
+  "workers_col_computing": "Travail en cours",
+  "workers_col_state": "État",
+  "workers_col_link": "Lien",
+  "workers_col_speed": "Vitesse",
+  "workers_here": "Cette machine",
+  "workers_computing": "Calcule",
+  "workers_idle": "Au repos",
+  "workers_paused": "File en pause",
+  "workers_unreachable": "Injoignable",
+  "workers_unreachable_hint": "Ses unités retournent dans la file si elle ne donne plus de nouvelles avant la fin de leur bail.",
+  "workers_per_unit": "~{time} par unité",
+  "workers_per_unit_title": {
+    "one": "En moyenne, sur {n} unité calculée pour toi",
+    "other": "En moyenne, sur les {n} unités calculées pour toi"
+  },
+  "workers_network_off": "Réseau désactivé : seule cette machine calcule.",
+  "workers_idle_peers": {
+    "one": "{n} autre machine en ligne, sans travail en ce moment.",
+    "other": "{n} autres machines en ligne, sans travail en ce moment."
+  }
 }

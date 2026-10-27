@@ -83,6 +83,21 @@ def test_failure_is_retried_then_marked_failed():
     assert queue.failed_units(job_id)[0]["error"] == "boum encore"
 
 
+def test_units_computing_here_are_counted_apart_from_those_lent():
+    """La vue Tâches dit ce que calcule chaque machine : « local », les unités en calcul ici ;
+    « remote », celles confiées sous bail à une autre machine."""
+    job_id = _job("trois", count=3)
+    here = queue.claim_next({"cpu"}, "local")
+    lent = queue.claim_next({"cpu"}, "local")
+    db.execute("UPDATE units SET node=?, lease_until=? WHERE id=?",
+               ("machine-b", db.now() + 60, lent["id"]))
+    for job in (queue.job_summary(job_id), next(j for j in queue.list_jobs() if j["id"] == job_id)):
+        assert job["local"] == 1 and job["remote"] == {"machine-b": 1}
+    queue.finish_unit(here["id"], {}, 0.1)
+    job = queue.job_summary(job_id)
+    assert job["local"] == 0 and job["remote"] == {"machine-b": 1}
+
+
 def test_skipped_units_count_apart():
     job_id = _job("vide")
     unit = queue.claim_next({"cpu"}, "local")

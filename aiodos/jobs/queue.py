@@ -366,11 +366,12 @@ def recover():
 
 
 # ------------------------------------------------------------------- lecture
-def _summary(row, remote, names=None) -> dict:
+def _summary(row, remote, local, names=None) -> dict:
     job = dict(row)
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
     job["remote"] = remote.get(job["id"], {})       # {machine: unités qu'elle calcule}
+    job["local"] = local.get(job["id"], 0)          # unités qui calculent ici
     # Le titre, écrit à la création dans la langue d'alors (title), et sa clé (title_t) :
     # l'interface le traduit dans la sienne (jobs.js, jobTitle)
     lazy_title = job["result"].pop("_title", None)
@@ -402,20 +403,28 @@ def remote_counts(job_id=None) -> dict:
     return out
 
 
+def local_counts(job_id=None) -> dict:
+    """Unités en calcul sur ce PC en ce moment, sans bail (pas confiées à une autre
+    machine) : {travail: n}. La vue Tâches dit ainsi ce que calcule chaque machine."""
+    return {r["job_id"]: r["n"] for r in db.query(
+        "SELECT job_id, COUNT(*) AS n FROM units WHERE status=? AND lease_until IS NULL "
+        "AND (? IS NULL OR job_id=?) GROUP BY job_id", (RUNNING, job_id, job_id))}
+
+
 def job_summary(job_id) -> dict | None:
     row = db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))
-    return _summary(row, remote_counts(job_id)) if row else None
+    return _summary(row, remote_counts(job_id), local_counts(job_id)) if row else None
 
 
 def list_jobs(limit=200) -> list:
-    remote = remote_counts()
+    remote, local = remote_counts(), local_counts()
     rows = db.query(
         "SELECT * FROM jobs ORDER BY CASE status WHEN 'running' THEN 0 "
         "WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, "
         "CASE WHEN status IN ('running','queued','paused') THEN priority ELSE 0 END, "
         "COALESCE(finished, created) DESC LIMIT ?", (limit,))
     names = _app_names(r["owner_app"] for r in rows)
-    return [_summary(r, remote, names) for r in rows]
+    return [_summary(r, remote, local, names) for r in rows]
 
 
 def failed_units(job_id, limit=50) -> list:
