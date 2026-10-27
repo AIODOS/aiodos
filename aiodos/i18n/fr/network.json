@@ -14,6 +14,13 @@
   "internet_key": "clé {key}…",
   "internet_denied": "le relais {relay} refuse cette machine : sa clé doit être dans la liste blanche du relais",
   "internet_title": "Relier mes machines par Internet",
+  "internet_fold": "Internet",
+  "internet_sub_ready": "prêt",
+  "internet_sub_relays": "prêt, relais {relays}",
+  "invitations_pending": {
+    "one": "{n} invitation en cours",
+    "other": "{n} invitations en cours"
+  },
   "invite_title": "Inviter un ami",
   "invite_hint": "Pour appairer la machine d'un ami qui n'est pas sur ton réseau. Crée une invitation et envoie-lui le code (message, courriel) ; il le colle dans son AIODOS avec « Répondre à une invitation », puis te renvoie sa réponse, que tu colles ici. Vous confirmez alors chacun le même code à 6 chiffres. Une invitation sert une seule fois, pendant 24 heures, et il faut la connexion par Internet des deux côtés.",
   "create_invitation": "Créer une invitation",
@@ -52,6 +59,8 @@
   "public_key": "Clé publique de cette machine :",
   "public_none": "Aucun autre nœud public en ligne pour l'instant.",
   "public_title": "Rejoindre le réseau public",
+  "public_fold": "Réseau public",
+  "public_sub_needs_internet": "Internet à activer d'abord",
   "public_trial": "essai",
   "public_help": "Un annuaire sans propriétaire (la DHT de BitTorrent), où les nœuds AIODOS se trouvent sans invitation. Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais : ton adresse IP n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre relais pourrait la voir (limite connue de cet essai). Elle dit seulement sa version d'AIODOS et les modèles qu'elle sait calculer. Rien n'est confié aux inconnus, et rien n'est calculé pour eux : cela viendra plus tard, avec ton accord.",
   "local_off_internet": "Plus de découverte ni de chemin direct sur ton réseau : tes machines appairées restent jointes par Internet.",
@@ -59,8 +68,12 @@
   "local_visible_discovery": "Cette machine (« {name} ») est visible sur ton réseau, port {port}, découverte automatique active.",
   "local_visible": "Cette machine (« {name} ») est visible sur ton réseau, port {port}.",
   "starting": "Démarrage…",
-  "local_enabled": "Réseau local activé",
-  "local_disabled": "Réseau local désactivé",
+  "local_title": "Réseau local",
+  "local_sub_on": "actif, port {port}",
+  "sub_off": "coupé",
+  "sub_starting": "démarrage…",
+  "sub_connecting": "connexion…",
+  "add_hint": "Une machine de ton réseau n'apparaît pas dans « Machines détectées » ? Ajoute-la par son adresse IP.",
   "firewall_html": "À l'activation, Windows demandera sans doute l'autorisation du pare-feu pour Python : accepte pour les <b>réseaux privés</b> seulement.",
   "profile_pending": "Profil pas encore reçu.",
   "friend_profile": "profil réduit (cette machine te compte parmi ses amis)",
@@ -115,6 +128,19 @@
   "offload_on": "Tes tâches peuvent leur être confiées.",
   "offload_off": "Tu ne leur confies pas tes tâches.",
   "peers_title": "Machines appairées",
+  "peers_sub": {
+    "one": "{n} machine, {online} en ligne",
+    "other": "{n} machines, {online} en ligne"
+  },
+  "peers_sub_none": "aucune pour l'instant",
+  "intros_pending": {
+    "one": "{n} présentation à confirmer",
+    "other": "{n} présentations à confirmer"
+  },
+  "set_aside_count": {
+    "one": "{n} mise de côté",
+    "other": "{n} mises de côté"
+  },
   "peers_hint": "Tes machines et celles de tes amis. Les échanges sont chiffrés, et chaque machine applique ses propres règles de partage (réglables dans « Cette machine »). Un ami ne reçoit que les bibliothèques partagées avec tes amis. {offload} Une machine d'ami rencontre aussi tes autres machines, et les siennes les tiennes, avec votre accord.",
   "intro_waiting": "présentée par « {presenter} » {ago} · attend ta réponse",
   "answer": "Répondre",
@@ -169,7 +195,7 @@
   },
   "offline_hint": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local).",
   "offline_hint_peer_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; par Internet, il faut aussi activer « Internet » sur elle.",
-  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus haut, pour la joindre même hors du réseau local.",
+  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus bas, pour la joindre même hors du réseau local.",
   "internet_direct": "Internet : en direct",
   "internet_relay": "Internet : par un relais",
   "quoted": "« {name} »",
@@ -202,8 +228,22 @@
   "consulted_title": "Recherches de « {name} »",
   "consulted_text": "Ses recherches dans les bibliothèques que tu lui ouvres, de la plus récente à la plus ancienne, avec les documents d'où viennent les passages qu'elle a reçus. Ses questions ne sont pas gardées.",
   "visible_title": "Machines détectées",
-  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus haut).",
-  "visible_hint": "Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas, ajoute-la par son adresse IP.",
+  "visible_sub": {
+    "one": "{n} machine à appairer",
+    "other": "{n} machines à appairer"
+  },
+  "visible_sub_none": "aucune pour l'instant",
+  "visible_sub_off": "réseau local coupé",
+  "pairing_pending": {
+    "one": "{n} appairage en cours",
+    "other": "{n} appairages en cours"
+  },
+  "pairing_to_confirm": {
+    "one": "{n} appairage à confirmer ici",
+    "other": "{n} appairages à confirmer ici"
+  },
+  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus bas).",
+  "visible_hint": "Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas, ajoute-la par son adresse IP dans « Réseau local ».",
   "address_placeholder": "Adresse : 192.168.1.20 ou 192.168.1.20:47701",
   "add": "Ajouter",
   "pairing_code": "appairage en cours · code {code}",

@@ -78,6 +78,7 @@
   "title": "Machines connectées",
   "hint": "En direct : qui est en ligne, qui prête sa puissance, et ce que chaque machine fait pour l'autre. Nouvelles toutes les 15 secondes environ.",
   "empty": "Aucune machine appairée : appaire tes machines plus bas.",
+  "network_off": "Réseau coupé : active le réseau local ou Internet, plus bas, pour retrouver tes machines.",
   "rail_no_peers": "Aucune machine appairée",
   "rail_online": {
     "one": "{n} machine en ligne",

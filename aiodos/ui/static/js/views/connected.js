@@ -142,7 +142,6 @@ function nudge(net) {
     <button class="btn sm" data-go-node>${esc(t('nav.node'))}</button></div>`;
 }
 
-/** La carte « Machines connectées », en tête de la vue Réseau. */
 /** Info-bulle d'une machine appairée par une présentation (appairage par groupe). */
 function introduced(peer, net) {
   if (!peer.introduced_by) return '';
@@ -150,9 +149,16 @@ function introduced(peer, net) {
   return ` title="${esc(by ? t('connected.introduced_by', { name: by.name }) : t('connected.introduced_by_removed'))}"`;
 }
 
+/** La carte « Machines connectées », en tête de la vue Réseau, toujours ouverte (même réseau
+ *  coupé) : le titre et, sur sa ligne, le résumé ; l'explication passe en info-bulle du titre. */
 export function renderConnected(box, net) {
-  box.hidden = !net.enabled;
-  if (!net.enabled) return;
+  box.hidden = false;
+  const head = summaryHtml => `<div class="live-head"><h2 title="${esc(t('connected.hint'))}">${icon('bolt')}${
+    esc(t('connected.title'))}</h2>${summaryHtml ? `<div class="live-summary">${summaryHtml}</div>` : ''}</div>`;
+  if (!net.enabled) {
+    box.innerHTML = `${head('')}<p class="hint live-off">${esc(t('connected.network_off'))}</p>`;
+    return;
+  }
   const order = [...net.peers].sort((a, b) => (b.online - a.online) || (busy(b) - busy(a))
     || a.name.localeCompare(b.name, locale()));
   const rows = order.map(peer => `
@@ -167,11 +173,10 @@ export function renderConnected(box, net) {
   const columns = ['connected.col_machine', 'connected.col_link', 'connected.col_lends', 'connected.col_now',
     'connected.col_exchanged'].map(key => `<th>${esc(t(key))}</th>`).join('');
   box.innerHTML = `
-    <h2>${icon('bolt')}${esc(t('connected.title'))}</h2>
-    <p class="hint">${esc(t('connected.hint'))}</p>
-    ${net.peers.length ? `${nudge(net)}<div class="live-summary">${summary(net)}</div>
+    ${head(net.peers.length ? summary(net) : '')}
+    ${net.peers.length ? `${nudge(net)}
       <table class="live"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`
-      : `<div class="empty" style="padding:14px">${esc(t('connected.empty'))}</div>`}`;
+      : `<p class="hint live-off">${esc(t('connected.empty'))}</p>`}`;
   box.querySelector('[data-go-node]')?.addEventListener('click', () => emit('view:show', 'node'));
 }
 
