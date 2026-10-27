@@ -1,9 +1,10 @@
 # AIODOS Charter
 
-*Version 1, October 27, 2026*
+*Version 2, October 27, 2026*
 
-AIODOS is a free and open AI workshop. It runs on your own machines and, if you want, pools
-their power with your friends' machines and those of the other participants in the network.
+AIODOS is a free and open AI workshop. It connects, over the Internet, the machines of people
+who don't know each other, to pool their power: those of public network participants, of
+your friends, and your own.
 There is no central server: the network is everyone's machines. This charter sets out the
 spirit in which we use it together. It goes with the terms of use.
 
@@ -38,9 +39,11 @@ Alone or with other machines, you agree not to use AIODOS to:
 
 ## 3. Lending and borrowing power
 
-- **Lending is a choice.** Your paired machines compute together from the first launch; your
-  friends and the public network, only with your consent. Everything can be turned off at
-  any time in Settings.
+- **Lending is a choice.** From the first launch, your paired machines compute together,
+  your graphics card creates images for the friends you have added, and your machine joins
+  the public network's directory (it announces its AIODOS version and its models there; it
+  computes nothing for strangers). Everything can be turned off at any time in Settings and
+  the Network view.
 - **What others entrust to you is not yours.** When your machine computes for someone, it
   handles their request for the time of the computation, then forgets it. You agree not to
   try to read, copy or keep it, nor to modify AIODOS to do so.

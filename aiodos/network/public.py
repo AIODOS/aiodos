@@ -1,7 +1,7 @@
 """Réseau public, phase 3.0 : un annuaire, sans rien confier (docs/phase3-reseau-public.md).
 
-Désactivé par défaut (réglage « public_network », « Rejoindre le réseau public »). Activé,
-et quand Internet tourne, le compagnon (aiodos-net) rejoint le réseau public avec une clé
+Activé par défaut depuis le 27/10/2026 (réglage « public_network », « Rejoindre le réseau
+public ») : quand Internet tourne, le compagnon (aiodos-net) rejoint le réseau public avec une clé
 à part, qui ne le relie pas aux machines appairées, et par les relais : l'adresse IP de
 cette machine n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre
 relais pourrait la voir (Iroh joint le relais qu'un autre nœud annonce : limite connue). Il y diffuse un profil sans rien de

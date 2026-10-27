@@ -1,6 +1,6 @@
 # AIODOS Terms of Use
 
-*Version 1, October 27, 2026*
+*Version 2, October 27, 2026*
 
 ## 1. Purpose
 
@@ -46,6 +46,11 @@ have their own terms:
   computes them has to read them to process them. AIODOS is designed to keep nothing on the
   machine that computes; the publisher cannot guarantee that another person's program has
   not been modified.
+- From the first launch, and until you turn it off: your machine joins the public network's
+  directory (it announces its AIODOS version and the list of its models there, nothing
+  personal), your graphics card creates the images that the friends you have added ask of
+  it, and the applications on this machine can ask you for access to AIODOS (each one has to
+  be accepted by you).
 - Lending your power uses your processor, graphics card, memory, battery and connection:
   electricity, data, heat, wear. AIODOS keeps this lending gentle (low priority, not on
   battery, phone only while charging) and you can stop it at any time in Settings.

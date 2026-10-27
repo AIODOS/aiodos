@@ -79,9 +79,9 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"; LicenseFile: "{#Legal
 [Messages]
 ; L'accueil : le texte de présentation, à côté du logo
 fr.WelcomeLabel1=Bienvenue dans AIODOS
-fr.WelcomeLabel2=AIODOS fait tourner l'intelligence artificielle sur tes propres machines et les fait travailler ensemble : tes PC, ton téléphone et, si tu le veux, ceux de tes amis et du réseau.%n%nConverse avec des modèles ouverts, interroge tes documents, crée des images et des vidéos, sans abonnement ni cloud : tes données restent chez toi. Un modèle trop gros pour une seule machine se répartit entre plusieurs.%n%nCet assistant va installer [name/ver] sur ton ordinateur.
+fr.WelcomeLabel2=AIODOS relie par Internet les machines de personnes qui ne se connaissent pas, pour mettre leur puissance en commun : celles du réseau public, de tes amis et les tiennes, PC comme téléphone.%n%nConverse avec des modèles ouverts, interroge tes documents, crée des images et des vidéos, sans abonnement ni serveur central. Un modèle trop gros pour une seule machine se répartit entre plusieurs.%n%nCet assistant va installer [name/ver] sur ton ordinateur.
 en.WelcomeLabel1=Welcome to AIODOS
-en.WelcomeLabel2=AIODOS runs artificial intelligence on your own machines and makes them work together: your PCs, your phone and, if you want, those of your friends and of the network.%n%nChat with open models, search your documents, create images and videos, with no subscription and no cloud: your data stays with you. A model too large for one machine is split across several.%n%nThis wizard will install [name/ver] on your computer.
+en.WelcomeLabel2=AIODOS connects, over the Internet, the machines of people who don't know each other, to pool their power: those of the public network, of your friends and your own, PCs and phones alike.%n%nChat with open models, search your documents, create images and videos, with no subscription and no central server. A model too large for one machine is split across several.%n%nThis wizard will install [name/ver] on your computer.
 ; La page de licence : la charte et les conditions d'utilisation
 fr.WizardLicense=Charte et conditions d'utilisation
 fr.LicenseLabel=Lis-les avant de continuer.

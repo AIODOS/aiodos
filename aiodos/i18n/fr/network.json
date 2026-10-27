@@ -1,6 +1,6 @@
 {
   "title": "Réseau",
-  "intro": "Fais travailler tes machines ensemble, et celles de tes amis : chacune peut prêter sa puissance de calcul aux autres. Rien ne part sans appairage confirmé sur les deux machines.",
+  "intro": "AIODOS relie par Internet les machines de chacun, inconnus du réseau public compris, pour mettre leur puissance de calcul en commun. Aujourd'hui, le réseau public est un annuaire : seuls tes amis et tes machines appairées (appairage confirmé des deux côtés) calculent les uns pour les autres.",
   "invitation_received": "Invitation de « {name} » acceptée {ago} : l'appairage commencera quand ton ami aura collé ta réponse.",
   "invitation_answered": "Réponse de « {name} » reçue : appairage en cours.",
   "invitation_sent": "Invitation créée {ago}, en attente de la réponse de ton ami (valable jusqu'à {until}).",
@@ -54,7 +54,7 @@
     "other": "{n} voisins directs"
   },
   "public_directory": "annuaire : {error}",
-  "public_needs_internet": "Active d'abord « Internet », plus haut : le réseau public passe par lui.",
+  "public_needs_internet": "Active d'abord « Internet », juste en dessous : le réseau public passe par lui.",
   "public_connecting": "Connexion au réseau public…",
   "public_key": "Clé publique de cette machine :",
   "public_none": "Aucun autre nœud public en ligne pour l'instant.",
@@ -195,7 +195,7 @@
   },
   "offline_hint": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local).",
   "offline_hint_peer_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; par Internet, il faut aussi activer « Internet » sur elle.",
-  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus bas, pour la joindre même hors du réseau local.",
+  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus haut, pour la joindre même hors du réseau local.",
   "internet_direct": "Internet : en direct",
   "internet_relay": "Internet : par un relais",
   "quoted": "« {name} »",
@@ -242,7 +242,7 @@
     "one": "{n} appairage à confirmer ici",
     "other": "{n} appairages à confirmer ici"
   },
-  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus bas).",
+  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus haut).",
   "visible_hint": "Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas, ajoute-la par son adresse IP dans « Réseau local ».",
   "address_placeholder": "Adresse : 192.168.1.20 ou 192.168.1.20:47701",
   "add": "Ajouter",

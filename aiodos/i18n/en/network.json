@@ -1,6 +1,6 @@
 {
   "title": "Network",
-  "intro": "Make your machines work together, and your friends' machines too: each one can lend its computing power to the others. Nothing is sent until the pairing is confirmed on both machines.",
+  "intro": "AIODOS connects everyone's machines over the Internet, strangers on the public network included, to pool their computing power. For now, the public network is a directory: only your friends and your paired machines (pairing confirmed on both sides) compute for each other.",
   "invitation_received": "Invitation from “{name}” accepted {ago}: pairing will start once your friend has pasted your reply.",
   "invitation_answered": "Reply from “{name}” received: pairing in progress.",
   "invitation_sent": "Invitation created {ago}, waiting for your friend's reply (valid until {until}).",
@@ -57,7 +57,7 @@
     "other": "{n} direct neighbors"
   },
   "public_directory": "directory: {error}",
-  "public_needs_internet": "First turn on “Internet”, above: the public network goes through it.",
+  "public_needs_internet": "First turn on “Internet”, just below: the public network goes through it.",
   "public_connecting": "Connecting to the public network…",
   "public_key": "This machine's public key:",
   "public_none": "No other public node online for now.",
@@ -198,7 +198,7 @@
   },
   "offline_hint": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network).",
   "offline_hint_peer_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); to reach it over the Internet, “Internet” must also be turned on there.",
-  "offline_hint_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); or turn on “Internet” below, to reach it even outside the local network.",
+  "offline_hint_internet": "Offline: check that it is on and that AIODOS is running on it, on the same Wi-Fi as this machine, with no VPN blocking the local network (in NordVPN, for example: allow the local network); or turn on “Internet” above, to reach it even outside the local network.",
   "internet_direct": "Internet: direct",
   "internet_relay": "Internet: through a relay",
   "quoted": "“{name}”",
@@ -242,7 +242,7 @@
     "one": "{n} pairing to confirm here",
     "other": "{n} pairings to confirm here"
   },
-  "visible_off": "Turn on the local network to see the other AIODOS machines on your network (over the Internet: “Invite a friend” or one of your machines, below).",
+  "visible_off": "Turn on the local network to see the other AIODOS machines on your network (over the Internet: “Invite a friend” or one of your machines, above).",
   "visible_hint": "The AIODOS nodes announcing themselves on your network. If a machine doesn't show up, add it by its IP address in “Local network”.",
   "address_placeholder": "Address: 192.168.1.20 or 192.168.1.20:47701",
   "add": "Add",

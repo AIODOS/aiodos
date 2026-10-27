@@ -2,9 +2,10 @@
 
 *Version française : [README.md](README.md).*
 
-**The way of AI, made together.** AIODOS runs AI on your own machines and makes them work
-together: your PCs, your phone, your friends' machines and, in time, those of everyone on
-the public network. Each large job is split into small units that free machines share, like
+**The way of AI, made together.** AIODOS connects, over the Internet, the machines of people
+who don't know each other, to run AI on their pooled power: those of public network
+participants, of your friends, and your own (PCs, phone), with no central server; the local
+network is only a shortcut. Each large job is split into small units that free machines share, like
 the pieces of a torrent; a model too large for a single graphics card is split across
 several.
 
@@ -15,10 +16,12 @@ several.
 - **Plug in your applications and tools** (PANDORA, ARKLIGHT PC, a code editor, an
   assistant…): they benefit from the same shared power.
 
-> **Your machines first, the rest with your consent.** Your paired machines compute
-> together from the first opening; your friends and the public network, only if you accept
-> it. Between machines, everything is encrypted, and nothing is kept by the one that
-> computes. Never any cloud; the web remains optional, and each search is confirmed first.
+> **Everyone's power, pooled over the Internet.** From the first opening, your machine joins
+> the public network, your paired machines compute together and your graphics card creates
+> images for the friends you add. For now, the public network is a directory: your machine
+> announces its models there, without computing for strangers yet. Everything can be turned
+> off in one gesture. Between machines, everything
+> is encrypted, and nothing is kept by the one that computes. Never any cloud; the web remains optional, and each search is confirmed first.
 
 *AI* + *hodos*: Greek for “the way”, as in “method” and “synod” (travelling together).
 
@@ -125,8 +128,9 @@ friends give their excerpts.
 **Opening AIODOS to applications** (PANDORA, ARKLIGHT PC…): each app asks for access by
 itself; a card shows up in AIODOS with a 6-digit code to compare, what it will be able to
 do and where its computing may take place (this PC, my machines, my friends, strangers on
-the public network), to untick if needed. The first approval opens the gateway; each app
-has its own key, removable in one click. Dependency-free client libraries, Python and
+the public network), to untick if needed. The gateway listens from the first launch (on
+this PC only), but nothing gets in without that approval; each app has its own key,
+removable in one click. Dependency-free client libraries, Python and
 JavaScript, under Apache-2.0 (`clients/`): [docs/integrer-aiodos.md](docs/integrer-aiodos.md),
 reference [docs/api-applications.md](docs/api-applications.md) (in French).
 

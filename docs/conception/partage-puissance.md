@@ -27,8 +27,10 @@ J'ai travaillé en lecture seule le 20/10/2026 : rien n'a été modifié ni lanc
   - le demandeur reste anonyme chez les inconnus : clé éphémère par création, demande relayée ;
   - des reçus signés avant toute blockchain ;
   - une réciprocité souple ;
-  - les images ne se prêtent aux amis que sur autorisation ;
-  - « Rejoindre le réseau public » est désactivé par défaut ;
+  - les images ne se prêtent aux amis que sur autorisation (activé par défaut depuis le
+    27/10/2026, décision de l'auteur) ;
+  - « Rejoindre le réseau public » est désactivé par défaut (activé depuis le 27/10/2026 :
+    en 3.0, un annuaire seulement) ;
   - pas de version signée avant ton essai.
 - **Règles de l'auteur** :
   - un fichier par fonctionnalité ;
@@ -271,7 +273,7 @@ I1 à I12 sont ceux de la 1re conception (§ 1.2), avec I2, I3, I4 et I9 réécr
 | I19 | Aucun travail ne fait télécharger ni installer quoi que ce soit (modèle, nœud, paquet). Aucune route de la passerelle ne relaie une requête arbitraire vers un ComfyUI. |
 | I20 | Quitter l'appli, quitter AIODOS ou redémarrer le PC ne fait perdre ni un travail en file, ni un résultat déjà calculé ailleurs. |
 | I21 | Un inconnu n'envoie jamais de graphe : une recette du catalogue signé et des paramètres bornés. L'exécutant construit le graphe. |
-| I22 | Rien n'est calculé pour une autre machine sans l'accord de mon propre prêt pour ce cercle et ce moteur. Pour les amis et les inconnus, il est désactivé par défaut. |
+| I22 | Rien n'est calculé pour une autre machine sans l'accord de mon propre prêt pour ce cercle et ce moteur. Pour les amis et les inconnus, il est désactivé par défaut (sauf les images des amis, activé depuis le 27/10/2026). |
 | I23 | Tout résultat venu d'ailleurs passe les contrôles de forme ; celui d'un ami ou d'un inconnu, en plus les contrôles de contenu. Chacun dit le contrôle qu'il a passé. |
 | I24 | AIODOS ne prête pour autrui qu'une installation de ComfyUI, et des modèles, que seuls l'utilisateur, le système et les administrateurs peuvent modifier (`foreign_writers`). |
 | I25 | Un travail ne lit ni les fichiers d'un autre travail, ni ceux du prêteur. Le cache des entrées n'est jamais partagé entre deux demandeurs. |
@@ -483,7 +485,7 @@ Une **recette** remplace `graphs` et `models` :
 - `where_effective`.
 - Les réglages généraux.
   - `apps_keep_mine` (« Tout garder sur mes machines », désactivé par défaut) retire `friends` et `public`.
-  - `public` exige `public_network` (désactivé par défaut, 18/10) et `public_receive` (« Faire calculer mes applis par des inconnus », coché par défaut une fois le réseau rejoint, décision 2).
+  - `public` exige `public_network` (désactivé par défaut le 18/10, activé depuis le 27/10) et `public_receive` (« Faire calculer mes applis par des inconnus », coché par défaut une fois le réseau rejoint, décision 2).
 - Ce que l'unité a vécu : deux disparitions (`lost` ≥ 2) la ramènent à `here` et `mine`.
 - Ce que le prêteur prête : vérifié à chaque demande de bail (§ 3.5).
 

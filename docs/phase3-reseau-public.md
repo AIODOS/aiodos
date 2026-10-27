@@ -13,6 +13,9 @@ confier), est codée** (§ 2 et § 8) ; la suite attend ton essai.
 
 - **Un choix explicite**, désactivé par défaut, comme « Prêter ma puissance » : « Rejoindre
   le réseau public ». Sans lui, rien ne change : mes machines et mes amis seulement.
+  *Activé par défaut depuis le 27/10/2026 (décision de l'auteur : « des personnes qui ne
+  connaissent pas AIODOS ne vont pas automatiquement aller dans les réglages ») ; en 3.0,
+  ce n'est qu'un annuaire, rien n'est calculé pour des inconnus ni confié à eux.*
 - **Deux sens séparés**, chacun avec son interrupteur :
   - *calculer pour des inconnus* (donner) ;
   - *faire calculer par des inconnus* (recevoir).

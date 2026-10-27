@@ -22,14 +22,17 @@ export { answerPairRequest, answerIntroduction } from './network-pairing.js';
 const onWindows = () => (state.node?.os ? state.node.os.startsWith('Windows')
   : navigator.userAgent.includes('Windows'));
 
-// Les sections, dans l'ordre : les machines, puis par où elles se joignent. toggle : le texte
-// (pour les lecteurs d'écran) de l'interrupteur posé sur la ligne de titre
+// Les sections, dans l'ordre : le réseau public et Internet d'abord (AIODOS relie par Internet
+// les machines d'inconnus, demandé par l'auteur le 27/10/2026), puis les machines appairées,
+// le réseau local en dernier. toggle : le texte (pour les lecteurs d'écran) de l'interrupteur
+// posé sur la ligne de titre ; open : dépliée tant qu'on ne l'a pas repliée
 const SECTIONS = [
-  { id: 'net-peers', title: 'network.peers_title', iconName: 'network' },
-  { id: 'net-local', title: 'network.local_title', iconName: 'plug', toggle: 'network.local_title' },
-  { id: 'net-visible', title: 'network.visible_title', iconName: 'search' },
+  { id: 'net-public', title: 'network.public_fold', iconName: 'globe', toggle: 'network.public_title',
+    open: true },
   { id: 'net-internet', title: 'network.internet_fold', iconName: 'link', toggle: 'network.internet_title' },
-  { id: 'net-public', title: 'network.public_fold', iconName: 'globe', toggle: 'network.public_title' },
+  { id: 'net-peers', title: 'network.peers_title', iconName: 'network' },
+  { id: 'net-visible', title: 'network.visible_title', iconName: 'search', open: true },
+  { id: 'net-local', title: 'network.local_title', iconName: 'plug', toggle: 'network.local_title' },
 ];
 
 let root;
@@ -52,7 +55,7 @@ export function mountNetwork(container) {
         <div class="sub">${esc(t('network.intro'))}</div></div></div>
       <div class="card" id="net-live" hidden></div>
       <div class="net-folds">${SECTIONS.map(s => fold({ id: s.id, title: t(s.title), iconName: s.iconName,
-        body: `<div class="card"><div class="net-part"></div>${s.id === 'net-local' ? add : ''}</div>` }))
+        open: s.open, body: `<div class="card"><div class="net-part"></div>${s.id === 'net-local' ? add : ''}</div>` }))
         .join('')}</div>
     </div></div>`);
   for (const s of SECTIONS) {

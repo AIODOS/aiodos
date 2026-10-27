@@ -5,8 +5,9 @@ network/worker.py ; les nœuds lancés par les tests en héritent)."""
 import hashlib
 import os
 
-# Réseau, Internet et prêt sont activés par défaut depuis le 20/10 : les essais les gardent
-# éteints tant qu'ils ne les demandent pas (settings.FOR_MY_MACHINES), nœuds lancés compris
+# Réseau, Internet et prêt sont activés par défaut depuis le 20/10 (réseau public, applis et
+# images des amis depuis le 27/10) : les essais les gardent éteints tant qu'ils ne les
+# demandent pas (settings.FOR_MY_MACHINES, OPEN_FROM_THE_START), nœuds lancés compris
 os.environ["AIODOS_QUIET"] = "1"
 # Les essais lisent les textes en français, quelle que soit la langue de la machine qui les
 # lance (nœuds lancés compris) ; test_i18n.py passe à l'anglais quand il le faut

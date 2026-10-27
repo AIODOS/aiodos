@@ -75,7 +75,7 @@ async def enable(body: EnableIn, request: Request):
 
 @router.post("/public")
 async def public_enable(body: EnableIn, request: Request):
-    """« Rejoindre le réseau public » (phase 3.0, désactivé par défaut) : un annuaire, rien
+    """« Rejoindre le réseau public » (phase 3.0, activé par défaut) : un annuaire, rien
     de confié. Il passe par le compagnon Internet."""
     manager = _manager(request)
     if body.enabled and not manager.internet.enabled:

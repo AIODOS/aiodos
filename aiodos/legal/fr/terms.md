@@ -1,6 +1,6 @@
 # Conditions d'utilisation d'AIODOS
 
-*Version 1, 27 octobre 2026*
+*Version 2, 27 octobre 2026*
 
 ## 1. Objet
 
@@ -46,6 +46,11 @@ ont leurs propres conditions :
   machine qui calcule doit les lire pour les traiter. AIODOS est conçu pour ne rien garder
   chez celle qui calcule ; l'éditeur ne peut pas garantir que le programme d'une autre
   personne n'a pas été modifié.
+- Dès la première ouverture, et jusqu'à ce que tu le coupes : ta machine rejoint l'annuaire
+  du réseau public (elle y annonce sa version d'AIODOS et la liste de ses modèles, rien de
+  personnel), ta carte graphique crée les images que lui demandent les amis que tu as
+  ajoutés, et les applications de cette machine peuvent te demander l'accès à AIODOS
+  (chacune doit être acceptée par toi).
 - Prêter ta puissance utilise ton processeur, ta carte graphique, ta mémoire, ta batterie et
   ta connexion : de l'électricité, des données, de la chaleur, de l'usure. AIODOS ménage ce
   prêt (priorité basse, pas sur batterie, téléphone seulement en charge) et tu peux l'arrêter

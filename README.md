@@ -2,9 +2,10 @@
 
 *English version: [README.en.md](README.en.md).*
 
-**La voie de l'IA, faite ensemble.** AIODOS fait tourner l'IA sur tes propres machines et
-les fait travailler ensemble : tes PC, ton téléphone, ceux de tes amis et, à terme, ceux de
-tous les participants du réseau public. Chaque gros travail est découpé en petites unités
+**La voie de l'IA, faite ensemble.** AIODOS relie par Internet les machines de personnes
+qui ne se connaissent pas, pour faire tourner l'IA sur leur puissance mise en commun : celles
+des participants du réseau public, de tes amis, et les tiennes (PC, téléphone), sans serveur
+central ; le réseau local n'est qu'un raccourci. Chaque gros travail est découpé en petites unités
 que les machines libres se partagent, comme les morceaux d'un torrent ; un modèle trop gros
 pour une seule carte graphique se répartit entre plusieurs.
 
@@ -15,9 +16,12 @@ pour une seule carte graphique se répartit entre plusieurs.
 - **Brancher tes applications et tes outils** (PANDORA, ARKLIGHT PC, un éditeur de code, un
   assistant…) : ils profitent de la même puissance partagée.
 
-> **Tes machines d'abord, le reste avec ton accord.** Tes machines appairées calculent
-> ensemble dès la première ouverture ; tes amis et le réseau public, seulement si tu
-> l'acceptes. Entre machines, tout est chiffré, et rien n'est gardé par celle qui calcule.
+> **La puissance de chacun, mise en commun par Internet.** Dès la première ouverture, ta
+> machine rejoint le réseau public, tes machines appairées calculent ensemble et ta carte
+> graphique crée les images des amis que tu ajoutes. Aujourd'hui, le réseau public est un
+> annuaire : ta machine y annonce ses modèles, sans encore calculer pour des inconnus. Tout
+> se coupe d'un geste. Entre machines, tout est chiffré, et rien n'est
+> gardé par celle qui calcule.
 > Jamais de cloud ; le web reste optionnel, et chaque recherche se valide d'abord.
 
 *AI* + *hodos* : « le chemin » en grec, celui de « méthode » et de « synode » (faire route
@@ -128,8 +132,9 @@ extraits.
 **Ouvrir AIODOS aux applications** (PANDORA, ARKLIGHT PC…) : chaque appli demande l'accès
 d'elle-même ; une carte s'affiche dans AIODOS avec un code à 6 chiffres à comparer, ce qu'elle
 pourra faire et où ses calculs pourront se faire (ce PC, mes machines, mes amis, les inconnus
-du réseau public), à décocher au besoin. Le premier accord ouvre la passerelle ; chaque appli a
-sa clé, retirable d'un clic. Bibliothèques clientes sans dépendance, Python et JavaScript,
+du réseau public), à décocher au besoin. La passerelle écoute dès la première ouverture (sur
+ce PC seulement), mais rien n'y entre sans cet accord ; chaque appli a sa clé, retirable d'un
+clic. Bibliothèques clientes sans dépendance, Python et JavaScript,
 sous Apache-2.0 (`clients/`) : [docs/integrer-aiodos.md](docs/integrer-aiodos.md), référence
 [docs/api-applications.md](docs/api-applications.md).
 

@@ -57,15 +57,18 @@ def test_changing_a_companion_option_relaunches_it(data_dir, monkeypatch):
 
 def test_my_machines_compute_together_from_the_first_launch(monkeypatch):
     """Décision de l'auteur (20/10) : réseau local, Internet, calcul et prêt entre mes
-    machines activés dès la première ouverture ; les amis et le réseau public restent sur
-    autorisation. Les essais automatiques (AIODOS_QUIET=1) les gardent éteints."""
+    machines activés dès la première ouverture ; le 27/10, le réseau public, le prêt d'images
+    aux amis et l'accès des applications de ce PC aussi. Faire calculer les miennes par mes
+    amis reste sur autorisation. Les essais automatiques (AIODOS_QUIET=1) les gardent éteints."""
     monkeypatch.delenv("AIODOS_QUIET", raising=False)
-    for key in settings.FOR_MY_MACHINES:
+    for key in settings.FOR_MY_MACHINES + settings.OPEN_FROM_THE_START:
         assert settings.get(key) is True and settings.get_all()[key] is True
-    for key in ("public_network", "lend_images_friends", "images_from_friends",
-                "auto_route_friends"):
+    assert set(settings.OPEN_FROM_THE_START) == {"public_network", "lend_images_friends",
+                                                 "gateway_apps"}
+    for key in ("images_from_friends", "auto_route_friends"):
         assert settings.get(key) is False
     settings.set_value("internet_enabled", False)          # coupé ensuite : reste coupé
     assert settings.get("internet_enabled") is False
     monkeypatch.setenv("AIODOS_QUIET", "1")
     assert settings.get("network_enabled") is False
+    assert settings.get("public_network") is False and settings.get("gateway_apps") is False

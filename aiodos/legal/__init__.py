@@ -14,7 +14,7 @@ from pathlib import Path
 
 from aiodos import i18n, paths, settings
 
-VERSION = 1
+VERSION = 2
 FOLDER = Path(__file__).resolve().parent
 DOCS = ("charter", "terms")              # dans l'ordre où on les lit
 

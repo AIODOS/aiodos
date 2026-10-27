@@ -1,10 +1,10 @@
 # Charte d'utilisation d'AIODOS
 
-*Version 1, 27 octobre 2026*
+*Version 2, 27 octobre 2026*
 
-AIODOS est un atelier d'intelligence artificielle libre. Il tourne sur tes propres machines
-et, si tu le veux, met leur puissance en commun avec celle de tes amis et des autres
-participants du réseau. Il n'y a pas de serveur central : le réseau, ce sont les machines de
+AIODOS est un atelier d'intelligence artificielle libre. Il relie par Internet les machines
+de personnes qui ne se connaissent pas, pour mettre leur puissance en commun : celles des
+participants du réseau public, de tes amis, et les tiennes. Il n'y a pas de serveur central : le réseau, ce sont les machines de
 chacun. Cette charte dit dans quel esprit on l'utilise ensemble. Elle va avec les conditions
 d'utilisation.
 
@@ -41,9 +41,11 @@ Seul ou avec d'autres machines, tu t'engages à ne pas te servir d'AIODOS pour :
 
 ## 3. Prêter et emprunter de la puissance
 
-- **Prêter est un choix.** Tes machines appairées calculent ensemble dès la première
-  ouverture ; tes amis et le réseau public, seulement avec ton accord. Tout se coupe à tout
-  moment dans les Réglages.
+- **Prêter est un choix.** Dès la première ouverture, tes machines appairées calculent
+  ensemble, ta carte graphique crée les images des amis que tu as ajoutés, et ta machine
+  rejoint l'annuaire du réseau public (elle y annonce sa version d'AIODOS et ses modèles ;
+  elle n'y calcule rien pour des inconnus). Tout se coupe à tout moment dans les Réglages et
+  la vue Réseau.
 - **Ce qu'on te confie ne t'appartient pas.** Quand ta machine calcule pour quelqu'un, elle
   traite sa demande le temps du calcul, puis l'oublie. Tu t'engages à ne pas chercher à la
   lire, à la copier ou à la garder, ni à modifier AIODOS pour le faire.

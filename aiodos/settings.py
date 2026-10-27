@@ -62,8 +62,10 @@ DEFAULTS = {
     "whisper_model": "small",
     # --- Ce qui fait calculer mes machines ensemble est activé dès la première ouverture
     # (décision de l'auteur, 20/10/2026 : « le logiciel doit fonctionner dès la première
-    # ouverture » ; on peut tout couper ensuite). Les amis et le réseau public restent sur
-    # autorisation (décisions du 18/10). Cf. FOR_MY_MACHINES plus bas.
+    # ouverture » ; on peut tout couper ensuite). Le réseau public, le prêt d'images aux amis
+    # et l'accès des applications de ce PC aussi depuis le 27/10/2026 (« des personnes qui ne
+    # connaissent pas AIODOS ne vont pas automatiquement aller dans les réglages »). Cf.
+    # FOR_MY_MACHINES et OPEN_FROM_THE_START plus bas.
     # --- Réseau local (phase 1) ---
     "network_enabled": True,
     "p2p_port": 47701,                # échanges chiffrés entre nœuds
@@ -74,8 +76,8 @@ DEFAULTS = {
     "internet_relays": ["n0"],        # « n0 » (relais publics de n0), « none », ou https://…
     "internet_directory": ["n0-dns", "dht"],   # DNS de n0 d'abord, DHT Mainline en secours
     "internet_portmap": True,         # ouverture de port automatique sur la box (UPnP, PCP…)
-    # --- Réseau public (phase 3.0) : un annuaire, sans rien confier ; désactivé par défaut ---
-    "public_network": False,          # « Rejoindre le réseau public » (Internet requis)
+    # --- Réseau public (phase 3.0) : un annuaire, sans rien confier ; activé par défaut ---
+    "public_network": True,           # « Rejoindre le réseau public » (Internet requis)
     "p2p_route": "auto",              # chemin vers mes machines : auto | lan | internet
     "internet_max_blob_mb": 64,       # fichier confié par Internet : au-delà, il reste au local
     # --- Nœud & partage de puissance ---
@@ -115,7 +117,7 @@ DEFAULTS = {
     "images_device": "",              # carte qui calcule (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
     "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
-    "lend_images_friends": False,     # calculer les images de mes amis (jobs/kinds/images.py)
+    "lend_images_friends": True,      # calculer les images de mes amis (jobs/kinds/images.py)
     "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
@@ -127,9 +129,9 @@ DEFAULTS = {
     "gateway_enabled": False,
     "gateway_port": 11435,            # fixe (celui d'Ollama + 1), réglable
     # --- Applications (gateway/apps.py, docs/api-applications.md) : une clé par appli,
-    # accordée dans AIODOS. Fermé par défaut ; le premier accord donné à une appli l'ouvre
-    # (décision de l'auteur, 20/10/2026 : « fermée, ouverte au premier usage ») ---
-    "gateway_apps": False,            # « Ouvrir AIODOS aux applications de ce PC »
+    # accordée dans AIODOS. Ouvert par défaut depuis le 27/10/2026 (avant : fermé jusqu'au
+    # premier accord) : chaque appli reste à accepter, sur 127.0.0.1 seulement ---
+    "gateway_apps": True,             # « Ouvrir AIODOS aux applications de ce PC »
     "gateway_requests": True,         # « Accepter les nouvelles demandes d'accès »
     "gateway_same_account": True,     # refuser les applis d'un autre compte Windows
     "gateway_log_days": 30,           # journal des applis : 30 jours (compteurs : 90)
@@ -180,10 +182,12 @@ def rag_threshold(model) -> float:
 # réseau ni compagnon tant qu'un test ne les demande pas) les garde éteints.
 FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend_models",
                    "lend_gpu")
+# Activés par défaut depuis le 27/10/2026 (décision de l'auteur), éteints de même en essai
+OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps")
 
 
 def default(key):
-    if key in FOR_MY_MACHINES and os.environ.get("AIODOS_QUIET") == "1":
+    if key in FOR_MY_MACHINES + OPEN_FROM_THE_START and os.environ.get("AIODOS_QUIET") == "1":
         return False
     if key == "system_prompt":
         return i18n.t("settings.default_system_prompt")
