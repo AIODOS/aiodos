@@ -945,7 +945,8 @@ class _LenderManager:
     node_id = LENDER
 
     def __init__(self):
-        self.executor = type("Executor", (), {"interactive": 0, "cooldown": {}})()
+        self.executor = type("Executor", (), {"interactive": 0, "cooldown": {}, "slots": {},
+                                              "busy": {}})()
 
     def changed(self):
         pass

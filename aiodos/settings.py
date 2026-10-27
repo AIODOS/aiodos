@@ -93,7 +93,10 @@ DEFAULTS = {
     "share_on_ac_only": True,         # téléphone : seulement en charge
     "share_min_battery": 80,          # téléphone : charge minimale pour calculer (%)
     "share_max_temp": 40,             # téléphone : température maximale de la batterie (°C)
-    "share_max_gpu": 100,
+    # « Puissance prêtée » (node/places.py) : jamais toute la machine (décision de l'auteur,
+    # 27/10/2026). Fixe les places de calcul et la part du temps de la carte graphique ;
+    # remplace « GPU prêté au maximum » (share_max_gpu, 100 %), repris s'il était plus bas
+    "lend_power": 60,
     # --- Travail de fond (jobs/pacing.py, docs/arriere-plan.md) ---
     # Toute la file en pause (jobs/queue.py) : « » non, « after_current » (les unités en
     # cours finissent), « now » (elles s'arrêtent, rendues sans compter d'essai)

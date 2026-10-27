@@ -67,7 +67,7 @@ from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
-from aiodos.node import android, identity, keep_awake, power, priority
+from aiodos.node import android, identity, keep_awake, places, power, priority
 from aiodos.services import extract, media
 
 log = logging.getLogger("aiodos.worker")
@@ -472,7 +472,8 @@ class Worker:
                     # Le ComfyUI accordé de ce PC (travaux des applis de mes machines)
                     "engines": engine_lending.capabilities()}
             self._caps = (time.monotonic(), caps)
-        return caps
+        # Ses places, et combien sont prises : relues à chaque demande (essaim, § 3)
+        return {**caps, "places": self.executor.slots, "busy": dict(self.executor.busy)}
 
     def _ask(self, peer, offered):
         full = peers.get(peer["node_id"])
@@ -816,10 +817,10 @@ class Worker:
         return {}
 
     def _rest_gpu(self, a: Assignment, compute_s):
-        """« GPU prêté au maximum : X % » : après une unité GPU de t secondes,
-        pause de t × (100 − X) / X avant d'en reprendre une (comme BOINC). Pendant
-        que l'utilisateur se sert du PC, X vaut au plus IN_USE_GPU_SHARE."""
-        share = int(settings.get("share_max_gpu") or 100)
+        """« Puissance prêtée : X % » (node/places.py, 60 % par défaut) : après une unité GPU
+        de t secondes, pause de t × (100 − X) / X avant d'en reprendre une (comme BOINC).
+        Pendant que l'utilisateur se sert du PC, X vaut au plus IN_USE_GPU_SHARE."""
+        share = places.share()
         if self.state.get("state") == "in_use":
             share = min(share, IN_USE_GPU_SHARE)
         if a.resource in GPU_BOUND and 0 < share < 100:

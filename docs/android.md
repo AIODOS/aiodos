@@ -230,8 +230,9 @@ d'autres comptes de la machine ; chaque refus dit quoi corriger.
   l'utilisateur du téléphone : rien ne se fait sans lui.
 - « Seulement en charge » (activé), « Batterie minimale » (80 %), « Température
   maximale de la batterie » (40 °C) : à ajuster si besoin.
-- « Calcul prêté au maximum » : entre 50 et 75 %, le téléphone fait des pauses entre deux
-  unités et chauffe moins. BOINC n'utilise que la moitié des cœurs d'un téléphone.
+- « Puissance prêtée » (60 % par défaut depuis le 27/10/2026) : le nombre de calculs faits en
+  même temps et des pauses entre deux ; plus bas, le téléphone chauffe moins. BOINC n'utilise
+  que la moitié des cœurs d'un téléphone.
 - « Alimentation » doit afficher par exemple **« En charge · batterie 84 % · 31,2 °C »** :
   - « Charge inconnue » : dans l'appli, Android la donne toujours ; sous Termux,
     voir l'étape 2 de l'ancienne méthode ;
@@ -279,7 +280,7 @@ compagnon se construisait à part : voir [compagnon/README.md](../compagnon/READ
 | « Port 47701 pris par un autre programme » au journal | ancien nœud sous Termux encore en marche | « Passer de Termux à l'appli » |
 | `termux-battery-status` ne rend pas la main ; « Charge inconnue » (Termux) | application Termux:API absente, ou pas de la même source que Termux | l'installer depuis la même source (étape 1) |
 | « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
-| « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Calcul prêté au maximum » |
+| « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Puissance prêtée » |
 | Le téléphone ne reçoit jamais rien | modèle d'embedding absent du téléphone ou différent de celui du PC (embeddinggemma : « Installer un modèle » ; sous Termux, colonne ID de `ollama list`), « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images, de sons ou de documents que le téléphone ne sait pas lire (paquet de lecture manquant), ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
 | Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | rouvrir l'appli (sous Termux : relancer `sh lancer-noeud.sh`) ; sur le même Wi-Fi, le téléphone s'annonce tout seul dans « Machines détectées » |
 | `[Process completed (signal 9) - press Enter]` (Termux) | phantom process killer | étape 6 de l'ancienne méthode |
@@ -444,7 +445,7 @@ ollama list
    |---|---|
    | 14 et plus | Options pour les développeurs, puis « Désactiver les limites pour les processus enfant » (en anglais *Disable child process restrictions*). L'option se remet à zéro si on désactive les options pour les développeurs. |
    | 12L, 13 et plus | depuis le PC, avec `adb` : `adb shell "settings put global settings_enable_monitor_phantom_procs false"` |
-   | 12 | `adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent; /system/bin/device_config put activity_manager max_phantom_processes 2147483647"`. Attention : rien ne désactive l'arrêt pour « usage excessif du processeur ». Baisser « Calcul prêté au maximum » pour en limiter le risque. |
+   | 12 | `adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent; /system/bin/device_config put activity_manager max_phantom_processes 2147483647"`. Attention : rien ne désactive l'arrêt pour « usage excessif du processeur ». Baisser « Puissance prêtée » pour en limiter le risque. |
 
    - Pour afficher les options pour les développeurs : toucher 7 fois « Numéro de build »
      dans « À propos du téléphone ».

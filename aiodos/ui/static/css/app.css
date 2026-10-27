@@ -585,6 +585,8 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .setting-row .txt { flex: 1; min-width: 0; }
 .setting-row .txt b { display: block; font-weight: 500; }
 .setting-row .txt small { color: var(--muted); font-size: 12.5px; }
+.setting-row .txt small.places { display: block; margin-top: 4px; color: var(--text); }
+.setting-row .txt small.places:empty { display: none; }
 .updates-status .txt small { display: block; margin-top: 3px; }
 .updates-status .txt small.warn { color: var(--warn); }
 .setting-row .input, .setting-row .select { width: 220px; }

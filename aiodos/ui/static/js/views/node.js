@@ -238,8 +238,20 @@ function shareRow(key, title, text) {
     <label class="switch"><input type="checkbox" data-key="${key}" ${on ? 'checked' : ''}><span></span></label></div>`;
 }
 
+// Les places de cette machine, sur secteur (node/places.py) : ce que permet la puissance prêtée
+function renderPlaces() {
+  const line = root && $('#places-line', root);
+  const places = state.executor?.configured;
+  if (!line) return;
+  line.textContent = places ? t('node.places', { list: ['cpu', 'gpu', 'embed', 'net']
+    .filter(name => name in places)
+    .map(name => t('node.places_item', { n: places[name], name: t(`jobs.resource_${name}`) }))
+    .join(' · ') }) : '';
+}
+
 // État du partage, en direct : prêt, en pause (pourquoi), unités calculées ici pour d'autres
 function renderShareStatus() {
+  renderPlaces();
   const box = root && $('#share-status', root);
   if (!box) return;
   const net = state.network;
@@ -292,10 +304,10 @@ function renderShare() {
     ${shareRow('share_on_ac_only', t(mobile ? 'node.ac_only_phone' : 'node.ac_only_pc'),
       t(mobile ? 'node.ac_only_phone_help' : 'node.ac_only_pc_help'))}
     ${mobile ? phoneRows : ''}
-    <div class="setting-row"><div class="txt"><b>${esc(t(mobile ? 'node.max_share_phone' : 'node.max_share_pc'))}</b><small>${esc(t(mobile
-      ? 'node.max_share_phone_help' : 'node.max_share_pc_help'))}</small></div>
-      <select class="select short" data-num="share_max_gpu">${[25, 50, 75, 100].map(p =>
-        `<option value="${p}" ${p === s.share_max_gpu ? 'selected' : ''}>${esc(t('node.percent', { n: p }))}</option>`).join('')}</select></div>`;
+    <div class="setting-row"><div class="txt"><b>${esc(t('node.lend_power'))}</b><small>${esc(t(mobile
+      ? 'node.lend_power_help_phone' : 'node.lend_power_help_pc'))}</small><small class="places" id="places-line"></small></div>
+      <select class="select short" data-num="lend_power">${[20, 40, 60, 80, 100].map(p =>
+        `<option value="${p}" ${p === s.lend_power ? 'selected' : ''}>${esc(t('node.percent', { n: p }))}</option>`).join('')}</select></div>`;
   box.querySelectorAll('input[data-key]').forEach(input => {
     input.onchange = () => save({ [input.dataset.key]: input.checked });
   });

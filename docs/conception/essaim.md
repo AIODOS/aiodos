@@ -1,7 +1,7 @@
 # L'essaim : chaque demande partagée entre un maximum de machines
 
-*Intention, 27 octobre 2026. Document de réflexion écrit avec l'auteur ; rien n'est encore
-codé, sauf l'outil de mesure `tools/bench_essaim.py`.*
+*Intention, 27 octobre 2026. Document de réflexion écrit avec l'auteur. Codé : l'outil de
+mesure `tools/bench_essaim.py` et les places de chaque machine (§ 3).*
 
 ## 1. L'intention
 
@@ -65,6 +65,17 @@ l'utilisateur**. Application proposée :
 - **Téléphone** : en plus des règles existantes (en charge, batterie ≥ 80 %, température
   ≤ 40 °C).
 - Un seul réglage « Puissance prêtée », qui remplace `share_max_gpu` (100 % aujourd'hui).
+
+**Codé le 27/10** (`aiodos/node/places.py`) : places de processeur = part × processeurs
+logiques ÷ 4, entre 1 et 8 (4 sur le PC de l'auteur, 32 processeurs ; 1 sur un téléphone) ;
+une place de carte graphique, prêtée au plus cette part de son temps ; embeddings 2 (1 sous
+50 %), réseau 3. Les places servent au travail de fond d'ici comme aux unités prêtées, et
+sont dites à chaque demande de travail (`places`, `busy`). Écart à revoir avec l'auteur :
+la **mémoire vive** bloque une nouvelle unité sous **la moitié** de la part gardée (20 % à
+60 %), pas sous toute la part (40 %) : un portable de 8 Go avec un navigateur ouvert, ou un
+téléphone (Android remplit sa mémoire de caches), n'aurait jamais rien calculé. Réglage
+dans Réglages → Cette machine → Partage de puissance (20 à 100 %), avec les places qui en
+découlent.
 
 ## 4. Une décision reposée sans cesse
 
@@ -283,7 +294,9 @@ l'ouverture.
 1. **Mesurer** les longues réponses (§ 12) et décider du seuil où l'essaim vaut la peine.
 2. **Places et décision reposée** (§ 3-4) : file de fragments, places annoncées, fin de
    partie ; d'abord pour ce qui existe déjà (travaux de fond, images entre mes machines),
-   puis pour les conversations.
+   puis pour les conversations. *Places à 60 % et annoncées : faites le 27/10. La file
+   tirée par les machines libres existait déjà (« la file comme un torrent »,
+   partage-puissance.md § 2.5) ; reste la fin de partie.*
 3. **Conversations en essaim** entre mes machines et mes amis : plusieurs questions (§ 5.2),
    lecture (§ 5.4), plan-contrat (§ 5.3), chef de chantier et vérificateur (§ 8).
 4. **Le réseau public qui calcule** : route publique dans le compagnon, clé jetable,

@@ -8,7 +8,11 @@ moins d'unités à la fois, ou aucune, selon le réglage (jobs/pacing.py).
 
 Les ressources sont partagées avec le calcul fait ici pour d'autres machines
 (begin_remote / end_remote, cf. network.worker) ; l'exécuteur surveille aussi
-les baux des unités que ce nœud a confiées ailleurs (cf. jobs.leases).
+les baux des unités que ce nœud a confiées ailleurs (cf. jobs.leases). Leur nombre de
+places vient de la puissance de la machine et de la part prêtée (node/places.py, 60 % par
+défaut), relu à chaque tour : un changement de réglage vaut tout de suite. Les places
+données au lancement (--slots) passent avant. Quand la mémoire vive manque, rien de
+nouveau ne commence, sauf la lecture de pages (« net »).
 
 Chaque unité calculée ici reçoit son arrêt (stop), comme celles calculées pour une autre
 machine : il est levé quand son travail est annulé ou supprimé (vue Tâches, création
@@ -31,7 +35,7 @@ import requests
 
 from aiodos.jobs import leases, pacing, queue, registry
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
-from aiodos.node import priority
+from aiodos.node import places, priority
 from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.executor")
@@ -76,9 +80,11 @@ class Executor:
     def __init__(self, node_id: str, publish, slots: dict | None = None):
         self.node_id = node_id
         self.publish = publish            # publish(event: dict), sûr depuis tout thread
-        self.slots = {name: max(0, int(n)) for name, n in {**DEFAULT_SLOTS, **(slots or {})}.items()
+        # Places données au lancement (--slots, essais) : elles passent avant celles de la
+        # puissance de la machine (slots)
+        self.fixed = {name: max(0, int(n)) for name, n in (slots or {}).items()
                       if name in DEFAULT_SLOTS}
-        self.busy = {name: 0 for name in self.slots}
+        self.busy = {name: 0 for name in DEFAULT_SLOTS}
         self.remote = {}                  # unités calculées ici pour d'autres machines
         self.interactive = 0
         # Conversations commencées et finies depuis des fils différents (chat local,
@@ -134,11 +140,25 @@ class Executor:
         self.wake()
 
     # ------------------------------------------------------------------ boucle
+    @property
+    def slots(self) -> dict:
+        """Places de chaque ressource, sur secteur (node/places.py, puis --slots)."""
+        return {**places.count(), **self.fixed}
+
+    def places_changed(self):
+        """« Puissance prêtée » changée : places relues, dites à l'interface, et le travail
+        en attente repart s'il y en a de nouvelles (appelable depuis n'importe quel thread)."""
+        places.forget()
+        self._publish_status()
+        self.wake()
+
     def free_resources(self) -> set:
         now = time.monotonic()
+        room = places.memory_room()
         return {name for name, n in pacing.slots(self.slots).items()
                 if self.busy[name] < n and self.cooldown.get(name, 0) <= now
-                and not (self.interactive and name in GPU_BOUND)}
+                and not (self.interactive and name in GPU_BOUND)
+                and (room or name == "net")}
 
     async def _pace(self):
         """Alimentation et réglage relus hors de la boucle ; l'interface prévenue d'un

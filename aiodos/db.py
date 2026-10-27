@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -394,6 +394,14 @@ MIGRATIONS = {
         text_state  TEXT
     );
     CREATE INDEX IF NOT EXISTS ix_attachments_message ON attachments(message_id);
+    """,
+    # « Puissance prêtée » (node/places.py, 60 % par défaut) remplace « GPU prêté au
+    # maximum » (100 % par défaut) : une part choisie plus basse est reprise telle quelle
+    25: """
+    INSERT OR IGNORE INTO settings(key, value)
+        SELECT 'lend_power', value FROM settings
+        WHERE key = 'share_max_gpu' AND CAST(value AS INTEGER) BETWEEN 10 AND 99;
+    DELETE FROM settings WHERE key = 'share_max_gpu';
     """,
 }
 

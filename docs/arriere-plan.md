@@ -219,8 +219,8 @@ D'où la règle (`worker.sharing_state`, `worker._rest_gpu`) :
   tu utilises ce PC ») : threads de fond abaissés (§ 2), une conversation sur ce PC arrête
   et rend les unités qui occupent la carte graphique (comme avant) ;
 - pendant l'utilisation, la carte graphique n'est prêtée que la moitié du temps au plus
-  (après une unité de t secondes, une pause de t ; « GPU prêté au maximum » plus bas reste
-  appliqué) : c'est la seule « priorité basse » possible pour elle ;
+  (après une unité de t secondes, une pause de t ; « Puissance prêtée » plus basse reste
+  appliquée, 60 % par défaut depuis le 27/10/2026, node/places.py) : c'est la seule « priorité basse » possible pour elle ;
 - jamais sur batterie pendant l'utilisation, même quand « Seulement sur secteur » est
   désactivé ; une inactivité qu'on ne sait pas mesurer (PC sous Linux) compte comme une
   utilisation ;

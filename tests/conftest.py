@@ -1,7 +1,8 @@
 """Chaque test travaille dans une base neuve, sans Ollama ni réseau, sur secteur et sur
-une machine inactive depuis un jour (simulés : sur batterie, ou pendant que quelqu'un se
-sert du PC, le travail de fond et le prêt ralentiraient les tests, cf. jobs/pacing.py et
-network/worker.py ; les nœuds lancés par les tests en héritent)."""
+une machine inactive depuis un jour, la mémoire vive assez libre (simulés : sur batterie,
+pendant que quelqu'un se sert du PC, ou mémoire pleine, le travail de fond et le prêt
+ralentiraient les tests, cf. jobs/pacing.py, network/worker.py et node/places.py ; les
+nœuds lancés par les tests en héritent)."""
 import hashlib
 import os
 
@@ -23,6 +24,7 @@ from aiodos.i18n import language
 from aiodos.jobs import pacing
 from aiodos.knowledge import search
 from aiodos.network import client, work
+from aiodos.node import places
 from aiodos.services import extract, ollama
 
 
@@ -31,6 +33,10 @@ def data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("AIODOS_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AIODOS_SIMULATE_POWER", "ac")
     monkeypatch.setenv("AIODOS_SIMULATE_IDLE", "86400")
+    # Mémoire vive assez libre : les places (node/places.py) ne dépendent pas de ce qui tourne
+    # sur la machine des essais
+    monkeypatch.setenv(places.SIMULATE_MEMORY_ENV, "80")
+    places.forget()
     search.invalidate()
     language.forget()                  # la langue choisie dans la base d'un essai précédent
     pacing.start()                     # ni conversation en cours, ni arrêt d'un test précédent

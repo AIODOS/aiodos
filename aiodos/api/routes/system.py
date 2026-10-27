@@ -44,6 +44,8 @@ def write_settings(values: dict, request: Request):
     if engines.ENGINE_OPTIONS & set(values):     # ComfyUI accordé, déplacé : relu
         engines.forget()
         request.app.state.executor.wake()
+    if "lend_power" in values:             # plus ou moins de places : tout de suite
+        request.app.state.executor.places_changed()
     job_id = reindex.schedule()            # nouveau modèle d'embedding : tout recalculer
     if job_id:
         executor = request.app.state.executor

@@ -14,7 +14,7 @@ from aiodos.knowledge import store
 from aiodos.network import peers, sharing, work, worker
 from aiodos.network.client import PeerError
 from aiodos.network.worker import Assignment, Worker, sharing_state
-from aiodos.node import identity, power
+from aiodos.node import identity, places, power
 from aiodos.services import extract, ollama
 
 OWNER, LENDER = "machine-a", "machine-b"
@@ -44,6 +44,8 @@ class LenderExecutor:
 
     def __init__(self):
         self.cooldown = {}
+        self.slots = {"gpu": 1, "embed": 2, "cpu": 4, "net": 3}
+        self.busy = {"gpu": 0, "embed": 1, "cpu": 0, "net": 0}
 
 
 class LenderManager:
@@ -307,12 +309,14 @@ def test_while_the_pc_is_used_the_gpu_is_lent_half_the_time_at_most(setup):
     lender._rest_gpu(setup["assignment"], compute_s=2.0)          # unité « embed », 100 %
     remaining = lender._gpu_rest_until - worker.time.monotonic()
     assert 1.5 < remaining <= 2.0                                  # 2 s × 50 / 50
-    settings.set_value("share_max_gpu", 25)                        # plus strict : gardé
+    settings.set_value("lend_power", 25)                           # plus strict : gardé
+    places.forget()
     lender._gpu_rest_until = 0.0
     lender._rest_gpu(setup["assignment"], compute_s=2.0)
     assert 5.5 < lender._gpu_rest_until - worker.time.monotonic() <= 6.0
     lender.state = {"active": True, "state": "ready", "detail": ""}
-    settings.set_value("share_max_gpu", 100)
+    settings.set_value("lend_power", 100)
+    places.forget()
     lender._gpu_rest_until = 0.0
     lender._rest_gpu(setup["assignment"], compute_s=2.0)           # personne : pas de pause
     assert lender._gpu_rest_until == 0.0
@@ -392,7 +396,8 @@ def test_phone_rules_follow_the_settings(monkeypatch):
 
 
 def test_gpu_share_below_100_percent_imposes_a_rest(setup):
-    settings.set_value("share_max_gpu", 25)
+    settings.set_value("lend_power", 25)
+    places.forget()
     lender = setup["lender"]
     lender._rest_gpu(setup["assignment"], compute_s=2.0)          # unité « embed »
     remaining = lender._gpu_rest_until - worker.time.monotonic()
