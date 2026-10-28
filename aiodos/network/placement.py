@@ -422,9 +422,16 @@ def plan(model, executor=None, public=False, bigger=False) -> list:
     une machine appairée) passe tel quel ; « auto:<modèle> » est réparti. public, bigger :
     cf. candidates (la conversation le permet, chat/public_consent.py) ; jamais pour un
     modèle précis. « Automatique · réseau public » (PUBLIC_BEST) : les machines du réseau
-    public seules (best_public), si public."""
+    public seules (best_public), si public.
+
+    Une machine du réseau public (« public:<clé>:<modèle> ») ne se désigne jamais à la main :
+    seul ce choix la propose, quand la conversation le permet (relecture du 28/10/2026 : passé
+    tel quel, un tel identifiant partait chez l'inconnu malgré use_public, « Sur mes machines
+    seulement », les pièces jointes, l'accord d'un modèle plus gros et la mise de côté)."""
     name = parse(model)
     if name is None:
+        if public_chat.parse(model):
+            raise NoMachine(t("placement.public_by_hand"))
         return [model]
     if model == PUBLIC_BEST:
         ranked = best_public() if public else []

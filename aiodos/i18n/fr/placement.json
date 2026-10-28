@@ -6,5 +6,6 @@
   "public_machine": "une machine du réseau public",
   "public_auto": "Automatique · réseau public",
   "no_public": "Aucune machine du réseau public ne peut répondre pour l'instant ; installe un modèle ou réessaie plus tard.",
-  "public_closed": "Aucun modèle ici ni sur tes machines pour répondre, et ce message ne peut pas partir sur le réseau public."
+  "public_closed": "Aucun modèle ici ni sur tes machines pour répondre, et ce message ne peut pas partir sur le réseau public.",
+  "public_by_hand": "Une machine du réseau public ne se choisit pas à la main : choisis le mode automatique, et AIODOS la proposera si cette conversation peut partir chez un inconnu."
 }

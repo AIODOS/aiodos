@@ -133,6 +133,32 @@ def test_a_link_the_other_answer_or_the_question_gives_is_not_an_ad():
                    HONEST_B).ok
 
 
+def test_texts_from_strangers_are_read_in_linear_time():
+    """Relecture du 28/10/2026 : les motifs des liens et des fins coupées, essayés à chaque
+    position d'une longue suite (« a.a.a.a… »), prenaient un temps quadratique : 4 s pour
+    20 000 caractères, des minutes pour une réponse de 130 000, en gardant le GIL (AIODOS
+    entier figé par un contrôle). Linéaires désormais, ils trouvent les mêmes domaines."""
+    import time
+    for text in ("a." * 20_000, "a" * 40_000, "a-" * 20_000, "\n" * 40_000 + "x",
+                 ("a" * 999 + "@") * 40):
+        started = time.perf_counter()
+        spot_check.links(text)
+        spot_check.unfinished(text)
+        compare(QUESTION, text, HONEST_B)
+        assert time.perf_counter() - started < 1.0
+    # Les mêmes domaines qu'avant : une longue adresse, un domaine après un mot capitalisé,
+    # un tiret ; jamais « Site.com » (en minuscules seulement)
+    assert spot_check.links("Écrivez à " + "x" * 80 + "@promo-malin.example !") \
+        == {"promo-malin.example"}
+    assert spot_check.links("Voir Promo.arnaque.com ou x-site.com, pas Site.com") \
+        == {"arnaque.com", "x-site.com"}
+    assert spot_check.links("." * 30 + "a." * 20 + "promo.fr") == {"promo.fr"}
+    # … et les mêmes fins coupées : un dernier signe, ou une puce seule sur sa ligne
+    assert spot_check.unfinished("Fin,") and spot_check.unfinished("Liste :\n  *  ")
+    assert spot_check.unfinished("+") and not spot_check.unfinished("Fin.")
+    assert not spot_check.unfinished("a *") and not spot_check.unfinished("   ")
+
+
 def test_a_truncated_answer_is_caught():
     cut = HONEST_A[:int(len(HONEST_A) * 0.35)]
     cut = cut[:cut.rfind(" ")]

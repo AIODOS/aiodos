@@ -378,6 +378,27 @@ def test_on_my_machines_only_keeps_a_conversation_home(monkeypatch, companion, o
     assert conversations.get(conv_id)["mine_only"] is False
 
 
+def test_a_public_machine_is_never_chosen_by_hand(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : « public:<clé>:<modèle> » envoyé tel quel (une autre interface,
+    un script avec le jeton) partait chez l'inconnu malgré use_public coupé et « Sur mes
+    machines seulement ». Seul le choix automatique propose une machine publique."""
+    local_models(monkeypatch, SMALL)
+    directory(node(PC, SMALL))
+    settings.set_value("use_public", False)
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        for use_public in (False, True):
+            settings.set_value("use_public", use_public)
+            answer = ui.post("/api/chat", headers=AUTH, json={
+                "text": "Mon secret", "model": at(PC, SMALL), "mine_only": True,
+                "libraries": False, "conversations": False})
+            assert answer.status_code == 400 and "à la main" in answer.json()["detail"]
+    assert companion.requests == [] and conversations.list_tree()["conversations"] == []
+    with pytest.raises(placement.NoMachine):
+        placement.plan(at(PC, SMALL), Executor(), public=True)
+    with pytest.raises(gateway_answer.GatewayError):            # les applis non plus
+        gateway_answer.plan(at(PC, SMALL), Executor())
+
+
 def test_attachments_never_go_to_a_stranger(monkeypatch, companion, opened):
     """Une conversation qui porte une pièce jointe reste chez moi ; et rien d'une image ne
     peut partir, même si on le demandait (défense en profondeur)."""
@@ -523,6 +544,55 @@ def test_an_error_after_the_first_word_is_not_handed_over(monkeypatch, companion
         assert events[-1]["error"] == "La machine du réseau public est occupée."
         conv = ui.get(f"/api/conversations/{events[0]['conversation_id']}", headers=AUTH).json()
     assert conv["messages"][-1]["content"] == "Bon"
+
+
+def test_an_endless_answer_is_cut(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : le prêteur borne sa réponse (2 048 jetons) ; un menteur qui
+    envoyait des Mio de texte les voyait tous gardés, rendus à chaque morceau sur la boucle du
+    nœud et enregistrés. Coupée au-delà de MAX_TEXT caractères (le début reste affiché), ou de
+    MAX_STREAM octets de flux, même sans texte."""
+    salut = [{"role": "user", "content": "Salut"}]
+    piece = "x" * 100_000
+    # « raw » : le compagnon simulé tolère que le demandeur coupe en route
+    companion.script = {PC: ("raw", [(0, {"type": "delta", "text": piece})] * 5)}
+    out = []
+    with pytest.raises(public_chat.PublicError) as cut:
+        for kind, value in public_chat.chat_stream(at(PC, SMALL), salut):
+            out.append(value)
+    assert cut.value.code == "too_long" and "".join(out) == piece
+    assert len(piece) <= public_chat.MAX_TEXT < 2 * len(piece)
+    # Dans la conversation : le début gardé, et pourquoi elle s'arrête
+    local_models(monkeypatch)
+    directory(node(PC, SMALL))
+    companion.script = {PC: ("raw", [(0, {"type": "delta", "text": text})
+                                     for text in ("Bon", piece, piece)])}
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        events = ask(ui, "Bonjour")
+        assert events[-1]["error"] == ("La réponse de la machine du réseau public dépassait "
+                                       "la longueur permise : elle a été coupée.")
+        conv = ui.get(f"/api/conversations/{events[0]['conversation_id']}", headers=AUTH).json()
+    assert conv["messages"][-1]["content"] == "Bon" + piece
+    # Des événements inconnus sans fin, sans un mot
+    monkeypatch.setattr(public_chat, "MAX_STREAM", 8192)
+    companion.script = {PC: ("raw", [(0, {"type": "plus tard", "pad": "y" * 200})] * 100)}
+    with pytest.raises(public_chat.PublicError) as junk:
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert junk.value.code == "too_long"
+
+
+def test_a_lone_surrogate_does_not_lose_the_answer(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : « \\ud800 » est du JSON valide ; reçu d'un prêteur, il faisait
+    échouer l'envoi de la réponse à l'interface puis son enregistrement (réponse perdue)."""
+    local_models(monkeypatch)
+    directory(node(PC, SMALL))
+    companion.script = {PC: ("answer", ["Bon\ud800", "jour"])}
+    assert list(public_chat.chat_stream(at(PC, SMALL), [{"role": "user", "content": "x"}])) \
+        == [("content", "Bon?"), ("content", "jour")]
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        events = ask(ui, "Bonjour")
+        assert events[-1]["error"] is None and "Bon?jour" in events[-1]["html"]
+        conv = ui.get(f"/api/conversations/{events[0]['conversation_id']}", headers=AUTH).json()
+    assert conv["messages"][-1]["content"] == "Bon?jour"
 
 
 def test_the_stream_reads_the_lender_contract(companion, opened):

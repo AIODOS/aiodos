@@ -28,7 +28,8 @@ Tant qu'aucun mot n'est arrivé, tout refus (prêteur : 503 busy ou not_lending,
 lève PublicError, qui n'a pas de statut HTTP : placement.run passe alors à la machine
 suivante. Après le premier mot, une erreur remonte (la réponse est gardée jusque-là, comme
 pour mes machines). Le journal ne dit que la clé du prêteur (abrégée) et le code d'un refus,
-jamais le texte de la conversation.
+jamais le texte de la conversation. La réponse est bornée ici (MAX_TEXT caractères de texte,
+MAX_STREAM octets de flux) : au-delà, elle est coupée (« too_long »), le début gardé.
 
 Signes de vie (essai réel du 28/10/2026 : un prêteur a mis 45 à 53 s à charger qwen3.5:9b
 avant le premier mot) : tant que son moteur charge le modèle ou lit la demande, le prêteur
@@ -76,11 +77,20 @@ ALIVE_GRACE_S = 20
 LOADING_MAX_S = 180
 WATCH_S = 0.25
 REFUSAL_BYTES = 4096             # refus lu au plus
+# La réponse d'un prêteur, bornée ici (relecture du 28/10/2026) : il borne la sienne à
+# public_lending.MAX_TOKENS jetons, mais un menteur qui ne s'arrête pas (des Mio de texte,
+# rendus à chaque morceau sur la boucle du nœud, gardés en base, comparés par les contrôles)
+# est coupé : TEXT_PER_TOKEN caractères par jeton, bien au-delà d'une réponse honnête, et
+# MAX_STREAM octets de flux en tout (signes de vie et événements inconnus compris)
+TEXT_PER_TOKEN = 64
+MAX_TEXT = public_lending.MAX_TOKENS * TEXT_PER_TOKEN
+MAX_STREAM = 4 * 1024 ** 2
 MAX_TAGS = 2000                  # identifiants de conversation gardés en mémoire
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")
 # Codes des refus, chacun avec son message (public_chat.error_<code>)
 CODES = {"busy", "not_lending", "no_model", "too_big", "bad_request", "unreachable", "engine",
-         "slow", "cut", "unreadable", "documents", "attachments", "companion", "refused"}
+         "slow", "cut", "unreadable", "documents", "attachments", "companion", "refused",
+         "too_long"}
 # Codes des compagnons (public_ask.rs chez moi, public_serve.rs chez le prêteur, relayés
 # tels quels) qui disent la même chose qu'un des nôtres. Le compagnon ne refait jamais
 # d'essai (le prêteur ne calcule pas deux fois) : sur « interrupted » ou « timeout », c'est
@@ -289,6 +299,13 @@ def _event(line: bytes) -> dict:
     return event
 
 
+def _clean(text: str) -> str:
+    """Le texte d'un morceau sans demi-paire de substitution (« \\ud800 », du JSON valide) :
+    elle ferait échouer l'envoi de la réponse à l'interface puis son enregistrement, et la
+    réponse serait perdue (relecture du 28/10/2026). Remplacée par « ? »."""
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
 def chat_stream(model, messages, think=True, stop=None, options=None, stats=False,
                 conversation=None):
     """Couples (genre, texte), comme remote_models.chat_stream, calculés par une machine du
@@ -323,12 +340,16 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
         client._plain(response)
         first, done, why = threading.Event(), threading.Event(), []
         deadline, told = [started + FIRST_WORD_S], set()
+        received = written = 0          # octets du flux, caractères de texte (MAX_STREAM, MAX_TEXT)
         threading.Thread(target=_watch, daemon=True, name="aiodos-public-demande",
                          args=(response, stop, first, done, why, deadline)).start()
         try:
             for line in client._lines(response):
                 if stop is not None and stop.is_set():
                     return
+                received += len(line) + 1
+                if received > MAX_STREAM:
+                    raise _too_long(key)
                 if not line.strip():
                     continue
                 event = _event(line)
@@ -346,8 +367,11 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
                 elif kind == "delta":
                     text = event.get("text")
                     if isinstance(text, str) and text:
+                        written += len(text)
+                        if written > MAX_TEXT:
+                            raise _too_long(key)
                         first.set()
-                        yield "content", text
+                        yield "content", _clean(text)
                 elif kind == "done":
                     if stats:
                         tokens, seconds = event.get("tokens"), event.get("seconds")
@@ -368,6 +392,13 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
             raise PublicError(_ended(why, first, deadline)) from exc
         finally:
             done.set()
+
+
+def _too_long(key) -> PublicError:
+    """La réponse dépasse MAX_TEXT caractères ou MAX_STREAM octets : coupée (la connexion se
+    ferme, le prêteur s'arrête) ; le début reçu reste affiché."""
+    log.info("Réseau public : %s, réponse trop longue, coupée", reputation.short(key))
+    return PublicError("too_long")
 
 
 def _ended(why: list, first, deadline: list) -> str:

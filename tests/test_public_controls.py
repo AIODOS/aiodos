@@ -251,3 +251,35 @@ def test_placement_skips_set_aside_machines_and_prefers_the_speed_measured_here(
     assert plan() == [SMALL, at(PC, SMALL)]
     assert [c.model for c in placement.best_public()] == [at(PC, SMALL)]
     assert placement.best_public()[0].tps == 20.0
+
+
+# ------------------------------------------------- une machine de contrôle sans fin
+def test_a_control_machine_that_never_finishes_is_given_up(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : une machine de contrôle qui distille sa réponse sans fin
+    tenait le contrôle ouvert pour toujours (deux ainsi : plus aucun contrôle, MAX_RUNNING).
+    Au bout de CONTROL_S, elle est abandonnée, et sa réponse partielle ne sert pas : la
+    suivante est essayée (spot_check._ask)."""
+    import time
+    monkeypatch.setattr(public_controls, "CONTROL_S", 0.6)
+    request = {"model": BIG, "messages": [{"role": "user", "content": QUESTION}],
+               "options": public_controls.options(), "conversation": public_chat.tag(None)}
+    companion.script = {OTHER: ("raw", [(0.15, {"type": "delta", "text": "goutte "})] * 60)}
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        public_controls.ask(at(OTHER, BIG), request)
+    assert time.monotonic() - started < 4
+
+    def dripping(model, messages, think=True, stop=None, options=None, stats=False):
+        for _ in range(60):                               # une des miennes, de même
+            if stop is not None and stop.is_set():
+                return
+            yield "content", "goutte "
+            time.sleep(0.1)
+    monkeypatch.setattr(remote_models, "chat_stream", dripping)
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        public_controls.ask(my_machine(BIG), request)
+    assert time.monotonic() - started < 3
+    # Une réponse à temps : rendue entière
+    companion.script = {OTHER: ("answer", ["Bon", "jour"])}
+    assert public_controls.ask(at(OTHER, BIG), request) == "Bonjour"

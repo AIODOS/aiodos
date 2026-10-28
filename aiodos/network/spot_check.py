@@ -142,19 +142,27 @@ def should_check(lender_key, rng=None) -> bool:
 
 
 # ---------------------------------------------------------------- mesures
+# Les textes comparés viennent d'inconnus (le prêteur, une machine de contrôle) : chaque motif
+# se lit en temps linéaire (relecture du 28/10/2026). « [\w.+-]+@ » ou « (?:[a-z0-9-]+\.)+ »,
+# essayés à chaque position d'une longue suite de lettres (« a.a.a.a… »), prenaient un temps
+# quadratique : 4 s pour 20 000 caractères, des minutes pour une réponse de 130 000, sans
+# rendre la main aux autres fils (le module re garde le GIL) : AIODOS entier figé. Bornés
+# comme le sont les vraies adresses (64 signes avant « @ », 63 par étiquette d'un domaine,
+# 16 étiquettes au plus avant la fin), ils trouvent les mêmes domaines.
 _WORD = re.compile(r"\w+")
 # i18n: tel quel (motif : un lien s'arrête aux guillemets)
 _URL = re.compile(r"(?:https?://|www\.)[^\s<>()\[\]\"'«»]+", re.IGNORECASE)
-_EMAIL = re.compile(r"[\w.+-]+@([\w-]+(?:\.[\w-]+)+)")
+_EMAIL = re.compile(r"[\w.+-]{1,64}@([\w-]+(?:\.[\w-]+)+)")
 # Un domaine nu, en minuscules seulement (« mot.De plus », sans espace, n'en est pas un)
-_DOMAIN = re.compile(r"\b((?:[a-z0-9-]+\.)+(?:com|fr|net|org|io|ly|me|co|info|biz|shop|xyz|"
-                     r"app|eu|be|ch|ca|de|uk|us|tv|gg|link|click|online|site|store|top|"
-                     r"example))\b")
+_DOMAIN = re.compile(r"\b((?:[a-z0-9-]{1,63}\.){1,16}(?:com|fr|net|org|io|ly|me|co|info|biz|"
+                     r"shop|xyz|app|eu|be|ch|ca|de|uk|us|tv|gg|link|click|online|site|store|"
+                     r"top|example))\b")
 _PHONE = re.compile(r"(?:\+\d{2}[\s.-]?|\b0)[1-9](?:[\s.-]?\d{2}){4}\b")
 _SECOND_LEVEL = {"co", "com", "org", "net", "gouv", "gov", "ac", "edu"}   # bbc.co.uk
 # Fin d'une phrase coupée : une lettre, un chiffre, une virgule, deux-points, « = » (du
-# code)…, ou une puce ; i18n: tel quel (motif)
-_UNFINISHED = re.compile(r"(?:[\w,;:(\[{=«\-–—]|(?:^|\n)\s*[*+-])\s*$")
+# code)…, ou une puce (« * », « + » ou « - » seuls sur leur ligne) ; i18n: tel quel (motif)
+_UNFINISHED_END = re.compile(r"[\w,;:(\[{=«\-–—]")
+_BULLETS = "*+-"
 
 
 def _fold(text: str) -> str:
@@ -199,8 +207,19 @@ def new_links(a: str, b: str, question: str) -> int:
 
 
 def unfinished(text: str) -> bool:
-    """Le texte s'arrête-t-il au milieu d'une phrase (une lettre, une virgule, une puce) ?"""
-    return bool(_UNFINISHED.search(text.rstrip()))
+    """Le texte s'arrête-t-il au milieu d'une phrase (une lettre, une virgule, une puce) ?
+    Son dernier signe seulement, et pour une puce ce qui la précède sur sa ligne : lu en
+    temps linéaire (cf. plus haut)."""
+    text = text.rstrip()
+    if not text:
+        return False
+    if _UNFINISHED_END.fullmatch(text[-1]):
+        return True
+    if text[-1] not in _BULLETS:
+        return False
+    before = text[:-1]
+    kept = before.rstrip()                       # la puce seule sur sa ligne (ou en tête)
+    return not kept or "\n" in before[len(kept):]
 
 
 def cosine(a, b) -> float | None:

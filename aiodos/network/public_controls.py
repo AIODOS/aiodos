@@ -31,6 +31,7 @@ clé abrégée à reputation.SHORT caractères) et elle n'est plus choisie (plac
 """
 import logging
 import secrets
+import threading
 import time
 
 from aiodos import settings
@@ -41,6 +42,9 @@ from aiodos.services import ollama
 log = logging.getLogger("aiodos.net")
 
 SEED_MAX = 2 ** 31 - 1          # dans les bornes du prêteur (public_lending.SEED_RANGE)
+# Réponse d'une machine de contrôle attendue au plus (ask) : chargement du modèle compris
+# (public_chat.LOADING_MAX_S), puis public_lending.MAX_TOKENS jetons même lents
+CONTROL_S = 900
 
 
 def seed() -> int:
@@ -142,15 +146,30 @@ def controls(name: str, lender_key, documents=True) -> list:
 def ask(machine, request) -> str:
     """La réponse entière d'une machine de contrôle à `request` (spot_check.run_check) :
     une machine publique par le compagnon, sous l'identifiant de conversation du contrôle ;
-    une des miennes comme d'habitude (remote_models). Lève en cas d'échec : la suivante."""
-    if public_chat.parse(machine):
-        pieces = public_chat.chat_stream(machine, request["messages"], think=False,
-                                         options=request["options"],
-                                         conversation=request["conversation"])
-    else:
-        pieces = remote_models.chat_stream(machine, request["messages"], think=False,
-                                           options=request["options"])
-    return "".join(text for kind, text in pieces if kind == "content")
+    une des miennes comme d'habitude (remote_models). Lève en cas d'échec : la suivante.
+
+    CONTROL_S secondes au plus (relecture du 28/10/2026) : une machine de contrôle qui
+    distille sa réponse sans fin tenait le contrôle ouvert pour toujours, et avec lui sa place
+    (spot_check.MAX_RUNNING : deux ainsi, plus aucun contrôle jusqu'au redémarrage). Coupée à
+    l'échéance, sa réponse partielle ne sert pas (elle ferait accuser le prêteur) : TimeoutError."""
+    stop = threading.Event()
+    timer = threading.Timer(CONTROL_S, stop.set)
+    timer.daemon = True
+    timer.start()
+    try:
+        if public_chat.parse(machine):
+            pieces = public_chat.chat_stream(machine, request["messages"], think=False,
+                                             stop=stop, options=request["options"],
+                                             conversation=request["conversation"])
+        else:
+            pieces = remote_models.chat_stream(machine, request["messages"], think=False,
+                                               stop=stop, options=request["options"])
+        text = "".join(text for kind, text in pieces if kind == "content")
+    finally:
+        timer.cancel()
+    if stop.is_set():
+        raise TimeoutError("contrôle trop long")        # i18n: tel quel (jamais montré)
+    return text
 
 
 def _embed():

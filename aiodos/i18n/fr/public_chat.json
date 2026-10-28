@@ -13,6 +13,7 @@
   "error_attachments": "Les pièces jointes et les images ne partent jamais chez un inconnu du réseau public.",
   "error_companion": "Le compagnon réseau (aiodos-net) n'est pas prêt à confier une conversation au réseau public.",
   "error_refused": "La machine du réseau public a refusé la demande.",
+  "error_too_long": "La réponse de la machine du réseau public dépassait la longueur permise : elle a été coupée.",
   "loading": "La machine du réseau public charge le modèle…",
   "reading": "La machine du réseau public lit la conversation…",
   "closed_off": "Aucun modèle ici ni sur tes machines pour répondre, et tes conversations ne partent pas chez des inconnus (« Faire calculer mes conversations par des inconnus » est désactivé dans les Réglages, Cette machine, Partage de puissance) : installe un modèle, ou active ce réglage.",

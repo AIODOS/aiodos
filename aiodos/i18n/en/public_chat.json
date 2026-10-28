@@ -13,6 +13,7 @@
   "error_attachments": "Attachments and images never go to a stranger on the public network.",
   "error_companion": "The network companion (aiodos-net) is not ready to hand a conversation to the public network.",
   "error_refused": "The public network machine refused the request.",
+  "error_too_long": "The answer from the public network machine went beyond the allowed length: it was cut off.",
   "loading": "The public network machine is loading the model…",
   "reading": "The public network machine is reading the conversation…",
   "closed_off": "No model here or on your machines to answer, and your conversations do not go to strangers (“Have my conversations computed by strangers” is off in Settings, This machine, Sharing computing power): install a model, or turn this setting on.",
