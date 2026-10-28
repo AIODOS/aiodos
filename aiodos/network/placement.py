@@ -31,6 +31,14 @@ seulement si sa vitesse annoncée (« tps ») vaut au moins FASTER fois celle de
 un modèle plus gros accepté ; jamais devant une de mes machines libres (cette machine, libre,
 passe alors après elles). PUBLIC_TRIES au plus. Identifiant : « public:<clé>:<modèle> ».
 
+« Automatique · réseau public » (PUBLIC_BEST, 28/10/2026) : ni cette machine ni mes machines
+n'ont de modèle de conversation (un téléphone neuf, sans modèle téléchargé), et la conversation
+peut partir chez un inconnu. Seules les machines du réseau public répondent alors, chacune avec
+son meilleur modèle de conversation (le plus grand nombre de paramètres lu dans le nom), le
+meilleur d'abord, puis la plus rapide (best_public) ; PUBLIC_TRIES au plus. Il n'y a rien ici à
+quoi comparer : ni « modèle plus gros », ni son accord. L'interface ne le propose que dans ce
+cas (chat/public_consent.py, entry).
+
 Tant qu'aucun mot de la réponse n'est arrivé, une machine qui échoue (injoignable, ne
 prête plus, Ollama arrêté, machine publique occupée…) cède la place à la suivante (run).
 
@@ -60,6 +68,9 @@ from aiodos.node import android, identity, speed
 log = logging.getLogger("aiodos.placement")
 
 PREFIX = "auto:"
+# « Automatique · réseau public » : le meilleur modèle d'une machine du réseau public, quand je
+# n'en ai aucun (« * » n'est le nom d'aucun modèle ; parse le dit automatique)
+PUBLIC_BEST = PREFIX + "*"
 LOAD_TTL = 60               # nouvelles d'une machine plus vieilles : oubliées
 LOAD_MAX = 1000             # valeurs annoncées par une autre machine : bornées
 FASTER = 2                  # une machine publique passe devant celle-ci : deux fois plus rapide
@@ -313,6 +324,26 @@ def _public(name: str, bigger: bool) -> list:
     return found[:PUBLIC_TRIES]
 
 
+def best_public() -> list:
+    """« Automatique · réseau public » (PUBLIC_BEST) : chaque machine du réseau public qui prête
+    et a une place, avec son meilleur modèle de conversation (le plus grand nombre de paramètres
+    lu dans le nom, public_chat.params ; un nom qui n'en dit rien passe après), le meilleur
+    d'abord, puis la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus."""
+    found = []
+    for node in _public_nodes():
+        talking = [m for m in node["models"] if public_chat.converses(m) and not reserved(m)]
+        if not talking:
+            continue
+        chosen = max(talking, key=lambda m: public_chat.params(m) or 0)
+        found.append(Candidate(
+            model=public_chat.model_id(node["key"], chosen),
+            node_id=public_chat.PREFIX + node["key"], machine=t("placement.public_machine"),
+            trust="public", params=public_chat.params(chosen), tps=node.get("tps"),
+            seen=int(node.get("seen_s") or 0), ahead=True))
+    found.sort(key=lambda c: (-(c.params or 0), -(c.tps or 0), c.seen))
+    return found[:PUBLIC_TRIES]
+
+
 def bigger_public(name: str) -> str | None:
     """Le plus gros modèle de conversation qu'une machine du réseau public pourrait donner à la
     place de `name` (la carte d'accord le nomme), ou None."""
@@ -351,13 +382,19 @@ def plan(model, executor=None, public=False, bigger=False) -> list:
     """Identifiants concrets à essayer, dans l'ordre. Un modèle précis (cette machine,
     une machine appairée) passe tel quel ; « auto:<modèle> » est réparti. public, bigger :
     cf. candidates (la conversation le permet, chat/public_consent.py) ; jamais pour un
-    modèle précis."""
+    modèle précis. « Automatique · réseau public » (PUBLIC_BEST) : les machines du réseau
+    public seules (best_public), si public."""
     name = parse(model)
     if name is None:
         return [model]
-    ranked = candidates(name, executor, public, bigger)
-    if not ranked:
-        raise NoMachine(t("placement.no_machine", model=name))
+    if model == PUBLIC_BEST:
+        ranked = best_public() if public else []
+        if not ranked:
+            raise NoMachine(t("placement.no_public" if public else "placement.public_closed"))
+    else:
+        ranked = candidates(name, executor, public, bigger)
+        if not ranked:
+            raise NoMachine(t("placement.no_machine", model=name))
     log.info("Mode automatique, « %s » : %s", name,
              # i18n: tel quel (journal)
              ", ".join(f"{c.machine} ({c.chats} conv., {c.units} unités)" if c.trust != "public"

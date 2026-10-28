@@ -7,6 +7,18 @@ import { state } from '../state.js';
 export const AUTO = 'auto:';
 const CLUSTER = 'reparti:';
 const PUBLIC = 'public:';          // une machine du réseau public (network/public_chat.py)
+// « Automatique · réseau public » : le meilleur modèle d'une machine du réseau public, quand ni
+// cette machine ni mes machines n'en ont (network/placement.py, PUBLIC_BEST)
+export const PUBLIC_AUTO = 'auto:*';
+
+/** Le réseau public dans le choix du modèle (chat/public_consent.py, entry) : { id, ready,
+ *  models } quand aucune de mes machines n'a de modèle de conversation et que mes
+ *  conversations peuvent partir chez un inconnu (Réglages) ; null sinon, ou si la conversation
+ *  reste sur mes machines (mine : « Sur mes machines seulement », chat-public.js). */
+export function publicChoice(mine = false) {
+  if (mine) return null;
+  return state.models.find(m => m.group === 'public' && m.id === PUBLIC_AUTO) || null;
+}
 
 /** [{ name, size, auto: identifiant automatique ou null, machines: [{ id, label, slow }] }],
  *  du plus puissant au moins puissant (le plus gros d'abord). */
@@ -58,6 +70,7 @@ export function modelName(id) {
  * here : préciser « cette machine » pour un modèle local (conversation en mode automatique).
  */
 export function modelLabel(id, here = false) {
+  if (id === PUBLIC_AUTO) return t('models.public_auto');
   if (id?.startsWith(AUTO)) return t('models.label_auto', { name: modelName(id) });
   if (id?.startsWith(PUBLIC)) return t('models.label_public', { name: modelName(id) });
   const m = state.models.find(x => x.id === id);

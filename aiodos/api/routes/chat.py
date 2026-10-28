@@ -9,7 +9,9 @@ La recherche web n'a lieu que si l'envoi la dit validée : même si l'interface 
 contournée, rien ne part sur le web sans accord.
 Une machine du réseau public peut répondre si la conversation le permet (chat/
 public_consent.py) ; l'événement « notice » porte alors une carte d'accord ou la note de la
-première fois, que l'interface montre dans la conversation.
+première fois, que l'interface montre dans la conversation. Sans aucun modèle ici ni sur mes
+machines, « Automatique · réseau public » (placement.PUBLIC_BEST) : seules les machines du
+réseau public répondent, et un refus (pièces jointes…) se dit tel quel.
 """
 import asyncio
 import contextvars
@@ -105,7 +107,9 @@ async def chat(body: ChatIn, request: Request):
         plan = await asyncio.to_thread(placement.plan, body.model, executor, reach.public,
                                        reach.bigger)
     except placement.NoMachine as exc:
-        raise HTTPException(400, str(exc))
+        # « Automatique · réseau public » refusé à cette conversation : pourquoi (réglages,
+        # « Sur mes machines seulement », pièces jointes), rien d'autre ne pouvant répondre
+        raise HTTPException(400, public_consent.refusal(body.model, reach) or str(exc))
     # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation pour
     # se resynchroniser attend (pending) : l'écran voit ce que le nœud garde. Une
     # conversation neuve n'est créée qu'à l'acceptation (ask)

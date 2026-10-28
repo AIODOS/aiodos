@@ -87,6 +87,9 @@ class Companion:
 
             def do_POST(self):
                 prefix = "/net/v1/public/ask/"
+                # Le corps lu d'abord : un refus envoyé avant, la connexion fermée sur un corps
+                # pas lu, Windows la coupe (« unreachable » au lieu du refus)
+                raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 if self.headers.get("X-Aiodos-Net-Token") != NET_TOKEN:
                     return self._json(401, {"detail": "jeton"})
                 if not self.path.startswith(prefix):
@@ -95,7 +98,7 @@ class Companion:
                 tag = self.headers.get("X-Aiodos-Conversation") or ""
                 if not TAG.fullmatch(tag):
                     return self._json(400, {"error": "conversation"})
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                body = json.loads(raw)
                 companion.requests.append({"key": key, "tail": tail, "tag": tag, "body": body})
                 act = companion.script.get(key, ("answer", ["Bonjour"]))
                 if act[0] == "refuse":
@@ -307,13 +310,15 @@ def _library(name, text, embed):
 
 def test_my_documents_go_to_a_stranger_only_with_consent(monkeypatch, companion, opened,
                                                          fake_embed):
-    store.ensure_defaults()
     settings.set_value("rag_min_score", 0.1)
-    _library("maison", "fusée lunaire notes maison", fake_embed)
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: True)   # le public devant
     directory(node(PC, SMALL))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        # Après le démarrage : sinon, le modèle d'embedding des vecteurs n'étant pas noté, le
+        # nœud les retire et les refait en fond (reindex.schedule), pendant la question
+        store.ensure_defaults()
+        _library("maison", "fusée lunaire notes maison", fake_embed)
         events = ask(ui, "fusée lunaire", libraries=True)       # pas encore demandé
         assert notices(events) == ["public_documents"]
         assert routes(events) == [at(PC, SMALL), SMALL]          # passée à cette machine

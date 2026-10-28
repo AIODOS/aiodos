@@ -6,7 +6,8 @@ import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
-import { AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName } from './models.js';
+import { AUTO, PUBLIC_AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName,
+  publicChoice } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated } from './model-install.js';
 import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
@@ -25,6 +26,8 @@ let entries = [];          // modèles proposés, une fois chacun (cf. models.js
 let editing = null;        // { node } : le dernier message de l'utilisateur, en cours de modification
 let opening = 0;           // ouvertures de conversation : seule la dernière s'affiche
 let installing = null;     // installation d'un modèle en cours (avancement)
+let filledMine = null;     // « Sur mes machines seulement » quand le choix du modèle a été fait
+let publicSettings = null; // réglages du réseau public au dernier chargement des réglages
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -121,6 +124,16 @@ export function mountChat(container) {
     if (state.modelsLoaded) fillModels();
   });
   on('node:loaded', () => { if (state.modelsLoaded) fillModels(); });   // libellés VRAM
+  // Sans modèle ici : le réseau public se propose selon la conversation (« Sur mes machines
+  // seulement », chat-public.js) et les Réglages (use_public, public_network)
+  const mineChanged = () => { if (state.modelsLoaded && mineOnly() !== filledMine) fillModels(); };
+  on('chat:current', mineChanged);
+  on('chat:mine-only', mineChanged);
+  on('settings:loaded', () => {
+    const now = `${!!state.settings?.use_public}:${!!state.settings?.public_network}`;
+    if (publicSettings !== null && now !== publicSettings && state.modelsLoaded) emit('models:reload');
+    publicSettings = now;
+  });
   el.model.innerHTML = `<option value="">${esc(t('chat.loading_models'))}</option>`;
   showWelcome();
 }
@@ -131,10 +144,10 @@ function vramTotal() {
 }
 
 /** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
- *  précise, ou un gros modèle réparti. */
+ *  précise, un gros modèle réparti, ou « Automatique · réseau public ». */
 function selectedModel() {
   const value = el.model.value;
-  if (/^reparti:/.test(value)) return value;
+  if (/^reparti:/.test(value) || value === PUBLIC_AUTO) return value;
   const entry = entries.find(e => e.name === value);
   return entry ? (el.machine.value || defaultChoice(entry)) : '';
 }
@@ -146,6 +159,9 @@ function fillModels() {
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
   const cluster = state.models.filter(m => m.group === 'cluster').sort(byPower);
+  // Rien ici ni sur mes machines : le réseau public, si cette conversation peut y partir
+  filledMine = mineOnly();
+  const open = entries.length || cluster.length ? null : publicChoice(filledMine);
   el.model.innerHTML = '';
   const group = (label, items) => {
     if (!items.length) return;
@@ -162,15 +178,25 @@ function fillModels() {
   group(t('chat.group_cluster'), cluster.map(m => [m.id,
     t(m.complete ? 'chat.cluster_option' : 'chat.cluster_option_partial',
       { label: m.label, size: bytes(m.size), machines: m.machines.join(', ') })]));
+  if (open?.ready) {                      // le meilleur modèle d'une machine du réseau public
+    const option = new Option(t('models.public_auto'), PUBLIC_AUTO);
+    option.title = t('models.public_auto_title', { models: (open.models || []).join(', ') });
+    el.model.append(option);
+  }
   selectModel(wanted);
-  // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un
+  // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un ;
+  // le réseau public, s'il peut répondre, ou qu'aucune de ses machines ne le peut pour l'instant
   const phone = isPhone();
-  const none = integrated() ? (phone ? 'chat.no_model_phone' : 'chat.no_model_pc')
+  const none = open ? (phone ? 'chat.no_public_phone' : 'chat.no_public_pc')
+    : integrated() ? (phone ? 'chat.no_model_phone' : 'chat.no_model_pc')
     : (phone ? 'chat.no_model_phone_ollama' : 'chat.no_model_pc_ollama');
   el.banner.innerHTML = progressBar(installing) + (local.length ? '' : remote.length ? `
     <div class="banner info">${icon('network')}<div style="flex:1">${esc(t(phone
       ? 'chat.no_model_remote_phone' : 'chat.no_model_remote_pc'))}</div>
-    <button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install_here'))}</button></div>` : `
+    <button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install_here'))}</button></div>` : open?.ready ? `
+    <div class="banner info wrap">${icon('globe')}<div class="banner-text">${esc(t(phone
+      ? 'chat.no_model_public_phone' : 'chat.no_model_public_pc'))}</div>
+    <div class="banner-actions"><button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install'))}</button></div></div>` : `
     <div class="banner warn wrap">${icon('warn')}<div class="banner-text">${esc(t(none))}</div>
     <div class="banner-actions"><button class="btn sm primary" data-install>${icon('plus')}${esc(t('chat.install'))}</button>
     <button class="btn sm" id="models-retry">${icon('retry')}${esc(t('chat.retry'))}</button></div></div>`);
@@ -180,9 +206,9 @@ function fillModels() {
 }
 
 /** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,
- *  « reparti:x »). */
+ *  « reparti:x », « Automatique · réseau public »). */
 function selectModel(id) {
-  const value = /^reparti:/.test(id || '') ? id : modelName(id);
+  const value = /^reparti:/.test(id || '') || id === PUBLIC_AUTO ? id : modelName(id);
   const values = [...el.model.options].map(o => o.value);
   // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
@@ -245,7 +271,9 @@ function showPreparation(ev) {
 
 async function rememberModel() {
   const id = selectedModel();
-  if (id) {
+  // « Automatique · réseau public » n'est pas un modèle par défaut (les applis s'en servent) :
+  // il revient seul tant qu'aucune de mes machines n'a de modèle
+  if (id && id !== PUBLIC_AUTO) {
     try { state.settings = await put('/settings', { default_model: id }); } catch { /* sans gravité */ }
   }
 }
@@ -722,8 +750,15 @@ async function sendNow(asText, replace) {
   }
   if (!model) {
     if (!state.modelsLoaded) toast(t('chat.models_loading'));
+    else if (publicChoice(mineOnly())) toast(t('placement.no_public'), 'err');   // aucune ne prête
     else if (integrated()) toast(t('chat.no_model_install'), 'err');
     else toast(t('chat.no_model_ollama'), 'err');
+    return false;
+  }
+  // Une pièce jointe ne part jamais chez un inconnu, et rien ici ne la lirait : le message
+  // reste dans la zone de saisie (le nœud le refuserait de même, chat/public_consent.py)
+  if (model === PUBLIC_AUTO && attached.length) {
+    toast(t('public_chat.closed_attachments'), 'err', 8000);
     return false;
   }
   const go = await confirmOutgoing(text, model, pre);

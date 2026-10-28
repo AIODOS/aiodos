@@ -149,7 +149,10 @@ def peers_allowed(model) -> bool:
 
 def available_models() -> list:
     """Modèles de conversation : en mode automatique (une fois chacun), locaux (Ollama),
-    ceux de mes machines, puis les gros modèles répartis entre elles."""
+    ceux de mes machines, puis les gros modèles répartis entre elles. Aucun (un téléphone
+    neuf) : « Automatique · réseau public », si mes conversations peuvent partir chez un
+    inconnu (chat/public_consent.py, entry : group « public », ready si une machine du réseau
+    public peut répondre en ce moment)."""
     models = []
     try:
         installed = ollama.list_models()
@@ -171,6 +174,15 @@ def available_models() -> list:
     except Exception as exc:
         log.warning("Modèles répartis indisponibles : %s", exc)
     models[:0] = placement.auto_entries(models)
+    if not models:
+        from aiodos.chat import public_consent      # il s'appuie sur ce module
+        try:
+            found = public_consent.entry()
+        except Exception as exc:
+            log.warning("Réseau public illisible : %s", exc)
+            found = None
+        if found:
+            models.append(found)
     return models
 
 

@@ -39,11 +39,17 @@ export function mineOnlyRow() {
     </div>`;
 }
 
-/** Relie l'interrupteur (dans `root`) ; changed() redessine ce qui en dépend (le bouton). */
+/** Relie l'interrupteur (dans `root`) ; changed() redessine ce qui en dépend (le bouton), et
+ *  « chat:mine-only » le choix du modèle (sans modèle ici, le réseau public, chat.js). */
 export function bindMineOnly(root, changed) {
   row = root.querySelector('[data-mine-only]');
   const input = row.querySelector('input');
-  input.onchange = async () => { await setMineOnly(input.checked); sync(); changed(); };
+  input.onchange = async () => {
+    await setMineOnly(input.checked);
+    sync();
+    changed();
+    emit('chat:mine-only');
+  };
   on('chat:current', () => {
     const conv = state.currentConversation;
     if (!conv) next = false;                    // nouvelle conversation : désactivé

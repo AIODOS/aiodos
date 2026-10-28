@@ -5,5 +5,7 @@
   "label_split": "{name} · réparti",
   "label_here": "{name} · cette machine",
   "label_other": "{name} · autre machine",
-  "label_public": "Répondu par {name}, sur une machine du réseau public"
+  "label_public": "Répondu par {name}, sur une machine du réseau public",
+  "public_auto": "Automatique · réseau public",
+  "public_auto_title": "Le meilleur modèle d'une machine du réseau public : {models}"
 }
