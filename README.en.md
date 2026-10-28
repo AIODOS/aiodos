@@ -17,11 +17,13 @@ several.
   assistant…): they benefit from the same shared power.
 
 > **Everyone's power, pooled over the Internet.** From the first opening, your machine joins
-> the public network, your paired machines compute together and your graphics card creates
-> images for the friends you add. For now, the public network is a directory: your machine
-> announces its models there, without computing for strangers yet. Everything can be turned
-> off in one gesture. Between machines, everything
-> is encrypted, and nothing is kept by the one that computes. Never any cloud; the web remains optional, and each search is confirmed first.
+> the public network: strangers can answer your conversations without knowing who you are,
+> and your machine answers theirs, within the power lent (60% by default, never on battery).
+> A phone without any model can thus chat thanks to the network's machines. Your paired
+> machines compute together and your graphics card creates images for the friends you add.
+> Everything can be turned off in one gesture, and a conversation can stay on your machines
+> only. Between machines, everything is encrypted, and nothing is kept by the one that
+> computes. Never any cloud; the web remains optional, and each search is confirmed first.
 
 *AI* + *hodos*: Greek for “the way”, as in “method” and “synod” (travelling together).
 
@@ -36,7 +38,7 @@ Language.
 | 0 — Foundations | Local node, task queue, interface, libraries | ✅ done |
 | 1 — Local network | Machine discovery, pairing, distribution, power sharing, models lent for conversations | ✅ done |
 | 2 — Circle of trust | Friends' machines over the Internet (NAT traversal) | in progress: Internet companion [`aiodos-net`](compagnon/README.md) (2.2), remote invitation (2.4), sharing with friends (2.5), searchable libraries, automatic updates approved on a second device, large models split across my machines (prototype), distributed images and videos (created in the conversation), flexible reciprocity, keys protected on disk (2.3), group pairing: a friend paired with one of my machines meets the others, with their consent ([docs/appairage-groupe.md](docs/appairage-groupe.md), in French) |
-| 3 — Public network | Result verification, incentives, governance | being designed: [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) (in French) |
+| 3 — Public network | Strangers compute conversations; result verification, incentives, governance | conversations done (10/28/2026, [docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)); the rest being designed: [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) (in French) |
 
 The documents in `docs/` are written in French.
 

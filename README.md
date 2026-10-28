@@ -17,11 +17,13 @@ pour une seule carte graphique se répartit entre plusieurs.
   assistant…) : ils profitent de la même puissance partagée.
 
 > **La puissance de chacun, mise en commun par Internet.** Dès la première ouverture, ta
-> machine rejoint le réseau public, tes machines appairées calculent ensemble et ta carte
-> graphique crée les images des amis que tu ajoutes. Aujourd'hui, le réseau public est un
-> annuaire : ta machine y annonce ses modèles, sans encore calculer pour des inconnus. Tout
-> se coupe d'un geste. Entre machines, tout est chiffré, et rien n'est
-> gardé par celle qui calcule.
+> machine rejoint le réseau public : des inconnus peuvent répondre à tes conversations, sans
+> savoir qui tu es, et ta machine répond aux leurs, dans la limite de la puissance prêtée
+> (60 % par défaut, jamais sur batterie). Un téléphone sans aucun modèle converse ainsi grâce
+> aux machines du réseau. Tes machines appairées calculent ensemble et ta carte graphique
+> crée les images des amis que tu ajoutes. Tout se coupe d'un geste, et une conversation peut
+> rester sur tes machines seulement. Entre machines, tout est chiffré, et rien n'est gardé par
+> celle qui calcule.
 > Jamais de cloud ; le web reste optionnel, et chaque recherche se valide d'abord.
 
 *AI* + *hodos* : « le chemin » en grec, celui de « méthode » et de « synode » (faire route
@@ -38,7 +40,7 @@ Langue.
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
 | 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques approuvées sur un deuxième appareil, gros modèles répartis entre mes machines (prototype), images et vidéos réparties (créées dans la conversation), réciprocité souple, clés protégées sur le disque (2.3), appairage par groupe : un ami appairé avec une de mes machines rencontre les autres, avec son accord ([docs/appairage-groupe.md](docs/appairage-groupe.md)) |
-| 3 — Réseau public | Vérification des résultats, incitation, gouvernance | en conception : [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) |
+| 3 — Réseau public | Des inconnus calculent les conversations ; vérification des résultats, incitation, gouvernance | conversations faites (28/10/2026, [docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)) ; le reste en conception : [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) |
 
 ## Ce que fait la phase 0
 
