@@ -7,5 +7,9 @@
   "model_gone": "The model “{model}” is no longer installed on “{name}”.",
   "busy": "“{name}” has been answering other conversations for a long time: try again in a moment.",
   "unpaired": "This machine is no longer paired: choose another model.",
-  "unreachable": "“{name}” is unreachable for now (no address on the local network, no Internet key)."
+  "unreachable": "“{name}” is unreachable for now (no address on the local network, no Internet key).",
+  "read_mine_only": "Only my machines can ask this machine for a reading.",
+  "read_unavailable": "“{name}” can't read a text under a model (it needs the built-in engine).",
+  "read_invalid": "Texts to read are invalid or too long.",
+  "read_failed": "“{name}” couldn't read these texts."
 }

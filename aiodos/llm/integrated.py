@@ -81,9 +81,9 @@ class Incompatible(RuntimeError):
     """Un modèle que llama.cpp ne sait pas charger : écarté pour de bon."""
 
 
-def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
-    """Requête au routeur, sa réponse rendue même en erreur ; un modèle que llama.cpp ne
-    sait pas charger est écarté (Incompatible)."""
+def _url(model: registry.Model) -> str:
+    """L'adresse qui sert ce modèle (le routeur, lancé s'il le faut) ; un modèle que
+    llama.cpp ne sait pas charger est écarté (Incompatible)."""
     try:
         url = _router.url(model.id)
     except engine.EngineUnavailable as exc:
@@ -93,6 +93,29 @@ def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(1
             raise Incompatible(t("llm.model_incompatible", name=model.name)) from exc
         raise
     _used(model.id)
+    return url
+
+
+def endpoint(name) -> tuple:
+    """(adresse, en-têtes, identifiant) qui servent ce modèle de conversation, pour une
+    demande que ce module ne fait pas lui-même (llm/reading.py : une lecture imposée) ; à
+    signaler finie par touch(identifiant). RuntimeError s'il n'est pas sur cette machine ou
+    n'est pas un modèle de conversation, Incompatible s'il ne se charge pas."""
+    model = _model(name)
+    if model.embedding:
+        raise RuntimeError(t("llm.model_missing", name=name))
+    return _url(model), dict(_router.headers), model.id
+
+
+def touch(model_id: str):
+    """Ce modèle vient de servir (le ménage ne le décharge pas tout de suite)."""
+    _used(model_id)
+
+
+def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(10, 900)):
+    """Requête au routeur, sa réponse rendue même en erreur ; un modèle que llama.cpp ne
+    sait pas charger est écarté (Incompatible)."""
+    url = _url(model)
     response = requests.post(url + path, json={**body, "model": model.id}, stream=stream,
                              headers=_router.headers, timeout=timeout, proxies=NO_PROXY)
     if response.status_code >= 400:

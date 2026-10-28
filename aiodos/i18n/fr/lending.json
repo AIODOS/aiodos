@@ -7,5 +7,9 @@
   "model_gone": "Le modèle « {model} » n'est plus installé sur « {name} ».",
   "busy": "« {name} » répond déjà à d'autres conversations depuis longtemps : réessaie dans un moment.",
   "unpaired": "Cette machine n'est plus appairée : choisis un autre modèle.",
-  "unreachable": "« {name} » est injoignable pour l'instant (ni adresse sur le réseau local, ni clé Internet)."
+  "unreachable": "« {name} » est injoignable pour l'instant (ni adresse sur le réseau local, ni clé Internet).",
+  "read_mine_only": "Seules mes machines peuvent demander une lecture à cette machine.",
+  "read_unavailable": "« {name} » ne sait pas lire un texte sous un modèle (il faut le moteur intégré).",
+  "read_invalid": "Textes à lire invalides ou trop longs.",
+  "read_failed": "« {name} » n'a pas pu lire ces textes."
 }

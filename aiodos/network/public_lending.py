@@ -51,6 +51,10 @@ demande vient du réseau public, puis oubliée) ; rien en base, et le journal ne
 modèle, le nombre de jetons et la durée. Pendant le calcul, en mémoire seulement, le modèle
 et l'heure du début, pour « Machines connectées » (serving, activity.public_live).
 
+La lecture de textes pour le contrôle d'un demandeur (POST /public/v1/read,
+network/lend_reading.py) passe par la même admission (admit) et la même tenue de compte du
+calcul (begin, watching, end : en cours, veille, pause, place, profil).
+
 Le profil public (« free ») est redit au compagnon, en fond, au début et à la fin de chaque
 conversation publique, et à la fin de la pause qui suit (_announce, Public.push) : les
 demandeurs voient en quelques secondes cette machine occupée, puis libre, au lieu
@@ -405,6 +409,37 @@ def _watch(manager, stop, done, why: list):
             return
 
 
+def begin(manager, model: str) -> int:
+    """Un calcul pour le réseau public commence (une conversation, ou une lecture :
+    lend_reading.py) : noté en cours (serving : le modèle, l'heure), profil public redit
+    (occupée). → son numéro, pour end."""
+    number = next(_numbers)
+    with _lock:
+        _serving[number] = (model, time.time())     # en cours (serving) : le modèle, l'heure
+    _announce(manager)                              # occupée : « free » 0 chez les demandeurs
+    return number
+
+
+def watching(manager, stop, done, why: list):
+    """La veille du calcul (_watch), dans un fil à part, jusqu'à `done`."""
+    threading.Thread(target=_watch, args=(manager, stop, done, why), daemon=True,
+                     name="aiodos-public-veille").start()
+
+
+def end(manager, number: int, done, clock: _Clock, place: _Place):
+    """Le calcul `number` est fini : plus en cours, veille arrêtée, pause comptée, place
+    rendue, profil public redit (libre, ou en pause, puis libre à la fin de la pause)."""
+    with _lock:
+        _serving.pop(number, None)
+    done.set()
+    _rest_after(manager, clock.counted())
+    place.release()
+    _announce(manager)                              # libre (ou en pause : « free » 0)
+    left = _rest_left()
+    if left > 0:                                    # et libre à la fin de la pause
+        _announce(manager, left + 0.1)
+
+
 def answer(manager, asked: dict, stop, clock: _Clock | None = None):
     """Les événements de la réponse (meta, delta…, puis done ou error ; les signes de vie,
     _Stream). `stop` est levé si l'appelant part, ou par _watch ; la place est rendue à la
@@ -415,16 +450,12 @@ def answer(manager, asked: dict, stop, clock: _Clock | None = None):
     started = time.monotonic()
     began = None                    # premier jeton : la génération commence (journal)
     done, why = threading.Event(), []
-    number = next(_numbers)
-    with _lock:
-        _serving[number] = (model, time.time())     # en cours (serving) : le modèle, l'heure
-    _announce(manager)                              # occupée : « free » 0 chez les demandeurs
+    number = begin(manager, model)
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
             return
-        threading.Thread(target=_watch, args=(manager, stop, done, why), daemon=True,
-                         name="aiodos-public-veille").start()
+        watching(manager, stop, done, why)
         tokens, counted, failed = 0, None, False
         try:
             for kind, value in ollama.chat_stream(model, asked["messages"], think=False,
@@ -462,15 +493,7 @@ def answer(manager, asked: dict, stop, clock: _Clock | None = None):
                      round(clock.counted(), 1), seconds)
             yield {"type": "done", "tokens": produced, "seconds": seconds}
     finally:
-        with _lock:
-            _serving.pop(number, None)
-        done.set()
-        _rest_after(manager, clock.counted())
-        place.release()
-        _announce(manager)                          # libre (ou en pause : « free » 0)
-        left = _rest_left()
-        if left > 0:                                # et libre à la fin de la pause
-            _announce(manager, left + 0.1)
+        end(manager, number, done, clock, place)
 
 
 def _stage(model) -> str:

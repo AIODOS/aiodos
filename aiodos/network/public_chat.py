@@ -60,6 +60,7 @@ from collections import OrderedDict
 import requests
 
 from aiodos.i18n import t
+from aiodos.llm import reading as _reading
 from aiodos.network import client, public_lending, reputation, route
 from aiodos.network.client import PeerError
 from aiodos.network.route import NO_PROXY
@@ -70,6 +71,8 @@ PREFIX = "public:"
 FEATURE = "public-ask"           # ce que le compagnon annonce savoir faire (compagnon/src/lib.rs)
 ROUTE = "/net/v1/public/ask/"
 LENDER_PATH = "/public/v1/chat"
+READ_PATH = "/public/v1/read"    # lire pour un contrôle (read ; lend_reading.py chez le prêteur)
+READ_STREAM = 256 * 1024         # flux d'une lecture, au plus (signes de vie et résumés)
 CONVERSATION_HEADER = "X-Aiodos-Conversation"
 MAX_BODY = 256 * 1024            # corps relayé au plus (compagnon/src/public_serve.rs)
 CONNECT_S = 5                    # le compagnon est sur 127.0.0.1
@@ -101,7 +104,7 @@ _KEY = re.compile(r"[0-9A-Za-z]{16,128}")
 # Codes des refus, chacun avec son message (public_chat.error_<code>)
 CODES = {"busy", "not_lending", "no_model", "too_big", "bad_request", "unreachable", "engine",
          "slow", "cut", "unreadable", "documents", "attachments", "companion", "refused",
-         "too_long"}
+         "too_long", "no_reading"}
 # Codes des compagnons (public_ask.rs chez moi, public_serve.rs chez le prêteur, relayés
 # tels quels) qui disent la même chose qu'un des nôtres. Le compagnon ne refait jamais
 # d'essai (le prêteur ne calcule pas deux fois) : sur « interrupted » ou « timeout », c'est
@@ -422,6 +425,81 @@ def _chat_stream(model, data: bytes, stop, stats, conversation):
         except client._CUT as exc:
             if stop is not None and stop.is_set():
                 return
+            raise PublicError(_ended(why, first, deadline)) from exc
+        finally:
+            done.set()
+
+
+# ------------------------------------------------------------------- la lecture
+def read(model, messages, texts, stop=None, conversation=None) -> list:
+    """Les textes lus par une machine du réseau public (« public:<clé>:<modèle> ») sous ce
+    modèle, après ces messages (lend_reading.py chez elle : POST /public/v1/read, par le
+    compagnon comme une conversation) : [résumé {"n", "mean", "window", "eos"} ou None],
+    un par texte, réduits à leur forme (llm/reading.clean). Pour un contrôle seulement
+    (public_controls.read), sous l'identifiant de conversation `conversation`.
+
+    PublicError à tout refus ou échec : « busy » (occupée, ou en pause), « no_reading » (elle
+    ne sait pas lire), « no_model » (le 404 d'une version d'avant, qui n'a pas la route) ;
+    TOTAL_S secondes au plus depuis la demande, READ_STREAM octets de flux. Un échec n'écarte
+    pas la machine (la lecture n'est qu'un supplément) ; le journal ne dit que la clé abrégée
+    et le code."""
+    parsed = parse(model)
+    if parsed is None or not isinstance(texts, list) or not texts:
+        raise PublicError("bad_request")
+    key, name = parsed
+    data = json.dumps({"v": 1, "model": name, "messages": _text_messages(messages),
+                       "texts": [str(text) for text in texts]}, ensure_ascii=False).encode()
+    if len(data) > MAX_BODY:
+        raise PublicError("too_big")
+    companion = ready()
+    if companion is None:
+        raise PublicError("companion")
+    headers = {**companion.headers, CONVERSATION_HEADER: conversation or tag(None),
+               "Content-Type": "application/json", "Accept": "application/x-ndjson"}
+    started = time.monotonic()
+    try:
+        response = requests.post(f"http://{companion.listen}{ROUTE}{key}{READ_PATH}",
+                                 data=data, headers=headers, stream=True,
+                                 timeout=(CONNECT_S, FIRST_WORD_S), proxies=NO_PROXY)
+    except requests.Timeout as exc:
+        raise PublicError("slow") from exc
+    except requests.RequestException as exc:
+        raise PublicError("unreachable") from exc
+    with response:
+        if response.status_code >= 400:
+            code = _refusal(response)
+            log.info("Réseau public : %s, lecture refusée (%s)", reputation.short(key), code)
+            raise PublicError(code)
+        client._plain(response)
+        first, done, why = threading.Event(), threading.Event(), []
+        # Aucun « premier mot » dans une lecture : l'échéance est celle de toute la réponse
+        deadline = [started + TOTAL_S]
+        threading.Thread(target=_watch, daemon=True, name="aiodos-public-lecture",
+                         args=(response, stop, first, done, why, deadline, started)).start()
+        received = 0
+        try:
+            for line in client._lines(response):
+                if stop is not None and stop.is_set():
+                    raise PublicError("cut")
+                received += len(line) + 1
+                if received > READ_STREAM:
+                    raise PublicError("too_long")
+                if not line.strip():
+                    continue
+                event = _event(line)
+                kind = event["type"]
+                if kind == "meta" and event.get("model") != name:
+                    raise PublicError("unreadable")          # un autre modèle que celui demandé
+                if kind == "reading":
+                    found = event.get("readings")
+                    if not isinstance(found, list) or len(found) != len(texts):
+                        raise PublicError("unreadable")
+                    return [_reading.clean(item) for item in found]
+                if kind == "error":
+                    code = event.get("error")
+                    raise PublicError(code if isinstance(code, str) else "refused")
+            raise PublicError(_ended(why, first, deadline))           # flux fini sans lecture
+        except client._CUT as exc:
             raise PublicError(_ended(why, first, deadline)) from exc
         finally:
             done.set()

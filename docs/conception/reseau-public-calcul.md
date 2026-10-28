@@ -164,10 +164,31 @@ plafonds pour tout le public.
   des cartes différentes (CUDA, Vulkan, processeur) divergent après quelques dizaines de
   jetons. On compare donc le début (les premiers jetons identiques) et le sens (similarité
   des embeddings de deux réponses entières), avec des seuils **mesurés** sur des paires
-  honnêtes avant d'en faire une règle. Piste plus forte, à mesurer : faire calculer par la
-  seconde machine la **vraisemblance** de la réponse du prêteur (une lecture, bien moins
-  coûteuse qu'une génération) ; une réponse fausse, d'un autre modèle ou piégée y est
-  très improbable.
+  honnêtes avant d'en faire une règle. Mesuré le 28/10 (`tools/bench_controle.py`) : le
+  début commun ne prouve rien ; comparer les textes attrape une réponse sans rapport, un
+  lien ou un numéro ajouté, une réponse coupée, mais ni **un autre modèle** ni une
+  publicité sans lien.
+- **Lire** (branché le 28/10) : la machine de contrôle, après sa réponse B, **lit A et B
+  sous le même modèle** (`llm/reading.py` : une grammaire GBNF impose le texte, température
+  0, log-probabilités de chaque jeton avant échantillonnage, puis celle de la fin de texte ;
+  pas en flux, seule la réponse entière donne la fin de texte). Elle rend un résumé fait de
+  nombres (jetons lus, moyenne, pire fenêtre de 16 jetons, fin de texte), lu par
+  `spot_check.reading_verdict` : coupée, un autre modèle (A bien moins probable que B), un
+  passage ajouté. Mesure : aucune erreur sur 40 paires honnêtes et 120 tricheuses lues ;
+  essai réel sur qwen3.5:9b (moteur intégré) conforme. Coût : à peu près une génération
+  par texte lu (pas moins : la grammaire d'un long texte pèse sur le processeur), en fond,
+  jamais avant la réponse affichée. Chez mes machines, l'action « read » (mes machines
+  seulement, `network/lend_reading.py`) ; chez une machine publique, `POST /public/v1/read`
+  (même admission que `/public/v1/chat` : prêt permis, partage actif, une place, la pause
+  de la puissance prêtée, rien de gardé ni au journal ; réponse en NDJSON avec signes de
+  vie, le compagnon n'attendant le début d'une réponse que 120 s), redemandée toutes les 20 s
+  si la machine est en pause après sa réponse, 15 min au plus. A et B partent dans un ordre
+  tiré au hasard, sous l'identifiant de conversation de la réponse de contrôle (jamais
+  celui de la conversation contrôlée), chez la même machine de contrôle (donc jamais chez
+  un inconnu si la demande porte mes documents). Seul le moteur intégré sait lire : une
+  machine sur Ollama refuse (`no_reading`), une version d'avant répond 404 ; le contrôle
+  compare alors les textes seuls. Quand une seconde machine tranche, elle lit A, sa réponse
+  et celle de la première.
 - **Réputation** : une table locale par clé de prêteur (vitesse mesurée, contrôles réussis
   ou non). Un contrôle raté met la machine de côté 7 jours ; deux, pour de bon. Rien n'est
   partagé avec les autres dans cette version (pas de liste noire commune, qu'un menteur
@@ -211,6 +232,9 @@ plafonds pour tout le public.
   § 3.
 - `aiodos/network/spot_check.py` (nouveau) et `aiodos/network/reputation.py` (nouveau,
   table SQLite) : § 8.
+- `aiodos/llm/reading.py` (nouveau, la lecture imposée), `aiodos/network/lend_reading.py`
+  (nouveau : l'action « read » entre mes machines et `POST /public/v1/read`),
+  `public_chat.read`, `remote_models.read`, `public_controls.read` : la vraisemblance, § 8.
 - `aiodos/gateway/scopes.py`, `chat/answer.py` : le cercle « public » servi et affiché.
 - Réglages : `lend_public` (prêter mes conversations aux inconnus, **activé**),
   `use_public` (faire calculer mes conversations par des inconnus, **activé**),

@@ -99,6 +99,31 @@ def peer_name(model) -> str | None:
     return peer["name"] if peer else None
 
 
+def read(model, messages, texts, stop=None) -> list:
+    """Les textes lus par une de mes machines (« peer:<machine>:<modèle> ») sous ce modèle,
+    après ces messages (l'action en flux « read », network/lend_reading.py chez elle,
+    réservée à mes machines) : [résumé {"n", "mean", "window", "eos"} ou None], un par
+    texte, réduits à leur forme (llm/reading.clean). Pour un contrôle seulement
+    (public_controls.read). PeerError à tout refus (une version d'avant n'a pas l'action :
+    404), échec, ou réponse sans lecture."""
+    from aiodos.llm import reading
+    node_id, name = parse(model)
+    peer = peers.get(node_id)
+    if not peer:
+        raise PeerError(t("lending.unpaired"))
+    if not (peer.get("address") or peer.get("net_id")):
+        raise PeerError(t("lending.unreachable", name=peer["name"]))
+    payload = {"model": name, "messages": messages, "texts": list(texts)}
+    for frame in client.stream(identity.node_id(), peer, "read", payload, stop=stop,
+                               read_timeout=READ_ALIVE_S):
+        found = frame.get("readings")
+        if found is not None:
+            if not isinstance(found, list) or len(found) != len(texts):
+                raise PeerError(t("p2p.frame_unreadable"))
+            return [reading.clean(item) for item in found]
+    raise PeerError(t("p2p.reply_interrupted"))
+
+
 def chat_stream(model, messages, think=True, stop=None, options=None, stats=False):
     """Couples (genre, texte), comme ollama.chat_stream, mais calculés par une autre
     machine, jointe sur le réseau local ou par Internet (une machine appairée sur

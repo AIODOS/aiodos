@@ -32,6 +32,13 @@ contrôle : un second inconnu ne les lit pas. Cette machine-ci n'en est pas : le
 prend pas la carte graphique à l'utilisateur, qui converse ici. Aucune machine de contrôle :
 rien n'est lancé, et la prochaine réponse de ce prêteur reste « la première » (spot_check).
 
+La lecture (read, depuis le 28/10/2026) : après sa réponse B, la machine de contrôle lit A et
+B sous le même modèle (llm/reading.py chez elle), et spot_check.compare reçoit les deux
+lectures : elles seules voient un autre modèle ou une publicité sans lien (mesure du 28/10).
+Toujours en fond, après la réponse affichée ; chez la même machine de contrôle (donc jamais
+chez un inconnu si la demande porte mes documents) ; une machine qui ne sait pas lire : les
+textes seuls.
+
 Une machine prise en faute : rien ne change dans la conversation déjà affichée ; une ligne au
 journal (reputation : « Machine du réseau public mise de côté : contrôle raté (raison) », la
 clé abrégée à reputation.SHORT caractères) et elle n'est plus choisie (placement).
@@ -54,6 +61,10 @@ SEED_MAX = 2 ** 31 - 1          # dans les bornes du prêteur (public_lending.SE
 # publique est coupée avant, à public_chat.TOTAL_S (et écartée quelques minutes) ; ce délai
 # borne surtout mes machines
 CONTROL_S = 900
+# Lecture de A et de B par la machine de contrôle (read), au plus, attente de sa pause
+# comprise : une lecture coûte à peu près une génération par texte
+READ_S = 900
+READ_RETRY_S = 20               # une machine publique en pause (« busy ») : redemandée après
 
 
 def seed() -> int:
@@ -132,7 +143,7 @@ def answered(key, request, text, tokens, seconds, documents=True):
         log.debug("Contrôle du réseau public : %s, aucune machine de contrôle pour l'instant",
                   reputation.short(key))     # i18n: tel quel (journal)
         return None
-    return spot_check.run_check(key, request, text, ask, machines, embed=_embed())
+    return spot_check.run_check(key, request, text, ask, machines, embed=_embed(), read=read)
 
 
 def controls(name: str, lender_key, documents=True) -> list:
@@ -181,6 +192,37 @@ def ask(machine, request) -> str:
     if stop.is_set():
         raise TimeoutError("contrôle trop long")        # i18n: tel quel (jamais montré)
     return text
+
+
+def read(machine, request, texts) -> list:
+    """Les textes lus par la machine de contrôle qui vient de répondre (spot_check.run_check,
+    read), sous le modèle demandé, après les mêmes messages : [résumé ou None]. Une machine
+    publique par le compagnon (public_chat.read), sous l'identifiant de conversation de sa
+    réponse (jamais celui de la conversation contrôlée) ; une des miennes par l'action
+    « read » (remote_models.read). Lève si elle ne sait pas lire (version d'avant : 404 ;
+    Ollama au lieu du moteur intégré) ou échoue : le contrôle compare alors les textes seuls.
+
+    Une machine publique vient de calculer : elle peut être en pause (public_lending : la
+    puissance prêtée) et refuser « busy » ; la demande est refaite toutes les READ_RETRY_S
+    secondes. READ_S secondes au plus en tout (TimeoutError)."""
+    stop = threading.Event()
+    timer = threading.Timer(READ_S, stop.set)
+    timer.daemon = True
+    timer.start()
+    try:
+        if not public_chat.parse(machine):
+            return remote_models.read(machine, request["messages"], texts, stop=stop)
+        while True:
+            try:
+                return public_chat.read(machine, request["messages"], texts, stop=stop,
+                                        conversation=request["conversation"])
+            except public_chat.PublicError as exc:
+                if exc.code != "busy" or stop.wait(READ_RETRY_S):
+                    raise
+    finally:
+        timer.cancel()
+        if stop.is_set():
+            raise TimeoutError("lecture trop longue")       # i18n: tel quel (jamais montré)
 
 
 def _embed():

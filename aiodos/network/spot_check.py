@@ -38,10 +38,16 @@ question, publicité ajoutée avec ou sans lien). Ce qu'elle a montré :
 - un autre modèle, ou une publicité sans lien, ne se voient pas en comparant deux textes
   (similarité et longueurs dans les mêmes plages que les paires honnêtes : 0 à 5 pris sur
   80 selon le modèle d'embedding, 0 sur 20) ; la vraisemblance les voit (reading_verdict) :
-  lecture de A et de B plus
-  les règles du texte, aucune erreur sur 40 paires honnêtes et 120 tricheuses lues. Aucune
-  route ne demande encore cette lecture à une machine : compare la prend si on la lui
-  donne.
+  lecture de A et de B plus les règles du texte, aucune erreur sur 40 paires honnêtes et 120
+  tricheuses lues.
+
+Lire (read, depuis le 28/10/2026) : la machine de contrôle qui a répondu B lit ensuite A et B
+sous le même modèle (llm/reading.py chez elle : une de mes machines par l'action « read »,
+une machine publique par POST /public/v1/read), dans un ordre tiré au hasard, sous
+l'identifiant de conversation de sa réponse ; compare reçoit les deux lectures. Une machine
+qui ne sait pas lire (version d'avant : 404 ; Ollama au lieu du moteur intégré) : la
+comparaison des textes seule, comme avant. Quand une seconde machine tranche, elle lit A, sa
+réponse et celle de la première.
 
 Le journal ne dit que la clé du prêteur (abrégée), le verdict et ses mesures (des nombres) :
 jamais le contenu des conversations, ni l'identifiant de conversation du contrôle (il mène à
@@ -56,6 +62,7 @@ import threading
 import unicodedata
 from dataclasses import dataclass, field
 
+from aiodos.llm import reading as _reading
 from aiodos.network import reputation
 
 log = logging.getLogger("aiodos.net")
@@ -95,9 +102,10 @@ TRUNCATED_RATIO = 0.5
 # imposée), mesurée avec llama-server (sa route OpenAI refuse « echo » : pas de probabilités
 # des jetons de la demande). Elle coûte autant qu'une génération, et même plus (sur la RTX
 # 4070, 50 jetons/s pour quatre lectures à la fois, contre 95 en génération : la grammaire
-# d'un long texte pèse sur le processeur) ; aucune route ne la demande encore.
-READ_CLIP = -10.0              # log-probabilité d'un jeton bornée (découpage inhabituel)
-READ_WINDOW = 16               # fenêtre glissante, en jetons
+# d'un long texte pèse sur le processeur). Demandée à la machine de contrôle après sa réponse
+# (run_check, read : llm/reading.py chez elle), qui rend un résumé fait des mêmes bornes.
+READ_CLIP = _reading.CLIP      # log-probabilité d'un jeton bornée (découpage inhabituel)
+READ_WINDOW = _reading.WINDOW  # fenêtre glissante, en jetons
 # Coupée : une réponse honnête arrêtée d'elle-même finit à -1,72 au plus bas (40 réponses) ;
 # une réponse coupée à 35 %, à -13,1 au plus haut (20). Une réponse de LIMIT_SHARE de la
 # longueur maximale ou plus a pu être coupée par la limite : pas de test.
@@ -284,13 +292,24 @@ def compare(question, answer_a, answer_b, *, embed=None, embed_model=None,
 
 
 def _log_probs(reading) -> list:
-    return [max(READ_CLIP, float(x)) for x in (reading or {}).get("lp") or []
-            if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)]
+    raw = reading.get("lp") if isinstance(reading, dict) else None
+    return [max(READ_CLIP, float(x)) for x in raw if isinstance(x, (int, float))
+            and not isinstance(x, bool) and math.isfinite(x)] if isinstance(raw, list) else []
 
 
 def reading_measures(reading) -> dict:
     """Jetons lus, moyenne des log-probabilités (bornées à READ_CLIP), pire fenêtre de
-    READ_WINDOW jetons, et log-probabilité de la fin de texte (None : inconnue)."""
+    READ_WINDOW jetons, et log-probabilité de la fin de texte (None : inconnue). La lecture
+    est soit entière ({"lp": […], "eos"}), soit déjà résumée par la machine qui l'a faite
+    ({"n", "mean", "window", "eos"} : llm/reading.summarize, mêmes bornes et même fenêtre ;
+    hors de sa forme, ignorée)."""
+    if isinstance(reading, dict) and "lp" not in reading:
+        summary = _reading.clean(reading)
+        if summary is None:
+            return {}
+        return {"ll_n": summary["n"], "ll_mean": round(summary["mean"], 3),
+                "ll_window": round(summary["window"], 3),
+                "ll_eos": round(summary["eos"], 3) if summary["eos"] is not None else None}
     lp = _log_probs(reading)
     if not lp:
         return {}
@@ -300,6 +319,12 @@ def reading_measures(reading) -> dict:
     eos = float(eos) if isinstance(eos, (int, float)) and math.isfinite(eos) else None
     return {"ll_n": len(lp), "ll_mean": round(sum(lp) / len(lp), 3),
             "ll_window": round(worst, 3), "ll_eos": round(eos, 3) if eos is not None else None}
+
+
+def _mean(reading) -> float | None:
+    """La moyenne d'une lecture, entière ou résumée (None : pas de lecture)."""
+    found = reading_measures(reading) if reading is not None else {}
+    return found.get("ll_mean")
 
 
 def reading_verdict(reading, reading_b=None) -> Verdict:
@@ -315,9 +340,9 @@ def reading_verdict(reading, reading_b=None) -> Verdict:
     if measures["ll_eos"] is not None and isinstance(limit, int) and limit > 0 \
             and measures["ll_n"] < LIMIT_SHARE * limit and measures["ll_eos"] < EOS_MIN:
         return Verdict(False, "truncated", measures)
-    reference = _log_probs(reading_b)
-    if reference:
-        measures["ll_gap"] = round(measures["ll_mean"] - sum(reference) / len(reference), 3)
+    reference = _mean(reading_b)
+    if reference is not None:
+        measures["ll_gap"] = round(measures["ll_mean"] - reference, 3)
         if measures["ll_gap"] < GAP_MIN:
             return Verdict(False, "unlikely", measures)
     elif measures["ll_mean"] < UNLIKELY_MEAN:
@@ -358,21 +383,58 @@ def _local_embed():
 
 
 def _ask(ask, candidates, request, used: list):
-    """La réponse de la première machine de contrôle qui répond : (machine, clé, texte), ou
-    None. Une machine qui échoue est passée."""
+    """La réponse de la première machine de contrôle qui répond : (machine, clé, texte,
+    demande partie, avec son identifiant de conversation), ou None. Une machine qui échoue
+    est passée."""
     while candidates and len(used) < MAX_CONTROLS:
         machine, key = candidates.pop(0)
         used.append(key)
+        sent = control_request(request)
         try:
-            text = ask(machine, control_request(request))
+            text = ask(machine, sent)
         except Exception as exc:  # noqa: BLE001 — la suivante
             # i18n: tel quel (journal) ; le type seulement : le message pourrait citer la demande
             log.info("Contrôle du réseau public : machine de contrôle en échec (%s)",
                      type(exc).__name__)
             continue
         if isinstance(text, str) and text.strip():
-            return machine, key, text
+            return machine, key, text, sent
     return None
+
+
+def _limit(request):
+    """La longueur maximale de la demande (options « num_predict »), None si inconnue."""
+    wanted = ((request or {}).get("options") or {}).get("num_predict")
+    return wanted if isinstance(wanted, int) and not isinstance(wanted, bool) \
+        and wanted > 0 else None
+
+
+def _readings(read, control, texts: list) -> list:
+    """Les lectures de `texts` par la machine de contrôle `control` (le résultat de _ask),
+    sous le modèle demandé, chacune avec la longueur maximale de la demande
+    (« max_tokens ») : [lecture ou None], dans l'ordre de `texts`. Envoyés dans un ordre
+    tiré au hasard (elle ne sait pas lequel est la réponse contrôlée), sous l'identifiant de
+    conversation de sa réponse (jamais celui de la conversation contrôlée). Une machine qui
+    ne sait pas lire (version d'avant, Ollama…) ou qui échoue : aucune lecture, la
+    comparaison des textes reste."""
+    if read is None:
+        return [None] * len(texts)
+    machine, _key, _text, sent = control
+    order = list(range(len(texts)))
+    _rng.shuffle(order)
+    try:
+        found = read(machine, sent, [texts[i] for i in order])
+    except Exception as exc:  # noqa: BLE001 — sans lecture, les textes seuls
+        # i18n: tel quel (journal) ; le type seulement : le message pourrait citer la demande
+        log.info("Contrôle du réseau public : lecture absente (%s)", type(exc).__name__)
+        return [None] * len(texts)
+    if not isinstance(found, list) or len(found) != len(texts):
+        return [None] * len(texts)
+    limit, out = _limit(sent), [None] * len(texts)
+    for place, index in enumerate(order):
+        if isinstance(found[place], dict):
+            out[index] = {**found[place], "max_tokens": limit}
+    return out
 
 
 def _note(key, ok, verdict, role="prêteur"):        # i18n: tel quel (journal)
@@ -382,7 +444,7 @@ def _note(key, ok, verdict, role="prêteur"):        # i18n: tel quel (journal)
              "réussi" if ok else "raté", verdict.reason, verdict.measures)
 
 
-def _check(lender_key, request, answer, ask, controls, embed, embed_model):
+def _check(lender_key, request, answer, ask, controls, embed, embed_model, read=None):
     question = _question(request)
     candidates = [(machine, key) for machine, key in controls
                   if key != lender_key and not (key is not None and
@@ -393,7 +455,10 @@ def _check(lender_key, request, answer, ask, controls, embed, embed_model):
         log.info("Contrôle du réseau public : %s, aucune machine de contrôle",  # i18n: tel quel
                  reputation.short(lender_key))
         return None
-    found = compare(question, answer, first[2], embed=embed, embed_model=embed_model)
+    # A et B lus par la machine de contrôle, sous le même modèle (si elle sait lire)
+    read_a, read_b = _readings(read, first, [answer, first[2]])
+    found = compare(question, answer, first[2], embed=embed, embed_model=embed_model,
+                    reading=read_a, reading_b=read_b)
     if found.ok or first[1] is None:            # accord, ou désaccord d'une de mes machines
         _note(lender_key, found.ok, found)
         return found
@@ -402,12 +467,16 @@ def _check(lender_key, request, answer, ask, controls, embed, embed_model):
         log.info("Contrôle du réseau public : %s, sans conclusion (%s, une seule machine de "
                  "contrôle)", reputation.short(lender_key), found.reason)  # i18n: tel quel
         return None
-    again = compare(question, answer, second[2], embed=embed, embed_model=embed_model)
+    # La seconde lit aussi la réponse de la première : de quoi la juger à son tour
+    read_a, read_2, read_1 = _readings(read, second, [answer, second[2], first[2]])
+    again = compare(question, answer, second[2], embed=embed, embed_model=embed_model,
+                    reading=read_a, reading_b=read_2)
     if not again.ok:
         _note(lender_key, False, again)
         return again
     # La seconde donne raison au prêteur : la première a-t-elle menti ?
-    other = compare(question, first[2], second[2], embed=embed, embed_model=embed_model)
+    other = compare(question, first[2], second[2], embed=embed, embed_model=embed_model,
+                    reading=read_1, reading_b=read_2)
     if not other.ok:
         _note(first[1], False, other, role="contrôleur")    # i18n: tel quel (journal)
         _note(lender_key, True, again)
@@ -418,7 +487,7 @@ def _check(lender_key, request, answer, ask, controls, embed, embed_model):
 
 
 def run_check(lender_key, request, answer, ask, controls, *, embed="local", embed_model=None,
-              on_done=None) -> threading.Thread | None:
+              on_done=None, read=None) -> threading.Thread | None:
     """Contrôler en arrière-plan la réponse `answer` du prêteur `lender_key` (la clé publique
     de son nœud) à `request` (la demande telle qu'elle est partie : « model », « messages »,
     « options »). Ne bloque jamais : le contrôle tourne dans un fil à part, qui est rendu
@@ -431,7 +500,11 @@ def run_check(lender_key, request, answer, ask, controls, *, embed="local", embe
     contrôle candidates, dans l'ordre de préférence, en couples (machine, clé) : clé None
     pour une de mes machines (crue seule), la clé publique du nœud sinon. embed : textes →
     vecteurs (« local » : le modèle d'embedding de cette machine ; None : les mots communs).
-    on_done(verdict ou None) à la fin, dans le fil du contrôle."""
+    read(machine, demande, textes) → [lecture ou None] : les textes lus par cette machine de
+    contrôle sous le modèle demandé (llm/reading.py), la demande étant celle qui lui est
+    partie (son identifiant de conversation compris) ; lève si elle ne sait pas lire. None :
+    aucune lecture, les textes seuls. on_done(verdict ou None) à la fin, dans le fil du
+    contrôle."""
     if not reputation.valid_key(lender_key):
         return None
     with _lock:
@@ -445,7 +518,8 @@ def run_check(lender_key, request, answer, ask, controls, *, embed="local", embe
     def work():
         verdict = None
         try:
-            verdict = _check(lender_key, request, answer, ask, controls, embed, embed_model)
+            verdict = _check(lender_key, request, answer, ask, controls, embed, embed_model,
+                             read)
         except Exception as exc:  # noqa: BLE001 — un échec de notre fait n'accuse personne
             # i18n: tel quel (journal) ; le type seulement : le message pourrait citer la demande
             log.warning("Contrôle du réseau public en échec (%s)", type(exc).__name__)
