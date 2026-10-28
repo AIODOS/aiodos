@@ -348,7 +348,12 @@ plusieurs questions réparties (§ 5.2). À remesurer sur plusieurs vraies machi
 5. **Code en essaim** avec essais (§ 5.5).
 6. **Images et vidéos par le code** (§ 5.6), puis **diffusion en tuiles** (§ 5.7).
 7. **Le chantier en direct dans l'appli** (accepté le 27/10) : pour chaque demande, les
-   fragments, les machines qui les calculent, leur avancement, la fin de partie.
+   fragments, les machines qui les calculent, leur avancement, la fin de partie. *Codé le
+   28/10 pour les travaux de fond (`jobs/chantier.py`, `views/chantier.js` : chaque unité, sa
+   machine, son étape, ses doublons « doublée par », « faite par », « battue » ; les places
+   annoncées par chaque machine, `network/places_seen.py`) et, dans « Machines connectées »,
+   les doublons et les conversations servies au réseau public ou calculées par lui (modèle et
+   durée seulement). Les conversations en essaim n'existent pas encore : rien à montrer.*
 
 ## 14. Décidé et encore ouvert
 

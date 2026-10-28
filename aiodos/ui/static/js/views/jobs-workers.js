@@ -2,12 +2,15 @@
 // la façon de la liste des pairs d'un client BitTorrent. Cette machine (les unités de mes
 // travaux calculées ici, celles qu'elle calcule pour d'autres), puis mes machines appairées qui
 // calculent pour moi : ce qu'elle calcule, son état, le chemin qui y mène, son temps moyen par
-// unité. Tout vient de ce que l'interface a déjà : state.jobs (local, remote), state.executor
-// (remote : les unités d'autres machines calculées ici) et state.network (cf. connected.js).
-import { esc, duration } from '../dom.js';
+// unité. Tout vient de ce que l'interface a déjà : state.jobs (local, remote, et les doublons de
+// fin de partie : copies, copies_remote), state.executor (remote : les unités d'autres machines
+// calculées ici) et state.network (cf. connected.js ; live.places : les places qu'une machine
+// annonce en demandant du travail, en petits points sous son nom, comme chantier.js).
+import { esc, duration, ago } from '../dom.js';
 import { fold, keepFolds } from '../fold.js';
 import { t, tt, locale } from '../i18n.js';
 import { state } from '../state.js';
+import { placeDots } from './chantier.js';
 import { link } from './connected.js';
 
 let box = null;
@@ -32,18 +35,33 @@ export function mountWorkers(container) {
 
 // Cette machine d'abord, puis celles qui calculent pour moi, les plus chargées en tête
 function machines() {
-  const self = { self: true, jobs: [], lent: new Map(), units: 0 };
-  const others = new Map();                          // machine -> { id, peer, jobs, units }
+  const self = { self: true, jobs: [], copies: [], lent: new Map(), units: 0 };
+  const others = new Map();                          // machine -> { id, peer, jobs, copies, units }
+  const other = id => {
+    if (!others.has(id)) others.set(id, { id, peer: findPeer(id), jobs: [], copies: [], units: 0 });
+    return others.get(id);
+  };
   for (const j of state.jobs?.values() || []) {
     if (j.local) {
       self.jobs.push([j, j.local]);
       self.units += j.local;
     }
     for (const [id, n] of Object.entries(j.remote || {})) {
-      if (!others.has(id)) others.set(id, { id, peer: findPeer(id), jobs: [], units: 0 });
-      const m = others.get(id);
+      const m = other(id);
       m.jobs.push([j, n]);
       m.units += n;
+    }
+    // Doublons de fin de partie : ailleurs (copies_remote), et le reste ici
+    let away = 0;
+    for (const [id, n] of Object.entries(j.copies_remote || {})) {
+      const m = other(id);
+      m.copies.push([j, n]);
+      m.units += n;
+      away += n;
+    }
+    if ((j.copies || 0) > away) {
+      self.copies.push([j, j.copies - away]);
+      self.units += j.copies - away;
     }
   }
   for (const w of state.executor?.remote || []) {    // unités d'autres machines calculées ici
@@ -63,6 +81,10 @@ const pill = (cls, key, title = '') =>
 // Ce qu'elle calcule : unités de mes travaux, et pour cette machine celles prêtées à d'autres
 function what(m) {
   const lines = m.jobs.map(([j, n]) => esc(t('connected.job_units', { title: titleOf(j), n })));
+  for (const [j, n] of m.copies || []) {
+    lines.push(`<span class="workers-copy" title="${esc(t('chantier.doubled_title'))}">${
+      esc(t('chantier.workers_copies', { title: titleOf(j), n }))}</span>`);
+  }
   for (const lent of m.lent?.values() || []) {
     lines.push(`<span title="${esc(lent.labels.join(', '))}">${esc(t('jobs.computing_for',
       { name: lent.name, n: lent.labels.length }))}</span>`);
@@ -100,13 +122,23 @@ function speed(m) {
 // Une cellule sans rien à dire : un tiret (caché sur téléphone)
 const cell = html => (html ? `<td class="faint">${html}</td>` : '<td class="faint workers-none">—</td>');
 
+// Ses places, et combien sont prises, telles qu'elle les a dites en demandant du travail
+// (network/places_seen.py) ; celles de cette machine sont sur la ligne des ressources, en haut
+function places(m) {
+  const seen = m.self ? null : m.peer?.live?.places;
+  const dots = seen ? placeDots(seen.places, seen.busy) : '';
+  if (!dots) return '';
+  const at = typeof seen.at === 'number' && Number.isFinite(seen.at) ? seen.at : null;
+  return `<div class="workers-places"${at !== null ? ` title="${esc(t('chantier.places_title', { ago: ago(at) }))}"` : ''}>${dots}</div>`;
+}
+
 function row(m) {
   const me = state.network?.name;
   const name = m.self ? t('jobs.workers_here') : m.peer?.name || t('jobs.another_machine');
   const online = m.self || !!m.peer?.online;
   return `<tr>
     <td class="workers-name"><span class="dot ${online ? 'on' : ''}"></span><b${m.self && me
-      ? ` title="${esc(me)}"` : ''}>${esc(name)}</b></td>
+      ? ` title="${esc(me)}"` : ''}>${esc(name)}</b>${places(m)}</td>
     <td class="workers-what">${what(m)}</td>
     <td>${stateOf(m)}</td>
     ${cell(!m.self && m.peer ? link(m.peer) : '')}

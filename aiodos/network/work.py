@@ -43,6 +43,9 @@ valable gagne ; l'autre machine l'apprend à son renouvellement (« done ») et 
 arrive, est refusé poliment, sans échec compté ni mise de côté. Seul le gagnant est compté pour
 la réciprocité. Ses doublons comptent dans ce que détient un ami (FRIEND_MAX_HELD), et dans la
 taille de résultat qu'une machine peut m'envoyer (result_limit).
+
+Les places qu'annonce chaque demande (caps.places, caps.busy) sont gardées en mémoire, avec
+l'heure, pour le chantier en direct (network/places_seen.py).
 Appelées dans un thread par le serveur réseau (cf. p2p_app.HANDLERS).
 """
 import hashlib
@@ -61,7 +64,7 @@ from aiodos.jobs import endgame, leases, queue, registry
 from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import MAX_ATTEMPTS, QUEUED, RUNNING
 from aiodos.knowledge import store
-from aiodos.network import envelope, peers, profile, route, sharing, wire
+from aiodos.network import envelope, peers, places_seen, profile, route, sharing, wire
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -322,6 +325,7 @@ def lease(manager, sender, payload):
     if aside:
         return {"unit": None, "retry_after": 600,
                 "reason": t("work.set_aside", name=manager.name(), reason=aside)}
+    places_seen.note(sender, caps)        # ses places, et combien sont prises (chantier)
     friend = sharing.is_friend(sender)
     if friend and _friend_too_eager(sender):
         return {"unit": None, "retry_after": NOTHING_RETRY}
@@ -416,7 +420,10 @@ def lease(manager, sender, payload):
             return {"unit": None, "retry_after": NOTHING_RETRY,
                     "reason": t("work.outdated", name=manager.name())}
         return {"unit": None, "retry_after": NOTHING_RETRY}
-    return _order(manager, sender, unit, options, friend, caps, max_blob)
+    order = _order(manager, sender, unit, options, friend, caps, max_blob)
+    if order.get("unit"):
+        places_seen.took(sender, unit["resource"])     # la place qu'elle vient de prendre
+    return order
 
 
 def _offers_images(node_id) -> bool:

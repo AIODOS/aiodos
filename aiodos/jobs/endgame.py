@@ -31,11 +31,14 @@ gagne :
 Un doublon ne compte ni essai (attempts) ni remise (handouts). Seul le calcul gagnant compte
 pour la réciprocité (peers.account, au résultat accepté, des deux côtés). Les vues
 (queue.job_summary, gateway/jobs_api) ne lisent que units : un doublon n'y est pas une unité
-de plus.
+de plus ; seul le chantier en direct (jobs/chantier.py) montre les doublons en cours, et les
+calculs battus d'une unité faite, retenus en mémoire seulement (beat, losers).
 """
 import json
+import threading
 import time
 import uuid
+from collections import OrderedDict
 
 from aiodos import db
 from aiodos.jobs import registry
@@ -50,6 +53,10 @@ ENDGAME_COLD_S = 120
 SLOW_FACTOR = 2
 MAX_RUNS = 2            # calculs d'une même unité à la fois : le principal et un doublon
 SCAN = 200              # unités en calcul examinées à chaque demande
+BEATEN_KEPT = 2000      # unités faites dont on retient les calculs battus (chantier en direct)
+
+_beaten_lock = threading.Lock()
+_beaten = OrderedDict()  # unité faite -> [(machine, lieu)] de ses calculs battus, en mémoire
 
 # Une unité en calcul qu'on peut doubler pour la machine `?` : son travail n'a plus rien en
 # file, aucun résultat n'entre encore, elle traîne (voir plus haut), elle n'a pas déjà
@@ -250,6 +257,28 @@ def forget(c, unit_id):
     """Les doublons d'une unité faite (queue.finish_unit), échouée ou annulée : leurs
     machines l'apprennent à leur renouvellement, celui d'ici par l'exécuteur (beaten)."""
     c.execute("DELETE FROM unit_copies WHERE unit_id=?", (unit_id,))
+
+
+def beat(c, unit_id):
+    """L'unité est faite (queue.finish_unit) : ses autres calculs sont battus. Retenus en
+    mémoire, pour le chantier en direct (« battue », jobs/chantier.py), puis oubliés comme
+    par forget. Dans la transaction c."""
+    losers = [(r["node"], r["place"]) for r in c.execute(
+        "SELECT node, place FROM unit_copies WHERE unit_id=? ORDER BY started", (unit_id,))]
+    if losers:
+        with _beaten_lock:
+            _beaten[unit_id] = losers
+            _beaten.move_to_end(unit_id)
+            while len(_beaten) > BEATEN_KEPT:
+                _beaten.popitem(last=False)
+    forget(c, unit_id)
+
+
+def losers(unit_ids) -> dict:
+    """{unité: [(machine, lieu)]} : les calculs battus de ces unités faites, s'ils sont
+    encore en mémoire (depuis le démarrage d'AIODOS, BEATEN_KEPT au plus)."""
+    with _beaten_lock:
+        return {u: list(_beaten[u]) for u in unit_ids if u in _beaten}
 
 
 def expire(now) -> int:

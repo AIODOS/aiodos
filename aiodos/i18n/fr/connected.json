@@ -84,5 +84,23 @@
     "one": "{n} machine en ligne",
     "other": "{n} machines en ligne"
   },
-  "rail_none_online": "Aucune machine en ligne"
+  "rail_none_online": "Aucune machine en ligne",
+  "doubling_for_you": {
+    "one": "double {n} unité pour toi",
+    "other": "double {n} unités pour toi"
+  },
+  "doubling_title": "Fin de partie : elle calcule aussi des unités qui traînent ailleurs. Le premier résultat gagne.",
+  "public_title": "Avec le réseau public, en ce moment",
+  "public_hint": "Ni le texte des conversations ni aucune clé ne sont gardés ou montrés : seulement le modèle et la durée.",
+  "public_serving": "Conversation pour une machine du réseau public · {model} · {time}",
+  "public_asking": {
+    "one": "Réponse en cours par une machine du réseau public · {model}",
+    "other": "{n} réponses en cours par des machines du réseau public · {model}"
+  },
+  "public_asking_unknown": {
+    "one": "Réponse en cours par une machine du réseau public",
+    "other": "{n} réponses en cours par des machines du réseau public"
+  },
+  "public_serving_chip": "tu réponds au réseau public",
+  "public_asking_chip": "le réseau public te répond"
 }

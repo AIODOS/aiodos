@@ -1,0 +1,81 @@
+{
+  "title": "Chantier en direct",
+  "hint": "Chaque fragment de la tâche, la machine qui le calcule et où il en est, en direct. En fin de partie, une machine libre double un fragment qui traîne : le premier résultat gagne, l’autre calcul s’arrête.",
+  "loading": "Lecture du chantier…",
+  "unavailable": "Chantier illisible pour l’instant : nouvel essai dans quelques secondes.",
+  "empty": "Aucun fragment.",
+  "unknown_job": "Tâche introuvable.",
+  "sub_running": "{n} en calcul",
+  "sub_queued": "{n} en file",
+  "sub_done": {
+    "one": "{n} faite",
+    "other": "{n} faites"
+  },
+  "sub_skipped": {
+    "one": "{n} ignorée",
+    "other": "{n} ignorées"
+  },
+  "sub_failed": "{n} en échec",
+  "sub_cancelled": {
+    "one": "{n} annulée",
+    "other": "{n} annulées"
+  },
+  "sub_copies": {
+    "one": "{n} doublée",
+    "other": "{n} doublées"
+  },
+  "machines": "Machines du chantier",
+  "who_here": "cette machine",
+  "who_named": "« {name} »",
+  "who_public": "une machine du réseau public",
+  "who_other": "une autre machine",
+  "here": "Cette machine",
+  "public": "Réseau public",
+  "fragment": "Fragment {n}",
+  "status_running": "En calcul",
+  "status_doubled": "Doublée",
+  "status_queued": "En file",
+  "status_done": "Faite",
+  "status_skipped": "Ignorée",
+  "status_failed": "En échec",
+  "status_cancelled": "Annulée",
+  "on": "Sur {who}",
+  "since": "depuis {time}",
+  "about": "environ {n} %",
+  "about_title": "Estimation : le temps écoulé, comparé à la durée habituelle d’un fragment de cette tâche ({time}).",
+  "doubled_by": "Doublée par {who}",
+  "doubled_title": "Fin de partie : une machine libre calcule aussi ce fragment qui traîne. Le premier résultat gagne, l’autre calcul s’arrête sans rien compter contre sa machine.",
+  "queued_since": "En file depuis {time}",
+  "retry": "nouvel essai",
+  "done_by": "Faite par {who}",
+  "done_in": "en {time}",
+  "skipped_by": "Ignorée par {who} : rien d’exploitable",
+  "failed_at": "En échec chez {who}",
+  "beaten": "battue : {who}",
+  "beaten_title": "Fin de partie : ce calcul a perdu la course et s’est arrêté, sans rien compter contre sa machine.",
+  "more": "Non montrés : {list}",
+  "stage_sending_inputs": "envoi des entrées",
+  "stage_waiting_engine": "attente du moteur",
+  "stage_running": "calcul",
+  "stage_receiving": "réception du résultat",
+  "stage_checking": "vérification",
+  "units": {
+    "one": "{n} fragment",
+    "other": "{n} fragments"
+  },
+  "copies": {
+    "one": "{n} doublon",
+    "other": "{n} doublons"
+  },
+  "places_title": "Places annoncées {ago} : combien de fragments cette machine peut calculer à la fois, et combien sont pris.",
+  "places_here_title": "Places de cette machine : combien de fragments elle peut calculer à la fois, et combien sont pris.",
+  "places_unknown": "places non dites",
+  "facts_copies": {
+    "one": "{n} doublon de fin de partie",
+    "other": "{n} doublons de fin de partie"
+  },
+  "workers_copies": {
+    "one": "{title} (doublon de {n} unité)",
+    "other": "{title} (doublons de {n} unités)"
+  }
+}

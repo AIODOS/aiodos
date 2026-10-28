@@ -84,5 +84,23 @@
     "one": "{n} machine online",
     "other": "{n} machines online"
   },
-  "rail_none_online": "No machines online"
+  "rail_none_online": "No machines online",
+  "doubling_for_you": {
+    "one": "doubling {n} unit for you",
+    "other": "doubling {n} units for you"
+  },
+  "doubling_title": "Endgame: it also computes units that lag behind elsewhere. The first result wins.",
+  "public_title": "With the public network, right now",
+  "public_hint": "Neither the text of conversations nor any key is kept or shown: only the model and the duration.",
+  "public_serving": "Conversation for a public network machine · {model} · {time}",
+  "public_asking": {
+    "one": "Answer in progress by a public network machine · {model}",
+    "other": "{n} answers in progress by public network machines · {model}"
+  },
+  "public_asking_unknown": {
+    "one": "Answer in progress by a public network machine",
+    "other": "{n} answers in progress by public network machines"
+  },
+  "public_serving_chip": "you're answering the public network",
+  "public_asking_chip": "the public network is answering you"
 }

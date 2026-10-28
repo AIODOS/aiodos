@@ -42,9 +42,11 @@ texte de la réponse part, et la machine ne calcule pas ce que personne ne lira.
 
 Rien n'est gardé : ni la conversation, ni la clé de l'appelant (lue pour savoir que la
 demande vient du réseau public, puis oubliée) ; rien en base, et le journal ne dit que le
-modèle, le nombre de jetons et la durée.
+modèle, le nombre de jetons et la durée. Pendant le calcul, en mémoire seulement, le modèle
+et l'heure du début, pour « Machines connectées » (serving, activity.public_live).
 """
 import asyncio
+import itertools
 import json
 import logging
 import math
@@ -83,6 +85,17 @@ _ASCII_TEXT = re.compile(r"[A-Za-z \t\r\n]+")
 
 _lock = threading.Lock()
 _rest = {"until": 0.0}         # pas de nouvelle conversation publique avant (monotonic)
+_serving = {}                  # conversation servie en ce moment -> (modèle, début), rien d'autre
+_numbers = itertools.count(1)
+
+
+def serving() -> list:
+    """Les conversations servies en ce moment au réseau public (« Machines connectées »,
+    activity.public_live) : [{"model", "since"}], le modèle et l'heure du début (time.time),
+    jamais le texte ni la clé de l'appelant, que ce module ne garde pas."""
+    with _lock:
+        return [{"model": model, "since": since}
+                for model, since in sorted(_serving.values(), key=lambda s: s[1])]
 
 
 class Refused(Exception):
@@ -339,6 +352,9 @@ def answer(manager, asked: dict, stop):
     model, place = asked["model"], asked["place"]
     started = time.monotonic()
     done, why = threading.Event(), []
+    number = next(_numbers)
+    with _lock:
+        _serving[number] = (model, time.time())     # en cours (serving) : le modèle, l'heure
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -378,6 +394,8 @@ def answer(manager, asked: dict, stop):
                      produced, seconds)
             yield {"type": "done", "tokens": produced, "seconds": seconds}
     finally:
+        with _lock:
+            _serving.pop(number, None)
         done.set()
         _rest_after(manager, time.monotonic() - started)
         place.release()

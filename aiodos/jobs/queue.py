@@ -174,7 +174,7 @@ def finish_unit(unit_id, result: dict, compute_s: float):
                   (status, json.dumps(result, ensure_ascii=False), db.now(),
                    compute_s, unit_id))
         c.execute(f"UPDATE jobs SET {counter} = {counter} + 1 WHERE id=?", (job_id,))
-        endgame.forget(c, unit_id)        # fin de partie : l'autre calcul s'arrête
+        endgame.beat(c, unit_id)          # fin de partie : l'autre calcul s'arrête, battu
         return job_id, _complete_if_last(c, job_id)
 
 
@@ -387,12 +387,18 @@ def recover():
 
 
 # ------------------------------------------------------------------- lecture
-def _summary(row, remote, local, names=None) -> dict:
+def _summary(row, remote, local, names=None, copies=None) -> dict:
     job = dict(row)
     job["params"] = json.loads(job["params"])
     job["result"] = json.loads(job["result"] or "{}")
     job["remote"] = remote.get(job["id"], {})       # {machine: unités qu'elle calcule}
     job["local"] = local.get(job["id"], 0)          # unités qui calculent ici
+    # Doublons de fin de partie en cours (endgame.py) : pas des unités de plus. Leur nombre,
+    # et ceux confiés à d'autres machines ({machine: n}) ; le chantier en direct les montre
+    # (jobs/chantier.py) et se relit quand ils changent
+    doubled = (copies or {}).get(job["id"]) or {}
+    job["copies"] = doubled.get("n", 0)
+    job["copies_remote"] = doubled.get("remote", {})
     # Le titre, écrit à la création dans la langue d'alors (title), et sa clé (title_t) :
     # l'interface le traduit dans la sienne (jobs.js, jobTitle)
     lazy_title = job["result"].pop("_title", None)
@@ -432,20 +438,37 @@ def local_counts(job_id=None) -> dict:
         "AND (? IS NULL OR job_id=?) GROUP BY job_id", (RUNNING, job_id, job_id))}
 
 
+def copy_counts(job_id=None) -> dict:
+    """Doublons de fin de partie en cours (endgame.py) : {travail: {"n": tous, ici ou
+    ailleurs, "remote": {machine: ceux qu'elle calcule}}} (un doublon d'ici n'a pas de bail)."""
+    out = {}
+    for r in db.query(
+            "SELECT u.job_id, uc.node, uc.lease_until IS NOT NULL AS away, COUNT(*) AS n "
+            "FROM unit_copies uc JOIN units u ON u.id = uc.unit_id WHERE u.status=? "
+            "AND (? IS NULL OR u.job_id=?) GROUP BY u.job_id, uc.node, away",
+            (RUNNING, job_id, job_id)):
+        found = out.setdefault(r["job_id"], {"n": 0, "remote": {}})
+        found["n"] += r["n"]
+        if r["away"]:
+            found["remote"][r["node"]] = found["remote"].get(r["node"], 0) + r["n"]
+    return out
+
+
 def job_summary(job_id) -> dict | None:
     row = db.query_one("SELECT * FROM jobs WHERE id=?", (job_id,))
-    return _summary(row, remote_counts(job_id), local_counts(job_id)) if row else None
+    return _summary(row, remote_counts(job_id), local_counts(job_id),
+                    copies=copy_counts(job_id)) if row else None
 
 
 def list_jobs(limit=200) -> list:
-    remote, local = remote_counts(), local_counts()
+    remote, local, copies = remote_counts(), local_counts(), copy_counts()
     rows = db.query(
         "SELECT * FROM jobs ORDER BY CASE status WHEN 'running' THEN 0 "
         "WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END, "
         "CASE WHEN status IN ('running','queued','paused') THEN priority ELSE 0 END, "
         "COALESCE(finished, created) DESC LIMIT ?", (limit,))
     names = _app_names(r["owner_app"] for r in rows)
-    return [_summary(r, remote, local, names) for r in rows]
+    return [_summary(r, remote, local, names, copies) for r in rows]
 
 
 def failed_units(job_id, limit=50) -> list:

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos.i18n import t
-from aiodos.jobs import queue
+from aiodos.jobs import chantier, queue
 from aiodos.jobs.models import PAUSE_AFTER, PAUSE_MODES, PRIORITIES
 
 router = APIRouter(prefix="/api")
@@ -46,6 +46,17 @@ def jobs(request: Request):
 @router.get("/jobs/{job_id}/failures")
 def failures(job_id: int):
     return queue.failed_units(job_id)
+
+
+@router.get("/jobs/{job_id}/chantier")
+def live_site(job_id: int, request: Request):
+    """Le chantier en direct d'un travail ouvert dans la vue Tâches (jobs/chantier.py) :
+    ses fragments, leurs machines et leurs doublons, les places de ces machines."""
+    executor = request.app.state.executor
+    found = chantier.view(job_id, executor.node_id, executor.status())
+    if found is None:
+        raise HTTPException(404, t("chantier.unknown_job"))
+    return found
 
 
 @router.post("/jobs/clear_finished")

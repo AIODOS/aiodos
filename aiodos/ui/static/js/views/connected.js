@@ -1,9 +1,12 @@
 // Machines connectées, en direct, à la façon de la liste des pairs d'un client BitTorrent :
 // qui est en ligne et par quel chemin, qui prête sa puissance, ce que chacune fait pour
-// l'autre en ce moment, et ce qui a été échangé (network/activity.py). En tête de la vue
-// Réseau ; et dans la barre du bas, le nombre de machines en ligne. Les textes (t, tt) sont
-// du texte brut : échappés (esc) en entier, paramètres compris, avant d'entrer dans le HTML.
-import { $, esc, ago, duration } from '../dom.js';
+// l'autre en ce moment (doublons de fin de partie compris), et ce qui a été échangé
+// (network/activity.py) ; sous la liste, ce que cette machine fait avec le réseau public (les
+// conversations qu'elle sert à des inconnus, celles qu'ils calculent pour elle : le modèle et
+// la durée, jamais le texte ni une clé). En tête de la vue Réseau ; et dans la barre du bas,
+// le nombre de machines en ligne. Les textes (t, tt) sont du texte brut : échappés (esc) en
+// entier, paramètres compris, avant d'entrer dans le HTML.
+import { $, esc, ago, duration, finite } from '../dom.js';
 import { t, tt, locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
@@ -21,8 +24,12 @@ const pauseDetail = sharing => tt(sharing.detail_t, sharing.detail || '');
 
 function busy(peer) {
   const live = peer.live || {};
-  return sum(live.for_me) + (live.for_it || []).length + (live.chats_for_me || 0) + (live.chats_for_it || 0);
+  return sum(live.for_me) + sum(live.copies_for_me) + (live.for_it || []).length + (live.chats_for_me || 0)
+    + (live.chats_for_it || 0);
 }
+
+// Elle travaille pour moi en ce moment : unités, doublons de fin de partie, conversations
+const helpsMe = peer => !!(sum(peer.live?.for_me) || sum(peer.live?.copies_for_me) || peer.live?.chats_for_me);
 
 export function link(peer) {           // aussi pour les machines au travail (jobs-workers.js)
   if (!peer.online) {
@@ -63,6 +70,13 @@ function now(peer) {
       .join(', ');
     items.push(`<span class="live-in" title="${esc(what)}">${icon('bolt')}${esc(t('connected.computing_for_you',
       { n: forMe }))}</span>`);
+  }
+  const doubling = sum(live.copies_for_me);
+  if (doubling) {
+    const what = live.copies_for_me.map(j => t('connected.job_units', { title: tt(j.title_t, j.title), n: j.units }))
+      .join(', ');
+    items.push(`<span class="live-in" title="${esc(`${t('connected.doubling_title')} ${what}`)}">${icon('copy')}${
+      esc(t('connected.doubling_for_you', { n: doubling }))}</span>`);
   }
   if (live.chats_for_me) {
     items.push(`<span class="live-in">${icon('chat')}${esc(t('connected.answering_your_chat'))}</span>`);
@@ -110,10 +124,35 @@ function exchanged(peer) {
   return lines.length ? lines.join('<br>') : `<span class="faint">${esc(t('connected.nothing_yet'))}</span>`;
 }
 
+// Ce que cette machine fait avec le réseau public en ce moment (activity.public_live) : les
+// conversations qu'elle sert à des inconnus, celles qu'elle leur fait calculer. Le modèle et la
+// durée seulement : le nœud n'envoie ni le texte ni aucune clé
+const publicServing = net => (Array.isArray(net.public_live?.serving) ? net.public_live.serving : []);
+const publicAsking = net => (Array.isArray(net.public_live?.asking) ? net.public_live.asking : []);
+
+function publicLive(net) {
+  const serving = publicServing(net);
+  const asking = publicAsking(net);
+  if (!serving.length && !asking.length) return '';
+  const now = Date.now() / 1000;
+  const items = [
+    ...serving.map(s => `<div class="live-out">${icon('chat')}<span>${esc(t('connected.public_serving', {
+      model: String(s.model ?? ''), time: duration(now - (finite(s.since) ?? now)) }))}</span></div>`),
+    ...asking.map(a => {
+      const n = Number.isInteger(a.n) && a.n > 0 ? a.n : 1;
+      return `<div class="live-in">${icon('chat')}<span>${esc(a.model
+        ? t('connected.public_asking', { n, model: String(a.model) })
+        : t('connected.public_asking_unknown', { n }))}</span></div>`;
+    }),
+  ];
+  return `<div class="live-public"><h3 title="${esc(t('connected.public_hint'))}">${icon('globe')}${
+    esc(t('connected.public_title'))}</h3>${items.join('')}</div>`;
+}
+
 function summary(net) {
   const peers = net.peers;
   const online = peers.filter(p => p.online);
-  const helping = online.filter(p => sum(p.live?.for_me) || p.live?.chats_for_me).length;
+  const helping = online.filter(helpsMe).length;
   const helped = online.filter(p => (p.live?.for_it || []).length || p.live?.chats_for_it).length;
   const lending = online.filter(p => lendsNow(p.live?.sharing)).length;
   const me = net.sharing;
@@ -122,6 +161,8 @@ function summary(net) {
   if (lending) chips.push(`<span class="pill ok">${esc(t('connected.lending', { n: lending }))}</span>`);
   if (helping) chips.push(`<span class="pill run">${esc(t('connected.helping', { n: helping }))}</span>`);
   if (helped) chips.push(`<span class="pill run">${esc(t('connected.helped', { n: helped }))}</span>`);
+  if (publicServing(net).length) chips.push(`<span class="pill run">${esc(t('connected.public_serving_chip'))}</span>`);
+  if (publicAsking(net).length) chips.push(`<span class="pill run">${esc(t('connected.public_asking_chip'))}</span>`);
   if (me) {
     chips.push(me.active ? `<span class="pill">${esc(t('connected.me_lending'))}</span>`
       : `<span class="pill idle" title="${esc(pauseDetail(me))}">${esc(t('connected.me_not_lending'))}</span>`);
@@ -176,7 +217,8 @@ export function renderConnected(box, net) {
     ${head(net.peers.length ? summary(net) : '')}
     ${net.peers.length ? `${nudge(net)}
       <table class="live"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`
-      : `<p class="hint live-off">${esc(t('connected.empty'))}</p>`}`;
+      : `<p class="hint live-off">${esc(t('connected.empty'))}</p>`}
+    ${publicLive(net)}`;
   box.querySelector('[data-go-node]')?.addEventListener('click', () => emit('view:show', 'node'));
 }
 
@@ -195,7 +237,7 @@ export function mountRailStatus() {
     const online = (peers || []).filter(p => p.online);
     dot.hidden = !online.length;
     if (!peers) return;
-    const helping = online.filter(p => sum(p.live?.for_me) || p.live?.chats_for_me).length;
+    const helping = online.filter(helpsMe).length;
     status.innerHTML = !peers.length ? esc(t('connected.rail_no_peers'))
       : `<span class="dot ${online.length ? 'on' : ''}"></span>${esc(t('connected.rail_online', { n: online.length }))}`
         + (helping ? ` <span class="work">${icon('bolt')}${esc(t('connected.helping', { n: helping }))}</span>` : '');

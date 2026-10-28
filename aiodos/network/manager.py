@@ -501,6 +501,8 @@ class NetworkManager:
             "invitations": invitations.snapshot(),
             "internet": self.internet.snapshot(),
             "public": self.public.snapshot(),              # réseau public (phase 3.0)
+            # … et ce que cette machine fait avec lui en ce moment (activity.py)
+            "public_live": activity.public_live(),
             "offload": bool(settings.get("offload_enabled")),
             "sharing": working,
         }

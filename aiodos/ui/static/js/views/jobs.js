@@ -1,12 +1,14 @@
 // Tâches : la file d'attente (travaux découpés en unités), priorités, commandes. Une ligne
 // repliable par travail (titre, état, progression, pause ou reprise, annulation), le détail à
-// l'ouverture ; en bas, les machines au travail (jobs-workers.js).
+// l'ouverture, avec le chantier en direct (chantier.js) ; en bas, les machines au travail
+// (jobs-workers.js).
 import { get, post, patch } from '../api.js';
 import { $, h, esc, duration, ago } from '../dom.js';
 import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast, confirmDanger, menu } from '../ui.js';
+import { showChantier, forgetChantier } from './chantier.js';
 import { mountWorkers, renderWorkers, peerName } from './jobs-workers.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -82,7 +84,9 @@ function render() {
   const list = $('#jobs-list', root);
   const jobs = sorted();
   for (const [id, r] of rows) {
-    if (!state.jobs.has(id)) { r.el.remove(); rows.delete(id); expanded.delete(id); failuresCache.delete(id); }
+    if (!state.jobs.has(id)) {
+      r.el.remove(); rows.delete(id); expanded.delete(id); failuresCache.delete(id); forgetChantier(id);
+    }
   }
   list.querySelector(':scope > .empty')?.remove();
   if (!jobs.length) {
@@ -132,7 +136,10 @@ function update(r, j) {
     r[part] = html;
     el.querySelector(`.job-${part}`).innerHTML = html;
   }
-  if (el.open) showFailures(el, j);
+  if (el.open) {
+    showFailures(el, j);
+    showChantier(el.querySelector('.job-chantier'), j);
+  }
 }
 
 function renderStats() {
@@ -200,6 +207,7 @@ function row(j) {
       <div class="fold-body">
         <dl class="facts job-facts"></dl>
         <div class="job-notes"></div>
+        <div class="job-chantier"></div>
         <div class="job-failures"></div>
       </div>
     </details>`);
@@ -235,7 +243,9 @@ function row(j) {
   el.addEventListener('toggle', () => {
     if (!el.open) { expanded.delete(j.id); return; }
     expanded.add(j.id);
-    showFailures(el, state.jobs.get(j.id) || j);      // données à jour, pas celles de la création
+    const now = state.jobs.get(j.id) || j;             // données à jour, pas celles de la création
+    showFailures(el, now);
+    showChantier(el.querySelector('.job-chantier'), now);
   });
   return el;
 }
@@ -263,6 +273,7 @@ function facts(j) {
   // Unités en calcul ici et sur d'autres machines
   const where = Object.entries(j.remote || {}).map(([id, n]) => esc(t('jobs.remote_on', { n, name: peerName(id) })));
   if (j.local) where.unshift(esc(t('jobs.local_here', { n: j.local })));
+  if (j.copies) where.push(esc(t('chantier.facts_copies', { n: j.copies })));   // fin de partie
   if (where.length) lines.push(['jobs.detail_machines', [where.join(', ')]]);
   if (j.result?.indexed !== undefined && !ACTIVE.includes(j.status)) {
     lines.push(['jobs.detail_result', [esc(t('jobs.indexed', { n: j.result.indexed, chunks: j.result.chunks || 0 }))]]);

@@ -559,6 +559,45 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .workers-name .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
 .workers-what { overflow-wrap: anywhere; }
 .workers-foot { margin: 8px 0 0; font-size: 12.5px; color: var(--faint); }
+.workers-places { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 4px 0 0 17px; font-size: 11.5px;
+  color: var(--faint); white-space: normal; }
+.workers-copy { color: var(--violet); }
+/* Le chantier en direct d'un travail ouvert (js/views/chantier.js) : les machines du chantier
+   et leurs places, puis chaque fragment, sa machine, son avancement et ses doublons */
+.job-chantier:empty { display: none; }
+details.chantier { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-2); }
+details.chantier > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; user-select: none; font-size: 13px; border-radius: var(--radius-sm); }
+details.chantier > summary::-webkit-details-marker { display: none; }
+details.chantier > summary:hover { background: var(--panel-3); }
+details.chantier > summary > .icon { color: var(--cyan); }
+details.chantier > summary .fold-chev { margin-left: auto; color: var(--faint); transition: transform .15s; }
+details.chantier[open] > summary { border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+details.chantier[open] > summary .fold-chev { transform: rotate(90deg); }
+.chantier-title { font-weight: 600; white-space: nowrap; }
+.chantier-sub { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chantier-body { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 10px; font-size: 12.5px; }
+.chantier-machines { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); }
+.chantier-label { color: var(--faint); }
+.chantier-machine { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.chantier-machine b { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+.chantier-note { margin: 0; color: var(--faint); }
+.chantier-units { list-style: none; margin: 0; padding: 0; }
+.cu { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
+  padding: 6px 0; border-top: 1px solid var(--line); }
+.cu:first-child { border-top: 0; }
+.cu-n { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cu-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cu-queued .cu-label, .cu-cancelled .cu-label { color: var(--muted); }
+.cu .pill { height: 20px; font-size: 11.5px; }
+.pill.copy { background: rgba(138, 217, 193, .14); color: var(--violet); }
+.cu-line { grid-column: 2 / -1; min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+.cu-line .icon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+.cu-copy { color: var(--violet); }
+.cu-beaten { color: var(--faint); }
+.cu-error { color: var(--err); font-family: var(--mono); font-size: 11.5px; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 @media (max-width: 760px) {
   /* Téléphone : l'état, la progression et les boutons passent sous le titre */
   details.fold.job > summary { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
@@ -577,6 +616,15 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
   .workers td.workers-name { flex: 1 1 auto; white-space: normal; }
   .workers td.workers-what { order: 1; flex: 1 1 100%; }
   .workers td.workers-none { display: none; }
+  .workers-places { margin-left: 0; }
+  /* Le chantier : son résumé passe sous son titre (comme les sections de la vue Réseau) ; un
+     fragment, son numéro, son nom et son état sur une ligne, ce qu'on en sait dessous, sur
+     toute la largeur */
+  details.chantier > summary { flex-wrap: wrap; row-gap: 2px; }
+  details.chantier > summary .chantier-sub { order: 1; flex: 1 1 100%; padding-left: 26px; white-space: normal; }
+  .chantier-body { padding: 8px 10px 10px; }
+  .cu { grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 8px; }
+  .cu-line { grid-column: 1 / -1; }
 }
 
 /* ------------------------------------------------------------------ machine */
@@ -699,6 +747,13 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .live-in { color: var(--cyan); }
 .live-trouble { color: var(--err); }
 .live-out { color: var(--violet); }
+/* Sous la liste : ce que cette machine fait avec le réseau public (le modèle, la durée) */
+.live-public { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--line); font-size: 13px; }
+.live-public h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-size: 13px;
+  font-weight: 600; color: var(--muted); }
+.live-public > div { display: flex; align-items: flex-start; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.live-public .icon { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 
 /* ------------------------------------------------------------------ réglages */
 .settings { display: flex; flex-direction: column; gap: 10px; }   /* même largeur que les autres vues (.page-inner) */

@@ -7,6 +7,12 @@ Chaque machine joint à ses nouvelles (ping toutes les 15 s, profil) l'état de 
 à mes machines, l'état du moment et sa raison (« en pause : sur batterie ») ; à un ami,
 seulement s'il est activé, car un ami ne voit pas l'activité de cette machine
 (sharing.FRIEND_PROFILE, placement.load_field).
+
+Le chantier en direct (essaim.md § 13, étape 7) y ajoute les doublons de fin de partie
+qu'une machine calcule pour moi (jobs/endgame.py), ses places et combien sont prises
+(network/places_seen.py), et ce que cette machine fait avec le réseau public (public_live) :
+les conversations qu'elle lui sert, celles qu'elle lui fait calculer, par leur modèle et
+leur durée seulement, jamais leur texte ni une clé.
 """
 import threading
 import time
@@ -15,7 +21,7 @@ from contextlib import contextmanager
 
 from aiodos import db, settings
 from aiodos.jobs.models import RUNNING
-from aiodos.network import peers, route, sharing
+from aiodos.network import peers, places_seen, public, public_lending, route, sharing
 
 _lock = threading.Lock()
 _heard = {}                  # machine -> {"sharing": …, "rtt_ms": …, "at": …}
@@ -54,6 +60,7 @@ def note(node_id: str, reply: dict, rtt_ms: float | None = None):
 def forget(node_id: str):
     with _lock:
         _heard.pop(node_id, None)
+    places_seen.forget(node_id)
 
 
 @contextmanager
@@ -90,6 +97,56 @@ def _helping_me() -> dict:
     return out
 
 
+def _doubling_for_me() -> dict:
+    """{machine: [{"title", "units"}]} : les doublons de fin de partie qu'elle calcule pour
+    moi en ce moment (jobs/endgame.py ; ceux d'ici n'ont pas de bail)."""
+    out = {}
+    for r in db.query("SELECT uc.node, j.title, COUNT(*) AS n FROM unit_copies uc "
+                      "JOIN units u ON u.id = uc.unit_id JOIN jobs j ON j.id = u.job_id "
+                      "WHERE u.status=? AND uc.lease_until IS NOT NULL "
+                      "GROUP BY uc.node, u.job_id ORDER BY n DESC", (RUNNING,)):
+        out.setdefault(r["node"], []).append({"title": r["title"], "units": r["n"]})
+    return out
+
+
+# ------------------------------------------------------------- réseau public
+def _asked_public() -> dict:
+    """{clé du prêteur: réponses en cours} : mes conversations qu'une machine du réseau
+    public calcule en ce moment, d'après le compte de placement (lu, jamais changé)."""
+    from aiodos.network import placement, public_chat     # à la demande : ils importent celui-ci
+    with placement._lock:
+        sent = dict(placement._sent)
+    prefix = public_chat.PREFIX
+    return {target[len(prefix):]: n for target, n in sent.items()
+            if isinstance(target, str) and target.startswith(prefix) and n > 0}
+
+
+def _lent_model(key, nodes) -> str | None:
+    """Le modèle de conversation de ce prêteur, s'il n'en prête qu'un d'après l'annuaire
+    (le compte de placement ne garde que sa clé) ; None si l'on ne peut pas le savoir."""
+    from aiodos.network import public_chat
+    node = next((n for n in nodes if n.get("key") == key), None)
+    models = [m for m in (node or {}).get("models") or []
+              if isinstance(m, str) and public_chat.converses(m)]
+    return models[0] if len(models) == 1 else None
+
+
+def public_live() -> dict:
+    """Ce que cette machine fait avec le réseau public en ce moment, pour « Machines
+    connectées » : « serving », les conversations qu'elle sert à des inconnus
+    (public_lending.serving : modèle, début) ; « asking », celles qu'elle leur fait
+    calculer (modèle quand on le sait, nombre). Jamais le texte, jamais une clé."""
+    asked = _asked_public()
+    nodes = public.seen()[1] if asked else []
+    asking = {}
+    for key, n in asked.items():
+        model = _lent_model(key, nodes)
+        asking[model] = asking.get(model, 0) + n
+    return {"serving": public_lending.serving(),
+            "asking": [{"model": model, "n": n} for model, n in
+                       sorted(asking.items(), key=lambda item: (item[0] is None, item[0] or ""))]}
+
+
 def _route(peer: dict) -> str | None:
     """Chemin vers une machine en ligne : réseau local, Internet en direct, ou par un relais."""
     if not peer.get("online"):
@@ -105,7 +162,7 @@ def _route(peer: dict) -> str | None:
 def annotate(paired: list, working: list | None):
     """Ajoute « live » à chaque machine appairée (après l'état Internet, qu'il utilise).
     `working` : les unités que cette machine calcule pour d'autres (Worker.snapshot)."""
-    helping = _helping_me()
+    helping, doubling = _helping_me(), _doubling_for_me()
     for_them = {}
     for item in working or []:
         for_them.setdefault(item.get("peer"), []).append(item.get("label") or "")
@@ -122,6 +179,8 @@ def annotate(paired: list, working: list | None):
             "internet_rtt_ms": inet.get("rtt_ms") if inet.get("connected") else None,
             "sharing": seen.get("sharing"),
             "for_me": helping.get(node_id, []),          # elle calcule pour moi
+            "copies_for_me": doubling.get(node_id, []),  # … et des doublons de fin de partie
+            "places": places_seen.get(node_id),          # ses places, dites en demandant du travail
             "for_it": for_them.get(node_id, []),         # je calcule pour elle
             "chats_for_me": chats_by.get(node_id, 0),    # mes conversations, par ses modèles
             "chats_for_it": chats_for.get(node_id, 0),   # les siennes, par mes modèles
