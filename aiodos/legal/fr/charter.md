@@ -1,6 +1,6 @@
 # Charte d'utilisation d'AIODOS
 
-*Version 2, 27 octobre 2026*
+*Version 3, 28 octobre 2026*
 
 AIODOS est un atelier d'intelligence artificielle libre. Il relie par Internet les machines
 de personnes qui ne se connaissent pas, pour mettre leur puissance en commun : celles des
@@ -10,8 +10,9 @@ d'utilisation.
 
 ## 1. L'esprit d'AIODOS
 
-- **Ton IA t'appartient.** Tes conversations, tes bibliothèques et tes créations restent sur
-  tes machines, sauf quand tu choisis de les confier à d'autres.
+- **Ton IA t'appartient.** Tes conversations, tes bibliothèques et tes créations sont
+  enregistrées sur tes machines. Quand une autre machine calcule pour toi, AIODOS n'y garde
+  rien, et tu peux toujours garder un travail chez toi (partie 3).
 - **Partager plutôt que consommer.** La puissance de calcul se met en commun. La réciprocité
   est souple : personne n'est bloqué, mais quand une machine est occupée, ceux qui lui ont le
   plus donné passent devant.
@@ -43,19 +44,40 @@ Seul ou avec d'autres machines, tu t'engages à ne pas te servir d'AIODOS pour :
 
 - **Prêter est un choix.** Dès la première ouverture, tes machines appairées calculent
   ensemble, ta carte graphique crée les images des amis que tu as ajoutés, et ta machine
-  rejoint l'annuaire du réseau public (elle y annonce sa version d'AIODOS et ses modèles ;
-  elle n'y calcule rien pour des inconnus). Tout se coupe à tout moment dans les Réglages et
-  la vue Réseau.
+  rejoint le réseau public : elle annonce dans son annuaire sa version d'AIODOS, ses modèles
+  et ce qu'elle peut prêter, et elle calcule les conversations d'inconnus (« Prêter ma
+  puissance aux conversations d'inconnus »). Elle le fait dans la limite de la « Puissance
+  prêtée » (60 % par défaut), jamais sur batterie (un téléphone, seulement en charge et en
+  Wi-Fi), et après tes propres travaux, tes machines et tes amis. Tout se coupe à tout moment
+  dans les Réglages et la vue Réseau.
 - **Ce qu'on te confie ne t'appartient pas.** Quand ta machine calcule pour quelqu'un, elle
   traite sa demande le temps du calcul, puis l'oublie. Tu t'engages à ne pas chercher à la
-  lire, à la copier ou à la garder, ni à modifier AIODOS pour le faire.
+  lire, à la copier ou à la garder, ni à découvrir qui la demande, ni à modifier AIODOS pour
+  le faire.
+- **Pour un inconnu, ta machine ne fait que calculer.** Elle ne garde rien, ni la
+  conversation ni qui la demande, et ne te la montre pas : tu ne choisis pas et tu ne vois
+  pas ce qu'elle calcule. Un inconnu pourrait donc lui demander un texte illicite : ta
+  machine ne ferait que faire tourner un modèle public dessus, sans rien en garder. Chacun
+  reste responsable de ce qu'il demande. Si cela ne te convient pas, coupe ce prêt dans les
+  Réglages.
 - **Des résultats honnêtes.** Tu t'engages à ne pas fausser les résultats que rend ta
   machine, à ne pas mentir sur ce qu'elle sait faire, et à ne pas contourner les limites et
-  les protections d'AIODOS.
-- **Ce que tu confies part chez d'autres.** Une demande calculée ailleurs (une question, la
-  description d'une image, des passages d'une bibliothèque) voyage chiffrée, mais la machine
-  qui calcule peut la lire. Ne confie pas ce que tu ne dirais pas à un inconnu : garde le
-  travail sensible sur tes machines, AIODOS le permet.
+  les protections d'AIODOS. Des contrôles au hasard comparent la réponse d'une machine du
+  réseau public à celle d'une autre machine : une machine qui triche est mise de côté.
+- **Ce que tu confies part chez d'autres.** Dès la première ouverture, tes conversations
+  peuvent être calculées par la machine d'un inconnu du réseau public (« Faire calculer mes
+  conversations par des inconnus »). Une demande calculée ailleurs (une question, le prompt
+  système, des passages d'une bibliothèque, la description d'une image) voyage chiffrée, mais
+  la machine qui calcule la lit. Un inconnu ne sait pas qui la lui demande (une clé jetable
+  par conversation, et la demande passe par un relais), mais ton texte lui-même peut révéler
+  qui tu es : un nom, une adresse dans ta question. Ne confie pas ce que tu ne dirais pas à
+  un inconnu : coupe ce réglage, ou active « Sur mes machines seulement » dans la
+  conversation.
+- **Rien de plus sans ton accord.** Deux choses attendent ton accord, demandé une fois et
+  modifiable dans les Réglages : faire répondre tes conversations par un modèle plus gros
+  d'une machine du réseau public, et envoyer à un inconnu les passages de tes documents (tes
+  bibliothèques, la mémoire de tes conversations). Tes pièces jointes, tes images et tes
+  fichiers ne partent jamais chez un inconnu.
 - **Recevoir sans jamais donner** n'est pas interdit, mais une machine qui ne fait que
   recevoir voit un rappel : installer un modèle, ou prêter sa puissance.
 

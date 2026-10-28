@@ -1,6 +1,6 @@
 # AIODOS Terms of Use
 
-*Version 2, October 27, 2026*
+*Version 3, October 28, 2026*
 
 ## 1. Purpose
 
@@ -31,9 +31,9 @@ Depending on your settings, AIODOS contacts services that do not belong to the p
 have their own terms:
 
 - **Internet relays** (by default, n0's public relays, or the one you choose) and
-  **directories** (n0's DNS, the Mainline DHT), to connect your machines and your friends'.
-  A relay only sees encrypted traffic, but it sees which machines talk to each other, from
-  which IP addresses, and how much;
+  **directories** (n0's DNS, the Mainline DHT), to connect your machines to those of your
+  friends and of the public network. A relay only sees encrypted traffic, but it sees which
+  machines talk to each other, from which IP addresses, and how much;
 - a **search engine** (DuckDuckGo) and the pages found, when web search is enabled and you
   approve a search;
 - the sites that **models and engines** come from (Hugging Face, Ollama…), only when you ask
@@ -41,16 +41,34 @@ have their own terms:
 
 ## 5. Sharing power
 
-- When you allow it, part of your requests is computed by other machines: yours, your
-  friends', those of the public network. They travel encrypted, but the machine that
-  computes them has to read them to process them. AIODOS is designed to keep nothing on the
-  machine that computes; the publisher cannot guarantee that another person's program has
-  not been modified.
+- Part of your requests can be computed by other machines: yours, your friends', those of
+  the public network. They travel encrypted, but the machine that computes them has to read
+  them to process them. AIODOS is designed to keep nothing on the machine that computes; the
+  publisher cannot guarantee that another person's program has not been modified.
 - From the first launch, and until you turn it off: your machine joins the public network's
-  directory (it announces its AIODOS version and the list of its models there, nothing
-  personal), your graphics card creates the images that the friends you have added ask of
-  it, and the applications on this machine can ask you for access to AIODOS (each one has to
-  be accepted by you).
+  directory (it announces its AIODOS version, the list of its models, whether it lends, its
+  free places and its speed there, nothing personal), your conversations can be computed by
+  strangers and your machine computes theirs (see below), your graphics card creates the
+  images that the friends you have added ask of it, and the applications on this machine can
+  ask you for access to AIODOS (each one has to be accepted by you).
+- **Your conversations on a stranger's machine** ("Have my conversations computed by
+  strangers"): a stranger's machine on the public network can compute your conversations.
+  It reads the conversation (your text, the system prompt), but doesn't know who is asking:
+  each conversation has its own throwaway key, and the request goes through a relay. AIODOS
+  keeps nothing there. Your text itself can still reveal who wrote it (a name, an address in
+  your question). To keep a conversation on your own machines, turn this setting off, or
+  turn on "On my machines only" in that conversation. Having a larger model on a public
+  network machine answer, or sending a stranger the passages of your documents (your
+  libraries, the memory of your conversations), waits for your consent, asked once and
+  changeable in Settings. Your attachments, images and files never go to a stranger.
+- **Strangers' conversations on your machine** ("Lend my computing power to strangers'
+  conversations"): your machine computes them within the limit of the "Power lent" (60% by
+  default), never on battery, a phone only while charging and on Wi-Fi, and after your own
+  work, your machines and your friends. It keeps nothing, neither the conversation nor who
+  is asking, and does not show it to you: you don't choose and you don't see what it
+  computes. A stranger could therefore ask it for an illegal text: your machine would only
+  run a public model on it, without keeping any of it. Everyone remains responsible for
+  what they ask (part 6). If this doesn't suit you, turn this lending off in Settings.
 - Lending your power uses your processor, graphics card, memory, battery and connection:
   electricity, data, heat, wear. AIODOS keeps this lending gentle (low priority, not on
   battery, phone only while charging) and you can stop it at any time in Settings.
@@ -61,8 +79,12 @@ have their own terms:
 - The answers, images and videos of the models can be false, incomplete, biased or
   shocking. They do not replace the advice of a professional (doctor, lawyer, financial
   adviser…): check before relying on them.
-- You alone are responsible for what you ask, what you create and what you do with it,
-  including sharing it.
+- An answer computed by a stranger's machine can be false, by mistake or because that
+  machine cheats. It is marked "public network" in the conversation; random checks compare
+  it with that of another machine, and a machine that cheats is set aside. These checks only
+  cover some of the answers.
+- You alone are responsible for what you ask, including of other people's machines, what you
+  create and what you do with it, including sharing it.
 - The publisher claims no rights to what you create with AIODOS. The rights to a creation
   depend on the applicable law and on the license of the model used.
 

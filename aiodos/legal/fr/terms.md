@@ -1,6 +1,6 @@
 # Conditions d'utilisation d'AIODOS
 
-*Version 2, 27 octobre 2026*
+*Version 3, 28 octobre 2026*
 
 ## 1. Objet
 
@@ -31,9 +31,9 @@ Selon tes réglages, AIODOS contacte des services qui n'appartiennent pas à l'�
 ont leurs propres conditions :
 
 - des **relais Internet** (par défaut, les relais publics de n0, ou celui que tu choisis) et
-  des **annuaires** (DNS de n0, DHT Mainline), pour relier tes machines et celles de tes amis.
-  Un relais ne voit qu'un trafic chiffré, mais il voit quelles machines se parlent, depuis
-  quelles adresses IP, et combien ;
+  des **annuaires** (DNS de n0, DHT Mainline), pour relier tes machines à celles de tes amis
+  et du réseau public. Un relais ne voit qu'un trafic chiffré, mais il voit quelles machines
+  se parlent, depuis quelles adresses IP, et combien ;
 - un **moteur de recherche** (DuckDuckGo) et les pages trouvées, quand la recherche web est
   activée et que tu valides une recherche ;
 - les sites d'où viennent les **modèles et les moteurs** (Hugging Face, Ollama…), seulement
@@ -41,16 +41,38 @@ ont leurs propres conditions :
 
 ## 5. Le partage de puissance
 
-- Quand tu l'autorises, une partie de tes demandes est calculée par d'autres machines : les
-  tiennes, celles de tes amis, celles du réseau public. Elles voyagent chiffrées, mais la
-  machine qui calcule doit les lire pour les traiter. AIODOS est conçu pour ne rien garder
-  chez celle qui calcule ; l'éditeur ne peut pas garantir que le programme d'une autre
-  personne n'a pas été modifié.
+- Une partie de tes demandes peut être calculée par d'autres machines : les tiennes, celles
+  de tes amis, celles du réseau public. Elles voyagent chiffrées, mais la machine qui calcule
+  doit les lire pour les traiter. AIODOS est conçu pour ne rien garder chez celle qui
+  calcule ; l'éditeur ne peut pas garantir que le programme d'une autre personne n'a pas été
+  modifié.
 - Dès la première ouverture, et jusqu'à ce que tu le coupes : ta machine rejoint l'annuaire
-  du réseau public (elle y annonce sa version d'AIODOS et la liste de ses modèles, rien de
-  personnel), ta carte graphique crée les images que lui demandent les amis que tu as
-  ajoutés, et les applications de cette machine peuvent te demander l'accès à AIODOS
-  (chacune doit être acceptée par toi).
+  du réseau public (elle y annonce sa version d'AIODOS, la liste de ses modèles, si elle
+  prête, ses places libres et sa vitesse, rien de personnel), tes conversations peuvent être
+  calculées par des inconnus et ta machine calcule les leurs (voir ci-dessous), ta carte
+  graphique crée les images que lui demandent les amis que tu as ajoutés, et les
+  applications de cette machine peuvent te demander l'accès à AIODOS (chacune doit être
+  acceptée par toi).
+- **Tes conversations chez un inconnu** (« Faire calculer mes conversations par des
+  inconnus ») : la machine d'un inconnu du réseau public peut calculer tes conversations.
+  Elle lit la conversation (ton texte, le prompt système), mais ne sait pas qui la demande :
+  chaque conversation a sa clé jetable, et la demande passe par un relais. AIODOS n'y garde
+  rien. Ton texte lui-même peut pourtant révéler qui l'écrit (un nom, une adresse dans ta
+  question). Pour garder une conversation chez toi, coupe ce réglage, ou active « Sur mes
+  machines seulement » dans cette conversation. Faire répondre un modèle plus gros d'une
+  machine du réseau public, ou envoyer à un inconnu les passages de tes documents (tes
+  bibliothèques, la mémoire de tes conversations), attend ton accord, demandé une fois et
+  modifiable dans les Réglages. Tes pièces jointes, tes images et tes fichiers ne partent
+  jamais chez un inconnu.
+- **Les conversations d'inconnus sur ta machine** (« Prêter ma puissance aux conversations
+  d'inconnus ») : ta machine les calcule dans la limite de la « Puissance prêtée » (60 % par
+  défaut), jamais sur batterie, un téléphone seulement en charge et en Wi-Fi, et après tes
+  propres travaux, tes machines et tes amis. Elle ne garde rien, ni la conversation ni qui
+  la demande, et ne te la montre pas : tu ne choisis pas et tu ne vois pas ce qu'elle
+  calcule. Un inconnu pourrait donc lui demander un texte illicite : ta machine ne ferait
+  que faire tourner un modèle public dessus, sans rien en garder. Chacun reste responsable
+  de ce qu'il demande (partie 6). Si cela ne te convient pas, coupe ce prêt dans les
+  Réglages.
 - Prêter ta puissance utilise ton processeur, ta carte graphique, ta mémoire, ta batterie et
   ta connexion : de l'électricité, des données, de la chaleur, de l'usure. AIODOS ménage ce
   prêt (priorité basse, pas sur batterie, téléphone seulement en charge) et tu peux l'arrêter
@@ -63,8 +85,12 @@ ont leurs propres conditions :
 - Les réponses, les images et les vidéos des modèles peuvent être fausses, incomplètes,
   biaisées ou choquantes. Elles ne remplacent pas l'avis d'un professionnel (médecin, avocat,
   conseiller financier…) : vérifie avant de t'y fier.
-- Tu es seul responsable de ce que tu demandes, de ce que tu crées et de ce que tu en fais,
-  notamment de sa diffusion.
+- Une réponse calculée par la machine d'un inconnu peut être fausse, par erreur ou parce que
+  cette machine triche. Elle est marquée « réseau public » dans la conversation ; des
+  contrôles au hasard la comparent à celle d'une autre machine, et une machine qui triche
+  est mise de côté. Ces contrôles ne portent que sur une partie des réponses.
+- Tu es seul responsable de ce que tu demandes, y compris aux machines des autres, de ce que
+  tu crées et de ce que tu en fais, notamment de sa diffusion.
 - L'éditeur ne revendique aucun droit sur ce que tu crées avec AIODOS. Les droits sur une
   création dépendent de la loi qui s'applique et de la licence du modèle utilisé.
 
