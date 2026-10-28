@@ -282,12 +282,55 @@ Ce que cela dit :
 Objectif de la prochaine mesure : à longueur égale, l'essaim plus rapide qu'une réponse
 d'un trait, le premier mot en moins de 3 s, et le juge sans préférence nette.
 
-Codé dans le banc d'essai (`--methode flux`, mesure prévue le 28/10 au matin), avec une
+Codé dans le banc d'essai (`--methode flux`, mesuré le 28/10 au matin, ci-dessous), avec une
 variante du point 2 : plutôt que d'attendre la fin du plan, **une ouverture part à
 l'instant zéro** chez une autre machine (l'essentiel de la réponse en quelques phrases,
 sans chiffres précis pour ne contredire aucune partie), pendant que le plan s'écrit ;
 chaque partie part dès que sa ligne est écrite. Le premier mot affiché est celui de
 l'ouverture.
+
+### Deuxième mesure : le plan en flux (28/10/2026)
+
+Mêmes 12 longues questions et 3 courtes, même modèle et même carte (llama-server à 9 places
+de 6 144 jetons). Deux essais d'abord abandonnés : sans contrainte, le modèle écrivait des
+lignes de 300 caractères, oubliait le nombre de mots ou rédigeait la partie 1 au milieu du
+plan (600 jetons, jusqu'à 81 s), et deux plans sur sept étaient illisibles. D'où une
+**grammaire** (GBNF de llama.cpp) qui impose la forme du plan (FIL, FAITS, 3 à 6 parties,
+lignes bornées, `PLAN_GRAMMAR` dans le banc) : 230 jetons, 13 s seul, toujours lisible.
+
+**Réserve** : pendant cette mesure, des agents compilaient le compagnon et passaient la
+suite d'essais sur le même PC ; certaines réponses d'un trait ont pris plus de 300 s au lieu
+d'une centaine. Les temps sont donc bruités ; les vitesses médianes, moins.
+
+| | D'un trait | En flux |
+|---|---|---|
+| Premier mot affiché (médiane) | 0,9 s | **1,1 s** (27 s hier) |
+| Longueur de la réponse (médiane) | 1 658 jetons | 1 381 jetons (de 622 à 2 850) |
+| Vitesse à longueur égale (jetons/s, médiane) | 14,2 | **16,8** (+18 %) |
+| Plan (médiane, écrit en même temps que les parties) | — | 40 s |
+| Juge à l'aveugle | préférée 11 fois sur 12 | 1 égalité ; « égal » dans un des deux ordres pour 11 |
+| 3 questions courtes | — | 0,04 à 0,26 fois la vitesse d'un trait |
+
+Ce que cela dit :
+
+- **Le premier mot n'est plus un problème** : l'ouverture qui part à l'instant zéro le
+  donne aussi vite qu'une réponse d'un trait.
+- **Sur une seule carte, le gain plafonne** : huit « machines » qui se partagent une carte
+  ne vont pas plus vite qu'elle (+18 %, le gain du calcul par lots). Le vrai gain de
+  l'essaim, chaque partie à pleine vitesse sur sa propre machine, **ne se mesure qu'avec
+  plusieurs machines** : à faire entre le PC, le téléphone et des machines d'amis, quand
+  les conversations du réseau public tourneront.
+- **La qualité reste un peu en dessous** : le juge préfère encore la réponse d'un trait,
+  de peu. La longueur des parties n'est pas tenue (de 622 à 2 850 jetons) : le plan donne
+  un nombre de mots, les parties ne le suivent pas.
+- **Les questions courtes vont d'un trait** à la machine la plus rapide (§ 5.1) : l'essaim
+  y est 4 à 25 fois plus lent.
+
+**Décision appliquée** (règle de l'auteur du 27/10 : l'essaim s'active tout seul *si la
+mesure montre un gain*) : le gain n'est pas net, l'écriture en essaim d'une longue réponse
+**n'est pas activée** dans AIODOS pour l'instant. Ce qui ne dépend pas de cette mesure se
+fait : une question simple à la machine la plus rapide qui a une place libre (§ 5.1), et
+plusieurs questions réparties (§ 5.2). À remesurer sur plusieurs vraies machines.
 
 ## 13. Étapes proposées
 
@@ -315,7 +358,8 @@ l'ouverture.
 - **Ouvert** : à partir de quelle longueur de réponse l'essaim s'active-t-il ? L'auteur n'a
   pas d'avis : la mesure (§ 12) tranchera, et le chef de chantier peut aussi décider
   demande par demande (estimer la longueur dans le plan, et répondre d'un trait sous le
-  seuil).
+  seuil). *28/10 : la deuxième mesure ne montre pas de gain net sur une seule carte ;
+  l'écriture en essaim n'est pas activée, à remesurer sur plusieurs vraies machines.*
 
 ## Sources
 

@@ -30,6 +30,7 @@ import argparse
 import json
 import re
 import statistics
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -94,15 +95,31 @@ FLOW_SYSTEM = (
     "Tu prépares une réponse rédigée par plusieurs auteurs en même temps, chacun écrivant "
     "une partie sans voir les autres ; une ouverture de quelques phrases est déjà en cours "
     "d'écriture. Écris seulement le plan de la suite, en texte, exactement dans ce format :\n"
-    "FIL : l'idée directrice, en une phrase\n"
-    "TERMES : les noms à employer partout, séparés par des points-virgules\n"
-    "FAITS : les chiffres, dates et recommandations communs, séparés par des "
-    "points-virgules\n"
-    "1. titre | ce que couvre cette partie, et seulement elle | nombre de mots\n"
+    "FIL : l'idée directrice, 12 mots au plus\n"
+    "FAITS : les chiffres et dates que toutes les parties doivent partager, séparés par "
+    "des points-virgules, 15 mots au plus\n"
+    "1. titre de 5 mots au plus | ce que couvre cette partie et seulement elle, 10 mots au "
+    "plus | nombre de mots de la partie\n"
     "2. …\n"
-    "Entre 3 et 8 parties, dans l'ordre de lecture, sans introduction (l'ouverture la "
-    "fait). Une réponse complète compte 1 000 à 1 300 mots en tout : répartis-les entre les "
-    "parties. Une ligne par élément, très courte ; rien d'autre.")
+    "Entre 3 et 6 parties, autant que la question en demande, dans l'ordre de lecture, "
+    "sans introduction (l'ouverture la fait). Une réponse complète compte 1 000 à 1 300 "
+    "mots en tout : répartis-les entre les parties. Rien d'autre, et ne rédige aucune "
+    "partie.")
+
+# La forme du plan en flux, imposée au modèle (grammaire GBNF de llama.cpp) : sans elle, le
+# 28/10, qwen3.5:9b écrivait des lignes de 300 caractères, oubliait le nombre de mots, ou se
+# mettait à rédiger la partie 1 au milieu du plan, jusqu'à 600 jetons (30 s seul, 80 s en
+# partageant la carte). Les longueurs bornées font un plan de 300 jetons au plus.
+# Deuxième essai du 28/10 : avec TERMES et des lignes jusqu'à 100 caractères, le modèle
+# remplissait toujours 8 parties et butait sur les bornes (lignes coupées au milieu d'un mot),
+# 400 jetons. D'où : pas de TERMES, 3 à 6 parties, et les bornes dites dans la consigne.
+PLAN_GRAMMAR = r'''root ::= "FIL : " fil "\nFAITS : " facts "\n" part{3,6}
+fil ::= [^\n|]{10,90}
+facts ::= [^\n|]{3,110}
+part ::= [1-6] ". " title " | " what " | " [1-9] [0-9] [0-9]? "\n"
+title ::= [^\n|]{3,45}
+what ::= [^\n|]{10,80}
+'''
 
 # Les lignes du plan en flux, lues pendant qu'il s'écrit (« **1.** », « - FIL : » passent)
 FIELD_LINE = re.compile(r"^\W*(FIL|TERMES|FAITS)\W*:\s*(.+)$", re.IGNORECASE)
@@ -143,10 +160,11 @@ PLAN_SCHEMA = {
 }
 
 
-def ask(url, system, user, max_tokens, schema=None, temperature=0.7, on_text=None) -> dict:
+def ask(url, system, user, max_tokens, schema=None, temperature=0.7, on_text=None,
+        grammar=None) -> dict:
     """Une demande en flux : texte, jetons écrits, temps jusqu'au premier mot et en tout.
 
-    on_text reçoit chaque morceau de texte dès qu'il arrive."""
+    on_text reçoit chaque morceau de texte dès qu'il arrive ; grammar : la forme imposée."""
     body = {"messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
             "stream": True, "stream_options": {"include_usage": True},
@@ -155,6 +173,8 @@ def ask(url, system, user, max_tokens, schema=None, temperature=0.7, on_text=Non
     if schema is not None:
         body["response_format"] = {"type": "json_schema",
                                    "json_schema": {"name": "plan", "schema": schema}}
+    if grammar is not None:
+        body["grammar"] = grammar
     began = time.monotonic()
     first, text, tokens = None, [], 0
     with requests.post(url + "/v1/chat/completions", json=body, stream=True, timeout=600,
@@ -256,7 +276,8 @@ def flow(url, question, workers) -> dict:
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         opening = pool.submit(ask, url, OPEN_SYSTEM, question, 300)
-        planned = ask(url, FLOW_SYSTEM, question, max_tokens=600, temperature=0.3, on_text=read)
+        planned = ask(url, FLOW_SYSTEM, question, max_tokens=600, temperature=0.3, on_text=read,
+                      grammar=PLAN_GRAMMAR)
         line(pending[0])
         plan_seconds = time.monotonic() - began
         opened = opening.result()
@@ -281,7 +302,10 @@ METHODS = {"flux": flow, "contrat": swarm}
 
 def judge(url, question, a, b) -> str:
     user = f"Question : {question}\n\n=== Réponse A ===\n{a}\n\n=== Réponse B ===\n{b}"
-    verdict = ask(url, JUDGE_SYSTEM, user, max_tokens=3, temperature=0.0)["text"].strip()
+    try:
+        verdict = ask(url, JUDGE_SYSTEM, user, max_tokens=3, temperature=0.0)["text"].strip()
+    except requests.HTTPError:          # deux réponses trop longues pour une place : noté
+        return "?"
     return verdict[:1] if verdict[:1] in ("A", "B", "=") else "?"
 
 
@@ -321,6 +345,8 @@ def main():
     parser.add_argument("--methode", choices=sorted(METHODS), default="flux",
                         help="façon d'écrire en essaim")
     args = parser.parse_args()
+    # Sortie redirigée vers un fichier sous Windows : cp1252, qui n'a pas « → »
+    sys.stdout.reconfigure(encoding="utf-8")
     url = args.url.rstrip("/")
     results = [r for q in (SHORT if args.court else QUESTIONS + SHORT)
                if (r := run(url, q, args.machines, METHODS[args.methode])) is not None]
