@@ -52,7 +52,7 @@
   "rename_label": "Nouveau titre :",
   "answer_running": "Une réponse est en cours : arrête-la (Échap) avant de changer de conversation.",
   "welcome_title": "Que fait-on aujourd'hui ?",
-  "welcome_text": "Tout tourne sur tes machines. Le web ne sert qu'avec ton accord.",
+  "welcome_text": "Tes machines et celles du réseau public calculent ensemble. Le web ne sert qu'avec ton accord.",
   "edit_message": "Modifier ce message",
   "copy_answer": "Copier la réponse",
   "regenerate": "Régénérer la réponse (avec le modèle choisi)",

@@ -49,7 +49,7 @@
   "rename_label": "New title:",
   "answer_running": "An answer is in progress: stop it (Esc) before switching conversations.",
   "welcome_title": "What shall we do today?",
-  "welcome_text": "Everything runs on your machines. The web is only used with your consent.",
+  "welcome_text": "Your machines and those of the public network compute together. The web is only used with your consent.",
   "edit_message": "Edit this message",
   "copy_answer": "Copy the answer",
   "regenerate": "Regenerate the answer (with the chosen model)",
