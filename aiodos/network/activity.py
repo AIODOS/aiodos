@@ -21,7 +21,7 @@ from contextlib import contextmanager
 
 from aiodos import db, settings
 from aiodos.jobs.models import RUNNING
-from aiodos.network import peers, places_seen, public, public_lending, route, sharing
+from aiodos.network import peers, places_seen, public_lending, route, sharing
 
 _lock = threading.Lock()
 _heard = {}                  # machine -> {"sharing": …, "rtt_ms": …, "at": …}
@@ -111,40 +111,28 @@ def _doubling_for_me() -> dict:
 
 # ------------------------------------------------------------- réseau public
 def _asked_public() -> dict:
-    """{clé du prêteur: réponses en cours} : mes conversations qu'une machine du réseau
-    public calcule en ce moment, d'après le compte de placement (lu, jamais changé)."""
+    """{modèle : réponses en cours} : mes conversations qu'une machine du réseau public
+    calcule en ce moment, d'après le compte de placement (placement.sending : le modèle exact
+    de chaque envoi, même chez un prêteur qui en annonce plusieurs ; lu, jamais changé)."""
     from aiodos.network import placement, public_chat     # à la demande : ils importent celui-ci
-    with placement._lock:
-        sent = dict(placement._sent)
-    prefix = public_chat.PREFIX
-    return {target[len(prefix):]: n for target, n in sent.items()
-            if isinstance(target, str) and target.startswith(prefix) and n > 0}
-
-
-def _lent_model(key, nodes) -> str | None:
-    """Le modèle de conversation de ce prêteur, s'il n'en prête qu'un d'après l'annuaire
-    (le compte de placement ne garde que sa clé) ; None si l'on ne peut pas le savoir."""
-    from aiodos.network import public_chat
-    node = next((n for n in nodes if n.get("key") == key), None)
-    models = [m for m in (node or {}).get("models") or []
-              if isinstance(m, str) and public_chat.converses(m)]
-    return models[0] if len(models) == 1 else None
+    asking = {}
+    for target, models in placement.sending().items():
+        if not (isinstance(target, str) and target.startswith(public_chat.PREFIX)):
+            continue
+        for model, n in models.items():
+            parsed = public_chat.parse(model)
+            if parsed is not None and n > 0:
+                asking[parsed[1]] = asking.get(parsed[1], 0) + n
+    return asking
 
 
 def public_live() -> dict:
     """Ce que cette machine fait avec le réseau public en ce moment, pour « Machines
     connectées » : « serving », les conversations qu'elle sert à des inconnus
     (public_lending.serving : modèle, début) ; « asking », celles qu'elle leur fait
-    calculer (modèle quand on le sait, nombre). Jamais le texte, jamais une clé."""
-    asked = _asked_public()
-    nodes = public.seen()[1] if asked else []
-    asking = {}
-    for key, n in asked.items():
-        model = _lent_model(key, nodes)
-        asking[model] = asking.get(model, 0) + n
+    calculer (modèle, nombre). Jamais le texte, jamais une clé."""
     return {"serving": public_lending.serving(),
-            "asking": [{"model": model, "n": n} for model, n in
-                       sorted(asking.items(), key=lambda item: (item[0] is None, item[0] or ""))]}
+            "asking": [{"model": model, "n": n} for model, n in sorted(_asked_public().items())]}
 
 
 def _route(peer: dict) -> str | None:

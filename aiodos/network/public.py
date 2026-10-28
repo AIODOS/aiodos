@@ -15,7 +15,14 @@ le réglage lend_public, et le partage actif, cf. public_lending.lending_now), s
 conversation peut y être prise maintenant (« free » : 1 ou 0) et, si elle est connue, sa
 vitesse (« tps », jetons par seconde, node/speed.py). Le compagnon les publie signés. Les
 nœuds vus sont gardés typés (_node), « free » et « tps » compris : le côté demandeur y
-choisit ses machines (seen, network/placement.py).
+choisit ses machines (seen, network/placement.py). Une conversation publique qui commence ou
+finit chez moi redit le profil sans attendre la synchronisation suivante (Public.push).
+
+La première minute (essai réel du 28/10/2026) : tant que le réseau public n'est pas rejoint,
+ou rejoint sans qu'aucun nœud n'ait encore été vu, et depuis moins de SEARCH_S secondes (le
+démarrage, ou l'arrivée sur le réseau), on cherche encore (searching) : l'interface d'une
+machine sans modèle dit « Recherche des machines du réseau public… » plutôt qu'« aucune ne
+peut répondre » (chat/public_consent.py, entry).
 """
 import asyncio
 import json
@@ -43,6 +50,9 @@ MAX_FREE = 255                # places libres dites, au plus (comme le compagnon
 # prêteur redevenu libre est vu plus tôt (essai réel du 28/10/2026)
 FRESH_S = 3
 FRESH_TIMEOUT = 2             # le compagnon est sur 127.0.0.1
+# Recherche des machines du réseau public : les profils partent chaque minute (et dans les
+# 5 s quand ils changent), plus la recherche de voisins par la DHT
+SEARCH_S = 90
 
 
 def _models() -> list:
@@ -85,16 +95,20 @@ def _typed(status) -> dict:
     return dict(status, nodes=[n for n in map(_node, nodes[:MAX_KEPT]) if n is not None])
 
 
-# Le dernier état lu, pour le choix des machines (placement.py), qui n'a pas le gestionnaire
+# Le dernier état lu, pour le choix des machines (placement.py), qui n'a pas le gestionnaire ;
+# « since » : depuis quand on cherche (le démarrage, puis l'arrivée sur le réseau), « found » :
+# un nœud a été vu depuis (searching)
 _lock = threading.Lock()
-_latest = {"key": None, "nodes": [], "at": 0.0}
+_latest = {"key": None, "nodes": [], "at": 0.0, "since": time.monotonic(), "found": False}
 
 
 def _remember(status):
     with _lock:
         status = status if isinstance(status, dict) and status.get("enabled") else {}
-        _latest.update(key=status.get("key"), nodes=list(status.get("nodes") or []),
-                       at=time.monotonic())
+        key, nodes, now = status.get("key"), list(status.get("nodes") or []), time.monotonic()
+        if key is not None and _latest["key"] is None:      # le réseau (re)joint : on cherche
+            _latest.update(since=now, found=False)
+        _latest.update(key=key, nodes=nodes, at=now, found=_latest["found"] or bool(nodes))
 
 
 def _refresh():
@@ -130,9 +144,18 @@ def seen(fresh: bool = False) -> tuple:
     return key, [dict(node, seen_s=node["seen_s"] + age) for node in nodes]
 
 
+def searching() -> bool:
+    """Cherche-t-on encore les machines du réseau public ? Aucun nœud vu depuis le démarrage
+    ou l'arrivée sur le réseau, il y a moins de SEARCH_S secondes (cf. le début du module)."""
+    with _lock:
+        return not _latest["found"] and time.monotonic() - _latest["since"] < SEARCH_S
+
+
 def forget():
-    """Rien de vu (essais)."""
+    """Rien de vu, et la première minute passée (essais)."""
     _remember(None)
+    with _lock:
+        _latest.update(since=float("-inf"), found=False)
 
 
 class Public:
@@ -141,6 +164,31 @@ class Public:
         self._status = None        # dernier état du réseau public lu au compagnon
         self._sent = None          # (lancement du compagnon, demande envoyée)
         self._error = None
+        self._syncing = asyncio.Lock()     # une synchronisation à la fois (push, la boucle)
+        self._pushed = threading.Event()   # une poussée attend déjà son tour : pas deux
+
+    def push(self) -> bool:
+        """Le profil redit au compagnon sans attendre la synchronisation suivante (une
+        conversation publique commence ou finit ici, public_lending._announce) : planifiée sur
+        la boucle du gestionnaire, sans attendre ; une seule à la fois en attente. → vrai si
+        elle est partie."""
+        loop = getattr(self.m, "_loop", None)
+        if loop is None or loop.is_closed() or self._pushed.is_set():
+            return False
+        self._pushed.set()
+        try:
+            asyncio.run_coroutine_threadsafe(self._push(), loop)
+        except RuntimeError:               # la boucle s'arrête
+            self._pushed.clear()
+            return False
+        return True
+
+    async def _push(self):
+        self._pushed.clear()               # la suivante lira l'état d'après celle-ci
+        try:
+            await self.sync()
+        except Exception:  # noqa: BLE001 — la boucle de synchronisation redira tout
+            log.debug("Profil public : envoi anticipé en échec", exc_info=True)  # i18n: tel quel
 
     @property
     def wanted(self) -> bool:
@@ -154,7 +202,12 @@ class Public:
 
     async def sync(self):
         """Dit au compagnon de rejoindre ou de quitter le réseau public (quand la demande
-        change, et après chaque relance du compagnon), puis relit son état."""
+        change, et après chaque relance du compagnon), puis relit son état. Une à la fois :
+        la boucle du gestionnaire, la vue Réseau et les poussées (push) ne se croisent pas."""
+        async with self._syncing:
+            await self._sync()
+
+    async def _sync(self):
         companion = self.m.internet.companion
         if companion is None or not companion.running:
             self._status, self._sent = None, None

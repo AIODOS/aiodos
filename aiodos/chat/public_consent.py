@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from aiodos import settings
 from aiodos.chat import attachments, pipeline
 from aiodos.i18n import t
-from aiodos.network import placement, public_chat
+from aiodos.network import placement, public, public_chat
 
 BIGGER = "public_bigger"         # genres des cartes et de la note (événement « notice »)
 DOCUMENTS = "public_documents"
@@ -108,14 +108,17 @@ def entry() -> dict | None:
     ni cette machine ni mes machines n'ont de modèle de conversation ; None si mes
     conversations ne partent jamais chez un inconnu (use_public, public_network). ready : une
     machine du réseau public peut répondre en ce moment ; models : les meilleurs modèles
-    qu'elles donneraient, le premier d'abord. « Sur mes machines seulement », propre à chaque
+    qu'elles donneraient, le premier d'abord ; searching : aucune encore, mais on les cherche
+    (la première minute, public.searching) : l'interface dit « Recherche des machines du
+    réseau public… » et relit bientôt. « Sur mes machines seulement », propre à chaque
     conversation, est regardé par l'interface (et refusé ici, refusal)."""
     if closed(None, False) is not None:
         return None
     best = placement.best_public()
     names = list(dict.fromkeys(public_chat.parse(c.model)[1] for c in best))
     return {"id": placement.PUBLIC_BEST, "label": t("placement.public_auto"),
-            "group": "public", "ready": bool(best), "models": names}
+            "group": "public", "ready": bool(best), "models": names,
+            "searching": not best and public.searching()}
 
 
 def first_time() -> bool:

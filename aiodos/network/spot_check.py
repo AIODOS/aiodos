@@ -357,7 +357,7 @@ def _ask(ask, candidates, request, used: list):
 
 
 def _note(key, ok, verdict, role="prêteur"):        # i18n: tel quel (journal)
-    reputation.note_check(key, ok)
+    reputation.note_check(key, ok, verdict.reason)
     # i18n: tel quel (journal) ; des nombres seulement
     log.info("Contrôle du réseau public : %s %s %s (%s, %s)", role, reputation.short(key),
              "réussi" if ok else "raté", verdict.reason, verdict.measures)

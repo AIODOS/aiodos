@@ -53,9 +53,12 @@ def data_dir(tmp_path, monkeypatch):
     from aiodos.node import speed
     speed.forget()
     public_lending.forget()
-    # Côté demandeur : nœuds publics vus, identifiants des conversations (public_chat.tag)
+    # Côté demandeur : nœuds publics vus, identifiants des conversations (public_chat.tag),
+    # contrôles au hasard en cours (spot_check)
+    from aiodos.network import spot_check
     public.forget()
     public_chat.forget()
+    spot_check.forget()
     # Applications (gateway/) : clés en cache, demandes d'accès, limites
     from aiodos.gateway import access_flow, apps, limits, open_page
     apps.forget_all()

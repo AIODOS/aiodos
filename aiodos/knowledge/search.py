@@ -127,6 +127,19 @@ def search(vector, k=4, libraries=True, conversations=False, exclude_conversatio
     return hits
 
 
+def searchable(libraries=True, conversations=False, only=None) -> bool:
+    """Y a-t-il au moins un passage avec un vecteur dans les sources autorisées (cf.
+    allowed_collections) ? Sinon, rien à trouver : la question n'a pas à passer par le
+    modèle d'embedding (une machine neuve, sans modèle, n'a rien d'indexé)."""
+    ids = [cid for cid, _name in allowed_collections(libraries, conversations, only)]
+    if not ids:
+        return False
+    marks = ",".join("?" * len(ids))
+    return db.query_one(f"SELECT 1 FROM chunks k JOIN entries e ON e.id = k.entry_id "
+                        f"WHERE e.collection_id IN ({marks}) AND length(k.embedding) > 0 "
+                        f"LIMIT 1", tuple(ids)) is not None
+
+
 def search_in(vector, k, collection_ids, exclude=None) -> list:
     """Les k passages les plus proches, dans ces bibliothèques seulement, sans ceux
     qu'écarte exclude(collection_id) (cf. _ranked). Chaque passage dit d'où il vient

@@ -28,6 +28,8 @@ let opening = 0;           // ouvertures de conversation : seule la dernière s'
 let installing = null;     // installation d'un modèle en cours (avancement)
 let filledMine = null;     // « Sur mes machines seulement » quand le choix du modèle a été fait
 let publicSettings = null; // réglages du réseau public au dernier chargement des réglages
+let searchAgain = null;    // la première minute : les modèles relus tant qu'on cherche le réseau public
+const SEARCH_AGAIN_MS = 5000;
 
 export function mountChat(container) {
   mountSidebar(container);
@@ -185,7 +187,11 @@ function fillModels() {
   }
   selectModel(wanted);
   // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un ;
-  // le réseau public, s'il peut répondre, ou qu'aucune de ses machines ne le peut pour l'instant
+  // le réseau public, s'il peut répondre, qu'on cherche encore ses machines (la première
+  // minute : relu dans quelques secondes), ou qu'aucune ne le peut pour l'instant
+  const searching = !!(open && !open.ready && open.searching);
+  clearTimeout(searchAgain);
+  if (searching) searchAgain = setTimeout(() => emit('models:reload'), SEARCH_AGAIN_MS);
   const phone = isPhone();
   const none = open ? (phone ? 'chat.no_public_phone' : 'chat.no_public_pc')
     : integrated() ? (phone ? 'chat.no_model_phone' : 'chat.no_model_pc')
@@ -196,6 +202,9 @@ function fillModels() {
     <button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install_here'))}</button></div>` : open?.ready ? `
     <div class="banner info wrap">${icon('globe')}<div class="banner-text">${esc(t(phone
       ? 'chat.no_model_public_phone' : 'chat.no_model_public_pc'))}</div>
+    <div class="banner-actions"><button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install'))}</button></div></div>` : searching ? `
+    <div class="banner info wrap">${icon('globe')}<div class="banner-text">${esc(t(phone
+      ? 'chat.no_model_searching_phone' : 'chat.no_model_searching_pc'))}</div>
     <div class="banner-actions"><button class="btn sm" data-install>${icon('plus')}${esc(t('chat.install'))}</button></div></div>` : `
     <div class="banner warn wrap">${icon('warn')}<div class="banner-text">${esc(t(none))}</div>
     <div class="banner-actions"><button class="btn sm primary" data-install>${icon('plus')}${esc(t('chat.install'))}</button>
@@ -214,7 +223,10 @@ function selectModel(id) {
   const here = entries.find(e => e.machines.some(m => m.local))?.name;
   const usable = values.filter(Boolean);
   if (!values.includes(value) && !here && !usable.length) {
-    if (!values.includes('')) el.model.prepend(new Option(t('chat.no_model_ready'), ''));
+    // Sans modèle, la première minute : on cherche encore les machines du réseau public
+    const open = publicChoice(filledMine);
+    const empty = open && !open.ready && open.searching ? 'chat.public_searching' : 'chat.no_model_ready';
+    if (!values.includes('')) el.model.prepend(new Option(t(empty), ''));
     el.model.value = '';
   } else {
     el.model.value = values.includes(value) ? value : (here || usable[0] || values[0] || '');
@@ -750,6 +762,7 @@ async function sendNow(asText, replace) {
   }
   if (!model) {
     if (!state.modelsLoaded) toast(t('chat.models_loading'));
+    else if (publicChoice(mineOnly())?.searching) toast(t('chat.public_searching'));   // la première minute
     else if (publicChoice(mineOnly())) toast(t('placement.no_public'), 'err');   // aucune ne prête
     else if (integrated()) toast(t('chat.no_model_install'), 'err');
     else toast(t('chat.no_model_ollama'), 'err');

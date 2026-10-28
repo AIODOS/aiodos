@@ -60,7 +60,12 @@ Décisions de l'auteur (27/10) :
    journal ne dit que « une conversation pour le réseau public, 412 jetons, 9 s ».
 6. **Afficher.** Le demandeur affiche la réponse dès le premier mot, marquée « Calculée par
    une machine du réseau public » avec le modèle. Si rien n'arrive dans le délai (premier
-   mot), il passe à la machine suivante, comme aujourd'hui (`placement.run`).
+   mot), il passe à la machine suivante, comme aujourd'hui (`placement.run`). Tant que son
+   moteur charge le modèle ou lit la demande, le prêteur envoie toutes les 5 s un signe de
+   vie (`{"type": "wait", "stage": "loading" | "reading"}`, ignoré par une version d'avant) :
+   le demandeur repousse alors son délai, 180 s au plus, et l'interface dit « La machine du
+   réseau public charge le modèle… » (essai réel du 28/10 : 45 à 53 s de chargement, pour
+   60 s d'attente).
 
 ## 4. Ce que chacun voit
 
@@ -87,6 +92,10 @@ plafonds pour tout le public.
 - **Par demande** : 256 Kio de requête au plus ; contexte borné (8 192 jetons), réponse
   bornée (2 048 jetons) ; texte seulement (ni image, ni fichier) dans cette première
   version.
+- **Puissance prêtée** : après t s de génération (du premier jeton au dernier ; le
+  chargement du modèle ne compte pas), pause de t × (100 − X) / X. Le profil (« free ») est
+  redit au compagnon au début et à la fin de chaque conversation publique, et à la fin de
+  la pause, sans attendre la synchronisation toutes les 15 s.
 - **Jamais** sur batterie ; un téléphone seulement en charge et en Wi-Fi (comme pour un
   ami) ; une conversation de l'utilisateur sur cette machine passe devant et arrête le prêt
   en cours, comme aujourd'hui.
@@ -139,6 +148,16 @@ plafonds pour tout le public.
   ou non). Un contrôle raté met la machine de côté 7 jours ; deux, pour de bon. Rien n'est
   partagé avec les autres dans cette version (pas de liste noire commune, qu'un menteur
   pourrait remplir).
+- **Branché** (28/10, `network/public_controls.py`) : chaque demande publique porte une
+  graine tirée au hasard et la longueur maximale du prêteur (2 048 jetons), gardées pour
+  le contrôle ; la température reste celle de la demande (aucune n'est imposée : les
+  seuils ont été mesurés aussi sur des paires d'autres graines). À la fin d'une réponse
+  complète et affichée : vitesse notée, puis contrôle en arrière-plan, chez mes machines
+  d'abord (pas celles de mes amis, ni celle-ci, où l'utilisateur converse), puis chez les
+  machines publiques qui ont le modèle, quatre au plus ; une demande qui porte mes
+  documents n'est contrôlée que par mes machines. Sans machine de contrôle, rien n'est
+  lancé : la prochaine réponse de ce prêteur est encore « la première ». Une machine mise
+  de côté n'est plus choisie ; la vitesse mesurée ici passe avant celle qu'elle annonce.
 
 ## 9. Ce qu'on ajoute, fichier par fichier
 

@@ -11,7 +11,9 @@ Une machine du réseau public peut répondre si la conversation le permet (chat/
 public_consent.py) ; l'événement « notice » porte alors une carte d'accord ou la note de la
 première fois, que l'interface montre dans la conversation. Sans aucun modèle ici ni sur mes
 machines, « Automatique · réseau public » (placement.PUBLIC_BEST) : seules les machines du
-réseau public répondent, et un refus (pièces jointes…) se dit tel quel.
+réseau public répondent, et un refus (pièces jointes…) se dit tel quel. Une réponse publique
+complète est notée, et parfois contrôlée en arrière-plan (network/public_controls.py) : par
+mes machines seules si elle porte mes documents.
 """
 import asyncio
 import contextvars
@@ -28,7 +30,7 @@ from aiodos.api.events import sse
 from aiodos.chat import attachments, conversations, creations, pending, pipeline, public_consent
 from aiodos.i18n import t
 from aiodos.jobs.kinds import index
-from aiodos.network import placement, public_chat
+from aiodos.network import placement, public_chat, public_controls
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger("aiodos.chat")
@@ -223,6 +225,8 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
                         web=web, peers=body.peer_libraries if ok else None,
                         summary=shown), shown, pipeline.inherited(rows, keep))
                 messages, sources, shown, marks = built[level, ok]
+                if level == "public":     # ses contrôles au hasard : chez mes machines seules ?
+                    extra_args["documents"] = public_controls.documents_in(sources, shown, marks)
                 if joined:
                     messages = attached(model, messages)
                     if stop.is_set():

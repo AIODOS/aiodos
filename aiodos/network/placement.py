@@ -31,6 +31,10 @@ seulement si sa vitesse annoncée (« tps ») vaut au moins FASTER fois celle de
 un modèle plus gros accepté ; jamais devant une de mes machines libres (cette machine, libre,
 passe alors après elles). PUBLIC_TRIES au plus. Identifiant : « public:<clé>:<modèle> ».
 
+Ce que les contrôles au hasard ont appris (network/reputation.py, 28/10/2026) : une machine
+publique mise de côté (contrôle raté) n'est plus jamais candidate, ni comme machine de
+contrôle ; la vitesse mesurée ici, quand elle est connue, passe avant celle qu'elle annonce.
+
 « Automatique · réseau public » (PUBLIC_BEST, 28/10/2026) : ni cette machine ni mes machines
 n'ont de modèle de conversation (un téléphone neuf, sans modèle téléchargé), et la conversation
 peut partir chez un inconnu. Seules les machines du réseau public répondent alors, chacune avec
@@ -62,7 +66,7 @@ from aiodos import settings
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.jobs import queue
-from aiodos.network import peers, public, public_chat, remote_models, sharing
+from aiodos.network import peers, public, public_chat, remote_models, reputation, sharing
 from aiodos.node import android, identity, speed
 
 log = logging.getLogger("aiodos.placement")
@@ -80,6 +84,9 @@ PUBLIC_SEEN_MAX = 150       # nœud public vu il y a plus longtemps (profil tout
 _lock = threading.Lock()
 _loads = {}                 # machine -> (instant monotonic, {"chats": n, "units": n})
 _sent = {}                  # machine -> conversations que je lui ai envoyées, en cours
+# machine -> {identifiant concret : n} : le modèle exact de chacune (« Machines connectées »,
+# activity.public_live : un prêteur qui annonce plusieurs modèles)
+_sent_models = {}
 
 
 class NoMachine(Exception):
@@ -155,6 +162,14 @@ def forget():
     with _lock:
         _loads.clear()
         _sent.clear()
+        _sent_models.clear()
+
+
+def sending() -> dict:
+    """{machine : {identifiant concret : réponses en cours}} : les conversations que je fais
+    calculer ailleurs en ce moment, avec le modèle exact de chacune (lu, jamais changé)."""
+    with _lock:
+        return {target: dict(models) for target, models in _sent_models.items()}
 
 
 # --------------------------------------------------------------- candidates
@@ -265,8 +280,9 @@ def _remote(name: str) -> list:
 def _public_nodes() -> list:
     """Les nœuds du réseau public qui prêtent en ce moment et ont une place, d'après le
     dernier état lu au compagnon (public.seen, relu s'il date de plus de public.FRESH_S
-    secondes), moins les conversations que je viens de leur envoyer ; aucun si le compagnon
-    ne sait pas leur confier une conversation."""
+    secondes), moins les conversations que je viens de leur envoyer, sans ceux qu'un contrôle
+    a mis de côté (reputation.is_set_aside) ; aucun si le compagnon ne sait pas leur confier
+    une conversation."""
     if public_chat.ready() is None:
         return []
     mine, nodes = public.seen(fresh=True)
@@ -281,8 +297,30 @@ def _public_nodes() -> list:
             sent = _sent.get(public_chat.PREFIX + key, 0)
         if int(node.get("free") or 0) - sent < 1:
             continue
+        if reputation.is_set_aside(key):         # en dernier : une lecture de la base
+            continue
         found.append(node)
     return found
+
+
+def _speed(node) -> float | None:
+    """La vitesse d'une machine publique : mesurée ici (reputation.speed) si on la connaît,
+    sinon celle qu'elle annonce (« tps »)."""
+    measured = reputation.speed(node["key"])
+    return round(measured, 1) if measured is not None else node.get("tps")
+
+
+def public_with(name: str) -> list:
+    """(clé, modèle) des machines du réseau public qui prêtent, ont une place et ce modèle
+    (nom exact), hors machines mises de côté, la plus rapide d'abord : les machines de
+    contrôle possibles (network/public_controls.py)."""
+    found = []
+    for node in _public_nodes():
+        chosen = next((m for m in node["models"] if same_model(m, name) and not reserved(m)),
+                      None)
+        if chosen is not None:
+            found.append((-(_speed(node) or 0), node.get("seen_s", 0), node["key"], chosen))
+    return [(key, chosen) for _speed_, _seen, key, chosen in sorted(found)]
 
 
 def _larger(models, base) -> list:
@@ -314,7 +352,7 @@ def _public(name: str, bigger: bool) -> list:
             chosen = larger[1]
         if chosen is None:
             continue
-        tps = node.get("tps")
+        tps = _speed(node)
         faster = tps is not None and (tps >= FASTER * here if here is not None else phone)
         found.append(Candidate(
             model=public_chat.model_id(node["key"], chosen),
@@ -339,7 +377,7 @@ def best_public() -> list:
         found.append(Candidate(
             model=public_chat.model_id(node["key"], chosen),
             node_id=public_chat.PREFIX + node["key"], machine=t("placement.public_machine"),
-            trust="public", params=public_chat.params(chosen), tps=node.get("tps"),
+            trust="public", params=public_chat.params(chosen), tps=_speed(node),
             seen=int(node.get("seen_s") or 0), ahead=True))
     found.sort(key=lambda c: (-(c.params or 0), -(c.tps or 0), c.seen))
     return found[:PUBLIC_TRIES]
@@ -454,6 +492,8 @@ def _occupy(model, executor, interactive: bool = True):
     elif target:
         with _lock:
             _sent[target] = _sent.get(target, 0) + 1
+            models = _sent_models.setdefault(target, {})
+            models[model] = models.get(model, 0) + 1
     try:
         yield
     finally:
@@ -466,6 +506,13 @@ def _occupy(model, executor, interactive: bool = True):
                     _sent[target] = left
                 else:
                     _sent.pop(target, None)
+                models = _sent_models.get(target, {})
+                if models.get(model, 1) > 1:
+                    models[model] -= 1
+                else:
+                    models.pop(model, None)
+                if not models:
+                    _sent_models.pop(target, None)
 
 
 # N'engage pas encore la réponse (« notice » : une carte ou une note pour l'interface,

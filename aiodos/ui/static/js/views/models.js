@@ -12,7 +12,8 @@ const PUBLIC = 'public:';          // une machine du réseau public (network/pub
 export const PUBLIC_AUTO = 'auto:*';
 
 /** Le réseau public dans le choix du modèle (chat/public_consent.py, entry) : { id, ready,
- *  models } quand aucune de mes machines n'a de modèle de conversation et que mes
+ *  models, searching (la première minute : ses machines se cherchent encore) } quand aucune
+ *  de mes machines n'a de modèle de conversation et que mes
  *  conversations peuvent partir chez un inconnu (Réglages) ; null sinon, ou si la conversation
  *  reste sur mes machines (mine : « Sur mes machines seulement », chat-public.js). */
 export function publicChoice(mine = false) {

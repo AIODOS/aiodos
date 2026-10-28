@@ -22,10 +22,12 @@ l'ordre, chacune avec sa réponse, avant tout calcul (admit) :
      d'autre ne veut cette machine (_taken : conversation de l'utilisateur ici,
      executor.interactive ; conversation de mes machines ou de mes amis, servie ou en
      attente, lend_queue ; calcul de fond sur la carte graphique, le mien ou celui que je
-     fais pour eux, executor.busy), dans la limite de la puissance prêtée (après une
-     conversation de t s, pause de t × (100 − X) / X, comme worker._rest_gpu) et de la
-     mémoire vive (places.memory_room), et au plus PER_MINUTE demandes par minute pour tout
-     le public (seau de gateway/limits.py) : sinon 503 {"error": "busy"} ;
+     fais pour eux, executor.busy), dans la limite de la puissance prêtée (après t s de
+     génération, du premier jeton au dernier, pause de t × (100 − X) / X, comme
+     worker._rest_gpu ; le chargement du modèle ne compte pas : 48 s sur 52,5 s lors de
+     l'essai réel du 28/10/2026) et de la mémoire vive (places.memory_room), et au plus
+     PER_MINUTE demandes par minute pour tout le public (seau de gateway/limits.py) : sinon
+     503 {"error": "busy"} ;
   3. le modèle de conversation installé ici, au nom exact : sinon 404 {"error": "no_model"} ;
   4. la demande dans les bornes : du texte seulement, un contexte de CONTEXT_TOKENS jetons au
      plus (estimés prudemment, sans charger le modèle), une réponse ramenée à MAX_TOKENS
@@ -34,7 +36,11 @@ l'ordre, chacune avec sa réponse, avant tout calcul (admit) :
 
 La réponse, en flux application/x-ndjson, une ligne JSON par événement : {"type": "meta",
 "model", "version"}, puis {"type": "delta", "text"} à chaque morceau, enfin {"type": "done",
-"tokens", "seconds"} ; ou, en route, {"type": "error", "error": code} et la fin. Codes :
+"tokens", "seconds"} ; ou, en route, {"type": "error", "error": code} et la fin. Avant le
+premier morceau, toutes les WAIT_S secondes, un signe de vie {"type": "wait", "stage":
+"loading" (le moteur charge le modèle) ou "reading" (il lit la demande)} : le demandeur
+attend alors plus longtemps son premier mot (public_chat.py) ; une version d'avant ignore ce
+type (essai réel du 28/10/2026 : 45 à 53 s de chargement, pour 60 s d'attente). Codes :
 « busy » (l'utilisateur, mes machines, mes amis ou le travail de fond reprennent cette
 machine : ils passent devant et arrêtent le prêt, _watch), « not_lending » (prêt coupé,
 machine débranchée…), « engine » (le moteur a failli). Sans réflexion (think faux) : seul le
@@ -44,6 +50,11 @@ Rien n'est gardé : ni la conversation, ni la clé de l'appelant (lue pour savoi
 demande vient du réseau public, puis oubliée) ; rien en base, et le journal ne dit que le
 modèle, le nombre de jetons et la durée. Pendant le calcul, en mémoire seulement, le modèle
 et l'heure du début, pour « Machines connectées » (serving, activity.public_live).
+
+Le profil public (« free ») est redit au compagnon, en fond, au début et à la fin de chaque
+conversation publique, et à la fin de la pause qui suit (_announce, Public.push) : les
+demandeurs voient en quelques secondes cette machine occupée, puis libre, au lieu
+d'attendre la synchronisation toutes les 15 s.
 """
 import asyncio
 import itertools
@@ -81,6 +92,8 @@ PER_MINUTE = limits.PER_MINUTE  # demandes par minute pour tout le public (120)
 BUCKET = "réseau public"       # i18n: tel quel (seau de débit de tout le public, jamais montré)
 WATCH_S = 0.25                 # s entre deux regards : quelqu'un d'autre veut-il la machine ?
 CHECK_S = 5                    # s entre deux lectures du partage (alimentation, Wi-Fi…)
+WAIT_S = 5                     # s entre deux signes de vie, avant le premier morceau
+STAGE_TIMEOUT = 2              # s pour savoir si le modèle est chargé (sinon : « loading »)
 _ASCII_TEXT = re.compile(r"[A-Za-z \t\r\n]+")
 
 _lock = threading.Lock()
@@ -144,14 +157,20 @@ def _taken(manager) -> bool:
 
 
 def _resting() -> bool:
+    return _rest_left() > 0
+
+
+def _rest_left() -> float:
+    """Secondes de pause qui restent (0 : aucune)."""
     with _lock:
-        return time.monotonic() < _rest["until"]
+        return max(0.0, _rest["until"] - time.monotonic())
 
 
 def _rest_after(manager, seconds: float):
-    """« Puissance prêtée : X % » (node/places.py) : après une conversation publique de t s,
-    pause de t × (100 − X) / X avant d'en prendre une autre (comme worker._rest_gpu) ;
-    pendant que l'utilisateur se sert du PC, X vaut au plus worker.IN_USE_GPU_SHARE."""
+    """« Puissance prêtée : X % » (node/places.py) : après t s de génération (du premier
+    jeton au dernier : le chargement du modèle n'en est pas), pause de t × (100 − X) / X
+    avant une autre conversation publique (comme worker._rest_gpu) ; pendant que
+    l'utilisateur se sert du PC, X vaut au plus worker.IN_USE_GPU_SHARE."""
     from aiodos.network import worker
     share = places.share()
     state = getattr(getattr(manager, "worker", None), "state", None) or {}
@@ -170,6 +189,20 @@ def _room(manager) -> bool:
 def free(manager) -> bool:
     """Une conversation publique peut-elle être prise maintenant ? (profil public)"""
     return lending_now(manager) and _room(manager) and lend_queue.idle()
+
+
+def _announce(manager, delay: float = 0.0):
+    """Le profil public redit au compagnon, en fond (Public.push), tout de suite ou dans
+    `delay` secondes (la fin d'une pause) : jamais d'attente pour la réponse."""
+    push = getattr(getattr(manager, "public", None), "push", None)
+    if push is None:
+        return
+    if delay <= 0:
+        push()
+        return
+    timer = threading.Timer(delay, push)
+    timer.daemon = True
+    timer.start()
 
 
 def profile_fields(manager) -> dict:
@@ -347,14 +380,17 @@ def _watch(manager, stop, done, why: list):
 
 
 def answer(manager, asked: dict, stop):
-    """Les événements de la réponse (meta, delta…, puis done ou error). `stop` est levé si
-    l'appelant part, ou par _watch ; la place est rendue à la fin du calcul."""
+    """Les événements de la réponse (meta, delta…, puis done ou error ; les signes de vie,
+    _Stream). `stop` est levé si l'appelant part, ou par _watch ; la place est rendue à la
+    fin du calcul, et le profil public redit au début et à la fin (_announce)."""
     model, place = asked["model"], asked["place"]
     started = time.monotonic()
+    began = None                    # premier jeton : la génération commence (_rest_after)
     done, why = threading.Event(), []
     number = next(_numbers)
     with _lock:
         _serving[number] = (model, time.time())     # en cours (serving) : le modèle, l'heure
+    _announce(manager)                              # occupée : « free » 0 chez les demandeurs
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -370,6 +406,8 @@ def answer(manager, asked: dict, stop):
                     break
                 if kind in ("content", "thinking"):
                     tokens += 1
+                    if began is None:
+                        began = time.monotonic()
                 if kind == "content" and value:
                     yield {"type": "delta", "text": value}
                 elif kind == "stats" and isinstance(value, dict):
@@ -389,26 +427,71 @@ def answer(manager, asked: dict, stop):
         elif not stop.is_set():
             seconds = round(time.monotonic() - started, 1)
             produced = counted if isinstance(counted, int) and counted > 0 else tokens
+            generating = round(time.monotonic() - began, 1) if began is not None else 0.0
             # i18n: tel quel (journal)
-            log.info("Conversation pour le réseau public : %s, %d jetons, %s s", model,
-                     produced, seconds)
+            log.info("Conversation pour le réseau public : %s, %d jetons, %s s de génération "
+                     "sur %s s", model, produced, generating, seconds)
             yield {"type": "done", "tokens": produced, "seconds": seconds}
     finally:
         with _lock:
             _serving.pop(number, None)
         done.set()
-        _rest_after(manager, time.monotonic() - started)
+        _rest_after(manager, time.monotonic() - began if began is not None else 0.0)
         place.release()
+        _announce(manager)                          # libre (ou en pause : « free » 0)
+        left = _rest_left()
+        if left > 0:                                # et libre à la fin de la pause
+            _announce(manager, left + 0.1)
+
+
+def _stage(model) -> str:
+    """Où en est le moteur avant le premier jeton : « reading » (le modèle est chargé, il
+    lit la demande) ou « loading » (il le charge, ou on ne sait pas)."""
+    try:
+        loaded = {m["name"] for m in ollama.loaded_models()}
+    except Exception:  # noqa: BLE001 — illisible : on dit qu'il charge
+        return "loading"
+    return "reading" if model in loaded else "loading"
+
+
+def _line(event) -> bytes:
+    return (json.dumps(event, ensure_ascii=False) + "\n").encode()
 
 
 class _Stream(StreamingResponse):
-    """La réponse en NDJSON ; le calcul (bloquant) tourne dans un thread. Quoi qu'il arrive à
-    la réponse (fin, appelant parti, erreur d'envoi), le calcul s'arrête (stop), et la place
-    est rendue : par le calcul quand il finit, ou ici s'il n'a jamais commencé."""
+    """La réponse en NDJSON ; le calcul (bloquant) tourne dans un thread. Tant qu'aucun
+    morceau n'est parti, un signe de vie toutes les WAIT_S secondes ({"type": "wait",
+    "stage"} : cf. le début du module). Quoi qu'il arrive à la réponse (fin, appelant parti,
+    erreur d'envoi), le calcul s'arrête (stop), et la place est rendue : par le calcul quand
+    il finit, ou ici s'il n'a jamais commencé."""
 
-    def __init__(self, events, place: _Place, stop):
-        self._events, self._place, self._stop = events, place, stop
+    def __init__(self, events, place: _Place, stop, model: str):
+        self._events, self._place, self._stop, self._model = events, place, stop, model
+        self._probe = None                 # lecture de l'étape en cours (_now), une à la fois
         super().__init__(self._lines(), media_type="application/x-ndjson")
+
+    async def _now(self, stage: str) -> str:
+        """L'étape du moteur : « reading » une fois vue, on n'y revient pas ; sinon relue, une
+        lecture à la fois (le moteur intégré peut tenir son verrou tout un chargement : elles
+        s'empileraient dans les fils d'asyncio), STAGE_TIMEOUT s au plus ; plus lente,
+        « loading », et elle continue pour le signe suivant."""
+        if stage == "reading":
+            return stage
+        if self._probe is None:
+            self._probe = asyncio.ensure_future(asyncio.to_thread(_stage, self._model))
+        try:
+            found = await asyncio.wait_for(asyncio.shield(self._probe), STAGE_TIMEOUT)
+        except Exception:  # noqa: BLE001 — lente (ou en échec) : on dit qu'il charge
+            if self._probe.done():
+                self._probe = None
+            return "loading"
+        self._probe = None
+        return found
+
+    async def _wait_line(self, stage: str) -> tuple:
+        """(étape, ligne) d'un signe de vie."""
+        stage = await self._now(stage)
+        return stage, _line({"type": "wait", "stage": stage})
 
     async def _lines(self):
         loop = asyncio.get_running_loop()
@@ -428,9 +511,20 @@ class _Stream(StreamingResponse):
 
         self._place.started = True
         threading.Thread(target=pump, daemon=True, name="aiodos-public").start()
+        first, stage = False, "loading"
         try:
-            while (event := await inbox.get()) is not None:
-                yield (json.dumps(event, ensure_ascii=False) + "\n").encode()
+            while True:
+                try:
+                    event = await (inbox.get() if first else
+                                   asyncio.wait_for(inbox.get(), WAIT_S))
+                except asyncio.TimeoutError:          # rien depuis WAIT_S s : un signe de vie
+                    stage, line = await self._wait_line(stage)
+                    yield line
+                    continue
+                if event is None:
+                    break
+                first = first or event.get("type") == "delta"
+                yield _line(event)
         finally:
             self._stop.set()              # fin, ou appelant parti : le calcul s'arrête
 
@@ -457,7 +551,7 @@ def mount(app, manager):
         except Refused as exc:
             return JSONResponse({"error": exc.code}, status_code=exc.status)
         stop = threading.Event()
-        return _Stream(answer(manager, asked, stop), asked["place"], stop)
+        return _Stream(answer(manager, asked, stop), asked["place"], stop, asked["model"])
 
 
 async def _not_found(send):

@@ -230,11 +230,17 @@ def test_my_conversation_answered_by_the_public_shows_the_model_never_the_key():
         live = activity.public_live()
         assert live["asking"] == [{"model": "qwen3.5:9b", "n": 1}]
         assert LENDER not in json.dumps(live)
-        # Deux modèles de conversation chez ce prêteur : on ne dit pas lequel
+        # Deux modèles de conversation chez ce prêteur : le modèle exact de l'envoi (essai réel
+        # du 28/10/2026 : « model: null » quand le prêteur en annonçait plusieurs)
         public._remember({"enabled": True, "key": "ma-cle", "nodes": [
             {"key": LENDER, "models": ["qwen3.5:9b", "gemma3:4b"], "seen_s": 0, "lends": True}]})
-        assert activity.public_live()["asking"] == [{"model": None, "n": 1}]
-    assert activity.public_live()["asking"] == []
+        assert activity.public_live()["asking"] == [{"model": "qwen3.5:9b", "n": 1}]
+        with placement._occupy(public_chat.model_id(LENDER, "gemma3:4b"), None):
+            assert activity.public_live()["asking"] == [{"model": "gemma3:4b", "n": 1},
+                                                        {"model": "qwen3.5:9b", "n": 1}]
+        public._remember(None)                               # même sans l'annuaire
+        assert activity.public_live()["asking"] == [{"model": "qwen3.5:9b", "n": 1}]
+    assert activity.public_live()["asking"] == [] and placement.sending() == {}
 
 
 # -------------------------------------------------------------------- l'API

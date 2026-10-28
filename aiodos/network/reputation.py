@@ -30,6 +30,7 @@ MAX_ROWS = 10_000              # lignes gardées, au plus
 MIN_TOKENS = 16                # en dessous, la vitesse ne dit rien (comme node/speed.py)
 SMOOTHING = 0.3                # poids d'une nouvelle mesure dans la vitesse gardée
 MAX_TPS = 100_000              # au-delà, la mesure est fausse (comme network/public.py)
+SHORT = 8                      # caractères de la clé dits au journal, au plus
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")      # comme network/public_chat.py
 
 _COLUMNS = ("key", "served", "tps", "checks_ok", "checks_failed", "aside_until", "forever",
@@ -41,8 +42,8 @@ def valid_key(key) -> bool:
 
 
 def short(key) -> str:
-    """La clé abrégée, pour le journal (comme network/public_chat.py)."""
-    return f"{str(key)[:10]}…"
+    """La clé abrégée, pour le journal : SHORT caractères au plus, jamais la clé entière."""
+    return f"{str(key)[:SHORT]}…"
 
 
 def _check(key):
@@ -111,15 +112,19 @@ def note_served(key, tokens, seconds):
                      (round(tps, 2) if tps is not None else None, now, key))
 
 
-def _aside(conn, key, now: float, forever: bool):
+def _aside(conn, key, now: float, forever: bool, reason=None):
     if forever:
         conn.execute("UPDATE public_reputation SET forever = 1 WHERE key = ?", (key,))
     else:
         conn.execute("UPDATE public_reputation SET aside_until = MAX(COALESCE(aside_until, 0), "
                      "?) WHERE key = ?", (now + ASIDE_DAYS * DAY_S, key))
     # i18n: tel quel (journal)
-    log.warning("Réseau public : %s mis de côté %s", short(key),
-                "pour de bon" if forever else f"{ASIDE_DAYS} jours")
+    duration = "pour de bon" if forever else f"{ASIDE_DAYS} jours"
+    if reason is not None:          # une ligne, sans contenu ni clé entière (spot_check._note)
+        log.warning("Machine du réseau public mise de côté : contrôle raté (%s), %s, %s",
+                    reason, short(key), duration)
+    else:
+        log.warning("Réseau public : %s mis de côté %s", short(key), duration)
 
 
 def set_aside(key, forever=False):
@@ -143,9 +148,10 @@ def is_set_aside(key) -> bool:
     return bool(row["forever"]) or (row["aside_until"] or 0) > db.now()
 
 
-def note_check(key, ok: bool) -> dict:
+def note_check(key, ok: bool, reason=None) -> dict:
     """Le résultat d'un contrôle de cette machine (spot_check.run_check). Raté : de côté
-    ASIDE_DAYS jours ; raté FOREVER_AFTER fois : pour de bon. → la ligne à jour."""
+    ASIDE_DAYS jours ; raté FOREVER_AFTER fois : pour de bon ; reason (le verdict : link,
+    unrelated…) va au journal. → la ligne à jour."""
     _check(key)
     now = db.now()
     with db.transaction() as conn:
@@ -154,7 +160,8 @@ def note_check(key, ok: bool) -> dict:
         conn.execute(f"UPDATE public_reputation SET {column} = {column} + 1, last_seen = ? "
                      f"WHERE key = ?", (now, key))
         if not ok:
-            _aside(conn, key, now, _row(conn, key)["checks_failed"] >= FOREVER_AFTER)
+            _aside(conn, key, now, _row(conn, key)["checks_failed"] >= FOREVER_AFTER,
+                   reason or "?")
     return get(key)
 
 

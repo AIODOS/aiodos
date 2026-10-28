@@ -25,7 +25,8 @@ from aiodos.chat import conversations, creations
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.knowledge import search, store
-from aiodos.network import placement, public_chat, remote_models, remote_search, sharing
+from aiodos.network import (placement, public_chat, public_controls, remote_models,
+                            remote_search, sharing)
 from aiodos.services import ollama, web
 
 log = logging.getLogger("aiodos.chat")
@@ -47,6 +48,7 @@ WEB_INTENT = re.compile(          # i18n: tel quel (motif de détection, frança
 # le sommaire (manifest), les résultats web, les extraits, ceux d'autres machines (rag_peers :
 # à part, chacun entre <<< et >>>, marqué non vérifié) et la règle anti-invention (rule_…).
 REMOTE_MAX = 6        # passages venus des autres machines, au plus, dans une réponse
+_search_failed = {"told": False}   # « recherche impossible » déjà dit (_knowledge_context)
 # Dans le texte d'un passage d'ailleurs : de quoi imiter une source ou fermer son bloc (les
 # en-têtes chat_prompts.knowledge_source et peer_source commencent ainsi dans chaque langue)
 _FORGED = (("<<<", "‹‹‹"), (">>>", "›››"), ("[Source", "(Source"), ("[Passage", "(Passage"))
@@ -390,13 +392,22 @@ def select_relevant(hits, min_score, limit=4) -> list:
 
 def _knowledge_context(question, libraries, conversations, sources, conversation_id=None,
                        only=None):
+    """Les extraits utiles de mes bibliothèques (et de la mémoire). Rien d'indexé dans les
+    sources permises (une machine neuve, sans modèle d'embedding) : pas de recherche du tout.
+    Une recherche impossible se dit une fois au journal, puis plus jusqu'à la prochaine
+    réussite (essai réel du 28/10/2026 : deux avertissements à chaque message)."""
+    if not search.searchable(libraries, conversations, only):
+        return []
     try:
         vector = ollama.embed([question])[0]
         hits = search.search(vector, k=8, libraries=libraries, conversations=conversations,
                              exclude_conversation=conversation_id, only=only)
     except Exception as exc:
-        log.warning("Recherche dans les connaissances impossible : %s", exc)
+        level = logging.DEBUG if _search_failed["told"] else logging.WARNING
+        _search_failed["told"] = True
+        log.log(level, "Recherche dans les connaissances impossible : %s", exc)
         return []
+    _search_failed["told"] = False
     hits = select_relevant(hits, float(settings.get("rag_min_score") or 0))
     seen = set()
     for h in hits:
@@ -508,12 +519,14 @@ def build_messages(history, question, *, libraries, conversations, web_search,
     return messages, sources
 
 
-def generate(model, messages, think=True, stop=None, conversation=None):
+def generate(model, messages, think=True, stop=None, conversation=None, documents=True):
     """Couples (genre, texte) depuis le modèle local, d'une machine appairée, réparti, ou
-    d'une machine du réseau public (conversation : son identifiant opaque, public_chat.tag)."""
+    d'une machine du réseau public (conversation : son identifiant opaque, public_chat.tag ;
+    sa réponse est notée et parfois contrôlée, network/public_controls.py, et documents dit
+    si la demande porte mes documents : ses contrôles restent alors chez mes machines)."""
     if public_chat.parse(model):
-        yield from public_chat.chat_stream(model, messages, think, stop,
-                                           conversation=conversation)
+        yield from public_controls.stream(model, messages, stop, conversation=conversation,
+                                          documents=documents)
     elif remote_models.parse(model):
         yield from remote_models.chat_stream(model, messages, think, stop)
     elif cluster.parse(model):

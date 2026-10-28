@@ -51,7 +51,9 @@ class Executor:
 class Companion:
     """Ce que public_chat lit du compagnon (running, listen, headers, supports), et sa route
     locale, servie pour de bon. script[clé] : ("answer", [morceaux]), ("refuse", statut,
-    code), ("error_after", morceau, code) ou ("silent", secondes) ; par défaut, « Bonjour »."""
+    code), ("error_after", morceau, code), ("silent", secondes) ou ("raw", [(attente,
+    événement)…]) : après « meta », chaque événement tel quel, après son attente en
+    secondes ; par défaut, « Bonjour »."""
 
     def __init__(self):
         self.requests = []
@@ -113,6 +115,14 @@ class Companion:
                 line({"type": "meta", "model": body["model"], "version": "1.0.0"})
                 if act[0] == "silent":
                     time.sleep(act[1])
+                    return
+                if act[0] == "raw":
+                    try:
+                        for pause, event in act[1]:
+                            time.sleep(pause)
+                            line(event)
+                    except OSError:                  # le demandeur a coupé : c'est permis
+                        pass
                     return
                 if act[0] == "error_after":
                     line({"type": "delta", "text": act[1]})
@@ -434,6 +444,71 @@ def test_no_first_word_in_time_hands_over(monkeypatch, companion, opened):
     out = list(placement.run(plan, lambda m: pipeline.generate(m, [
         {"role": "user", "content": "Salut"}])))
     assert out[-1] == ("content", f"Ici ({SMALL}).") and time.monotonic() - started < 4
+
+
+# ----------------------------------------------------- les signes de vie du prêteur
+def _loading(waits, every, stage="loading", words=("Bon", "jour")):
+    """Le prêteur charge son modèle : `waits` signes de vie toutes les `every` s, puis la
+    réponse."""
+    return ("raw", [(every, {"type": "wait", "stage": stage})] * waits
+            + [(0, {"type": "delta", "text": w}) for w in words]
+            + [(0, {"type": "done", "tokens": len(words), "seconds": 9.0})])
+
+
+def test_signs_of_life_extend_the_wait_for_the_first_word(monkeypatch, companion, opened):
+    """Essai réel du 28/10 : 45 à 53 s de chargement chez le prêteur, pour 60 s d'attente.
+    Ses signes de vie repoussent l'échéance du premier mot (jamais au-delà de LOADING_MAX_S)
+    et l'interface dit qu'il charge le modèle, une fois par étape ; sans eux, l'échéance de
+    toujours."""
+    monkeypatch.setattr(public_chat, "FIRST_WORD_S", 0.5)
+    monkeypatch.setattr(public_chat, "ALIVE_GRACE_S", 1.0)
+    salut = [{"role": "user", "content": "Salut"}]
+    companion.script = {PC: _loading(8, 0.2)}                # 1,6 s avant le premier mot
+    out = list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert out == [("status", "La machine du réseau public charge le modèle…"),
+                   ("content", "Bon"), ("content", "jour")]
+    companion.script = {PC: ("raw", [(1.6, {"type": "delta", "text": "Trop tard"})])}
+    with pytest.raises(public_chat.PublicError) as late:
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert late.value.code == "slow"
+    monkeypatch.setattr(public_chat, "LOADING_MAX_S", 1.2)  # des signes de vie sans fin
+    companion.script = {PC: _loading(25, 0.2)}
+    started = time.monotonic()
+    with pytest.raises(public_chat.PublicError) as endless:
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert endless.value.code == "slow" and time.monotonic() - started < 3.5
+    # Le modèle déjà chargé, il lit la demande : dit autrement, une fois ; après le premier
+    # mot, un signe de vie ne dit plus rien
+    companion.script = {PC: ("raw", [(0, {"type": "wait", "stage": "reading"}),
+                                     (0, {"type": "wait", "stage": "reading"}),
+                                     (0, {"type": "delta", "text": "Oui"}),
+                                     (0, {"type": "wait", "stage": "loading"}),
+                                     (0, {"type": "done", "tokens": 1, "seconds": 0.1})])}
+    assert list(public_chat.chat_stream(at(PC, SMALL), salut)) == [
+        ("status", "La machine du réseau public lit la conversation…"), ("content", "Oui")]
+
+
+def test_a_status_before_the_first_word_still_hands_over(monkeypatch, companion, opened):
+    """« Charge le modèle… » n'engage pas la réponse : un refus ensuite, et la machine
+    suivante répond (placement.QUIET)."""
+    local_models(monkeypatch, SMALL)
+    companion.script = {PC: ("raw", [(0, {"type": "wait", "stage": "loading"}),
+                                     (0, {"type": "error", "error": "busy"})])}
+    out = list(placement.run([at(PC, SMALL), SMALL], lambda m: pipeline.generate(m, [
+        {"role": "user", "content": "Salut"}])))
+    assert ("status", "La machine du réseau public charge le modèle…") in out
+    assert out[-1] == ("content", f"Ici ({SMALL}).")
+
+
+def test_an_unknown_event_is_ignored(companion, opened):
+    """Ce qu'un prêteur plus récent pourrait envoyer, le demandeur l'ignore : c'est ainsi que
+    les versions d'avant le 28/10 lisent « wait » (elles ne connaissent que meta, delta, done
+    et error)."""
+    companion.script = {PC: ("raw", [(0, {"type": "plus tard", "stage": 3}),
+                                     (0, {"type": "delta", "text": "Bon"}),
+                                     (0, {"type": "done", "tokens": 1, "seconds": 0.1})])}
+    assert list(public_chat.chat_stream(at(PC, SMALL), [{"role": "user", "content": "x"}])) \
+        == [("content", "Bon")]
 
 
 def test_an_error_after_the_first_word_is_not_handed_over(monkeypatch, companion, opened):

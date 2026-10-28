@@ -11,8 +11,10 @@ fait sans modèle, et rien d'autre que la réponse ne part chez un inconnu.
 
 Le compagnon simulé et l'annuaire public sont ceux de test_public_chat.py."""
 import json
+import logging
 import shutil
 import subprocess
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -71,11 +73,11 @@ def test_the_model_selector_offers_automatic_public(monkeypatch, companion, open
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         assert ui.get("/api/models", headers=AUTH).json() == [
             {"id": BEST, "label": "Automatique · réseau public", "group": "public",
-             "ready": True, "models": [BIG, SMALL]}]
+             "ready": True, "models": [BIG, SMALL], "searching": False}]
         directory(node(PC, SMALL, free=0))                       # plus de place nulle part
         assert ui.get("/api/models", headers=AUTH).json() == [
             {"id": BEST, "label": "Automatique · réseau public", "group": "public",
-             "ready": False, "models": []}]
+             "ready": False, "models": [], "searching": False}]
         directory(node(PC, SMALL))
         companion.features = set()                               # compagnon d'avant : non plus
         assert ui.get("/api/models", headers=AUTH).json()[0]["ready"] is False
@@ -178,6 +180,71 @@ def test_no_public_machine_a_clear_message(monkeypatch, companion, opened):
         companion.running = False                                # compagnon arrêté
         assert refused(ui) == NO_PUBLIC
     assert companion.requests == [] and conversations_count() == 0
+
+
+def test_the_first_minute_says_searching(monkeypatch, companion, opened):
+    """Essai réel du 28/10 : la première minute, le téléphone sans modèle disait « aucune
+    machine du réseau public ne peut répondre » avant même d'avoir lu l'annuaire. Tant que le
+    réseau n'est pas rejoint, ou qu'aucun nœud n'a été vu depuis, et depuis moins de
+    public.SEARCH_S secondes : « searching », que l'interface dit « Recherche des machines du
+    réseau public… »."""
+    from aiodos.i18n import t
+    from aiodos.network import public
+    nothing_here(monkeypatch)
+    entry = public_consent.entry
+    monkeypatch.setitem(public._latest, "since", time.monotonic())   # le nœud vient de démarrer
+    assert entry()["ready"] is False and entry()["searching"] is True
+    directory()                                    # rejoint, aucun nœud vu encore
+    assert entry()["searching"] is True
+    monkeypatch.setattr(public, "SEARCH_S", 0)     # la première minute passée : « aucune »
+    assert entry()["searching"] is False
+    monkeypatch.setattr(public, "SEARCH_S", 90)
+    directory(node(PC, SMALL, free=0))             # un nœud vu, occupé : on ne cherche plus
+    assert entry()["ready"] is False and entry()["searching"] is False
+    public._remember(None)                         # compagnon relancé, réseau rejoint à nouveau
+    directory()
+    assert entry()["searching"] is True
+    directory(node(PC, SMALL))
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        found = ui.get("/api/models", headers=AUTH).json()
+    assert found[0]["ready"] is True and found[0]["searching"] is False
+    assert t("chat.public_searching") == "Recherche des machines du réseau public…"
+    assert t("chat.no_model_searching_phone").endswith("Recherche des machines du réseau public…")
+
+
+def test_without_a_model_no_knowledge_search_and_no_repeated_warning(
+        monkeypatch, companion, opened, caplog, fake_embed):
+    """Essai réel du 28/10 : sans aucun modèle, deux avertissements « Recherche dans les
+    connaissances impossible » à chaque message. Rien d'indexé : pas de recherche du tout ;
+    une recherche qui échoue : dit une fois, puis plus jusqu'à la prochaine réussite."""
+    from aiodos.chat import pipeline
+    from aiodos.knowledge import store
+    nothing_here(monkeypatch)
+    calls = []
+
+    def failing(texts, model=None, timeout=None):
+        calls.append(texts)
+        raise RuntimeError("aucun modèle d'embedding")
+    monkeypatch.setattr(ollama, "embed", failing)
+    monkeypatch.setitem(pipeline._search_failed, "told", False)
+    directory(node(PC, SMALL))
+    warned = lambda: [r for r in caplog.records  # noqa: E731
+                      if "connaissances impossible" in r.getMessage()
+                      and r.levelno >= logging.WARNING]
+    with caplog.at_level(logging.DEBUG), TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        store.ensure_defaults()
+        for text in ("Bonjour", "Encore"):
+            assert ask(ui, text, model=BEST, libraries=True)[-1]["error"] is None
+        assert calls == [] and warned() == []
+        _library("maison", "fusée lunaire notes maison", fake_embed)    # quelque chose d'indexé
+        for _ in range(3):
+            assert pipeline._knowledge_context("fusée", True, False, []) == []
+        assert calls.count(["fusée"]) == 3 and len(warned()) == 1
+        monkeypatch.setattr(ollama, "embed", fake_embed)                # réussie : oublié
+        pipeline._knowledge_context("fusée lunaire", True, False, [])
+        monkeypatch.setattr(ollama, "embed", failing)
+        pipeline._knowledge_context("fusée", True, False, [])
+        assert len(warned()) == 2
 
 
 def test_documents_card_and_first_note_as_elsewhere(monkeypatch, companion, opened, fake_embed):

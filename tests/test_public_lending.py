@@ -65,18 +65,21 @@ class FakeManager:
 
 
 class Engine:
-    """Le moteur factice : ce qu'il a reçu, et une réponse (lente si `slow`). `during` :
-    {rang d'un mot : ce qui arrive juste après lui}, pendant la réponse (TestClient ne rend
-    la réponse qu'une fois finie : c'est d'ici qu'on agit en cours de route)."""
+    """Le moteur factice : ce qu'il a reçu, et une réponse (lente si `slow`, après `load`
+    secondes de chargement du modèle). `during` : {rang d'un mot : ce qui arrive juste après
+    lui}, pendant la réponse (TestClient ne rend la réponse qu'une fois finie : c'est d'ici
+    qu'on agit en cours de route)."""
 
-    def __init__(self, words=("Bon", "jour", " !"), slow=0.0):
+    def __init__(self, words=("Bon", "jour", " !"), slow=0.0, load=0.0):
         self.calls = []
-        self.words, self.slow = words, slow
+        self.words, self.slow, self.load = words, slow, load
         self.during = {}
 
     def __call__(self, model, messages, think=None, stop=None, options=None, stats=False):
         self.calls.append({"model": model, "messages": messages, "think": think,
                            "options": options, "stats": stats})
+        if self.load:
+            time.sleep(self.load)
         for rank, word in enumerate(self.words):
             if stop is not None and stop.is_set():
                 return
@@ -280,6 +283,142 @@ def test_the_power_lent_bounds_strangers_too(node):
     assert public_lending.free(manager) is False
     public_lending.forget()
     assert public_lending.free(manager) is True
+
+
+def test_the_pause_counts_only_the_generation(node, monkeypatch):
+    """Essai réel du 28/10 : la pause comptait le chargement du modèle (48 s sur 52,5 s). Elle
+    ne compte plus que la génération, du premier mot au dernier."""
+    manager, here, lan, engine = node
+    lend(power_share=60)
+    counted = []
+    monkeypatch.setattr(public_lending, "_rest_after", lambda m, seconds: counted.append(seconds))
+    engine.load, engine.slow = 1.5, 0.1            # 1,5 s de chargement, 0,3 s de génération
+    assert events(here)[-1]["type"] == "done"
+    assert len(counted) == 1 and 0.25 <= counted[0] < 1.2
+    engine.load, engine.words = 0.3, []            # rien de généré : pas de pause
+    events(here)
+    assert counted[1] == 0.0
+
+
+# ------------------------------------------- avant le premier mot : des signes de vie
+def test_signs_of_life_while_the_model_loads(node, monkeypatch):
+    """Tant que rien n'est parti, un signe de vie toutes les WAIT_S s : « loading » tant que
+    le modèle n'est pas chargé, « reading » ensuite ; plus rien après le premier morceau."""
+    manager, here, lan, engine = node
+    lend()
+    monkeypatch.setattr(public_lending, "WAIT_S", 0.2)
+    loaded = []
+    monkeypatch.setattr(ollama, "loaded_models", lambda: [{"name": m} for m in loaded])
+    engine.load, engine.slow = 0.9, 0.5            # puis 0,5 s entre deux mots
+    found = events(here)
+    kinds = [e["type"] for e in found]
+    first = kinds.index("delta")
+    assert kinds[0] == "meta" and kinds[-1] == "done" and first >= 3
+    assert all(e == {"type": "wait", "stage": "loading"} for e in found[1:first])
+    assert "wait" not in kinds[first:]
+    loaded.append(MODEL)                           # déjà chargé : il lit la demande
+    engine.slow = 0.0
+    found = events(here)
+    assert {e["stage"] for e in found if e["type"] == "wait"} == {"reading"}
+    engine.load = 0.0                              # le premier mot tout de suite : aucun
+    assert all(e["type"] != "wait" for e in events(here))
+
+
+def test_one_reading_of_the_engine_at_a_time(node, monkeypatch):
+    """Le moteur intégré peut tenir son verrou tout un chargement : les lectures de l'étape
+    ne s'empilent pas (une à la fois), et les signes de vie partent quand même."""
+    manager, here, lan, engine = node
+    lend()
+    monkeypatch.setattr(public_lending, "WAIT_S", 0.1)
+    monkeypatch.setattr(public_lending, "STAGE_TIMEOUT", 0.05)
+    running, most, guard = [0], [0], threading.Lock()
+
+    def slow():
+        with guard:
+            running[0] += 1
+            most[0] = max(most[0], running[0])
+        time.sleep(0.5)
+        with guard:
+            running[0] -= 1
+        return []
+    monkeypatch.setattr(ollama, "loaded_models", slow)
+    engine.load = 1.2
+    waits = [e for e in events(here) if e["type"] == "wait"]
+    assert len(waits) >= 5 and {w["stage"] for w in waits} == {"loading"}
+    assert most[0] == 1
+
+
+class Pushes:
+    """Ce que public_lending fait redire au compagnon (Public.push) : « free » à chaque fois."""
+
+    def __init__(self, manager):
+        self.manager, self.seen = manager, []
+
+    def push(self):
+        self.seen.append(public_lending.profile_fields(self.manager)["free"])
+        return True
+
+
+def test_the_profile_is_pushed_at_the_start_and_the_end(node):
+    """Essai réel du 28/10 : « free » se voyait toutes les 15 s seulement. Il est redit au
+    début (occupée) et à la fin (libre, ou en pause : alors encore à la fin de la pause)."""
+    manager, here, lan, engine = node
+    lend()
+    manager.public = Pushes(manager)
+    assert events(here)[-1]["type"] == "done"
+    assert manager.public.seen == [0, 1]
+    lend(power_share=60)
+    manager.public.seen.clear()
+    engine.slow = 0.2
+    events(here)
+    deadline = time.monotonic() + 5
+    while len(manager.public.seen) < 3 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert manager.public.seen == [0, 0, 1]        # occupée, en pause, libre
+
+
+def test_public_push_says_the_profile_at_once(node):
+    """Public.push : la synchronisation planifiée sur la boucle du gestionnaire, sans attendre
+    la suivante ; rien sans boucle."""
+    import asyncio
+    manager, here, lan, engine = node
+
+    class Internet:
+        companion = Companion()
+        enabled = True
+        launches = 1
+    manager.internet = Internet()
+    settings.set_value("public_network", True)
+    lend()
+    pub = public_mod.Public(manager)
+    assert pub.push() is False                     # pas de boucle : rien
+    loop = asyncio.new_event_loop()
+    runner = threading.Thread(target=loop.run_forever, daemon=True)
+    runner.start()
+    manager._loop = loop
+    calls = manager.internet.companion.calls
+
+    def put_free():
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            puts = [body for method, _path, body in calls if method == "PUT"]
+            if puts and (not seen or len(puts) > len(seen)):
+                return puts[-1]["free"]
+            time.sleep(0.02)
+        raise AssertionError("aucun profil redit")
+    try:
+        seen = []
+        assert pub.push()
+        seen.append(put_free())
+        manager.executor.interactive = 1           # l'utilisateur converse ici : occupée
+        assert pub.push()
+        seen.append(put_free())
+        assert seen == [1, 0]
+    finally:
+        manager.executor.interactive = 0
+        loop.call_soon_threadsafe(loop.stop)
+        runner.join(5)
+        loop.close()
 
 
 def test_at_most_so_many_public_requests_per_minute(node, monkeypatch):

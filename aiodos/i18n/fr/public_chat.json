@@ -13,6 +13,8 @@
   "error_attachments": "Les pièces jointes et les images ne partent jamais chez un inconnu du réseau public.",
   "error_companion": "Le compagnon réseau (aiodos-net) n'est pas prêt à confier une conversation au réseau public.",
   "error_refused": "La machine du réseau public a refusé la demande.",
+  "loading": "La machine du réseau public charge le modèle…",
+  "reading": "La machine du réseau public lit la conversation…",
   "closed_off": "Aucun modèle ici ni sur tes machines pour répondre, et tes conversations ne partent pas chez des inconnus (« Faire calculer mes conversations par des inconnus » est désactivé dans les Réglages, Cette machine, Partage de puissance) : installe un modèle, ou active ce réglage.",
   "closed_unjoined": "Aucun modèle ici ni sur tes machines pour répondre, et cette machine n'a pas rejoint le réseau public (« Rejoindre le réseau public », dans la vue Réseau) : installe un modèle, ou rejoins-le.",
   "closed_mine_only": "Cette conversation reste sur tes machines (« Sur mes machines seulement »), et aucune n'a de modèle pour répondre : installe un modèle, ou désactive « Sur mes machines seulement » (Autorisations, sous la zone de saisie).",
