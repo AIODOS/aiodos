@@ -37,9 +37,15 @@ pub async fn bind(config: &Config, secret: SecretKey, allowlist: Allowlist) -> R
         .idle_timeout
         .try_into()
         .context("délai d'inactivité trop grand")?;
+    // Ni flux à sens unique ni datagrammes : le chemin privé n'en lit aucun, et QUIC les
+    // garderait sans fin (1,25 Mo par flux, 100 flux par connexion, réglages par défaut
+    // d'Iroh), même venant d'une machine appairée (relecture du 28/10/2026, comme le nœud
+    // public, public.rs)
     let transport = QuicTransportConfig::builder()
         .max_idle_timeout(Some(idle))
         .max_concurrent_bidi_streams(VarInt::from_u32(MAX_STREAMS))
+        .max_concurrent_uni_streams(VarInt::from_u32(0))
+        .datagram_receive_buffer_size(None)
         .build();
     let relay_mode = match &config.relays {
         Relays::N0 => RelayMode::Default,
