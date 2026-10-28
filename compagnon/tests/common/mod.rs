@@ -14,9 +14,10 @@ use std::{
     time::Duration,
 };
 
-use aiodos_net::{Config, Running, start};
+use aiodos_net::{Config, Running, config::Relays, start};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
+use iroh::{RelayUrl, address_lookup::MemoryLookup};
 use hyper::{
     Method, Request, Response, StatusCode,
     body::{Frame, Incoming},
@@ -77,7 +78,9 @@ type AppBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Infallible>;
 /// - `/p2p/v1/echo` (et tout autre chemin) renvoie le chemin, le corps et les en-têtes vus ;
 /// - `/p2p/v1/stream/slow` et `/public/v1/stream/slow` répondent « un », puis « deux » quand
 ///   le test le permet ;
-/// - `/p2p/v1/stream/big` répond 256 Mio, faits à mesure qu'ils sont lus.
+/// - `/p2p/v1/stream/big` répond 256 Mio, faits à mesure qu'ils sont lus ;
+/// - `/public/v1/refused` est refusé aussitôt (400 `bad_request`, comme une demande mal
+///   formée).
 pub async fn fake_app(release: Arc<Notify>) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -121,6 +124,12 @@ async fn answer(req: Request<Incoming>, release: Arc<Notify>) -> Response<AppBod
     }
     if path == "/p2p/v1/stream/big" {
         return Response::new(Zeros(256 << 20).boxed_unsync());
+    }
+    if path == "/public/v1/refused" {
+        let refusal = Bytes::from_static(br#"{"error": "bad_request"}"#);
+        let mut response = Response::new(Full::new(refusal).boxed_unsync());
+        *response.status_mut() = StatusCode::BAD_REQUEST;
+        return response;
     }
     let body = req.into_body().collect().await.unwrap().to_bytes();
     let mut reply = json!({
@@ -236,6 +245,42 @@ pub async fn via(from: &Node, to: &Node, path: &str, body: &str) -> (StatusCode,
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+// ------------------------------------------------------------ réseau public
+
+/// Compagnon d'essai du réseau public (DHT locale, annuaire en mémoire), devant un faux
+/// AIODOS ; par ce relais s'il est donné (le nœud public est alors en relais seulement).
+pub async fn public_node(
+    bootstrap: &[String],
+    lookup: &MemoryLookup,
+    release: Arc<Notify>,
+    relay: Option<&RelayUrl>,
+) -> Node {
+    let app = fake_app(release).await;
+    let (bootstrap, lookup, relay) = (bootstrap.to_vec(), lookup.clone(), relay.cloned());
+    Node::start_with(tempfile::tempdir().unwrap(), move |dir| {
+        let mut config = Config::local(dir.to_path_buf(), app, TOKEN);
+        config.public_dht_bootstrap = Some(bootstrap);
+        config.public_lookup = Some(lookup);
+        config.dial_timeout = Duration::from_secs(5);
+        if let Some(url) = relay {
+            config.relays = Relays::Custom(vec![url]);
+        }
+        config
+    })
+    .await
+}
+
+/// Rejoint le réseau public en prêtant (ou non) ; → la clé publique du nœud.
+pub async fn lend(node: &Node, lends: bool) -> String {
+    let wanted = json!({
+        "enabled": true, "version": "2.1.0", "models": ["qwen3.5:9b"], "lends": lends, "free": 1, "tps": 30,
+    });
+    let (status, body) = call(node, Method::PUT, "/net/v1/public", wanted).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["error"].is_null(), "{body}");
+    body["key"].as_str().unwrap().to_string()
 }
 
 /// Deux compagnons qui s'autorisent l'un l'autre, B devant un faux p2p_app.

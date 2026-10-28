@@ -38,6 +38,7 @@ pub mod pool;
 pub mod public;
 pub mod public_ask;
 pub mod public_profile;
+pub mod public_reading;
 pub mod public_serve;
 pub mod relay_body;
 pub mod rendezvous;

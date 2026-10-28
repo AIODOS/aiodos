@@ -10,9 +10,9 @@ mod common;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use aiodos_net::{Config, config::Relays, public};
+use aiodos_net::public;
 use bytes::Bytes;
-use common::{LIMIT, Node, TOKEN, call, fake_app, send};
+use common::{LIMIT, Node, TOKEN, call, lend, public_node as node, send};
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 use hyper_util::rt::TokioIo;
@@ -23,45 +23,16 @@ use iroh::{
 };
 use iroh_relay::server::{RelayConfig, Server, ServerConfig};
 use serde_json::{Value, json};
-use tokio::{net::TcpStream, sync::Notify, time::timeout};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::Notify,
+    time::timeout,
+};
 
 const C1: &str = "conversation-0000000001";
 const C2: &str = "conversation-0000000002";
 const C3: &str = "conversation-0000000003";
-
-/// Compagnon d'essai du réseau public (DHT locale, annuaire en mémoire), devant un faux
-/// AIODOS ; par ce relais s'il est donné (le nœud public est alors en relais seulement).
-async fn node(
-    bootstrap: &[String],
-    lookup: &MemoryLookup,
-    release: Arc<Notify>,
-    relay: Option<&RelayUrl>,
-) -> Node {
-    let app = fake_app(release).await;
-    let (bootstrap, lookup, relay) = (bootstrap.to_vec(), lookup.clone(), relay.cloned());
-    Node::start_with(tempfile::tempdir().unwrap(), move |dir| {
-        let mut config = Config::local(dir.to_path_buf(), app, TOKEN);
-        config.public_dht_bootstrap = Some(bootstrap);
-        config.public_lookup = Some(lookup);
-        config.dial_timeout = Duration::from_secs(5);
-        if let Some(url) = relay {
-            config.relays = Relays::Custom(vec![url]);
-        }
-        config
-    })
-    .await
-}
-
-/// Rejoint le réseau public en prêtant (ou non) ; → la clé publique du nœud.
-async fn lend(node: &Node, lends: bool) -> String {
-    let wanted = json!({
-        "enabled": true, "version": "2.1.0", "models": ["qwen3.5:9b"], "lends": lends, "free": 1, "tps": 30,
-    });
-    let (status, body) = call(node, Method::PUT, "/net/v1/public", wanted).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["error"].is_null(), "{body}");
-    body["key"].as_str().unwrap().to_string()
-}
 
 /// `POST /net/v1/public/ask/<lender>/<path>` sur l'API locale du demandeur.
 async fn ask(
@@ -86,8 +57,11 @@ async fn ask(
     for (name, value) in headers {
         request = request.header(*name, *value);
     }
-    let request = request.body(Full::new(body.into())).unwrap();
-    timeout(LIMIT, sender.send_request(request)).await.expect("délai").unwrap()
+    let body: Bytes = body.into();
+    let size = body.len();
+    let request = request.body(Full::new(body)).unwrap();
+    let sent = timeout(LIMIT, sender.send_request(request)).await.expect("délai");
+    sent.unwrap_or_else(|err| panic!("{path} ({size} octets) : {err:?}"))
 }
 
 async fn read_json(response: Response<Incoming>) -> (StatusCode, Value) {
@@ -203,8 +177,20 @@ async fn a_stranger_answers_a_conversation_without_knowing_who_asks() {
     let around = ask(&asker, &lender_key, "public/v1/../../p2p/v1/echo", Some(C1), &[], "").await;
     refused(read_json(around).await, StatusCode::NOT_FOUND, "not_found");
     refused(echo(&asker, "pas-une-cle", C1).await, StatusCode::BAD_REQUEST, "bad_key");
-    let big = ask(&asker, &lender_key, "public/v1/echo", Some(C1), &[], vec![b'x'; 300 << 10]).await;
-    refused(read_json(big).await, StatusCode::PAYLOAD_TOO_LARGE, "too_large");
+    // Trop gros, annoncé : refusé sans rien lire. La tête seule : envoyer le corps ferait
+    // parfois couper la connexion par Windows avant que le refus soit lu (données reçues
+    // jamais lues à la fermeture)
+    let head = format!(
+        "POST /net/v1/public/ask/{lender_key}/public/v1/echo HTTP/1.1\r\nhost: 127.0.0.1\r\n\
+         x-aiodos-net-token: {TOKEN}\r\nx-aiodos-conversation: {C1}\r\ncontent-length: {}\r\n\r\n",
+        300 << 10
+    );
+    let mut tcp = TcpStream::connect(asker.running.listen).await.unwrap();
+    tcp.write_all(head.as_bytes()).await.unwrap();
+    let mut big = Vec::new();
+    timeout(LIMIT, tcp.read_to_end(&mut big)).await.expect("délai").unwrap();
+    let big = String::from_utf8_lossy(&big);
+    assert!(big.starts_with("HTTP/1.1 413") && big.contains("too_large"), "{big}");
     let path = format!("/net/v1/public/ask/{lender_key}/public/v1/echo");
     let get = send(asker.running.listen, Method::GET, &path, Some(TOKEN), String::new()).await;
     assert_eq!(get.status(), StatusCode::METHOD_NOT_ALLOWED);
