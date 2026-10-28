@@ -35,7 +35,8 @@ Décisions de l'auteur (27/10) :
 
 ## 3. Une conversation, de bout en bout
 
-1. **Choisir.** Le demandeur lit l'annuaire (déjà reçu toutes les 60 s) : machines qui
+1. **Choisir.** Le demandeur lit l'annuaire (profils reçus chaque minute, et dans les 5 s
+   quand ils changent ; relu au compagnon s'il date de plus de 3 s) : machines qui
    prêtent, ont le modèle voulu (§ 6) et une place libre. Il les classe par vitesse mesurée
    (sa propre table, § 8), puis latence. Mes machines et mes amis d'abord, à vitesse
    comparable ; une machine publique bien plus rapide passe devant ce téléphone.

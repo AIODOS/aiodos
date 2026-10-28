@@ -58,6 +58,20 @@ async fn sees(node: &Node, key: &str) -> Value {
     }
 }
 
+/// Attend que `node` voie la clé `key` avec un profil qui satisfait `wanted`, dans le délai.
+async fn sees_within(node: &Node, key: &str, within: Duration, wanted: impl Fn(&Value) -> bool) -> Value {
+    let deadline = tokio::time::Instant::now() + within;
+    loop {
+        let state = public(node).await;
+        let found = state["nodes"].as_array().and_then(|nodes| nodes.iter().find(|n| n["key"] == key));
+        if let Some(found) = found.filter(|n| wanted(n)) {
+            return found.clone();
+        }
+        assert!(tokio::time::Instant::now() < deadline, "profil de {key} pas vu à temps : {state}");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn two_public_nodes_meet_through_the_dht_and_a_third_stays_silent() {
     let testnet = n0_mainline::Testnet::new(5).await.unwrap();
@@ -90,9 +104,17 @@ async fn two_public_nodes_meet_through_the_dht_and_a_third_stays_silent() {
     assert!(quiet["nodes"].as_array().unwrap().is_empty());
     assert!(!c.dir.path().join("aiodos-public.key").exists());
 
-    // Le profil change : les autres le voient
+    // Le profil change : les autres le voient, sans attendre la diffusion de chaque minute
+    // (places libres vues avec jusqu'à 90 s de retard, essai réel du 28/10/2026)
     let wanted = json!({ "enabled": true, "version": "2.1.0", "models": ["mistral:7b"], "lends": false });
     call(&a, Method::PUT, "/net/v1/public", wanted).await;
+    let changed = sees_within(&b, &ka, Duration::from_secs(15), |n| n["lends"] == false).await;
+    assert_eq!(changed["models"], json!(["mistral:7b"]));
+    // Et de nouveau : au plus tôt CHANGE_GAP (5 s) après la précédente, pas une minute
+    let wanted = json!({ "enabled": true, "version": "2.1.0", "models": ["mistral:7b"], "lends": true, "free": 1 });
+    call(&a, Method::PUT, "/net/v1/public", wanted).await;
+    let changed = sees_within(&b, &ka, Duration::from_secs(15), |n| n["lends"] == true).await;
+    assert_eq!(changed["free"], json!(1));
 
     // Quitter le réseau public : plus de clé affichée, plus d'annuaire
     let (_, left) = call(&a, Method::PUT, "/net/v1/public", json!({ "enabled": false })).await;

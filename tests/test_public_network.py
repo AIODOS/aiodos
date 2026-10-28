@@ -125,3 +125,47 @@ def test_the_api_asks_for_internet_first():
         assert settings.get("public_network") is False
         snap = client.get("/api/network", headers=headers).json()["public"]
         assert snap["wanted"] is False and snap["joined"] is False
+
+
+def test_the_choice_of_machines_reads_a_fresh_directory():
+    """Le choix des machines (placement.py) relit l'annuaire au compagnon s'il date de plus de
+    FRESH_S secondes : un prêteur redevenu libre est vu sans attendre la synchronisation
+    suivante (15 s). Essai réel du 28/10/2026 : « free » vu avec jusqu'à 90 s de retard, et
+    un téléphone sans modèle refusait de converser alors que la machine qui prête était libre.
+    Pas rejoint, compagnon arrêté ou qui ne répond pas : l'état gardé, sans erreur."""
+    from aiodos.network import route
+
+    def older(seconds):                         # l'état gardé, lu il y a `seconds` de plus
+        public_mod._latest["at"] -= seconds
+    lender = {"key": "cd" * 32, "version": "1.0.0", "models": ["qwen3.5:9b"], "lends": True,
+              "seen_s": 1}
+    companion = Companion()
+    companion.api = lambda method, path, body=None, timeout=None: (
+        companion.calls.append((method, path, timeout)) or
+        {"enabled": True, "key": "ab" * 32, "nodes": [dict(lender, free=companion.free)]})
+    companion.free = 1
+    route.attach(companion)
+    try:
+        # Pas encore rejoint : rien n'est demandé au compagnon
+        assert public_mod.seen(fresh=True) == (None, []) and companion.calls == []
+        public_mod._remember(public_mod._typed(
+            {"enabled": True, "key": "ab" * 32, "nodes": [dict(lender, free=0)]}))
+        # Lu il y a moins de FRESH_S secondes : l'état gardé
+        older(public_mod.FRESH_S - 1)
+        assert public_mod.seen(fresh=True)[1][0]["free"] == 0 and companion.calls == []
+        assert public_mod.seen()[1][0]["free"] == 0
+        # Plus vieux : relu au compagnon, une fois, avec un délai court
+        older(2)
+        assert public_mod.seen(fresh=True)[1][0]["free"] == 1
+        assert companion.calls == [("GET", "/net/v1/public", public_mod.FRESH_TIMEOUT)]
+        assert public_mod.seen(fresh=True)[1][0]["free"] == 1 and len(companion.calls) == 1
+        # Le compagnon ne répond pas : l'état gardé, sans erreur
+        older(public_mod.FRESH_S + 1)
+        companion.api = lambda *a, **k: (_ for _ in ()).throw(CompanionError("injoignable"))
+        assert public_mod.seen(fresh=True)[1][0]["free"] == 1
+        # Compagnon arrêté : rien n'est demandé
+        companion.running = False
+        companion.api = lambda *a, **k: pytest.fail("compagnon arrêté interrogé")
+        assert public_mod.seen(fresh=True)[1][0]["free"] == 1
+    finally:
+        route.detach(companion)

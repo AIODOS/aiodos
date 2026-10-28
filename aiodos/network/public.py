@@ -26,7 +26,7 @@ import time
 
 from aiodos import __version__, settings
 from aiodos.i18n import t
-from aiodos.network import public_lending
+from aiodos.network import public_lending, route
 from aiodos.network.companion import CompanionError
 from aiodos.services import ollama
 
@@ -38,6 +38,11 @@ MAX_NODES = 200               # nœuds montrés dans la vue Réseau
 MAX_KEPT = 2000               # nœuds gardés du dernier état lu au compagnon
 MAX_TPS = 100_000             # vitesse au-delà de laquelle un profil ment
 MAX_FREE = 255                # places libres dites, au plus (comme le compagnon)
+# Le choix des machines (placement.py) relit l'annuaire au compagnon s'il date de plus de
+# FRESH_S secondes, au lieu d'attendre la prochaine synchronisation (toutes les 15 s) : un
+# prêteur redevenu libre est vu plus tôt (essai réel du 28/10/2026)
+FRESH_S = 3
+FRESH_TIMEOUT = 2             # le compagnon est sur 127.0.0.1
 
 
 def _models() -> list:
@@ -92,10 +97,31 @@ def _remember(status):
                        at=time.monotonic())
 
 
-def seen() -> tuple:
+def _refresh():
+    """L'annuaire relu au compagnon s'il date de plus de FRESH_S secondes, et seulement si le
+    réseau public est rejoint (dernière synchronisation, Public.sync) ; sinon, ou si le
+    compagnon ne répond pas, l'état gardé sert tel quel."""
+    with _lock:
+        joined, at = _latest["key"] is not None, _latest["at"]
+    if not joined or time.monotonic() - at < FRESH_S:
+        return
+    companion = route.companion()
+    if companion is None or not getattr(companion, "running", False):
+        return
+    try:
+        status = _typed(companion.api("GET", "/net/v1/public", timeout=FRESH_TIMEOUT))
+    except Exception:  # noqa: BLE001 — compagnon arrêté, lent ou ancien : l'état gardé
+        return
+    _remember(status)
+
+
+def seen(fresh: bool = False) -> tuple:
     """(clé de cette machine sur le réseau public, nœuds vus) d'après le dernier état lu au
     compagnon ; « seen_s » de chaque nœud y compte le temps écoulé depuis. Rien si le
-    réseau public n'est pas rejoint."""
+    réseau public n'est pas rejoint. fresh : relu d'abord au compagnon s'il date de plus de
+    FRESH_S secondes (_refresh)."""
+    if fresh:
+        _refresh()
     with _lock:
         key, nodes, at = _latest["key"], list(_latest["nodes"]), _latest["at"]
     if not nodes:

@@ -25,7 +25,8 @@
 //!
 //! Le nœud trouve quelques autres clés par la DHT (rendezvous.rs), rejoint le sujet
 //! « aiodos/public/1 » du groupe de discussion, et y diffuse son profil signé chaque
-//! minute (public_profile.rs) ; il garde en mémoire les profils reçus depuis moins de
+//! minute (public_profile.rs), et dans les 5 s quand il change (`CHANGE_GAP` : places
+//! libres, prêt) ; il garde en mémoire les profils reçus depuis moins de
 //! 5 minutes. Les conversations ne sont relayées à AIODOS que tant que le nœud tourne
 //! (réglage « Rejoindre le réseau public ») et que son profil dit qu'il prête (`lends`).
 
@@ -76,6 +77,12 @@ use crate::{
 pub const KEY_FILE: &str = "aiodos-public.key";
 /// Diffusion du profil.
 const PROFILE_EVERY: Duration = Duration::from_secs(60);
+/// Un profil changé (places libres, prêt, modèles, vitesse) part sans attendre la minute,
+/// mais au plus tôt ce délai après la diffusion précédente : chaque profil est daté à la
+/// seconde, et les autres ignorent celui qui n'est pas plus récent que le leur (essai réel
+/// du 28/10/2026 : « free » vu avec jusqu'à 90 s de retard, et un téléphone sans modèle
+/// refusait de converser alors que la machine qui prête était libre).
+const CHANGE_GAP: Duration = Duration::from_secs(5);
 /// Inscription dans la DHT, et recherche d'autres nœuds s'il en manque.
 const RENDEZVOUS_EVERY: Duration = Duration::from_secs(5 * 60);
 /// Sans aucun voisin : nouvelle lecture après 20 s, puis 40, 80… jusqu'à 5 minutes.
@@ -149,6 +156,8 @@ pub struct Public {
     limits: Limits,
     state: Arc<Mutex<State>>,
     session: tokio::sync::Mutex<Option<Session>>,
+    /// Le profil a changé : la session en cours le diffuse bientôt (`CHANGE_GAP`).
+    changed: Arc<tokio::sync::Notify>,
 }
 
 impl Public {
@@ -166,6 +175,7 @@ impl Public {
             limits: Limits::default(),
             state: Arc::new(Mutex::new(State::default())),
             session: tokio::sync::Mutex::new(None),
+            changed: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -206,7 +216,10 @@ impl Public {
                 *state = State { profile, ..State::default() };
                 info!("Réseau public quitté");
             }
-            (true, true) if changed => debug!("Réseau public : profil changé"),
+            (true, true) if changed => {
+                debug!("Réseau public : profil changé");
+                self.changed.notify_one(); // diffusé sans attendre la minute (cf. run)
+            }
             _ => {}
         }
         drop(session);
@@ -306,6 +319,7 @@ impl Public {
         let task = tokio::spawn(run(
             Node { id, secret, dht, sender, state: self.state.clone() },
             receiver,
+            self.changed.clone(),
             cancel.clone(),
         ));
         Ok(Session { router, cancel, task })
@@ -478,8 +492,12 @@ impl Node {
     }
 }
 
-async fn run(node: Node, mut receiver: GossipReceiver, cancel: CancellationToken) {
+async fn run(node: Node, mut receiver: GossipReceiver, changed: Arc<tokio::sync::Notify>, cancel: CancellationToken) {
+    // Le profil part chaque minute, et sans attendre quand il change : la minute repart
+    // alors de cette diffusion, au plus tôt CHANGE_GAP après la précédente (une seule
+    // diffusion par seconde : cf. CHANGE_GAP)
     let mut profile_tick = tokio::time::interval(PROFILE_EVERY);
+    let mut broadcast_at: Option<tokio::time::Instant> = None;
     // Seul (aucun voisin), le nœud relit la DHT bien plus tôt : deux nœuds arrivés au même
     // instant peuvent l'avoir lue chacun avant l'inscription de l'autre
     let rendezvous_at = tokio::time::sleep(Duration::ZERO);
@@ -498,7 +516,17 @@ async fn run(node: Node, mut receiver: GossipReceiver, cancel: CancellationToken
                 renewed = true;
                 break;
             }
-            _ = profile_tick.tick() => node.broadcast_profile(false).await,
+            _ = profile_tick.tick() => {
+                node.broadcast_profile(false).await;
+                broadcast_at = Some(tokio::time::Instant::now());
+            }
+            _ = changed.notified() => {
+                let now = tokio::time::Instant::now();
+                match broadcast_at.map(|at| at + CHANGE_GAP) {
+                    Some(soonest) if soonest > now => profile_tick.reset_at(soonest),
+                    _ => profile_tick.reset_immediately(),
+                }
+            }
             _ = &mut rendezvous_at => {
                 if pending.as_ref().is_none_or(|task| task.is_finished()) {
                     let node = node.clone();
@@ -519,6 +547,7 @@ async fn run(node: Node, mut receiver: GossipReceiver, cancel: CancellationToken
                 Some(Ok(Event::NeighborUp(id))) => {
                     node.state.lock().expect("état").neighbors.insert(id);
                     node.broadcast_profile(true).await; // le nouveau voisin nous connaît tout de suite
+                    broadcast_at = Some(tokio::time::Instant::now());
                 }
                 Some(Ok(Event::NeighborDown(id))) => {
                     node.state.lock().expect("état").neighbors.remove(&id);

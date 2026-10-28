@@ -264,11 +264,12 @@ def _remote(name: str) -> list:
 
 def _public_nodes() -> list:
     """Les nœuds du réseau public qui prêtent en ce moment et ont une place, d'après le
-    dernier état lu au compagnon (public.seen), moins les conversations que je viens de leur
-    envoyer ; aucun si le compagnon ne sait pas leur confier une conversation."""
+    dernier état lu au compagnon (public.seen, relu s'il date de plus de public.FRESH_S
+    secondes), moins les conversations que je viens de leur envoyer ; aucun si le compagnon
+    ne sait pas leur confier une conversation."""
     if public_chat.ready() is None:
         return []
-    mine, nodes = public.seen()
+    mine, nodes = public.seen(fresh=True)
     found = []
     for node in nodes:
         key = node.get("key")
