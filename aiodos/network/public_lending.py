@@ -376,15 +376,15 @@ def admit(manager, raw: bytes) -> dict:
     tout calcul. → {"model", "messages", "options", "place"} : la place est prise."""
     if not lending_now(manager):
         raise Refused(503, "not_lending")
-    place = _take_place(manager)
-    try:
-        body = _parse(raw)
-        model = _model(body)
-        return {"model": model, "messages": _messages(body.get("messages")),
-                "options": _options(body.get("options")), "place": place}
-    except BaseException:
-        place.release()
-        raise
+    # La demande lue et bornée d'abord, sans rien prendre : une requête mal formée, trop
+    # grosse ou pour un modèle absent ne consomme ni la place ni le seau des BUCKET par minute
+    # (des refus rapides en série rendaient le prêteur « occupé » pour tous : relecture du
+    # 28/10/2026, comme les deux seaux du compagnon, public_serve.rs)
+    body = _parse(raw)
+    asked = {"model": _model(body), "messages": _messages(body.get("messages")),
+             "options": _options(body.get("options"))}
+    asked["place"] = _take_place(manager)
+    return asked
 
 
 # ------------------------------------------------------------------- réponse

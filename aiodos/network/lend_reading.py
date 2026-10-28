@@ -139,21 +139,20 @@ def read(manager, sender, payload, stop):
 def admit(manager, raw: bytes) -> dict:
     """public_lending.admit, puis les textes : Refused au premier refus, avant tout calcul
     (la place rendue). → {"model", "messages", "options", "texts", "place"}."""
-    if public_lending.lending_now(manager) and not reads():
-        raise Refused(404, "no_reading")                 # avant de prendre une place
-    asked = public_lending.admit(manager, raw)
-    try:
-        body = public_lending._parse(raw)
+    found = None
+    if public_lending.lending_now(manager):
+        if not reads():
+            raise Refused(404, "no_reading")             # avant de prendre une place
+        # Les textes bornés d'abord, sans rien prendre (cf. public_lending.admit)
         try:
-            asked["texts"] = texts(body.get("texts"))
+            found = texts(public_lending._parse(raw).get("texts"))
         except ValueError:
             raise public_lending._bad() from None
         except OverflowError:
             raise Refused(413, "too_big") from None
-        return asked
-    except BaseException:
-        asked["place"].release()
-        raise
+    asked = public_lending.admit(manager, raw)           # « not_lending » sans prêt
+    asked["texts"] = found
+    return asked
 
 
 def answer(manager, asked: dict, stop, clock=None):

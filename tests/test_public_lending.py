@@ -491,6 +491,24 @@ def test_at_most_so_many_public_requests_per_minute(node, monkeypatch):
     assert len(engine.calls) == 2
 
 
+def test_quick_refusals_do_not_use_up_the_requests_of_the_minute(node, monkeypatch):
+    """Relecture du 28/10/2026 : la place et le seau des requêtes par minute étaient pris avant
+    de lire la demande ; des requêtes mal formées, trop grosses ou pour un modèle absent, en
+    série, rendaient le prêteur « occupé » pour tous. Elles ne prennent plus rien."""
+    manager, here, lan, engine = node
+    lend()
+    monkeypatch.setattr(limits, "PER_MINUTE", 2)
+    for _ in range(5):
+        assert post(here, dict(ask(), v=2)).json() == {"error": "bad_request"}
+        assert post(here, dict(ask(), model="llama-inconnu")).json() == {"error": "no_model"}
+        assert post(here, dict(ask(), messages=[{"role": "user", "content": "1" * 9000}])) \
+            .json() == {"error": "too_big"}
+    assert post(here).status_code == 200
+    assert post(here).status_code == 200
+    assert post(here).json() == {"error": "busy"}           # les vraies, elles, sont comptées
+    assert len(engine.calls) == 2 and lend_queue.idle()
+
+
 def test_only_a_conversation_model_installed_here_under_its_exact_name(node):
     manager, here, lan, engine = node
     lend()
