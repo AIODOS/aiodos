@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -425,6 +425,24 @@ MIGRATIONS = {
     # conversation ne part chez un inconnu
     27: """
     ALTER TABLE conversations ADD COLUMN mine_only INTEGER NOT NULL DEFAULT 0;
+    """,
+    # Contrôles au hasard du réseau public (network/spot_check.py, network/reputation.py) :
+    # par clé de prêteur (la clé publique de son nœud, jamais une clé jetable), les réponses
+    # servies ici, la vitesse mesurée ici, les contrôles réussis ou ratés, la mise de côté
+    # (aside_until : jusqu'à quand ; forever : pour de bon). Rien n'est partagé.
+    28: """
+    CREATE TABLE IF NOT EXISTS public_reputation (
+        key           TEXT PRIMARY KEY,
+        served        INTEGER NOT NULL DEFAULT 0,
+        tps           REAL,
+        checks_ok     INTEGER NOT NULL DEFAULT 0,
+        checks_failed INTEGER NOT NULL DEFAULT 0,
+        aside_until   REAL,
+        forever       INTEGER NOT NULL DEFAULT 0,
+        first_seen    REAL NOT NULL,
+        last_seen     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_public_reputation_seen ON public_reputation(last_seen);
     """,
 }
 

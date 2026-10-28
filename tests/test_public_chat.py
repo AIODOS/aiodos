@@ -472,5 +472,5 @@ def test_migration_27_adds_on_my_machines_only():
     db.execute("PRAGMA user_version=26")
     db.close()
     db._initialized.discard(path)
-    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION == 27
+    assert db.query_one("PRAGMA user_version")[0] == db.SCHEMA_VERSION >= 27
     assert db.query_one("SELECT mine_only FROM conversations WHERE title='Avant'")[0] == 0
