@@ -23,10 +23,13 @@ relayé par le compagnon), aussi longtemps qu'il les gardait. Désormais :
 
 Et l'en-tête X-Aiodos-Peer (la clé Internet de l'appelant) n'est cru que d'une connexion
 venue de cette machine même : seul le compagnon l'ajoute, et un appareil du réseau local
-qui l'enverrait lui-même se ferait passer pour une machine jointe par Internet.
+qui l'enverrait lui-même se ferait passer pour une machine jointe par Internet. De même
+pour X-Aiodos-Public (la clé jetable d'un inconnu du réseau public, network/public_lending.py) :
+sans lui, crédible, aucune route /public/… n'est ouverte.
 """
 import ipaddress
 import logging
+import re
 import time
 
 from uvicorn.protocols.http.h11_impl import H11Protocol
@@ -36,6 +39,8 @@ from aiodos.network import peers
 log = logging.getLogger("aiodos.network")
 
 PEER_HEADER = b"x-aiodos-peer"     # clé Internet de l'appelant, ajoutée par le compagnon
+PUBLIC_HEADER = b"x-aiodos-public"  # clé jetable d'un inconnu du réseau public, de même
+_PUBLIC_KEY = re.compile(r"[0-9a-f]{16,128}")   # une clé d'Iroh en hexadécimal : 64 signes
 HEADER_S = 10            # s pour envoyer les en-têtes d'une requête
 BODY_GRACE = 10          # s de lecture du corps avant de regarder son débit
 MIN_RATE = 8 * 1024      # octets/s en moyenne, au moins, pour le corps d'une requête
@@ -78,18 +83,32 @@ def same_machine(client_host, server_host) -> bool:
         and normal_host(client_host) == normal_host(server_host)
 
 
-def internet_key(scope) -> str:
-    """Clé Internet de l'appelant (X-Aiodos-Peer), seulement si la requête vient du
-    compagnon, donc de cette machine ; "" sinon : venue du réseau local, l'en-tête ne
-    prouve rien et la requête est traitée comme venue du réseau local."""
+def _from_here(scope, header: bytes) -> str:
+    """L'en-tête `header` (en minuscules), seulement si la requête vient de cette machine."""
     client = scope.get("client") or (None, None)
     server = scope.get("server") or (None, None)
     if not same_machine(client[0], server[0]):
         return ""
     for name, value in scope.get("headers") or []:
-        if name == PEER_HEADER:
+        if name == header:
             return value.decode("latin-1").strip().lower()
     return ""
+
+
+def internet_key(scope) -> str:
+    """Clé Internet de l'appelant (X-Aiodos-Peer), seulement si la requête vient du
+    compagnon, donc de cette machine ; "" sinon : venue du réseau local, l'en-tête ne
+    prouve rien et la requête est traitée comme venue du réseau local."""
+    return _from_here(scope, PEER_HEADER)
+
+
+def public_key(scope) -> str:
+    """Clé jetable d'un inconnu du réseau public (X-Aiodos-Public), seulement si la requête
+    vient du compagnon, donc de cette machine, et si c'est bien une clé (hexadécimal) ; ""
+    sinon. Elle n'est ni gardée ni comparée à rien : elle dit seulement que la demande vient
+    du réseau public, par le compagnon (network/public_lending.py)."""
+    key = _from_here(scope, PUBLIC_HEADER)
+    return key if _PUBLIC_KEY.fullmatch(key) else ""
 
 
 def known_addresses() -> frozenset:

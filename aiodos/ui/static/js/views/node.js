@@ -298,6 +298,8 @@ function renderShare() {
     ${shareRow('offload_enabled', t('node.offload'), t('node.offload_help', { device }))}
     ${shareRow('share_enabled', t('node.share'), t(mobile ? 'node.share_help_phone' : 'node.share_help_pc'))}
     ${shareRow('lend_models', t('node.lend_models'), t('node.lend_models_help', { device }))}
+    ${shareRow('lend_public', t('node.lend_public'), mobile ? t('node.lend_public_help_phone')
+      : t('node.lend_public_help', { device }))}
     ${mobile ? '' : shareRow('lend_gpu', t('node.lend_gpu'), t('node.lend_gpu_help'))}
     ${mobile ? '' : shareRow('lend_images_friends', t('node.lend_images'), t('node.lend_images_help'))}
     ${mobile ? '' : idleRows}

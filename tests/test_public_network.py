@@ -1,6 +1,7 @@
 """Réseau public, phase 3.0 (network/public.py) : désactivé par défaut ; activé, le compagnon
 reçoit un profil sans rien de personnel, et ne le reçoit de nouveau que s'il change ou
-si le compagnon a été relancé. Un compagnon trop ancien est dit clairement."""
+si le compagnon a été relancé. Un compagnon trop ancien est dit clairement. Le prêt aux
+inconnus dans le profil (lends, free, tps) : tests/test_public_lending.py."""
 import asyncio
 
 import pytest
@@ -58,7 +59,7 @@ def test_off_by_default_and_nothing_personal_when_on(models):
     settings.set_value("public_network", True)
     asyncio.run(pub.sync())
     assert companion.calls[-1] == ("PUT", "/net/v1/public", {
-        "enabled": True, "version": __version__, "lends": False,
+        "enabled": True, "version": __version__, "lends": False, "free": 0,
         "models": ["embeddinggemma:latest", "qwen3.5:9b"]})
     asyncio.run(pub.sync())                       # le même profil : l'état seulement
     assert companion.calls[-1][:2] == ("GET", "/net/v1/public")

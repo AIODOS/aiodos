@@ -14,6 +14,7 @@ import requests
 
 from aiodos import i18n, settings
 from aiodos.llm import integrated
+from aiodos.node import speed
 
 _caps_cache = {}
 _caps_lock = threading.Lock()
@@ -192,7 +193,14 @@ def chat_stream(model, messages, think=None, stop=None, options=None, stats=Fals
     options : réglages d'échantillonnage d'Ollama (temperature, num_predict…).
     stats   : à la fin, un couple ("stats", {"prompt_tokens", "completion_tokens",
               "done_reason"}) en plus (passerelle vers les autres outils).
+
+    La vitesse de la réponse est notée au passage (node/speed.py : profil public).
     """
+    yield from speed.measured(_chat_stream(model, messages, think, stop, options, stats,
+                                           timeout))
+
+
+def _chat_stream(model, messages, think, stop, options, stats, timeout):
     if use_integrated():
         yield from integrated.chat_stream(model, messages, think=think, stop=stop,
                                           options=options, stats=stats, timeout=timeout)

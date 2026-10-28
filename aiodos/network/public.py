@@ -1,4 +1,6 @@
-"""Réseau public, phase 3.0 : un annuaire, sans rien confier (docs/phase3-reseau-public.md).
+"""Réseau public : un annuaire (phase 3.0, docs/phase3-reseau-public.md), et des inconnus
+qui font calculer leurs conversations par cette machine (network/public_lending.py,
+docs/conception/reseau-public-calcul.md).
 
 Activé par défaut depuis le 27/10/2026 (réglage « public_network », « Rejoindre le réseau
 public ») : quand Internet tourne, le compagnon (aiodos-net) rejoint le réseau public avec une clé
@@ -8,22 +10,32 @@ relais pourrait la voir (Iroh joint le relais qu'un autre nœud annonce : limite
 personnel : la version d'AIODOS et les modèles que cette machine sait calculer. En retour,
 la vue Réseau montre les nœuds publics en ligne.
 
-En 3.0, rien n'est confié aux inconnus et rien n'est calculé pour eux : le profil dit
-donc « ne prête pas » (« lends » : faux), quels que soient les réglages de prêt.
+Depuis le 28/10/2026, le profil dit aussi si cette machine prête aux inconnus (« lends » :
+le réglage lend_public, et le partage actif, cf. public_lending.lending_now), si une
+conversation peut y être prise maintenant (« free » : 1 ou 0) et, si elle est connue, sa
+vitesse (« tps », jetons par seconde, node/speed.py). Le compagnon les publie signés. Les
+nœuds vus sont gardés typés (_node), « free » et « tps » compris : le côté demandeur y
+choisira ses machines.
 """
 import asyncio
 import json
 import logging
+import math
 
 from aiodos import __version__, settings
 from aiodos.i18n import t
+from aiodos.network import public_lending
 from aiodos.network.companion import CompanionError
 from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.net")
 
 MAX_MODELS = 24               # comme le compagnon (public_profile.rs)
+MAX_TEXT = 64                 # de même, pour une version ou un nom de modèle
 MAX_NODES = 200               # nœuds montrés dans la vue Réseau
+MAX_KEPT = 2000               # nœuds gardés du dernier état lu au compagnon
+MAX_TPS = 100_000             # vitesse au-delà de laquelle un profil ment
+MAX_FREE = 255                # places libres dites, au plus (comme le compagnon)
 
 
 def _models() -> list:
@@ -32,6 +44,38 @@ def _models() -> list:
     except Exception:                  # Ollama arrêté : on dira « aucun modèle »
         return []
     return names[:MAX_MODELS]
+
+
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) \
+        and math.isfinite(value)
+
+
+def _node(raw) -> dict | None:
+    """Un nœud vu, tel que le compagnon le dit, typé : sa clé, sa version, ses modèles, s'il
+    prête, depuis quand il a été vu, et, s'il les publie, « free » (places libres) et
+    « tps » (jetons par seconde)."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("key"), str) or not raw["key"]:
+        return None
+    models = raw.get("models") if isinstance(raw.get("models"), list) else []
+    node = {"key": raw["key"][:128],
+            "version": raw["version"][:MAX_TEXT] if isinstance(raw.get("version"), str) else "",
+            "models": [m[:MAX_TEXT] for m in models if isinstance(m, str)][:MAX_MODELS],
+            "lends": raw.get("lends") is True,
+            "seen_s": max(0, int(raw["seen_s"])) if _number(raw.get("seen_s")) else 0}
+    if _number(raw.get("free")):                  # places libres (0 ou 1 aujourd'hui)
+        node["free"] = max(0, min(MAX_FREE, round(raw["free"])))
+    if _number(raw.get("tps")) and 0 < raw["tps"] < MAX_TPS:
+        node["tps"] = round(float(raw["tps"]), 1)
+    return node
+
+
+def _typed(status) -> dict:
+    """L'état lu au compagnon, ses nœuds typés (_node)."""
+    if not isinstance(status, dict):
+        return {}
+    nodes = status.get("nodes") if isinstance(status.get("nodes"), list) else []
+    return dict(status, nodes=[n for n in map(_node, nodes[:MAX_KEPT]) if n is not None])
 
 
 class Public:
@@ -48,7 +92,8 @@ class Public:
     def _request(self) -> dict:
         if not self.wanted:
             return {"enabled": False}
-        return {"enabled": True, "version": __version__, "models": _models(), "lends": False}
+        return {"enabled": True, "version": __version__, "models": _models(),
+                **public_lending.profile_fields(self.m)}
 
     async def sync(self):
         """Dit au compagnon de rejoindre ou de quitter le réseau public (quand la demande
@@ -64,11 +109,12 @@ class Public:
                  json.dumps(request, sort_keys=True))
         try:
             if state != self._sent:
-                self._status = await asyncio.to_thread(companion.api, "PUT", "/net/v1/public",
-                                                       request)
+                self._status = _typed(await asyncio.to_thread(companion.api, "PUT",
+                                                              "/net/v1/public", request))
                 self._sent = state
             elif self.wanted:
-                self._status = await asyncio.to_thread(companion.api, "GET", "/net/v1/public")
+                self._status = _typed(await asyncio.to_thread(companion.api, "GET",
+                                                              "/net/v1/public"))
                 if not self._status.get("enabled"):
                     self._sent = None      # le compagnon n'y est plus : redit au prochain tour
             self._error = None

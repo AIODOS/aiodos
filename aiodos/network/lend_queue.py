@@ -12,6 +12,12 @@ un gros contributeur passe devant, sans pouvoir écarter les autres indéfinimen
 Une conversation qui attend reçoit un signe de vie toutes les quelques secondes (wait,
 tick) : la machine qui la demande peut partir (Cancelled ici), et l'attente se termine en
 « occupée » (Busy, MAX_WAIT_S) avant que sa propre patience (10 minutes) ne s'épuise.
+
+Le réseau public (public_lending.py, 28/10/2026) vient après mes machines et mes amis
+(PUBLIC, rang le plus bas) et n'attend jamais : sa conversation prend la place tout de suite
+(take_now) quand personne n'est servi ni n'attend, sinon elle est refusée (« occupée »). Une
+conversation de mes machines ou de mes amis qui arrive pendant la sienne l'arrête (elle
+regarde waiting()).
 """
 import heapq
 import itertools
@@ -25,6 +31,8 @@ CHAT_AS_SECONDS = 30            # une conversation servie compte comme 30 s de c
 BALANCE_CAP = 1800              # solde compté, au plus, dans un sens comme dans l'autre
 MAX_WAIT_S = 540                # avant les 600 s d'attente de lecture de la machine qui demande
 AT_ONCE = 1
+# Rang des conversations d'inconnus du réseau public : jamais un identifiant de machine
+PUBLIC = "réseau public"        # i18n: tel quel (jamais montré)
 
 _cond = threading.Condition()
 _serving = 0
@@ -54,7 +62,10 @@ def balance(node_id: str) -> float:
 
 
 def _key(node_id: str) -> tuple:
-    """Mes machines d'abord (la réciprocité vaut entre amis), puis le solde, borné."""
+    """Mes machines d'abord (la réciprocité vaut entre amis), puis le solde, borné ; le
+    réseau public en dernier."""
+    if node_id == PUBLIC:
+        return (2, 0.0)
     clamped = max(-BALANCE_CAP, min(BALANCE_CAP, balance(node_id)))
     return (0 if sharing.level(node_id) == sharing.MINE else 1, -clamped)
 
@@ -62,6 +73,28 @@ def _key(node_id: str) -> tuple:
 def waiting() -> int:
     with _cond:
         return len(_waiting)
+
+
+def idle() -> bool:
+    """Personne n'est servi, personne n'attend."""
+    with _cond:
+        return _serving == 0 and not _waiting
+
+
+def take_now(node_id: str) -> Ticket | None:
+    """La place servie tout de suite, sans attendre : seulement si personne n'est servi ni
+    n'attend (le réseau public passe après tout le monde) ; None sinon. Rendue par leave."""
+    global _serving
+    key = _key(node_id)
+    with _cond:
+        if _serving >= AT_ONCE or _waiting:
+            return None
+        ticket = Ticket()
+        ticket.entry = (key, next(_order), ticket)
+        ticket.deadline = time.monotonic()
+        ticket.serving = True
+        _serving += 1
+        return ticket
 
 
 def enter(node_id: str, max_wait: float = MAX_WAIT_S) -> Ticket:

@@ -76,7 +76,8 @@ DEFAULTS = {
     "internet_relays": ["n0"],        # « n0 » (relais publics de n0), « none », ou https://…
     "internet_directory": ["n0-dns", "dht"],   # DNS de n0 d'abord, DHT Mainline en secours
     "internet_portmap": True,         # ouverture de port automatique sur la box (UPnP, PCP…)
-    # --- Réseau public (phase 3.0) : un annuaire, sans rien confier ; activé par défaut ---
+    # --- Réseau public (phase 3.0) : un annuaire, activé par défaut ; les conversations
+    # d'inconnus calculées ici : lend_public, plus bas ---
     "public_network": True,           # « Rejoindre le réseau public » (Internet requis)
     "p2p_route": "auto",              # chemin vers mes machines : auto | lan | internet
     "internet_max_blob_mb": 64,       # fichier confié par Internet : au-delà, il reste au local
@@ -85,6 +86,9 @@ DEFAULTS = {
     "offload_enabled": True,          # confier des unités à mes machines appairées
     "share_enabled": True,            # calculer pour mes machines appairées
     "lend_models": True,              # répondre aux conversations de mes machines appairées
+    # « Prêter ma puissance aux conversations d'inconnus » (network/public_lending.py,
+    # 28/10/2026) : après mes machines et mes amis, jamais sur batterie ; activé par défaut
+    "lend_public": True,
     # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
     # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
     # en priorité basse, jamais sur batterie (network/worker.py, docs/arriere-plan.md)
@@ -185,8 +189,9 @@ def rag_threshold(model) -> float:
 # réseau ni compagnon tant qu'un test ne les demande pas) les garde éteints.
 FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend_models",
                    "lend_gpu")
-# Activés par défaut depuis le 27/10/2026 (décision de l'auteur), éteints de même en essai
-OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps")
+# Activés par défaut depuis le 27/10/2026 (décision de l'auteur), éteints de même en essai ;
+# le prêt aux conversations d'inconnus aussi, depuis le 28/10/2026
+OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps", "lend_public")
 
 
 def default(key):

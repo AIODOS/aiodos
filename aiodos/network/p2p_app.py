@@ -12,6 +12,11 @@ cette clé doit être celle de la machine qui a scellé l'enveloppe, et l'adress
 connexion venue de cette machine même (connections.internet_key) : un appareil du réseau
 local qui l'enverrait est traité comme ce qu'il est.
 
+Les inconnus du réseau public (28/10/2026) n'ont qu'une route, /public/v1/chat
+(public_lending.py), relayée par le compagnon avec leur clé jetable (X-Aiodos-Public, crue
+de cette machine seulement). Une requête qui la porte n'atteint aucune route /p2p/… ; une
+requête qui ne la porte pas n'atteint aucune route /public/… (public_lending.PublicOnly).
+
 La taille des requêtes est bornée avant toute lecture (body_limit.py), et le corps est
 analysé ici plutôt que par FastAPI : son erreur 422 recopiait tout ce qui avait été reçu.
 Un gros corps n'est analysé que s'il a la forme d'une enveloppe (quelques valeurs simples) :
@@ -35,7 +40,7 @@ from aiodos.cluster import helper as cluster
 from aiodos.i18n import t
 from aiodos.imaging import share as images_share
 from aiodos.network import (activity, body_limit, connections, consult, envelope, group,
-                            lending, netinfo, peers, placement, sharing, work)
+                            lending, netinfo, peers, placement, public_lending, sharing, work)
 from aiodos.network.client import PeerError
 from aiodos.network.crypto import SealError
 from aiodos.node import identity
@@ -160,6 +165,10 @@ def create_p2p_app(manager) -> FastAPI:
     app.add_middleware(body_limit.BodyLimit,
                        actions={"hello", "pair/start", *HANDLERS,
                                 *(f"stream/{action}" for action in STREAM_HANDLERS)})
+    # Ajouté après : passe avant BodyLimit (un 404 sans rien lire)
+    app.add_middleware(public_lending.PublicOnly)
+    # Conversations d'inconnus : avant les routes génériques ci-dessous
+    public_lending.mount(app, manager)
 
     @app.post("/p2p/v1/hello")
     def hello():

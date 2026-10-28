@@ -15,7 +15,10 @@ geler puis arrêter AIODOS tout entier (l'interface tourne dans le même process
   même chemin ;
 - peu de gros corps lus à la fois : au-delà d'OPEN_BODY, BIG_PER_SENDER par machine et
   BIG_TOTAL en tout ; au-delà de SEALED_BODY, HUGE_PER_SENDER et HUGE_TOTAL. Les suivants
-  attendent leur tour (SLOT_WAIT au plus, puis 503), sans être lus.
+  attendent leur tour (SLOT_WAIT au plus, puis 503), sans être lus ;
+- la demande d'un inconnu du réseau public (/public/…, relayée par le compagnon avec sa clé
+  jetable, connections.public_key) : PUBLIC_BODY, comme le compagnon l'a déjà bornée ;
+  sans cette clé, OPEN_BODY (elle aura un 404, network/public_lending.py).
 
 Une taille annoncée trop grande est refusée sans rien lire ; sans taille annoncée (envoi
 en morceaux), la lecture s'arrête à la limite. L'enveloppe est ensuite vérifiée comme
@@ -33,7 +36,9 @@ from aiodos.i18n import t
 from aiodos.network import connections, peers, work
 
 BASE = "/p2p/v1/"
+PUBLIC_BASE = "/public/"             # demandes d'inconnus du réseau public (public_lending.py)
 HELLO_BODY = 4 * 1024                # « hello » n'a pas de contenu
+PUBLIC_BODY = 256 * 1024             # demande d'un inconnu (le compagnon la borne de même)
 OPEN_BODY = 64 * 1024                # début d'appairage ; message d'une machine inconnue
 SEALED_BODY = 16 * 1024 ** 2         # conversation prêtée, présentations, recherches…
 # Une vidéo calculée par une de mes machines (jobs/kinds/images.MAX_WEBM, 512 Mio), en
@@ -76,8 +81,8 @@ def _same_path(scope, known: dict) -> bool:
         and connections.normal_host(client[0]) == connections.normal_host(known["address"])
 
 
-async def _answer(send, status: int, detail: str):
-    data = json.dumps({"detail": detail}, ensure_ascii=False).encode()
+async def _answer(send, status: int, detail: str, payload: dict | None = None):
+    data = json.dumps(payload or {"detail": detail}, ensure_ascii=False).encode()
     await send({"type": "http.response.start", "status": status,
                 "headers": [(b"content-type", b"application/json"),
                             (b"content-length", str(len(data)).encode()),
@@ -87,6 +92,11 @@ async def _answer(send, status: int, detail: str):
 
 async def _refuse(send, detail: str):
     await _answer(send, 413, detail)
+
+
+async def _refuse_public(send, detail: str):
+    """Un inconnu du réseau public lit un code (public_lending.py), pas une phrase."""
+    await _answer(send, 413, detail, {"error": "too_big"})
 
 
 class _Slots:
@@ -161,13 +171,18 @@ class BodyLimit:
             return await self.app(scope, receive, send)
         path = scope.get("path") or ""
         action = path[len(BASE):] if path.startswith(BASE) else None
-        ceiling = self._ceiling(action)
+        public = path.startswith(PUBLIC_BASE)
+        if public:                        # un inconnu : sa limite, décidée tout de suite
+            ceiling = PUBLIC_BODY if connections.public_key(scope) else OPEN_BODY
+        else:
+            ceiling = self._ceiling(action)
+        refuse = _refuse_public if public else _refuse
         declared = _declared(scope)
         if declared is not None and declared > ceiling:
-            return await _refuse(send, t("p2p.request_too_big", limit=_mib(ceiling)))
+            return await refuse(send, t("p2p.request_too_big", limit=_mib(ceiling)))
         # Au-delà d'OPEN_BODY, la limite dépend de la machine qui envoie : décidée dès que
         # le début de l'enveloppe est lu (ou dès qu'on dépasse OPEN_BODY sans taille annoncée)
-        decided = ceiling <= OPEN_BODY
+        decided = public or ceiling <= OPEN_BODY
         limit = ceiling if decided else OPEN_BODY
         refusal = t("p2p.request_too_big", limit=_mib(limit))
         slot = None                      # (tours, machine) : un gros corps en cours de lecture
@@ -195,7 +210,7 @@ class BodyLimit:
                             return await _answer(send, 503, t("p2p.busy_receiving"))
                         slot = (pool, sender)
                 if total > limit:
-                    return await _refuse(send, refusal)
+                    return await refuse(send, refusal)
                 if not message.get("more_body"):
                     break
             body = b"".join(chunks)
