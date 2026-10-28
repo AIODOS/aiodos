@@ -13,12 +13,13 @@
   "error_attachments": "Attachments and images never go to a stranger on the public network.",
   "error_companion": "The network companion (aiodos-net) is not ready to hand a conversation to the public network.",
   "error_refused": "The public network machine refused the request.",
-  "error_too_long": "The answer from the public network machine went beyond the allowed length: it was cut off.",
+  "error_too_long": "The answer from the public network machine went beyond the allowed length or time: it was cut off.",
   "loading": "The public network machine is loading the model…",
   "reading": "The public network machine is reading the conversation…",
   "closed_off": "No model here or on your machines to answer, and your conversations do not go to strangers (“Have my conversations computed by strangers” is off in Settings, This machine, Sharing computing power): install a model, or turn this setting on.",
   "closed_unjoined": "No model here or on your machines to answer, and this machine has not joined the public network (“Join the public network”, in the Network view): install a model, or join it.",
   "closed_mine_only": "This conversation stays on your machines (“On my machines only”), and none of them has a model to answer: install a model, or turn off “On my machines only” (Permissions, under the message box).",
   "closed_attachments": "Attachments never go to a stranger on the public network, and no model here or on your machines can read them: send your message without attachments, or install a model.",
-  "closed_conversation_attachments": "This conversation has attachments: it never goes to a stranger on the public network, and no model here or on your machines can answer it. Start a new conversation, or install a model."
+  "closed_conversation_attachments": "This conversation has attachments: it never goes to a stranger on the public network, and no model here or on your machines can answer it. Start a new conversation, or install a model.",
+  "closed_own_models": "“Automatic · public network” is only for when neither this machine nor your machines have a conversation model: choose one of your models (in automatic mode, the conversation can also go through the public network)."
 }

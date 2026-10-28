@@ -115,7 +115,7 @@
   "public_saved_yes": "Noted: yes. You can change your mind in Settings (This machine, Sharing computing power).",
   "public_saved_no": "Noted: no. You can change your mind in Settings (This machine, Sharing computing power).",
   "public_first_title": "Your conversation goes to a stranger",
-  "public_first_text": "The machine of someone on the public network reads this conversation to answer it, without knowing who is asking; nothing is kept there. What you write may still reveal who you are. To avoid it: “On my machines only” (Permissions, under the message box) for one conversation, or “Have my conversations computed by strangers” in Settings for all of them.",
+  "public_first_text": "The machine of someone on the public network reads this conversation, including your general instructions given to the AI (system prompt), to answer it, without knowing who is asking; nothing is kept there. What you write may still reveal who you are. To avoid it: “On my machines only” (Permissions, under the message box) for one conversation, or “Have my conversations computed by strangers” in Settings for all of them.",
   "public_first_ok": "Got it",
   "this_conversation": "This conversation",
   "mine_only": "On my machines only",

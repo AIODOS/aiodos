@@ -26,8 +26,8 @@ from aiodos.network import peers, placement
 from aiodos.services import ollama
 from tests import i18n_js
 from tests.test_public_chat import (AUTH, BIG, OTHER, PC, SMALL, THIRD, TOKEN, Executor,
-                                    _library, ask, at, directory, local_models, node, notices,
-                                    routes)
+                                    _library, ask, at, checkable, directory, local_models, node,
+                                    notices, routes)
 from tests.test_public_chat import companion, opened  # noqa: F401 (fixtures)
 
 BEST = placement.PUBLIC_BEST
@@ -69,16 +69,17 @@ def test_the_model_selector_offers_automatic_public(monkeypatch, companion, open
     réseau public peut répondre ; un modèle ici, ou chez une de mes machines : rien de plus
     qu'avant."""
     nothing_here(monkeypatch)
-    directory(node(PC, SMALL), node(OTHER, BIG, "embeddinggemma:latest"))
+    directory(node(PC, SMALL), node(OTHER, BIG, "embeddinggemma:latest"), checkable(SMALL, BIG))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         assert ui.get("/api/models", headers=AUTH).json() == [
             {"id": BEST, "label": "Automatique · réseau public", "group": "public",
              "ready": True, "models": [BIG, SMALL], "searching": False}]
-        directory(node(PC, SMALL, free=0))                       # plus de place nulle part
+        directory(node(PC, SMALL, free=0), checkable(SMALL))     # plus de place nulle part
         assert ui.get("/api/models", headers=AUTH).json() == [
             {"id": BEST, "label": "Automatique · réseau public", "group": "public",
              "ready": False, "models": [], "searching": False}]
-        directory(node(PC, SMALL))
+        directory(node(PC, SMALL), checkable(SMALL))
+        assert ui.get("/api/models", headers=AUTH).json()[0]["ready"] is True
         companion.features = set()                               # compagnon d'avant : non plus
         assert ui.get("/api/models", headers=AUTH).json()[0]["ready"] is False
         companion.features = {"public-ask"}
@@ -136,7 +137,7 @@ def test_no_model_here_the_best_public_model_first(monkeypatch, companion, opene
     called = nothing_here(monkeypatch)
     directory(node(PC, SMALL, tps=90), node(OTHER, BIG, "embeddinggemma:latest", tps=20),
               node(THIRD, "mistral:latest", MID, tps=50), node(FOURTH, "bge-m3:latest"),
-              node(FIFTH, BIG, free=0), node(SIXTH, BIG, lends=False))
+              node(FIFTH, BIG, free=0), node(SIXTH, BIG, lends=False), checkable(SMALL, MID))
     assert placement.plan(BEST, Executor(), public=True) == [
         at(OTHER, BIG), at(THIRD, MID), at(PC, SMALL)]
     assert settings.get("public_bigger_model") is None
@@ -167,6 +168,75 @@ def test_no_model_here_the_best_public_model_first(monkeypatch, companion, opene
         events = ask(ui, "Personne", model=BEST)
         assert events[-1]["error"] == "La machine du réseau public ne prête plus en ce moment."
     assert called == []                                          # jamais le moteur de cette machine
+
+
+def test_a_name_alone_never_makes_the_best_model(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : « Automatique · réseau public » triait par la taille lue dans
+    le nom ; un nœud qui annonçait « qwen3.5:999b » passait toujours premier et, seul à porter
+    ce nom, n'avait jamais de machine de contrôle. Seul un modèle présent chez deux machines
+    publiques qui prêtent (place libre ou non) est pris ; une taille invraisemblable ne compte
+    pas."""
+    nothing_here(monkeypatch)
+    liar, huge = "qwen3.5:999b", "qwen3.5:2000b"
+    plan = lambda: placement.plan(BEST, Executor(), public=True)  # noqa: E731
+    directory(node(PC, liar, SMALL), node(OTHER, BIG), checkable(SMALL))
+    assert plan() == [at(PC, SMALL)]                    # ni « 999b », ni le 9b, seuls à les avoir
+    directory(node(PC, liar, SMALL), node(OTHER, BIG), node(THIRD, BIG, free=0), checkable(SMALL))
+    assert plan() == [at(OTHER, BIG), at(PC, SMALL)]   # le 9b chez deux machines : choisi
+    directory(node(PC, huge), node(OTHER, huge), node(THIRD, SMALL), checkable(SMALL))
+    assert plan()[0] == at(THIRD, SMALL)                # contrôlable, mais 2 000 milliards : non
+    assert companion.requests == []
+
+
+def test_with_nothing_checkable_a_phone_still_gets_an_answer(monkeypatch, companion, opened):
+    """Repli (décision du 28/10/2026, à revoir) : sur un réseau encore minuscule, aucun modèle
+    n'est contrôlable ; un téléphone sans modèle prend alors n'importe lequel, une machine qui
+    a déjà répondu ici sans faute d'abord, plutôt que de n'avoir aucune réponse."""
+    from aiodos.network import reputation
+    nothing_here(monkeypatch)
+    plan = lambda: placement.plan(BEST, Executor(), public=True)  # noqa: E731
+    directory(node(PC, BIG))                                        # un seul PC, le 9b
+    assert plan() == [at(PC, BIG)]
+    directory(node(PC, "qwen3.5:999b"), node(OTHER, BIG))
+    assert plan() == [at(PC, "qwen3.5:999b"), at(OTHER, BIG)]       # le plus gros d'abord
+    reputation.note_served(OTHER, 200, 5.0)                         # l'autre a déjà bien servi
+    assert plan() == [at(OTHER, BIG), at(PC, "qwen3.5:999b")]
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        assert ui.get("/api/models", headers=AUTH).json()[0]["ready"] is True
+    assert companion.requests == []
+
+
+def test_automatic_public_is_refused_when_i_have_a_model(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : « auto:* » envoyé par une autre application, alors que cette
+    machine (ou une de mes machines) a un modèle, prenait le plus gros modèle du réseau public
+    sans l'accord public_bigger_model. Refusé, avec la raison (avant celle des réglages), même
+    avec cet accord ; rien ne part. Sans aucun modèle : comme avant."""
+    from aiodos.i18n import catalog
+    nothing_here(monkeypatch)
+    directory(node(PC, BIG), checkable(BIG))
+    own = ("« Automatique · réseau public » ne sert que si ni cette machine ni tes machines "
+           "n'ont de modèle de conversation")
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        monkeypatch.setattr(ollama, "list_models",               # un modèle ici
+                            lambda max_age=10: [{"name": SMALL, "size": 6}])
+        monkeypatch.setattr(ollama, "capabilities_many", lambda n: {m: ["completion"] for m in n})
+        assert refused(ui).startswith(own)
+        settings.set_value("public_bigger_model", True)
+        assert refused(ui).startswith(own)
+        settings.set_value("use_public", False)
+        assert refused(ui).startswith(own)
+        settings.set_value("use_public", True)
+        nothing_here(monkeypatch)                                # chez une de mes machines
+        peers.save("fixe", "PC fixe", b"k" * 32, "127.0.0.1", 1)
+        peers.set_profile("fixe", {"lends_models": True, "ollama": {"models": [
+            {"name": MID, "caps": ["completion"], "fits_vram": True, "loaded": False}]}})
+        assert refused(ui).startswith(own)
+        assert companion.requests == [] and conversations_count() == 0
+        db.execute("DELETE FROM peers")                          # plus aucun modèle : permis
+        assert routes(ask(ui, "Bonjour", model=BEST)) == [at(PC, BIG)]
+    assert len(companion.requests) == 1
+    assert catalog.lookup("en", "public_chat.closed_own_models").startswith(
+        "“Automatic · public network” is only for when neither this machine nor your machines")
 
 
 def test_no_public_machine_a_clear_message(monkeypatch, companion, opened):
@@ -204,7 +274,7 @@ def test_the_first_minute_says_searching(monkeypatch, companion, opened):
     public._remember(None)                         # compagnon relancé, réseau rejoint à nouveau
     directory()
     assert entry()["searching"] is True
-    directory(node(PC, SMALL))
+    directory(node(PC, SMALL), checkable(SMALL))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         found = ui.get("/api/models", headers=AUTH).json()
     assert found[0]["ready"] is True and found[0]["searching"] is False
@@ -227,7 +297,7 @@ def test_without_a_model_no_knowledge_search_and_no_repeated_warning(
         raise RuntimeError("aucun modèle d'embedding")
     monkeypatch.setattr(ollama, "embed", failing)
     monkeypatch.setitem(pipeline._search_failed, "told", False)
-    directory(node(PC, SMALL))
+    directory(node(PC, SMALL), checkable(SMALL))
     warned = lambda: [r for r in caplog.records  # noqa: E731
                       if "connaissances impossible" in r.getMessage()
                       and r.levelno >= logging.WARNING]
@@ -253,7 +323,7 @@ def test_documents_card_and_first_note_as_elsewhere(monkeypatch, companion, open
     nothing_here(monkeypatch)
     from aiodos.knowledge import store
     settings.set_value("rag_min_score", 0.1)
-    directory(node(PC, SMALL), node(OTHER, BIG))
+    directory(node(PC, SMALL), node(OTHER, BIG), checkable(SMALL, BIG))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         # Après le démarrage : sinon, le modèle d'embedding des vecteurs n'étant pas noté, le
         # nœud les retire et les refait en fond (reindex.schedule), pendant la question
@@ -276,7 +346,7 @@ def test_the_title_never_goes_to_a_stranger(monkeypatch, companion, opened):
     l'inconnu est la réponse. Enrichir la description d'une image, retoucher : sans modèle ici,
     la demande telle quelle, jamais chez un inconnu."""
     called = nothing_here(monkeypatch)
-    directory(node(PC, SMALL))
+    directory(node(PC, SMALL), checkable(SMALL))
     text = "Quel temps fera-t-il demain à Lyon, et faut-il prendre un parapluie pour la sortie ?"
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         events = ask(ui, text, model=BEST)

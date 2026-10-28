@@ -26,7 +26,10 @@ propose « Automatique · réseau public » (placement.PUBLIC_BEST), qui prend d
 modèle du réseau public, donc sans carte d'un modèle plus gros ; la carte des documents et la
 note de la première fois, comme ailleurs. Refusé à une conversation (closed : réglages,
 « Sur mes machines seulement », pièces jointes), refusal dit pourquoi, au lieu d'un « aucune
-machine » sans explication.
+machine » sans explication. Demandé alors que cette machine ou mes machines ont un modèle
+(pipeline.own_models : l'interface ne le propose pas, mais une autre application peut
+l'envoyer), il est refusé aussi (« own_models ») : il prenait le plus gros modèle du réseau
+public sans l'accord public_bigger_model (relecture du 28/10/2026).
 """
 import threading
 from dataclasses import dataclass
@@ -78,7 +81,10 @@ def allowed(conv_id, mine_only, joined=()) -> bool:
 def reach(model, conv_id, mine_only, joined=()) -> Reach:
     """Pour le choix des machines (placement.plan) et la carte d'un modèle plus gros. Un
     modèle précis (cette machine, une machine appairée) passe tel quel : pas de carte ;
-    « Automatique · réseau public » prend déjà le meilleur modèle : pas de carte non plus."""
+    « Automatique · réseau public » prend déjà le meilleur modèle : pas de carte non plus, et
+    seulement sans aucun modèle ici ni sur mes machines (« own_models » sinon)."""
+    if model == placement.PUBLIC_BEST and pipeline.own_models():
+        return Reach(closed="own_models")          # avant les réglages : la vraie raison
     why = closed(conv_id, mine_only, joined)
     if why is not None:
         return Reach(closed=why)

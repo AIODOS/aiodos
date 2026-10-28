@@ -118,7 +118,7 @@
   "public_saved_yes": "C'est noté : oui. Tu peux changer d'avis dans les Réglages (Cette machine, Partage de puissance).",
   "public_saved_no": "C'est noté : non. Tu peux changer d'avis dans les Réglages (Cette machine, Partage de puissance).",
   "public_first_title": "Ta conversation part chez un inconnu",
-  "public_first_text": "La machine d'une personne du réseau public lit cette conversation pour y répondre, sans savoir qui la demande ; rien n'y est gardé. Ce que tu écris peut quand même dire qui tu es. Pour l'éviter : « Sur mes machines seulement » (Autorisations, sous la zone de saisie) pour une conversation, ou « Faire calculer mes conversations par des inconnus » dans les Réglages pour toutes.",
+  "public_first_text": "La machine d'une personne du réseau public lit cette conversation, y compris tes consignes générales données à l'IA (prompt système), pour y répondre, sans savoir qui la demande ; rien n'y est gardé. Ce que tu écris peut quand même dire qui tu es. Pour l'éviter : « Sur mes machines seulement » (Autorisations, sous la zone de saisie) pour une conversation, ou « Faire calculer mes conversations par des inconnus » dans les Réglages pour toutes.",
   "public_first_ok": "Compris",
   "this_conversation": "Cette conversation",
   "mine_only": "Sur mes machines seulement",

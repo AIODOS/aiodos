@@ -26,6 +26,9 @@ from aiodos.services import ollama
 KEY = "ab" * 32                                # clé jetable de l'appelant (64 signes hexa)
 HEADERS = {"X-Aiodos-Public": KEY}
 HERE = ("127.0.0.1", 5000)                     # le compagnon : depuis cette machine
+# Le serveur réseau local tel que le compagnon le joint, et le Host qu'il pose
+# (compagnon/src/public_serve.rs, relayed_headers)
+FORWARD = "http://127.0.0.1:47701"
 SECRET = "Mon voisin s'appelle Hippolyte Zébulon"
 MODEL = "qwen3.5:9b"
 
@@ -66,20 +69,27 @@ class FakeManager:
 
 class Engine:
     """Le moteur factice : ce qu'il a reçu, et une réponse (lente si `slow`, après `load`
-    secondes de chargement du modèle). `during` : {rang d'un mot : ce qui arrive juste après
-    lui}, pendant la réponse (TestClient ne rend la réponse qu'une fois finie : c'est d'ici
-    qu'on agit en cours de route)."""
+    secondes de chargement du modèle, puis `read` secondes de lecture de la demande). `during`
+    : {rang d'un mot : ce qui arrive juste après lui}, pendant la réponse (TestClient ne rend
+    la réponse qu'une fois finie : c'est d'ici qu'on agit en cours de route). `loaded` : les
+    modèles chargés (ollama.loaded_models), si l'essai les suit ; le modèle y entre à la fin
+    du chargement."""
 
-    def __init__(self, words=("Bon", "jour", " !"), slow=0.0, load=0.0):
+    def __init__(self, words=("Bon", "jour", " !"), slow=0.0, load=0.0, read=0.0):
         self.calls = []
-        self.words, self.slow, self.load = words, slow, load
+        self.words, self.slow, self.load, self.read = words, slow, load, read
         self.during = {}
+        self.loaded = None
 
     def __call__(self, model, messages, think=None, stop=None, options=None, stats=False):
         self.calls.append({"model": model, "messages": messages, "think": think,
                            "options": options, "stats": stats})
         if self.load:
             time.sleep(self.load)
+        if self.loaded is not None and model not in self.loaded:
+            self.loaded.append(model)
+        if self.read:
+            time.sleep(self.read)
         for rank, word in enumerate(self.words):
             if stop is not None and stop.is_set():
                 return
@@ -108,7 +118,7 @@ def engine(monkeypatch):
 def node(engine):
     manager = FakeManager()
     app = p2p_app.create_p2p_app(manager)
-    yield manager, TestClient(app, client=HERE), TestClient(app), engine
+    yield manager, TestClient(app, client=HERE, base_url=FORWARD), TestClient(app), engine
     public_lending.forget()
     assert lend_queue.idle()                          # aucune place oubliée
 
@@ -136,19 +146,56 @@ def events(http, body=None, headers=HEADERS):
 
 # ------------------------------------------------------- l'en-tête, et lui seul
 def test_the_public_key_is_believed_only_from_this_machine():
-    def scope(host, key=KEY, server="0.0.0.0"):
+    def scope(host, key=KEY, server="0.0.0.0", sent="127.0.0.1:47701"):
         return {"client": (host, 5000), "server": (server, 47701),
-                "headers": [(b"x-aiodos-public", key.encode())]}
+                "headers": [(b"host", sent.encode()), (b"x-aiodos-public", key.encode())]}
     assert connections.public_key(scope("127.0.0.1")) == KEY
     assert connections.public_key(scope("::1", key=KEY.upper())) == KEY
-    assert connections.public_key(scope("192.168.1.20", server="192.168.1.20")) == KEY
+    # --p2p-host : le compagnon joint le serveur à cette adresse, et la pose dans Host
+    assert connections.public_key(scope("192.168.1.20", server="192.168.1.20",
+                                        sent="192.168.1.20:47701")) == KEY
     for host in ("192.168.1.66", "10.0.0.2", "testclient", None):
         assert connections.public_key(scope(host)) == ""
     for key in ("", "pas une clé", "zz" * 32, "ab" * 100, "ab"):
         assert connections.public_key(scope("127.0.0.1", key=key)) == ""
     # L'autre en-tête du compagnon ne vaut pas celui-ci
     assert connections.public_key({"client": ("127.0.0.1", 1), "server": ("0.0.0.0", 1),
-                                   "headers": [(b"x-aiodos-peer", KEY.encode())]}) == ""
+                                   "headers": [(b"host", b"127.0.0.1:1"),
+                                               (b"x-aiodos-peer", KEY.encode())]}) == ""
+
+
+def test_the_host_must_be_the_one_the_companion_sets():
+    """Relecture du 28/10/2026 : une page web servie sous un nom à elle, résolu vers 127.0.0.1
+    (« DNS rebinding »), atteignait /public/v1/chat depuis le navigateur, sans le compagnon.
+    Seul un Host écrit en chiffres, de la boucle locale ou de l'adresse où la requête arrive,
+    avec ou sans port, ouvre les routes /public/… ; un seul Host."""
+    def scope(*hosts, server="127.0.0.1"):
+        return {"client": ("127.0.0.1", 5000), "server": (server, 47701),
+                "headers": [(b"host", h.encode()) for h in hosts]
+                + [(b"x-aiodos-public", KEY.encode())]}
+    for sent in ("127.0.0.1:47701", "127.0.0.1", "[::1]:47701", "[::1]", "::1", "127.0.0.2"):
+        assert connections.public_key(scope(sent)) == KEY, sent
+    assert connections.public_key(scope("192.168.1.20", server="192.168.1.20")) == KEY
+    for sent in ("evil.example:47701", "localhost:47701", "localhost", "testserver",
+                 "127.0.0.1.nip.io", "", "127.0.0.1:port", "127.0.0.1:123456", "[::1",
+                 "[::1]x", "192.168.1.66:47701", "0x7f000001", "2130706433"):
+        assert connections.public_key(scope(sent)) == "", sent
+    assert connections.public_key(scope()) == ""                         # aucun Host
+    assert connections.public_key(scope("127.0.0.1", "evil.example")) == ""   # deux
+
+
+def test_a_public_request_with_another_host_is_unknown(node):
+    """Sur le serveur : la même demande, avec un autre Host que celui du compagnon, 404 comme
+    une route inconnue, et rien n'est calculé."""
+    manager, here, lan, engine = node
+    lend()
+    for sent in ("evil.example:47701", "localhost:47701", "testserver"):
+        response = post(here, headers={**HEADERS, "Host": sent})
+        assert response.status_code == 404 and response.json() == {"detail": "Not Found"}
+    assert engine.calls == []
+    for sent in ("127.0.0.1:47701", "[::1]:47701"):
+        assert post(here, headers={**HEADERS, "Host": sent}).status_code == 200
+    assert len(engine.calls) == 2
 
 
 def test_without_a_believable_key_every_public_route_is_unknown(node):
@@ -285,19 +332,32 @@ def test_the_power_lent_bounds_strangers_too(node):
     assert public_lending.free(manager) is True
 
 
-def test_the_pause_counts_only_the_generation(node, monkeypatch):
-    """Essai réel du 28/10 : la pause comptait le chargement du modèle (48 s sur 52,5 s). Elle
-    ne compte plus que la génération, du premier mot au dernier."""
+def test_the_pause_counts_the_reading_not_the_loading(node, monkeypatch):
+    """Essai réel du 28/10 : la pause comptait le chargement du modèle (48 s sur 52,5 s) ;
+    comptée ensuite du premier mot au dernier, elle laissait de côté la lecture de la demande
+    (relecture du 28/10/2026 : ~8 000 jetons envoyés avec max_tokens = 1, et la machine
+    calculait sans pause). Elle compte depuis que le modèle est chargé, lecture comprise."""
     manager, here, lan, engine = node
     lend(power_share=60)
     counted = []
     monkeypatch.setattr(public_lending, "_rest_after", lambda m, seconds: counted.append(seconds))
-    engine.load, engine.slow = 1.5, 0.1            # 1,5 s de chargement, 0,3 s de génération
-    assert events(here)[-1]["type"] == "done"
-    assert len(counted) == 1 and 0.25 <= counted[0] < 1.2
-    engine.load, engine.words = 0.3, []            # rien de généré : pas de pause
-    events(here)
-    assert counted[1] == 0.0
+    monkeypatch.setattr(public_lending, "WAIT_S", 0.1)
+    engine.loaded = [MODEL]                        # déjà chargé
+    monkeypatch.setattr(ollama, "loaded_models", lambda: [{"name": m} for m in engine.loaded])
+    # Une longue demande, un seul mot : 1 s de lecture, qui compte
+    engine.read, engine.words = 1.0, ["Oui"]
+    body = ask(content="mot " * 2000, options={"max_tokens": 1})
+    assert events(here, body)[-1]["type"] == "done"
+    assert engine.calls[-1]["options"]["num_predict"] == 1
+    assert len(counted) == 1 and 1.0 <= counted[0] < 1.6
+    # À charger : 1,5 s de chargement (ne compte pas), puis 0,5 s de lecture et 0,3 s de
+    # génération (comptées)
+    engine.loaded.clear()
+    engine.load, engine.read, engine.slow, engine.words = 1.5, 0.5, 0.1, ["Bon", "jour", " !"]
+    found = events(here)
+    assert found[-1]["type"] == "done"
+    assert {e["stage"] for e in found if e["type"] == "wait"} == {"loading", "reading"}
+    assert 0.7 <= counted[1] < 1.3
 
 
 # ------------------------------------------- avant le premier mot : des signes de vie

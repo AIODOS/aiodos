@@ -40,6 +40,11 @@ Décisions de l'auteur (27/10) :
    prêtent, ont le modèle voulu (§ 6) et une place libre. Il les classe par vitesse mesurée
    (sa propre table, § 8), puis latence. Mes machines et mes amis d'abord, à vitesse
    comparable ; une machine publique bien plus rapide passe devant ce téléphone.
+   **Relecture du 28/10** : seule la vitesse **mesurée ici** (au moins une réponse servie,
+   depuis l'envoi de la demande jusqu'au dernier mot, 1 000 jetons/s au plus) fait passer une
+   machine publique devant cette machine ; celle qu'elle annonce (« tps ») ne sert qu'à
+   départager les machines publiques entre elles. Une machine jamais mesurée sert quand cette
+   machine n'a pas le modèle, est occupée, ou pour un modèle plus gros accepté.
 2. **Se cacher.** Pour chaque conversation, le compagnon du demandeur crée une **clé
    jetable** et un point de terminaison Iroh **en relais seulement** : le prêteur voit la
    clé jetable et l'adresse du relais, jamais l'adresse ni la clé du demandeur. La clé
@@ -65,7 +70,10 @@ Décisions de l'auteur (27/10) :
    vie (`{"type": "wait", "stage": "loading" | "reading"}`, ignoré par une version d'avant) :
    le demandeur repousse alors son délai, 180 s au plus, et l'interface dit « La machine du
    réseau public charge le modèle… » (essai réel du 28/10 : 45 à 53 s de chargement, pour
-   60 s d'attente).
+   60 s d'attente). Toute la réponse, 10 min au plus depuis la demande ; au-delà, elle est
+   coupée, le début gardé. Un échec du prêteur (des signes de vie puis rien, une réponse
+   lente, coupée, illisible, trop longue, son moteur arrêté) l'écarte 10 min, en mémoire :
+   ce n'est pas une preuve de triche, mais il a pu lire la conversation sans y répondre.
 
 ## 4. Ce que chacun voit
 
@@ -92,10 +100,18 @@ plafonds pour tout le public.
 - **Par demande** : 256 Kio de requête au plus ; contexte borné (8 192 jetons), réponse
   bornée (2 048 jetons) ; texte seulement (ni image, ni fichier) dans cette première
   version.
-- **Puissance prêtée** : après t s de génération (du premier jeton au dernier ; le
-  chargement du modèle ne compte pas), pause de t × (100 − X) / X. Le profil (« free ») est
+- **Puissance prêtée** : après t s de calcul (depuis que le modèle est chargé, **lecture de
+  la demande comprise** ; le chargement du modèle ne compte pas, à 5 s près, en trop plutôt
+  qu'en moins), pause de t × (100 − X) / X. Relecture du 28/10 : comptée du premier jeton au
+  dernier, elle laissait de côté la lecture, et ~8 000 jetons envoyés avec `max_tokens` = 1
+  faisaient calculer la machine sans pause. Le profil (« free ») est
   redit au compagnon au début et à la fin de chaque conversation publique, et à la fin de
   la pause, sans attendre la synchronisation toutes les 15 s.
+- **Le compagnon seul** : la route locale `/public/v1/chat` n'est ouverte qu'à une requête
+  venue de cette machine, avec la clé jetable (`X-Aiodos-Public`) et un `Host` qui est une
+  adresse IP en chiffres (boucle locale, ou l'adresse où elle arrive), comme le pose le
+  compagnon : une page web qui se fait servir sous un nom résolu vers 127.0.0.1 (« DNS
+  rebinding ») ne l'atteint pas.
 - **Jamais** sur batterie ; un téléphone seulement en charge et en Wi-Fi (comme pour un
   ami) ; une conversation de l'utilisateur sur cette machine passe devant et arrête le prêt
   en cours, comme aujourd'hui.
@@ -114,6 +130,14 @@ plafonds pour tout le public.
     réseau public a un modèle plus gros. L'utiliser pour tes conversations ? » [Oui]
     [Non]). La réponse est gardée (réglage `public_bigger_model` : non demandé, oui, non)
     et se change dans les Réglages ; on ne redemande pas.
+  - **Seulement un modèle contrôlable** (relecture du 28/10) : présent, au nom exact, chez
+    au moins deux machines publiques distinctes qui prêtent, ou chez une de mes machines.
+    Un nœud qui annonçait « qwen3.5:999b » passait toujours premier et, seul à porter ce nom,
+    n'était jamais contrôlé. Une taille lue dans un nom au-delà de 1 000 milliards de
+    paramètres est ignorée (aucune machine d'aujourd'hui n'en fait tourner davantage).
+  - **« Automatique · réseau public »** (`auto:*`, un téléphone sans modèle) : refusé, avec
+    un message, si cette machine ou mes machines ont un modèle de conversation (une autre
+    application pouvait l'envoyer et prendre le plus gros modèle public sans l'accord).
 
 ## 7. Ce qui part, ou non, chez un inconnu
 
@@ -158,6 +182,11 @@ plafonds pour tout le public.
   documents n'est contrôlée que par mes machines. Sans machine de contrôle, rien n'est
   lancé : la prochaine réponse de ce prêteur est encore « la première ». Une machine mise
   de côté n'est plus choisie ; la vitesse mesurée ici passe avant celle qu'elle annonce.
+- **Relecture du 28/10** : la vitesse mesurée va de l'envoi de la demande au dernier mot (le
+  temps total vu d'ici : un prêteur qui garde sa réponse pour l'envoyer d'un coup ne paraît
+  pas plus rapide), bornée à 1 000 jetons/s et à la longueur demandée ; elle seule fait passer
+  une machine publique devant cette machine (§ 3). Un échec sans preuve de triche écarte le
+  prêteur 10 min, en mémoire (§ 3, étape 6), ni candidat ni machine de contrôle.
 
 ## 9. Ce qu'on ajoute, fichier par fichier
 

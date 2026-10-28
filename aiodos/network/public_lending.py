@@ -23,9 +23,9 @@ l'ordre, chacune avec sa réponse, avant tout calcul (admit) :
      executor.interactive ; conversation de mes machines ou de mes amis, servie ou en
      attente, lend_queue ; calcul de fond sur la carte graphique, le mien ou celui que je
      fais pour eux, executor.busy), dans la limite de la puissance prêtée (après t s de
-     génération, du premier jeton au dernier, pause de t × (100 − X) / X, comme
-     worker._rest_gpu ; le chargement du modèle ne compte pas : 48 s sur 52,5 s lors de
-     l'essai réel du 28/10/2026) et de la mémoire vive (places.memory_room), et au plus
+     calcul, pause de t × (100 − X) / X, comme worker._rest_gpu ; cf. _Clock : la lecture
+     de la demande compte, le chargement du modèle non, 48 s sur 52,5 s lors de l'essai
+     réel du 28/10/2026) et de la mémoire vive (places.memory_room), et au plus
      PER_MINUTE demandes par minute pour tout le public (seau de gateway/limits.py) : sinon
      503 {"error": "busy"} ;
   3. le modèle de conversation installé ici, au nom exact : sinon 404 {"error": "no_model"} ;
@@ -166,11 +166,37 @@ def _rest_left() -> float:
         return max(0.0, _rest["until"] - time.monotonic())
 
 
+class _Clock:
+    """Le temps de calcul d'une conversation publique, que la pause compte (_rest_after) :
+    depuis que le modèle est chargé, lecture de la demande comprise ; le chargement du modèle
+    n'en est pas (relecture du 28/10/2026 : compté du premier jeton au dernier, il laissait de
+    côté la lecture, et un inconnu qui envoyait ~8 000 jetons avec max_tokens = 1 faisait
+    calculer cette machine sans pause).
+
+    since : le début de la demande, avancé à la fin de chaque lecture de l'étape du moteur qui
+    le dit encore en train de charger le modèle (_Stream._now, une lecture toutes les WAIT_S s
+    tant que rien n'est parti). Le chargement n'est donc pas compté, à WAIT_S s près, en trop
+    plutôt qu'en moins : sans aucune lecture (premier mot en moins de WAIT_S s), toute la
+    demande compte ; un appelant parti pendant le chargement (les lectures s'arrêtent avec la
+    réponse) fait compter le reste du chargement."""
+
+    def __init__(self):
+        self.since = time.monotonic()
+
+    def loading(self, at: float):
+        """Une lecture finie à `at` (monotonic) disait le modèle encore en chargement."""
+        self.since = max(self.since, at)
+
+    def counted(self) -> float:
+        return max(0.0, time.monotonic() - self.since)
+
+
 def _rest_after(manager, seconds: float):
-    """« Puissance prêtée : X % » (node/places.py) : après t s de génération (du premier
-    jeton au dernier : le chargement du modèle n'en est pas), pause de t × (100 − X) / X
-    avant une autre conversation publique (comme worker._rest_gpu) ; pendant que
-    l'utilisateur se sert du PC, X vaut au plus worker.IN_USE_GPU_SHARE."""
+    """« Puissance prêtée : X % » (node/places.py) : après t s de calcul (depuis que le
+    modèle est chargé, lecture de la demande comprise : _Clock ; le chargement n'en est pas),
+    pause de t × (100 − X) / X avant une autre conversation publique (comme
+    worker._rest_gpu) ; pendant que l'utilisateur se sert du PC, X vaut au plus
+    worker.IN_USE_GPU_SHARE."""
     from aiodos.network import worker
     share = places.share()
     state = getattr(getattr(manager, "worker", None), "state", None) or {}
@@ -379,13 +405,15 @@ def _watch(manager, stop, done, why: list):
             return
 
 
-def answer(manager, asked: dict, stop):
+def answer(manager, asked: dict, stop, clock: _Clock | None = None):
     """Les événements de la réponse (meta, delta…, puis done ou error ; les signes de vie,
     _Stream). `stop` est levé si l'appelant part, ou par _watch ; la place est rendue à la
-    fin du calcul, et le profil public redit au début et à la fin (_announce)."""
+    fin du calcul, et le profil public redit au début et à la fin (_announce). clock : le
+    temps de calcul compté pour la pause (_Clock, tenu par _Stream)."""
     model, place = asked["model"], asked["place"]
+    clock = clock if clock is not None else _Clock()
     started = time.monotonic()
-    began = None                    # premier jeton : la génération commence (_rest_after)
+    began = None                    # premier jeton : la génération commence (journal)
     done, why = threading.Event(), []
     number = next(_numbers)
     with _lock:
@@ -429,14 +457,15 @@ def answer(manager, asked: dict, stop):
             produced = counted if isinstance(counted, int) and counted > 0 else tokens
             generating = round(time.monotonic() - began, 1) if began is not None else 0.0
             # i18n: tel quel (journal)
-            log.info("Conversation pour le réseau public : %s, %d jetons, %s s de génération "
-                     "sur %s s", model, produced, generating, seconds)
+            log.info("Conversation pour le réseau public : %s, %d jetons, %s s de génération, "
+                     "%s s de calcul, sur %s s", model, produced, generating,
+                     round(clock.counted(), 1), seconds)
             yield {"type": "done", "tokens": produced, "seconds": seconds}
     finally:
         with _lock:
             _serving.pop(number, None)
         done.set()
-        _rest_after(manager, time.monotonic() - began if began is not None else 0.0)
+        _rest_after(manager, clock.counted())
         place.release()
         _announce(manager)                          # libre (ou en pause : « free » 0)
         left = _rest_left()
@@ -454,6 +483,11 @@ def _stage(model) -> str:
     return "reading" if model in loaded else "loading"
 
 
+def _stage_seen(model) -> tuple:
+    """(étape, instant monotonic où sa lecture a fini) : _Clock."""
+    return _stage(model), time.monotonic()
+
+
 def _line(event) -> bytes:
     return (json.dumps(event, ensure_ascii=False) + "\n").encode()
 
@@ -463,12 +497,23 @@ class _Stream(StreamingResponse):
     morceau n'est parti, un signe de vie toutes les WAIT_S secondes ({"type": "wait",
     "stage"} : cf. le début du module). Quoi qu'il arrive à la réponse (fin, appelant parti,
     erreur d'envoi), le calcul s'arrête (stop), et la place est rendue : par le calcul quand
-    il finit, ou ici s'il n'a jamais commencé."""
+    il finit, ou ici s'il n'a jamais commencé. Chaque lecture de l'étape qui dit le modèle en
+    chargement avance le début du calcul compté pour la pause (_Clock)."""
 
-    def __init__(self, events, place: _Place, stop, model: str):
+    def __init__(self, events, place: _Place, stop, model: str, clock: _Clock | None = None):
         self._events, self._place, self._stop, self._model = events, place, stop, model
+        self._clock = clock if clock is not None else _Clock()
         self._probe = None                 # lecture de l'étape en cours (_now), une à la fois
         super().__init__(self._lines(), media_type="application/x-ndjson")
+
+    def _seen(self, probe) -> str | None:
+        """L'étape lue par une lecture finie (None : en échec) ; « loading » avance _Clock."""
+        if probe.cancelled() or probe.exception() is not None:
+            return None
+        found, at = probe.result()
+        if found == "loading":
+            self._clock.loading(at)
+        return found
 
     async def _now(self, stage: str) -> str:
         """L'étape du moteur : « reading » une fois vue, on n'y revient pas ; sinon relue, une
@@ -478,15 +523,16 @@ class _Stream(StreamingResponse):
         if stage == "reading":
             return stage
         if self._probe is None:
-            self._probe = asyncio.ensure_future(asyncio.to_thread(_stage, self._model))
+            self._probe = asyncio.ensure_future(asyncio.to_thread(_stage_seen, self._model))
         try:
-            found = await asyncio.wait_for(asyncio.shield(self._probe), STAGE_TIMEOUT)
+            await asyncio.wait_for(asyncio.shield(self._probe), STAGE_TIMEOUT)
         except Exception:  # noqa: BLE001 — lente (ou en échec) : on dit qu'il charge
             if self._probe.done():
+                self._seen(self._probe)
                 self._probe = None
             return "loading"
-        self._probe = None
-        return found
+        probe, self._probe = self._probe, None
+        return self._seen(probe) or "loading"
 
     async def _wait_line(self, stage: str) -> tuple:
         """(étape, ligne) d'un signe de vie."""
@@ -550,8 +596,9 @@ def mount(app, manager):
             asked = await asyncio.to_thread(admit, manager, raw)
         except Refused as exc:
             return JSONResponse({"error": exc.code}, status_code=exc.status)
-        stop = threading.Event()
-        return _Stream(answer(manager, asked, stop), asked["place"], stop, asked["model"])
+        stop, clock = threading.Event(), _Clock()
+        return _Stream(answer(manager, asked, stop, clock), asked["place"], stop,
+                       asked["model"], clock)
 
 
 async def _not_found(send):

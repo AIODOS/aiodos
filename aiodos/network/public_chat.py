@@ -29,7 +29,14 @@ lève PublicError, qui n'a pas de statut HTTP : placement.run passe alors à la 
 suivante. Après le premier mot, une erreur remonte (la réponse est gardée jusque-là, comme
 pour mes machines). Le journal ne dit que la clé du prêteur (abrégée) et le code d'un refus,
 jamais le texte de la conversation. La réponse est bornée ici (MAX_TEXT caractères de texte,
-MAX_STREAM octets de flux) : au-delà, elle est coupée (« too_long »), le début gardé.
+MAX_STREAM octets de flux, TOTAL_S secondes depuis la demande) : au-delà, elle est coupée
+(« too_long »), le début gardé.
+
+Un échec du prêteur qui n'est pas un simple refus (FAULTS : lent, coupé, illisible, trop
+long, moteur arrêté ; relecture du 28/10/2026) l'écarte quelques minutes
+(reputation.bench) : il a pu lire la conversation sans jamais répondre, et restait candidat
+à chaque message. Un refus avant tout calcul (occupée, ne prête plus, modèle absent…) ne
+l'écarte pas : c'est la vie normale d'une machine qui prête.
 
 Signes de vie (essai réel du 28/10/2026 : un prêteur a mis 45 à 53 s à charger qwen3.5:9b
 avant le premier mot) : tant que son moteur charge le modèle ou lit la demande, le prêteur
@@ -75,6 +82,10 @@ FIRST_WORD_S = 60
 # tu), LOADING_MAX_S après la demande au plus (un gros modèle sur un disque lent)
 ALIVE_GRACE_S = 20
 LOADING_MAX_S = 180
+# Toute la réponse, depuis la demande, au plus (relecture du 28/10/2026 : après le premier
+# mot, un prêteur pouvait envoyer un octet toutes les 59 s sans fin) : le chargement
+# (LOADING_MAX_S), puis public_lending.MAX_TOKENS jetons à 5 jetons par seconde
+TOTAL_S = 600
 WATCH_S = 0.25
 REFUSAL_BYTES = 4096             # refus lu au plus
 # La réponse d'un prêteur, bornée ici (relecture du 28/10/2026) : il borne la sienne à
@@ -100,11 +111,18 @@ ALIASES = {"too_large": "too_big", "timeout": "slow", "too_slow": "slow",
            "bad_key": "bad_request", "not_found": "bad_request", "method": "bad_request"}
 BY_STATUS = {400: "bad_request", 401: "companion", 404: "no_model", 408: "slow",
              413: "too_big", 502: "unreachable", 503: "busy", 504: "slow"}
+# Les échecs qui écartent le prêteur quelques minutes (reputation.bench, cf. plus haut)
+FAULTS = {"slow", "cut", "unreadable", "too_long", "engine"}
 # Étapes d'un signe de vie du prêteur (« wait »), chacune avec son texte (public_chat.<…>)
 STAGES = {"loading": "loading", "reading": "reading"}
 # Milliards de paramètres dans un nom de modèle : « :9b », « -0.8b », « 270m » ; pas « a3b »
 # (paramètres actifs d'un mélange d'experts) ni « 8x7b »
 _PARAMS = re.compile(r"(?<![a-z0-9.])(\d+(?:\.\d+)?)([bm])(?![a-z0-9])")
+# Au-delà, une taille lue dans un nom est invraisemblable, donc ignorée (relecture du
+# 28/10/2026 : « qwen3.5:999b » passait premier) : les plus gros modèles ouverts d'aujourd'hui
+# font de l'ordre de 1 000 milliards de paramètres, soit plus de 500 Go en 4 bits, déjà hors de
+# portée d'un serveur à huit cartes ; aucune machine du réseau n'en fait tourner davantage
+MAX_PARAMS = 1000
 # Ce qui ne converse pas : modèles d'embedding, de reclassement, de transcription
 _NOT_CHAT = re.compile(r"embed|bge|rerank|minilm|whisper|(?<![a-z])(e5|gte)-")
 
@@ -143,10 +161,11 @@ def valid_key(key) -> bool:
 
 def params(name) -> float | None:
     """Milliards de paramètres lus dans le nom (« qwen3.5:9b » → 9, « qwen3.5:0.8b » → 0.8,
-    « gemma3:270m » → 0.27) ; None s'il n'en dit rien. Le plus grand nombre lu compte."""
+    « gemma3:270m » → 0.27) ; None s'il n'en dit rien. Le plus grand nombre lu compte ; une
+    taille invraisemblable (au-delà de MAX_PARAMS) est ignorée."""
     found = [float(n) / (1000 if unit == "m" else 1)
              for n, unit in _PARAMS.findall(str(name or "").lower())]
-    found = [n for n in found if math.isfinite(n) and n > 0]
+    found = [n for n in found if math.isfinite(n) and 0 < n <= MAX_PARAMS]
     return max(found) if found else None
 
 
@@ -268,15 +287,17 @@ def _refusal(response) -> str:
     return BY_STATUS.get(response.status_code, "refused")
 
 
-def _watch(response, stop, first, done, why: list, deadline: list):
-    """Coupe la réponse si la conversation est arrêtée (Stop, client parti) ou si aucun mot
-    n'est arrivé à l'échéance (deadline[0], repoussée par les signes de vie) : le prêteur
-    arrête alors son calcul (compagnon)."""
+def _watch(response, stop, first, done, why: list, deadline: list, started: float):
+    """Coupe la réponse si la conversation est arrêtée (Stop, client parti), si aucun mot
+    n'est arrivé à l'échéance (deadline[0], repoussée par les signes de vie) ou si elle dure
+    depuis plus de TOTAL_S secondes : le prêteur arrête alors son calcul (compagnon)."""
     while not done.wait(WATCH_S):
         if stop is not None and stop.is_set():
             why.append("stop")
         elif not first.is_set() and time.monotonic() > deadline[0]:
             why.append("slow")
+        elif time.monotonic() > started + TOTAL_S:
+            why.append("too_long")
         else:
             continue
         client._cut(response)
@@ -313,8 +334,20 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
     stats ; ("status", texte) avant le premier mot si le prêteur dit charger le modèle ou
     lire la demande (cf. plus haut). Sans réflexion (le prêteur ne la calcule pas).
     conversation : l'identifiant opaque de la conversation (tag) ; sans lui, une clé
-    jetable pour cette seule demande."""
+    jetable pour cette seule demande. Un échec de FAULTS écarte le prêteur quelques minutes
+    (reputation.bench)."""
     data = body(model, messages, options)
+    key = parse(model)[0]
+    try:
+        yield from _chat_stream(model, data, stop, stats, conversation)
+    except PublicError as exc:
+        if exc.code in FAULTS:
+            reputation.bench(key, exc.code)
+        raise
+
+
+def _chat_stream(model, data: bytes, stop, stats, conversation):
+    """chat_stream, le corps `data` prêt."""
     key, name = parse(model)
     companion = ready()
     if companion is None:
@@ -342,7 +375,7 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
         deadline, told = [started + FIRST_WORD_S], set()
         received = written = 0          # octets du flux, caractères de texte (MAX_STREAM, MAX_TEXT)
         threading.Thread(target=_watch, daemon=True, name="aiodos-public-demande",
-                         args=(response, stop, first, done, why, deadline)).start()
+                         args=(response, stop, first, done, why, deadline, started)).start()
         try:
             for line in client._lines(response):
                 if stop is not None and stop.is_set():
@@ -404,6 +437,9 @@ def _too_long(key) -> PublicError:
 def _ended(why: list, first, deadline: list) -> str:
     """Pourquoi la réponse s'est arrêtée sans « done » : « slow » si aucun mot n'est arrivé
     à l'échéance (coupée par _watch, ou par le délai de lecture de requests, FIRST_WORD_S,
-    qui peut la devancer de WATCH_S), sinon « cut »."""
+    qui peut la devancer de WATCH_S), « too_long » si elle a duré plus de TOTAL_S secondes
+    (coupée par _watch), sinon « cut »."""
+    if "too_long" in why:
+        return "too_long"
     late = "slow" in why or (not first.is_set() and time.monotonic() >= deadline[0])
     return "slow" if late else "cut"

@@ -4,10 +4,18 @@ son nœud (celle de l'annuaire, « public:<clé>:<modèle> »), jamais une clé 
 nomme qu'une conversation de cette machine.
 
 Ce qu'on y garde (table public_reputation, migration 28) : les réponses servies ici, la
-vitesse mesurée ici (jetons par seconde, moyenne glissante), les contrôles réussis ou ratés
+vitesse mesurée ici (jetons par seconde, moyenne glissante, depuis l'envoi de la demande
+jusqu'au dernier mot, MAX_TPS au plus), les contrôles réussis ou ratés
 (network/spot_check.py) et la mise de côté : un contrôle raté écarte la machine ASIDE_DAYS
 jours, un deuxième pour de bon. Une machine mise de côté n'est plus choisie pour mes
 conversations, ni comme machine de contrôle.
+
+Un échec qui n'est pas une preuve de triche (relecture du 28/10/2026 : des signes de vie
+pendant 180 s puis rien, une réponse lente, coupée, illisible, trop longue, ou dont le moteur
+s'arrête : public_chat.FAULTS) écarte la machine BENCH_S secondes (bench), en mémoire
+seulement : pendant ce temps, elle n'est pas plus choisie qu'une machine mise de côté
+(is_set_aside). Sans cela, un prêteur qui lisait la conversation puis ne répondait jamais
+restait candidat à chaque message.
 
 Rien n'est partagé avec d'autres machines : pas de liste noire commune, qu'un menteur
 pourrait remplir pour écarter des machines honnêtes. Rien du contenu des conversations n'y
@@ -17,6 +25,8 @@ défaut, partent d'abord) ; une machine prise en défaut reste notée.
 """
 import logging
 import re
+import threading
+import time
 
 from aiodos import db
 
@@ -29,12 +39,22 @@ KEEP_DAYS = 180                # une machine sans faute, plus vue depuis : oubli
 MAX_ROWS = 10_000              # lignes gardées, au plus
 MIN_TOKENS = 16                # en dessous, la vitesse ne dit rien (comme node/speed.py)
 SMOOTHING = 0.3                # poids d'une nouvelle mesure dans la vitesse gardée
-MAX_TPS = 100_000              # au-delà, la mesure est fausse (comme network/public.py)
+# Vitesse mesurée ici, au plus (relecture du 28/10/2026) : une seule conversation ne va pas
+# plus vite sur une machine d'aujourd'hui, même un tout petit modèle sur la plus grosse carte
+# (quelques centaines de jetons par seconde), d'autant que la mesure compte aussi le relais, le
+# chargement et la lecture de la demande. Au-delà, ramenée à cette valeur : une mesure
+# aberrante ne pèse pas des dizaines de réponses dans la moyenne glissante
+MAX_TPS = 1000
 SHORT = 8                      # caractères de la clé dits au journal, au plus
+BENCH_S = 600                  # un échec (public_chat.FAULTS) : écartée 10 minutes
+MAX_BENCHED = 10_000           # machines écartées gardées en mémoire, au plus
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")      # comme network/public_chat.py
 
 _COLUMNS = ("key", "served", "tps", "checks_ok", "checks_failed", "aside_until", "forever",
             "first_seen", "last_seen")
+
+_lock = threading.Lock()
+_benched = {}                  # clé -> fin de l'écart (time.monotonic), en mémoire seulement
 
 
 def valid_key(key) -> bool:
@@ -94,9 +114,10 @@ def get(key) -> dict | None:
 
 
 def note_served(key, tokens, seconds):
-    """Une réponse servie ici par cette machine : `tokens` jetons en `seconds` secondes de
-    génération (du premier mot au dernier). La vitesse n'est retenue qu'au-delà de
-    MIN_TOKENS jetons."""
+    """Une réponse servie ici par cette machine : `tokens` jetons en `seconds` secondes, depuis
+    l'envoi de la demande jusqu'au dernier mot (le temps total vu d'ici : un prêteur qui garde
+    sa réponse pour l'envoyer d'un coup ne paraît pas plus rapide). La vitesse n'est retenue
+    qu'au-delà de MIN_TOKENS jetons, et ramenée à MAX_TPS au plus."""
     _check(key)
     now = db.now()
     with db.transaction() as conn:
@@ -104,8 +125,8 @@ def note_served(key, tokens, seconds):
         tps = row["tps"]
         if isinstance(tokens, (int, float)) and isinstance(seconds, (int, float)) \
                 and tokens >= MIN_TOKENS and seconds > 0:
-            measured = tokens / seconds
-            if 0 < measured <= MAX_TPS:
+            measured = min(MAX_TPS, tokens / seconds)
+            if measured > 0:
                 tps = measured if tps is None else (1 - SMOOTHING) * tps + SMOOTHING * measured
         conn.execute("UPDATE public_reputation SET served = served + 1, tps = ?, "
                      "last_seen = ? WHERE key = ?",
@@ -137,10 +158,44 @@ def set_aside(key, forever=False):
         _aside(conn, key, now, forever)
 
 
+def bench(key, reason=None):
+    """Un échec de cette machine (public_chat.FAULTS : lente, coupée, illisible…) : écartée
+    BENCH_S secondes, en mémoire seulement (cf. le début du module). reason (le code) va au
+    journal."""
+    if not valid_key(key):
+        return
+    now = time.monotonic()
+    with _lock:
+        for other in [k for k, until in _benched.items() if until <= now]:
+            del _benched[other]
+        _benched.pop(key, None)                   # en dernier : la plus récente
+        _benched[key] = now + BENCH_S
+        while len(_benched) > MAX_BENCHED:
+            del _benched[next(iter(_benched))]
+    # i18n: tel quel (journal) ; la clé abrégée, le code seulement
+    log.info("Réseau public : %s écartée %d min (%s)", short(key), BENCH_S // 60, reason or "?")
+
+
+def benched(key) -> bool:
+    """Cette machine est-elle écartée après un échec (bench), pour quelques minutes encore ?"""
+    with _lock:
+        until = _benched.get(key)
+    return until is not None and until > time.monotonic()
+
+
+def forget():
+    """Plus aucune machine écartée (essais) ; la table, elle, reste."""
+    with _lock:
+        _benched.clear()
+
+
 def is_set_aside(key) -> bool:
     """Cette machine est-elle de côté (contrôle raté, pas encore ASIDE_DAYS jours ; ou pour
-    de bon) ? Une clé mal formée l'est toujours."""
+    de bon), ou écartée quelques minutes après un échec (benched) ? Une clé mal formée l'est
+    toujours."""
     if not valid_key(key):
+        return True
+    if benched(key):
         return True
     row = get(key)
     if row is None:

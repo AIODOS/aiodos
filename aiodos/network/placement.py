@@ -24,24 +24,41 @@ Les machines du réseau public (network/public_chat.py, 28/10/2026), quand la co
 permet (public, cf. chat/public_consent.py) : celles qui prêtent (« lends »), ont une place
 (« free », moins les conversations que je viens de leur envoyer) et le modèle, au nom exact,
 ou, si l'utilisateur l'a accepté (bigger), un modèle de conversation plus gros (le plus grand
-nombre de paramètres lu dans le nom, public_chat.params) : « le meilleur modèle libre ». Elles
-viennent en dernier, à vitesse comparable ; une machine publique passe devant cette machine
-seulement si sa vitesse annoncée (« tps ») vaut au moins FASTER fois celle de cette machine
-(node/speed.py ; inconnue sur un téléphone : toute vitesse annoncée), ou si elle répond avec
-un modèle plus gros accepté ; jamais devant une de mes machines libres (cette machine, libre,
-passe alors après elles). PUBLIC_TRIES au plus. Identifiant : « public:<clé>:<modèle> ».
+nombre de paramètres lu dans le nom, public_chat.params) et contrôlable (cf. plus bas) : « le
+meilleur modèle libre ». Elles viennent en dernier, à vitesse comparable ; une machine publique
+passe devant cette machine seulement si sa vitesse **mesurée ici** (reputation.speed : au
+moins une réponse servie et mesurée, depuis l'envoi de la demande jusqu'au dernier mot) vaut
+au moins FASTER fois celle de cette machine (node/speed.py ; inconnue sur un téléphone : toute
+vitesse mesurée), si elle répond avec un modèle plus gros accepté, ou si cette machine est
+occupée (une conversation en cours ici : la machine publique, libre, répond sans attendre) ;
+jamais devant une de mes machines libres (cette machine, libre, passe alors après elles).
+La vitesse qu'une machine annonce (« tps », jusqu'à 100 000 dans un profil) ne sert qu'à
+départager les machines publiques entre elles, jamais à passer devant cette machine ni devant
+mes machines (relecture du 28/10/2026 : en annonçant une vitesse énorme, un menteur récoltait
+des conversations). Une machine jamais mesurée sert donc d'abord quand cette machine n'a pas le
+modèle, est occupée, ou pour un modèle plus gros accepté. PUBLIC_TRIES au plus. Identifiant :
+« public:<clé>:<modèle> ».
 
 Ce que les contrôles au hasard ont appris (network/reputation.py, 28/10/2026) : une machine
-publique mise de côté (contrôle raté) n'est plus jamais candidate, ni comme machine de
-contrôle ; la vitesse mesurée ici, quand elle est connue, passe avant celle qu'elle annonce.
+publique mise de côté (contrôle raté), ou écartée quelques minutes après un échec (lente,
+coupée, illisible… : reputation.bench), n'est plus candidate, ni comme machine de contrôle ;
+la vitesse mesurée ici, quand elle est connue, passe avant celle qu'elle annonce.
+
+Un modèle contrôlable (_controllable) : présent (nom exact) chez CHECKABLE_BY machines
+publiques distinctes qui prêtent, au moins, ou prêté par une de mes machines ; une autre
+machine peut alors refaire la demande (network/public_controls.py). Seul un tel modèle est pris
+pour le meilleur (best_public) ou pour un modèle plus gros (relecture du 28/10/2026 : un nœud
+qui annonçait « qwen3.5:999b » passait toujours premier, et, seul à porter ce nom, n'avait
+jamais de machine de contrôle). Une taille invraisemblable lue dans un nom est ignorée
+(public_chat.MAX_PARAMS).
 
 « Automatique · réseau public » (PUBLIC_BEST, 28/10/2026) : ni cette machine ni mes machines
 n'ont de modèle de conversation (un téléphone neuf, sans modèle téléchargé), et la conversation
 peut partir chez un inconnu. Seules les machines du réseau public répondent alors, chacune avec
-son meilleur modèle de conversation (le plus grand nombre de paramètres lu dans le nom), le
-meilleur d'abord, puis la plus rapide (best_public) ; PUBLIC_TRIES au plus. Il n'y a rien ici à
-quoi comparer : ni « modèle plus gros », ni son accord. L'interface ne le propose que dans ce
-cas (chat/public_consent.py, entry).
+son meilleur modèle de conversation contrôlable (le plus grand nombre de paramètres lu dans le
+nom), le meilleur d'abord, puis la plus rapide (best_public) ; PUBLIC_TRIES au plus. Il n'y a
+rien ici à quoi comparer : ni « modèle plus gros », ni son accord. L'interface ne le propose que
+dans ce cas (chat/public_consent.py, entry), et l'API le refuse sinon (public_consent.reach).
 
 Tant qu'aucun mot de la réponse n'est arrivé, une machine qui échoue (injoignable, ne
 prête plus, Ollama arrêté, machine publique occupée…) cède la place à la suivante (run).
@@ -80,6 +97,7 @@ LOAD_MAX = 1000             # valeurs annoncées par une autre machine : bornée
 FASTER = 2                  # une machine publique passe devant celle-ci : deux fois plus rapide
 PUBLIC_TRIES = 3            # machines publiques essayées au plus pour une réponse
 PUBLIC_SEEN_MAX = 150       # nœud public vu il y a plus longtemps (profil toutes les 60 s) : parti
+CHECKABLE_BY = 2            # machines publiques distinctes qui ont un modèle : il est contrôlable
 
 _lock = threading.Lock()
 _loads = {}                 # machine -> (instant monotonic, {"chats": n, "units": n})
@@ -277,37 +295,83 @@ def _remote(name: str) -> list:
     return out
 
 
-def _public_nodes() -> list:
-    """Les nœuds du réseau public qui prêtent en ce moment et ont une place, d'après le
+def _lending() -> list:
+    """Les nœuds du réseau public qui prêtent en ce moment, avec ou sans place, d'après le
     dernier état lu au compagnon (public.seen, relu s'il date de plus de public.FRESH_S
-    secondes), moins les conversations que je viens de leur envoyer, sans ceux qu'un contrôle
-    a mis de côté (reputation.is_set_aside) ; aucun si le compagnon ne sait pas leur confier
-    une conversation."""
+    secondes), une fois chacun, sans ceux qu'un contrôle a mis de côté ou qu'un échec écarte
+    (reputation.is_set_aside) ; aucun si le compagnon ne sait pas leur confier une
+    conversation."""
     if public_chat.ready() is None:
         return []
     mine, nodes = public.seen(fresh=True)
-    found = []
+    found, keys = [], set()
     for node in nodes:
         key = node.get("key")
-        if key == mine or not public_chat.valid_key(key) or not node.get("lends"):
-            continue
-        if node.get("seen_s", 0) > PUBLIC_SEEN_MAX:
-            continue
-        with _lock:
-            sent = _sent.get(public_chat.PREFIX + key, 0)
-        if int(node.get("free") or 0) - sent < 1:
+        if key == mine or key in keys or not public_chat.valid_key(key) \
+                or not node.get("lends") or node.get("seen_s", 0) > PUBLIC_SEEN_MAX:
             continue
         if reputation.is_set_aside(key):         # en dernier : une lecture de la base
             continue
+        keys.add(key)
         found.append(node)
     return found
 
 
-def _speed(node) -> float | None:
-    """La vitesse d'une machine publique : mesurée ici (reputation.speed) si on la connaît,
-    sinon celle qu'elle annonce (« tps »)."""
+def _with_room(nodes) -> list:
+    """Ceux de ces nœuds qui ont une place, moins les conversations que je viens de leur
+    envoyer."""
+    found = []
+    for node in nodes:
+        with _lock:
+            sent = _sent.get(public_chat.PREFIX + node["key"], 0)
+        if int(node.get("free") or 0) - sent >= 1:
+            found.append(node)
+    return found
+
+
+def _public_nodes() -> list:
+    """Les nœuds du réseau public qui prêtent en ce moment et ont une place (cf. _lending)."""
+    return _with_room(_lending())
+
+
+def _tagged(name) -> str:
+    """Le nom d'un modèle avec son étiquette (« llama3 » → « llama3:latest », comme Ollama)."""
+    name = str(name or "")
+    return name if ":" in name.rsplit("/", 1)[-1] else f"{name}:latest"
+
+
+def _controllable(nodes) -> set:
+    """Les modèles qu'une autre machine peut contrôler (cf. le début du module), avec leur
+    étiquette (_tagged) : présents chez CHECKABLE_BY de ces nœuds au moins (_lending : ils
+    prêtent, avec ou sans place), ou prêtés par une de mes machines (pas celles de mes amis,
+    qui ne contrôlent pas : network/public_controls.py)."""
+    counts = {}
+    for node in nodes:
+        for name in {_tagged(m) for m in node["models"]}:
+            counts[name] = counts.get(name, 0) + 1
+    found = {name for name, n in counts.items() if n >= CHECKABLE_BY}
+    for peer in peers.list_peers():
+        if eligible(peer) and sharing.level(peer["node_id"]) == sharing.MINE:
+            found |= {_tagged(m["name"]) for m in remote_models.chat_models(peer.get("profile"))}
+    return found
+
+
+def _measured(node) -> float | None:
+    """La vitesse d'une machine publique mesurée ici (reputation.speed : au moins une réponse
+    servie et mesurée), ou None : seule elle la fait passer devant cette machine."""
     measured = reputation.speed(node["key"])
-    return round(measured, 1) if measured is not None else node.get("tps")
+    return round(min(measured, reputation.MAX_TPS), 1) if measured is not None else None
+
+
+def _speed(node) -> float | None:
+    """La vitesse d'une machine publique : mesurée ici si on la connaît, sinon celle qu'elle
+    annonce (« tps »), bornée à reputation.MAX_TPS ; celle-ci ne sert qu'à départager les
+    machines publiques entre elles."""
+    measured = _measured(node)
+    if measured is not None:
+        return measured
+    told = node.get("tps")
+    return min(told, reputation.MAX_TPS) if told is not None else None
 
 
 def public_with(name: str) -> list:
@@ -323,54 +387,81 @@ def public_with(name: str) -> list:
     return [(key, chosen) for _speed_, _seen, key, chosen in sorted(found)]
 
 
-def _larger(models, base) -> list:
-    """(paramètres, nom) des modèles de conversation plus gros que `base` (milliards)."""
+def _larger(models, base, checkable) -> list:
+    """(paramètres, nom) des modèles de conversation plus gros que `base` (milliards) et
+    contrôlables (dans `checkable`, cf. _controllable)."""
     if base is None:
         return []
     found = []
     for m in models:
         size = public_chat.params(m)
-        if size is not None and size > base and public_chat.converses(m) and not reserved(m):
+        if size is not None and size > base and public_chat.converses(m) and not reserved(m) \
+                and _tagged(m) in checkable:
             found.append((size, m))
     return found
 
 
-def _public(name: str, bigger: bool) -> list:
+def _public(name: str, bigger: bool, busy: bool = False) -> list:
     """Machines du réseau public qui peuvent répondre (cf. le début du module) : chacune avec
     ce modèle (nom exact), ou, si bigger, avec son plus gros modèle de conversation plus gros
-    que celui-ci ; celles qui passent devant cette machine d'abord, puis le plus gros modèle,
-    la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus."""
+    que celui-ci et contrôlable ; celles qui passent devant cette machine d'abord (mesurée
+    FASTER fois plus rapide, modèle plus gros, ou cette machine occupée : busy), puis le plus
+    gros modèle, la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus."""
     base = public_chat.params(name)
     here = speed.median()
     phone = android.is_android()
+    lending = _lending()
+    checkable = _controllable(lending) if bigger else set()
     found = []
-    for node in _public_nodes():
+    for node in _with_room(lending):
         chosen = next((m for m in node["models"] if same_model(m, name) and not reserved(m)),
                       None)
-        larger = max(_larger(node["models"], base), default=None) if bigger else None
+        larger = max(_larger(node["models"], base, checkable), default=None) if bigger else None
         if larger is not None:
             chosen = larger[1]
         if chosen is None:
             continue
-        tps = _speed(node)
-        faster = tps is not None and (tps >= FASTER * here if here is not None else phone)
+        measured = _measured(node)
+        faster = measured is not None and (measured >= FASTER * here if here is not None
+                                           else phone)
         found.append(Candidate(
             model=public_chat.model_id(node["key"], chosen),
             node_id=public_chat.PREFIX + node["key"], machine=t("placement.public_machine"),
-            trust="public", params=public_chat.params(chosen), tps=tps,
-            seen=int(node.get("seen_s") or 0), ahead=faster or larger is not None))
+            trust="public", params=public_chat.params(chosen), tps=_speed(node),
+            seen=int(node.get("seen_s") or 0), ahead=faster or larger is not None or busy))
     found.sort(key=lambda c: (not c.ahead, -(c.params or 0), -(c.tps or 0), c.seen))
     return found[:PUBLIC_TRIES]
 
 
 def best_public() -> list:
     """« Automatique · réseau public » (PUBLIC_BEST) : chaque machine du réseau public qui prête
-    et a une place, avec son meilleur modèle de conversation (le plus grand nombre de paramètres
-    lu dans le nom, public_chat.params ; un nom qui n'en dit rien passe après), le meilleur
-    d'abord, puis la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus."""
+    et a une place, avec son meilleur modèle de conversation contrôlable (_controllable ; le
+    plus grand nombre de paramètres lu dans le nom, public_chat.params ; un nom qui n'en dit
+    rien passe après), le meilleur d'abord, puis la plus rapide, la plus récemment vue.
+    Aucun modèle contrôlable : n'importe lequel, en repli (ci-dessous). PUBLIC_TRIES au plus."""
+    lending = _lending()
+    found = _best(lending, _controllable(lending))
+    if not found:
+        # Repli (décision du 28/10/2026, à revoir avec l'auteur) : sur un réseau encore
+        # minuscule, aucun modèle n'est contrôlable (un seul PC qui prête qwen3.5:9b), et un
+        # téléphone sans modèle n'aurait aucune réponse. Il prend alors un modèle que personne
+        # ne peut contrôler, une machine qui a déjà répondu ici sans faute d'abord : un menteur
+        # seul sur le réseau peut alors être choisi ; un contrôle le prendra dès qu'une autre
+        # machine aura le même modèle
+        found = _best(lending, None)
+        found.sort(key=lambda c: (not _served_well(c.node_id.removeprefix(public_chat.PREFIX)),
+                                  -(c.params or 0), -(c.tps or 0), c.seen))
+    return found[:PUBLIC_TRIES]
+
+
+def _best(lending, checkable) -> list:
+    """Chaque machine qui prête et a une place, avec son plus gros modèle de conversation,
+    contrôlable (dans `checkable`) ou n'importe lequel (None), le plus gros d'abord, puis la
+    plus rapide, la plus récemment vue (cf. best_public)."""
     found = []
-    for node in _public_nodes():
-        talking = [m for m in node["models"] if public_chat.converses(m) and not reserved(m)]
+    for node in _with_room(lending):
+        talking = [m for m in node["models"] if public_chat.converses(m) and not reserved(m)
+                   and (checkable is None or _tagged(m) in checkable)]
         if not talking:
             continue
         chosen = max(talking, key=lambda m: public_chat.params(m) or 0)
@@ -380,27 +471,37 @@ def best_public() -> list:
             trust="public", params=public_chat.params(chosen), tps=_speed(node),
             seen=int(node.get("seen_s") or 0), ahead=True))
     found.sort(key=lambda c: (-(c.params or 0), -(c.tps or 0), c.seen))
-    return found[:PUBLIC_TRIES]
+    return found
+
+
+def _served_well(key) -> bool:
+    """Cette machine publique a-t-elle déjà répondu ici, sans contrôle raté ?"""
+    row = reputation.get(key)
+    return bool(row) and row["served"] > 0 and not row["checks_failed"]
 
 
 def bigger_public(name: str) -> str | None:
-    """Le plus gros modèle de conversation qu'une machine du réseau public pourrait donner à la
-    place de `name` (la carte d'accord le nomme), ou None."""
+    """Le plus gros modèle de conversation contrôlable qu'une machine du réseau public pourrait
+    donner à la place de `name` (la carte d'accord le nomme), ou None."""
     base = public_chat.params(name)
-    found = [pair for node in _public_nodes() for pair in _larger(node["models"], base)]
+    lending = _lending()
+    checkable = _controllable(lending)
+    found = [pair for node in _with_room(lending)
+             for pair in _larger(node["models"], base, checkable)]
     return max(found)[1] if found else None
 
 
 def candidates(name: str, executor=None, public=False, bigger=False) -> list:
     """Machines qui peuvent répondre avec ce modèle, la mieux placée d'abord. public : celles
-    du réseau public aussi ; bigger : avec un modèle plus gros, s'il est accepté."""
+    du réseau public aussi ; bigger : avec un modèle plus gros, s'il est accepté. Cette
+    machine occupée : les machines publiques libres passent devant elle (cf. _public)."""
     found = _remote(name)
     here = _local(name, executor)
     if here:
         found.append(here)
     ranked = sorted(found, key=Candidate.key)
     if public:
-        publics = _public(name, bigger)
+        publics = _public(name, bigger, busy=here is not None and here.chats > 0)
         ahead = [c for c in publics if c.ahead]
         if ahead and here is not None:
             # Devant cette machine, jamais devant une de mes machines libres (mes machines

@@ -26,6 +26,16 @@ venue de cette machine même : seul le compagnon l'ajoute, et un appareil du ré
 qui l'enverrait lui-même se ferait passer pour une machine jointe par Internet. De même
 pour X-Aiodos-Public (la clé jetable d'un inconnu du réseau public, network/public_lending.py) :
 sans lui, crédible, aucune route /public/… n'est ouverte.
+
+X-Aiodos-Public n'est cru, en plus, qu'avec un en-tête Host qui soit une adresse IP écrite en
+chiffres, de la boucle locale (127.0.0.1, ::1) ou celle où la requête est arrivée, avec ou sans
+port (local_host) : c'est ce que pose le compagnon (compagnon/src/public_serve.rs,
+relayed_headers : l'adresse du serveur réseau local, « 127.0.0.1:47701 » ou celle de
+--p2p-host). Relecture du 28/10/2026 : une page web qui se fait servir sous un nom à elle
+résolu vers 127.0.0.1 (« DNS rebinding ») atteignait /public/v1/chat depuis le navigateur,
+sans passer par le compagnon ; son Host porte alors ce nom, et la requête est refusée. Un
+programme de cette machine peut toujours poser le Host qu'il veut : il a déjà tout ce que
+l'utilisateur a.
 """
 import ipaddress
 import logging
@@ -41,6 +51,7 @@ log = logging.getLogger("aiodos.network")
 PEER_HEADER = b"x-aiodos-peer"     # clé Internet de l'appelant, ajoutée par le compagnon
 PUBLIC_HEADER = b"x-aiodos-public"  # clé jetable d'un inconnu du réseau public, de même
 _PUBLIC_KEY = re.compile(r"[0-9a-f]{16,128}")   # une clé d'Iroh en hexadécimal : 64 signes
+_PORT = re.compile(r":[0-9]{1,5}")
 HEADER_S = 10            # s pour envoyer les en-têtes d'une requête
 BODY_GRACE = 10          # s de lecture du corps avant de regarder son débit
 MIN_RATE = 8 * 1024      # octets/s en moyenne, au moins, pour le corps d'une requête
@@ -102,13 +113,48 @@ def internet_key(scope) -> str:
     return _from_here(scope, PEER_HEADER)
 
 
+def _host_address(value: str) -> str | None:
+    """L'adresse IP d'un en-tête Host écrit en chiffres (« 127.0.0.1 », « 127.0.0.1:47701 »,
+    « [::1]:47701 », « ::1 »), sans le port, sous une forme comparable ; None pour un nom
+    (« localhost », « exemple.fr ») ou un en-tête mal formé."""
+    text = value.strip()
+    if text.startswith("["):
+        inside, bracket, rest = text[1:].partition("]")
+        if not bracket or (rest and not _PORT.fullmatch(rest)):
+            return None
+        text = inside
+    elif text.count(":") == 1:                    # IPv4 et port ; plus d'un « : » : IPv6 nue
+        text, port = text.split(":")
+        if not _PORT.fullmatch(f":{port}"):
+            return None
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return None
+    return normal_host(text)
+
+
+def local_host(scope) -> bool:
+    """L'en-tête Host est-il une adresse IP en chiffres, de la boucle locale ou celle où la
+    requête est arrivée, avec ou sans port (cf. le début du module) ? Un seul Host."""
+    hosts = [value for name, value in scope.get("headers") or [] if name == b"host"]
+    if len(hosts) != 1:
+        return False
+    address = _host_address(hosts[0].decode("latin-1"))
+    if address is None:
+        return False
+    server = (scope.get("server") or (None, None))[0]
+    return is_loopback(address) or (bool(server) and address == normal_host(server))
+
+
 def public_key(scope) -> str:
     """Clé jetable d'un inconnu du réseau public (X-Aiodos-Public), seulement si la requête
-    vient du compagnon, donc de cette machine, et si c'est bien une clé (hexadécimal) ; ""
-    sinon. Elle n'est ni gardée ni comparée à rien : elle dit seulement que la demande vient
-    du réseau public, par le compagnon (network/public_lending.py)."""
+    vient du compagnon, donc de cette machine, avec le Host qu'il pose (local_host), et si
+    c'est bien une clé (hexadécimal) ; "" sinon. Elle n'est ni gardée ni comparée à rien :
+    elle dit seulement que la demande vient du réseau public, par le compagnon
+    (network/public_lending.py)."""
     key = _from_here(scope, PUBLIC_HEADER)
-    return key if _PUBLIC_KEY.fullmatch(key) else ""
+    return key if _PUBLIC_KEY.fullmatch(key) and local_host(scope) else ""
 
 
 def known_addresses() -> frozenset:

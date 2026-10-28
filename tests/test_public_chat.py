@@ -21,7 +21,7 @@ from aiodos.api.server import create_app
 from aiodos.chat import conversations, pipeline, public_consent
 from aiodos.gateway import answer as gateway_answer
 from aiodos.knowledge import chunking, store
-from aiodos.network import placement, public, public_chat, route
+from aiodos.network import placement, public, public_chat, reputation, route
 from aiodos.node import speed
 from aiodos.services import ollama
 
@@ -177,6 +177,17 @@ def directory(*nodes):
     public._remember(public._typed({"enabled": True, "key": MY_KEY, "nodes": list(nodes)}))
 
 
+def checkable(*models, key="9f" * 32):
+    """Une autre machine du réseau public qui prête ces modèles, sans place libre : elle n'est
+    jamais choisie, mais ils deviennent contrôlables (placement._controllable)."""
+    return node(key, *models, free=0)
+
+
+def measured(key, tps):
+    """La vitesse de cette machine publique mesurée ici (une réponse servie de 10 s)."""
+    reputation.note_served(key, int(tps * 10), 10.0)
+
+
 def at(key, model):
     return public_chat.model_id(key, model)
 
@@ -207,7 +218,7 @@ def notices(events):
 def test_public_machines_that_can_answer(monkeypatch, companion, opened):
     """Seules celles qui prêtent, ont une place et le modèle (nom exact), vues récemment, et
     pas cette machine elle-même ; en dernier à vitesse comparable, devant cette machine si
-    elles sont deux fois plus rapides (inconnue sur un téléphone : devant)."""
+    elles sont deux fois plus rapides, mesurées ici (inconnue sur un téléphone : devant)."""
     local_models(monkeypatch, SMALL)
     directory(node(PC, SMALL, BIG, tps=50), node(OTHER, SMALL, lends=False),
               node(THIRD, SMALL, free=0), node("d4" * 32, BIG), node("e5" * 32, SMALL, seen=400),
@@ -216,6 +227,8 @@ def test_public_machines_that_can_answer(monkeypatch, companion, opened):
     assert placement.plan(AUTO, ex) == [SMALL]                       # sans permission : non
     assert placement.plan(AUTO, ex, public=True) == [SMALL, at(PC, SMALL)]   # PC, vitesse inconnue
     speed.note(100, 10)                                              # 10 jetons/s ici
+    assert placement.plan(AUTO, ex, public=True) == [SMALL, at(PC, SMALL)]   # 50 annoncés
+    measured(PC, 50)                                                 # 50 mesurés : devant
     assert placement.plan(AUTO, ex, public=True) == [at(PC, SMALL), SMALL]
     speed.forget()
     speed.note(300, 10)                                              # 30 jetons/s : 50 < 60
@@ -243,6 +256,7 @@ def test_my_free_machines_stay_ahead_of_a_faster_stranger(monkeypatch, companion
     peers.set_profile("fixe", {"lends_models": True, "ollama": {"models": [
         {"name": SMALL, "caps": ["completion"], "fits_vram": True, "loaded": False}]}})
     directory(node(PC, SMALL, tps=200))
+    measured(PC, 200)
     speed.note(100, 10)
     fixe = remote_models.model_id("fixe", SMALL)
     assert placement.plan(AUTO, Executor(), public=True) == [fixe, at(PC, SMALL), SMALL]
@@ -253,10 +267,37 @@ def test_my_free_machines_stay_ahead_of_a_faster_stranger(monkeypatch, companion
     assert placement.plan(AUTO, Executor(), public=True) == [at(PC, SMALL)]
 
 
+def test_an_announced_speed_never_puts_a_stranger_ahead(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : un « tps » annoncé jusqu'à 100 000 faisait passer un menteur
+    devant cette machine, qui récoltait les conversations. Seule la vitesse mesurée ici (une
+    réponse servie au moins) fait passer une machine publique devant cette machine ;
+    l'annoncée ne départage que les machines publiques entre elles. Jamais mesurée, une
+    machine publique sert quand cette machine est occupée ou n'a pas le modèle."""
+    local_models(monkeypatch, SMALL)
+    directory(node(PC, SMALL, tps=99_999), node(OTHER, SMALL, tps=10))
+    plan = lambda busy=0: placement.plan(AUTO, Executor(busy), public=True)  # noqa: E731
+    speed.note(100, 10)                                   # 10 jetons/s ici
+    assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]
+    speed.forget()
+    monkeypatch.setattr(placement.android, "is_android", lambda: True)   # un téléphone non plus
+    assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]
+    assert placement.candidates(SMALL, Executor(), public=True)[1].tps == 1000   # borné
+    measured(OTHER, 30)                                   # mesurée ici : devant le téléphone
+    assert plan() == [at(OTHER, SMALL), SMALL, at(PC, SMALL)]
+    # Cette machine occupée : les machines publiques libres d'abord, mesurées ou non
+    assert plan(busy=1) == [at(PC, SMALL), at(OTHER, SMALL), SMALL]
+    local_models(monkeypatch)                             # le modèle n'est pas ici
+    assert plan() == [at(OTHER, SMALL), at(PC, SMALL)]
+
+
 def test_parameters_read_in_a_model_name():
     assert public_chat.params("qwen3.5:9b") == 9 and public_chat.params("qwen3.5:0.8b") == 0.8
     assert public_chat.params("qwen3.6:35b-a3b") == 35 and public_chat.params("gemma3:270m") == 0.27
     assert public_chat.params("mistral:latest") is None
+    # Une taille invraisemblable est ignorée (public_chat.MAX_PARAMS)
+    assert public_chat.params("qwen3.5:999b") == 999 and public_chat.params("x:1000b") == 1000
+    assert public_chat.params("qwen3.5:2000b") is None
+    assert public_chat.params("qwen3.5:9b-5000b") == 9
     assert not public_chat.converses("embeddinggemma:latest")
     assert not public_chat.converses("qwen3-embedding:0.6b") and public_chat.converses(BIG)
     assert public_chat.parse(at(PC, BIG)) == (PC, BIG)
@@ -270,7 +311,7 @@ def test_a_bigger_model_is_offered_once_then_used_or_not(monkeypatch, companion,
     d'accord, et la réponse part tout de suite sur ce téléphone ; oui : le 9b répond, marqué
     « réseau public » ; non : seulement le même modèle, sans carte."""
     local_models(monkeypatch, SMALL)
-    directory(node(PC, BIG, "embeddinggemma:latest", tps=60))
+    directory(node(PC, BIG, "embeddinggemma:latest", tps=60), checkable(BIG))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         events = ask(ui, "Bonjour")
         assert notices(events) == ["public_bigger"]
@@ -300,6 +341,32 @@ def test_a_bigger_model_is_offered_once_then_used_or_not(monkeypatch, companion,
     assert gateway_answer.route_info(at(PC, BIG))["place"] == "public"
 
 
+def test_only_a_model_another_machine_can_check_is_bigger(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : un nœud seul à annoncer « qwen3.5:999b » passait pour le plus
+    gros modèle et n'avait jamais de machine de contrôle. Un modèle plus gros n'est pris que
+    contrôlable : chez deux machines publiques qui prêtent (place libre ou non), ou chez une de
+    mes machines ; une taille invraisemblable ne compte pas."""
+    from aiodos.network import peers
+    liar, huge = "qwen3.5:999b", "qwen3.5:2000b"
+    local_models(monkeypatch, SMALL)
+    settings.set_value("public_bigger_model", True)
+    plan = lambda: placement.plan(AUTO, Executor(), public=True, bigger=True)  # noqa: E731
+    directory(node(PC, liar), node(OTHER, BIG))
+    assert placement.bigger_public(SMALL) is None and plan() == [SMALL]
+    directory(node(PC, liar, BIG), node(OTHER, BIG, free=0))     # le 9b chez deux machines
+    assert placement.bigger_public(SMALL) == BIG and plan() == [at(PC, BIG), SMALL]
+    directory(node(PC, liar), node(OTHER, liar, lends=False))     # l'autre ne prête pas
+    assert placement.bigger_public(SMALL) is None
+    directory(node(PC, huge), node(OTHER, huge))                  # contrôlable, invraisemblable
+    assert placement.bigger_public(SMALL) is None and plan() == [SMALL]
+    directory(node(PC, BIG))                                      # chez une de mes machines
+    assert placement.bigger_public(SMALL) is None
+    peers.save("fixe", "PC fixe", b"k" * 32, "127.0.0.1", 1)
+    peers.set_profile("fixe", {"lends_models": True, "ollama": {"models": [
+        {"name": BIG, "caps": ["completion"], "fits_vram": True, "loaded": False}]}})
+    assert placement.bigger_public(SMALL) == BIG and plan() == [at(PC, BIG), SMALL]
+
+
 def test_the_first_time_a_note_then_never_again(monkeypatch, companion, opened):
     local_models(monkeypatch)                                     # le modèle n'est pas ici
     directory(node(PC, SMALL))
@@ -324,6 +391,7 @@ def test_my_documents_go_to_a_stranger_only_with_consent(monkeypatch, companion,
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: True)   # le public devant
     directory(node(PC, SMALL))
+    measured(PC, 40)
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         # Après le démarrage : sinon, le modèle d'embedding des vecteurs n'étant pas noté, le
         # nœud les retire et les refait en fond (reindex.schedule), pendant la question
@@ -362,6 +430,7 @@ def test_on_my_machines_only_keeps_a_conversation_home(monkeypatch, companion, o
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: True)
     directory(node(PC, SMALL))
+    measured(PC, 40)
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         events = ask(ui, "Bonjour", mine_only=True)              # nouvelle conversation
         conv_id = events[0]["conversation_id"]
@@ -439,6 +508,8 @@ def test_a_refusal_before_the_first_word_hands_over(monkeypatch, companion, open
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: True)
     directory(node(PC, SMALL, tps=90), node(OTHER, SMALL, tps=80), node(THIRD, SMALL, tps=70))
+    for key, tps in ((PC, 90), (OTHER, 80), (THIRD, 70)):
+        measured(key, tps)
     companion.script = {PC: ("refuse", 503, "busy"), OTHER: ("refuse", 502, "unreachable"),
                         THIRD: ("refuse", 404, "no_model")}
     plan = placement.plan(AUTO, Executor(), public=True)
@@ -537,6 +608,7 @@ def test_an_error_after_the_first_word_is_not_handed_over(monkeypatch, companion
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: True)
     directory(node(PC, SMALL))
+    measured(PC, 40)
     companion.script = {PC: ("error_after", "Bon", "busy")}
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         events = ask(ui, "Bonjour")
@@ -561,6 +633,8 @@ def test_an_endless_answer_is_cut(monkeypatch, companion, opened):
             out.append(value)
     assert cut.value.code == "too_long" and "".join(out) == piece
     assert len(piece) <= public_chat.MAX_TEXT < 2 * len(piece)
+    assert reputation.benched(PC)                       # écartée quelques minutes
+    reputation.forget()
     # Dans la conversation : le début gardé, et pourquoi elle s'arrête
     local_models(monkeypatch)
     directory(node(PC, SMALL))
@@ -569,7 +643,7 @@ def test_an_endless_answer_is_cut(monkeypatch, companion, opened):
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         events = ask(ui, "Bonjour")
         assert events[-1]["error"] == ("La réponse de la machine du réseau public dépassait "
-                                       "la longueur permise : elle a été coupée.")
+                                       "la longueur ou la durée permise : elle a été coupée.")
         conv = ui.get(f"/api/conversations/{events[0]['conversation_id']}", headers=AUTH).json()
     assert conv["messages"][-1]["content"] == "Bon" + piece
     # Des événements inconnus sans fin, sans un mot
@@ -578,6 +652,97 @@ def test_an_endless_answer_is_cut(monkeypatch, companion, opened):
     with pytest.raises(public_chat.PublicError) as junk:
         list(public_chat.chat_stream(at(PC, SMALL), salut))
     assert junk.value.code == "too_long"
+
+
+def test_a_whole_answer_has_a_deadline(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : après le premier mot, plus aucune échéance ; un prêteur pouvait
+    envoyer un octet toutes les 59 s sans fin. Toute la réponse : TOTAL_S secondes au plus
+    depuis la demande ; au-delà, coupée (« too_long »), le début gardé, le prêteur écarté."""
+    monkeypatch.setattr(public_chat, "TOTAL_S", 1.0)
+    drops = ("raw", [(0.3, {"type": "delta", "text": "goutte "})] * 20)   # 6 s en tout
+    companion.script = {PC: drops}
+    out, started = [], time.monotonic()
+    with pytest.raises(public_chat.PublicError) as late:
+        for kind, value in public_chat.chat_stream(at(PC, SMALL),
+                                                   [{"role": "user", "content": "Salut"}]):
+            out.append(value)
+    assert late.value.code == "too_long" and time.monotonic() - started < 3
+    assert 1 <= len(out) < 20 and set(out) == {"goutte "}
+    assert reputation.benched(PC)
+    reputation.forget()
+    # Dans la conversation : le début gardé, et pourquoi elle s'arrête
+    local_models(monkeypatch)
+    directory(node(PC, SMALL))
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        events = ask(ui, "Bonjour")
+        assert events[-1]["error"] == ("La réponse de la machine du réseau public dépassait "
+                                       "la longueur ou la durée permise : elle a été coupée.")
+        conv = ui.get(f"/api/conversations/{events[0]['conversation_id']}", headers=AUTH).json()
+    assert conv["messages"][-1]["content"].startswith("goutte ")
+
+
+def test_a_lender_that_fails_is_set_aside_a_few_minutes(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : des signes de vie pendant 180 s puis rien, une réponse lente,
+    coupée, illisible ou trop longue, un moteur arrêté : le prêteur n'était jamais pénalisé ;
+    il lisait la conversation sans y répondre, et restait candidat. Il est écarté BENCH_S
+    secondes, en mémoire (ce n'est pas une preuve de triche) : ni candidat, ni machine de
+    contrôle ; puis il revient. Un simple refus (occupée…) ne l'écarte pas."""
+    local_models(monkeypatch)                                     # le modèle n'est pas ici
+    monkeypatch.setattr(public_chat, "FIRST_WORD_S", 0.5)
+    monkeypatch.setattr(public_chat, "ALIVE_GRACE_S", 0.5)
+    monkeypatch.setattr(public_chat, "LOADING_MAX_S", 1.0)
+    directory(node(PC, SMALL), node(OTHER, SMALL))
+    plan = lambda: placement.plan(AUTO, Executor(), public=True)  # noqa: E731
+    salut = [{"role": "user", "content": "Salut"}]
+    assert plan() == [at(PC, SMALL), at(OTHER, SMALL)]
+    words = [(0, {"type": "delta", "text": "Bon"})]
+    for code, act in (("slow", _loading(20, 0.2)),               # des signes de vie, puis rien
+                      ("slow", ("silent", 2)),
+                      ("cut", ("raw", words)),                   # fini sans « done »
+                      ("unreadable", ("raw", [(0, "pas un événement")])),
+                      ("engine", ("raw", [(0, {"type": "error", "error": "engine"})]))):
+        reputation.forget()
+        companion.script = {PC: act}
+        with pytest.raises(public_chat.PublicError) as failed:
+            list(public_chat.chat_stream(at(PC, SMALL), salut))
+        assert failed.value.code == code
+        assert reputation.benched(PC) and reputation.is_set_aside(PC), code
+        assert plan() == [at(OTHER, SMALL)], code
+        assert placement.public_with(SMALL) == [(OTHER, SMALL)], code   # ni contrôle
+    assert reputation.get(PC) is None                            # rien en base
+    # Quelques minutes après : de retour
+    reputation.forget()
+    monkeypatch.setattr(reputation, "BENCH_S", 0.3)
+    companion.script = {PC: ("raw", words)}
+    with pytest.raises(public_chat.PublicError):
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert plan() == [at(OTHER, SMALL)]
+    time.sleep(0.4)
+    assert not reputation.benched(PC) and plan() == [at(PC, SMALL), at(OTHER, SMALL)]
+    # Un refus avant tout calcul : pas écartée
+    for status, code in ((503, "busy"), (503, "not_lending"), (404, "no_model")):
+        companion.script = {PC: ("refuse", status, code)}
+        with pytest.raises(public_chat.PublicError):
+            list(public_chat.chat_stream(at(PC, SMALL), salut))
+        assert not reputation.benched(PC), code
+
+
+def test_the_first_note_says_the_system_prompt_goes_too(monkeypatch, companion, opened):
+    """Les consignes générales données à l'IA (prompt système), personnalisées ou non, partent
+    chez l'inconnu avec la conversation (c'est voulu) : la note de la première fois le dit."""
+    from pathlib import Path
+    root = Path(public_chat.__file__).resolve().parents[1] / "i18n"
+    said = {lang: json.loads((root / lang / "chat.json").read_text(encoding="utf-8"))
+            ["public_first_text"] for lang in ("fr", "en")}
+    assert "y compris tes consignes générales données à l'IA (prompt système)" in said["fr"]
+    assert "including your general instructions given to the AI (system prompt)" in said["en"]
+    local_models(monkeypatch)
+    directory(node(PC, SMALL))
+    settings.set_value("system_prompt", "Appelle-moi Hippolyte.")
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        assert notices(ask(ui, "Bonjour")) == ["public_first"]
+    assert companion.requests[-1]["body"]["messages"][0] == {
+        "role": "system", "content": "Appelle-moi Hippolyte."}
 
 
 def test_a_lone_surrogate_does_not_lose_the_answer(monkeypatch, companion, opened):

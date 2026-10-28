@@ -12,9 +12,16 @@ prêteur paraîtrait tronquée à côté d'une machine qui ne s'arrête pas.
 À la fin d'une réponse complète (« done » reçu) et affichée (ni Stop, ni client parti, ni
 erreur) : sa vitesse notée sous la clé du nœud prêteur, jamais une clé jetable
 (reputation.note_served : les jetons qu'il dit, bornés par une estimation prudente du texte
-reçu ; du premier mot au dernier, mesuré ici), puis, si spot_check.should_check le tire, le
-contrôle en arrière-plan (spot_check.run_check), qui rend la main tout de suite. Rien de tout
-cela ne peut faire échouer la réponse.
+reçu et par la longueur maximale demandée ; depuis l'envoi de la demande jusqu'au dernier
+mot, mesuré ici), puis, si spot_check.should_check le tire, le contrôle en arrière-plan
+(spot_check.run_check), qui rend la main tout de suite. Rien de tout cela ne peut faire
+échouer la réponse.
+
+Pourquoi depuis l'envoi de la demande (relecture du 28/10/2026) : mesurée du premier mot au
+dernier, la vitesse se trichait vers le haut (un prêteur qui garde sa réponse puis l'envoie
+d'un coup paraissait très rapide), et c'est elle qui fait passer une machine publique devant
+celle-ci (placement.py). Le temps total vu d'ici, chargement et lecture de la demande compris,
+est prudent : un prêteur ne peut que la faire paraître plus lente.
 
 Les machines de contrôle (controls), spot_check.MAX_CONTROLS au plus : d'abord mes machines
 (pas celles de mes amis) qui prêtent ce modèle, crues seules ; puis les machines du réseau
@@ -43,7 +50,9 @@ log = logging.getLogger("aiodos.net")
 
 SEED_MAX = 2 ** 31 - 1          # dans les bornes du prêteur (public_lending.SEED_RANGE)
 # Réponse d'une machine de contrôle attendue au plus (ask) : chargement du modèle compris
-# (public_chat.LOADING_MAX_S), puis public_lending.MAX_TOKENS jetons même lents
+# (public_chat.LOADING_MAX_S), puis public_lending.MAX_TOKENS jetons même lents. Une machine
+# publique est coupée avant, à public_chat.TOTAL_S (et écartée quelques minutes) ; ce délai
+# borne surtout mes machines
 CONTROL_S = 900
 
 
@@ -78,7 +87,8 @@ def stream(model, messages, stop=None, conversation=None, documents=True):
     la demande porte mes documents (cf. documents_in ; dans le doute, vrai)."""
     key, name = public_chat.parse(model)
     sent = options()
-    pieces, first, last, done = [], None, None, None
+    pieces, last, done = [], None, None
+    asked = time.monotonic()                # la demande part au premier tour de la boucle
     for kind, value in public_chat.chat_stream(model, messages, False, stop, options=sent,
                                                stats=True, conversation=conversation):
         if kind == "stats":                 # « done » reçu : la réponse est complète
@@ -86,7 +96,6 @@ def stream(model, messages, stop=None, conversation=None, documents=True):
             continue
         if kind == "content":
             last = time.monotonic()
-            first = first if first is not None else last
             pieces.append(value)
         yield kind, value
     if done is None or (stop is not None and stop.is_set()):
@@ -95,15 +104,16 @@ def stream(model, messages, stop=None, conversation=None, documents=True):
                "conversation": conversation}
     try:
         answered(key, request, "".join(pieces), done.get("completion_tokens"),
-                 last - first if first is not None else 0.0, documents)
+                 last - asked if last is not None else 0.0, documents)
     except Exception:  # noqa: BLE001 — la réponse est là : un contrôle manqué ne la gâche pas
         log.warning("Contrôle du réseau public : impossible de le préparer", exc_info=True)
 
 
 def _tokens(reported, text: str) -> int:
     """Les jetons de la réponse : ceux que dit le prêteur, jamais plus qu'une estimation
-    prudente du texte reçu (public_lending.estimate_tokens) : il ne gonfle pas sa vitesse."""
-    bound = public_lending.estimate_tokens(text)
+    prudente du texte reçu (public_lending.estimate_tokens), ni que la longueur maximale
+    demandée (public_lending.MAX_TOKENS, options) : il ne gonfle pas sa vitesse."""
+    bound = min(public_lending.estimate_tokens(text), public_lending.MAX_TOKENS)
     if isinstance(reported, int) and not isinstance(reported, bool) and reported > 0:
         return min(reported, bound)
     return bound
@@ -111,8 +121,9 @@ def _tokens(reported, text: str) -> int:
 
 def answered(key, request, text, tokens, seconds, documents=True):
     """Une réponse complète du prêteur `key` (clé de son nœud) à `request` ({"model",
-    "messages", "options", "conversation"}) : vitesse notée, puis le contrôle s'il est tiré
-    et qu'une machine peut le faire. → le fil du contrôle, ou None."""
+    "messages", "options", "conversation"}), en `seconds` secondes depuis l'envoi de la
+    demande : vitesse notée, puis le contrôle s'il est tiré et qu'une machine peut le faire.
+    → le fil du contrôle, ou None."""
     reputation.note_served(key, _tokens(tokens, text), seconds)
     if not spot_check.should_check(key):
         return None

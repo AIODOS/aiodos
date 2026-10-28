@@ -24,7 +24,8 @@ from aiodos.network import (peers, placement, public_chat, public_controls, publ
                             remote_models, reputation, spot_check)
 from aiodos.node import speed
 from tests.test_public_chat import (AUTH, BIG, OTHER, PC, SMALL, THIRD, TOKEN, Executor,
-                                    _library, ask, at, directory, local_models, node, routes)
+                                    _library, ask, at, checkable, directory, local_models, node,
+                                    routes)
 from tests.test_public_chat import companion, opened  # noqa: F401 (fixtures)
 from tests.test_public_no_model import nothing_here
 from tests.test_spot_check import HONEST_A, HONEST_B, QUESTION, UNRELATED
@@ -58,6 +59,15 @@ class Mine:
         yield "content", self.answer
 
 
+def bigger_here(monkeypatch):
+    """Cette machine a qwen3.5:0.8b, et les modèles plus gros du réseau public sont acceptés :
+    une machine publique qui a qwen3.5:9b répond (le 9b contrôlable : chez une de mes machines,
+    ou chez deux machines publiques). « Automatique · réseau public » est refusé dès qu'une de
+    mes machines a un modèle (public_consent.reach)."""
+    local_models(monkeypatch, SMALL)
+    settings.set_value("public_bigger_model", True)
+
+
 @pytest.fixture
 def checks(monkeypatch):
     """Les contrôles lancés (spot_check.run_check) : leur fil, pour les attendre."""
@@ -79,7 +89,7 @@ def checks(monkeypatch):
 def test_every_public_request_carries_a_random_seed_and_the_lender_limit(
         monkeypatch, companion, opened):
     nothing_here(monkeypatch)
-    directory(node(PC, BIG))
+    directory(node(PC, BIG), checkable(BIG))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         ask(ui, "Bonjour", model=BEST)
         ask(ui, "Encore", model=BEST)
@@ -98,7 +108,7 @@ def test_a_complete_answer_is_checked_in_the_background_by_my_machine(
     """La première réponse d'une machine publique est toujours contrôlée : la réponse
     s'affiche sans l'attendre ; ma machine reçoit exactement la même demande (messages,
     graine, longueur), et la donne pour bonne."""
-    nothing_here(monkeypatch)
+    bigger_here(monkeypatch)
     directory(node(PC, BIG))
     fixe = my_machine(BIG)
     release = threading.Event()
@@ -106,7 +116,7 @@ def test_a_complete_answer_is_checked_in_the_background_by_my_machine(
     monkeypatch.setattr(remote_models, "chat_stream", mine)
     companion.script = {PC: ("answer", [HONEST_A[:200], HONEST_A[200:]])}
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
-        events = ask(ui, QUESTION, model=BEST)
+        events = ask(ui, QUESTION)
     assert routes(events) == [at(PC, BIG)] and events[-1]["error"] is None
     (thread,) = checks
     assert thread.is_alive() and reputation.checked(PC) == 0     # affichée, le contrôle attend
@@ -128,20 +138,20 @@ def test_a_cheater_is_set_aside_said_once_and_no_longer_chosen(
         monkeypatch, companion, opened, checks, caplog):
     """Une réponse sans rapport : la conversation déjà affichée ne change pas ; une ligne au
     journal, sans contenu ni clé entière ; la machine n'est plus choisie."""
-    nothing_here(monkeypatch)
+    bigger_here(monkeypatch)
     directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20))
     my_machine(BIG)
     monkeypatch.setattr(remote_models, "chat_stream", Mine(HONEST_B))
     companion.script = {PC: ("answer", [UNRELATED]), OTHER: ("answer", [HONEST_B])}
     with caplog.at_level(logging.DEBUG), TestClient(create_app(TOKEN, {"testserver"})) as ui:
-        events = ask(ui, QUESTION, model=BEST)
+        events = ask(ui, QUESTION)
         assert routes(events) == [at(PC, BIG)] and "crêpe" in events[-1]["html"]
         checks[0].join(10)
         assert reputation.is_set_aside(PC) and reputation.get(PC)["checks_failed"] == 1
         conv_id = events[0]["conversation_id"]
         shown = ui.get(f"/api/conversations/{conv_id}", headers=AUTH).json()["messages"][-1]
         assert shown["content"] == UNRELATED                # rien n'y est changé
-        events = ask(ui, "Et la mer ?", model=BEST, conversation_id=conv_id)
+        events = ask(ui, "Et la mer ?", conversation_id=conv_id)
         assert routes(events) == [at(OTHER, BIG)]          # plus choisie
         assert placement.best_public()[0].model == at(OTHER, BIG)
     said = [r.getMessage() for r in caplog.records if r.name.startswith("aiodos")]
@@ -157,13 +167,13 @@ def test_with_my_documents_only_my_machines_check(monkeypatch, companion, opened
     """Une demande qui porte mes documents (accord donné) : contrôlée par mes machines
     seulement, jamais par un second inconnu ; sans aucune de mes machines, pas de contrôle
     (il attend une prochaine fois)."""
-    nothing_here(monkeypatch)
+    bigger_here(monkeypatch)
     settings.set_many({"rag_min_score": 0.1, "public_documents": True})
     directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         store.ensure_defaults()
         _library("maison", "fusée lunaire notes maison", fake_embed)
-        events = ask(ui, "fusée lunaire", model=BEST, libraries=True)
+        events = ask(ui, "fusée lunaire", libraries=True)
         assert routes(events) == [at(PC, BIG)]
         assert "notes maison" in " ".join(
             m["content"] for m in companion.requests[-1]["body"]["messages"])
@@ -172,7 +182,7 @@ def test_with_my_documents_only_my_machines_check(monkeypatch, companion, opened
         fixe = my_machine(BIG)
         mine = Mine("Bonjour")
         monkeypatch.setattr(remote_models, "chat_stream", mine)
-        ask(ui, "fusée lunaire", model=BEST, libraries=True)
+        ask(ui, "fusée lunaire", libraries=True)
         checks[0].join(10)
     assert [c["model"] for c in mine.asked] == [fixe] and len(companion.requests) == 2
     assert "notes maison" in " ".join(m["content"] for m in mine.asked[0]["messages"])
@@ -229,10 +239,31 @@ def test_a_cut_or_stopped_answer_is_neither_noted_nor_checked(monkeypatch, compa
 
 
 def test_a_lender_cannot_inflate_its_speed():
-    """Les jetons qu'il dit, jamais plus qu'une estimation prudente du texte reçu."""
+    """Les jetons qu'il dit, jamais plus qu'une estimation prudente du texte reçu, ni que la
+    longueur demandée ; une vitesse bornée à reputation.MAX_TPS."""
     assert public_controls._tokens(10, "mot " * 100) == 10
     assert public_controls._tokens(100000, "Bonjour") == public_lending.estimate_tokens("Bonjour")
     assert public_controls._tokens(None, "abc") == 1
+    assert public_controls._tokens(100000, "1 " * 5000) == public_lending.MAX_TOKENS
+    reputation.note_served(PC, 2048, 0.01)                 # 204 800 jetons/s : invraisemblable
+    assert reputation.speed(PC) == reputation.MAX_TPS == 1000
+
+
+def test_the_speed_is_measured_from_the_request(monkeypatch, companion, opened):
+    """Relecture du 28/10/2026 : mesurée du premier mot au dernier, la vitesse se trichait
+    vers le haut (un prêteur qui garde sa réponse puis l'envoie d'un coup paraissait très
+    rapide), et c'est elle qui fait passer une machine publique devant celle-ci. Elle va
+    désormais de l'envoi de la demande au dernier mot, vu d'ici."""
+    question = [{"role": "user", "content": QUESTION}]
+    pieces = [(0, {"type": "delta", "text": HONEST_A[i:i + 100]})        # tout d'un coup
+              for i in range(0, len(HONEST_A), 100)]
+    companion.script = {PC: ("raw", [(1.5, {"type": "wait", "stage": "reading"}), *pieces,
+                                     (0, {"type": "done", "tokens": 400, "seconds": 0.1})])}
+    out = list(public_controls.stream(at(PC, BIG), question))
+    assert "".join(v for k, v in out if k == "content") == HONEST_A
+    tokens = public_controls._tokens(400, HONEST_A)
+    assert tokens >= reputation.MIN_TOKENS
+    assert reputation.speed(PC) <= tokens / 1.5            # 1,5 s au moins, pas quelques ms
 
 
 # ---------------------------------------------------------------- le choix
@@ -240,10 +271,10 @@ def test_placement_skips_set_aside_machines_and_prefers_the_speed_measured_here(
         monkeypatch, companion, opened):
     local_models(monkeypatch, SMALL)
     monkeypatch.setattr(placement.android, "is_android", lambda: False)
-    directory(node(PC, SMALL, tps=100), node(OTHER, SMALL, tps=10))
+    directory(node(PC, SMALL, tps=100), node(OTHER, SMALL, tps=10), checkable(SMALL))
     speed.note(300, 10)                                     # 30 jetons/s ici
     plan = lambda: placement.plan(AUTO, Executor(), public=True)  # noqa: E731
-    assert plan() == [at(PC, SMALL), SMALL, at(OTHER, SMALL)]
+    assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]    # annoncée : derrière
     reputation.note_served(PC, 200, 10.0)                  # mesurée ici : 20, pas 100
     reputation.note_served(OTHER, 1000, 10.0)              # 100, pas 10
     assert plan() == [at(OTHER, SMALL), SMALL, at(PC, SMALL)]
