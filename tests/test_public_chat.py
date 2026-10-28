@@ -8,6 +8,7 @@ chaque prêteur ce que l'essai lui dicte (le NDJSON de public_lending.py, ou un 
 l'annuaire public est rempli comme le ferait network/public.py. Cette machine est simulée
 comme dans test_placement.py (son profil, son modèle)."""
 import json
+import logging
 import re
 import threading
 import time
@@ -21,7 +22,7 @@ from aiodos.api.server import create_app
 from aiodos.chat import conversations, pipeline, public_consent
 from aiodos.gateway import answer as gateway_answer
 from aiodos.knowledge import chunking, store
-from aiodos.network import placement, public, public_chat, reputation, route
+from aiodos.network import placement, public, public_chat, public_refusals, reputation, route
 from aiodos.node import speed
 from aiodos.services import ollama
 
@@ -725,6 +726,106 @@ def test_a_lender_that_fails_is_set_aside_a_few_minutes(monkeypatch, companion, 
         with pytest.raises(public_chat.PublicError):
             list(public_chat.chat_stream(at(PC, SMALL), salut))
         assert not reputation.benched(PC), code
+
+
+# ------------------------------- refus qui contredisent le profil (network/public_refusals.py)
+def test_a_lender_that_keeps_refusing_after_announcing_a_place_is_set_aside(
+        monkeypatch, companion, opened, caplog):
+    """Relecture du 28/10/2026 : un prêteur reçoit la conversation avant de répondre ; un
+    menteur la lisait puis refusait « avant calcul » (occupé…), sans jamais être écarté.
+    Proposé par le choix des machines (une place, le modèle annoncés), il refuse trois fois en
+    dix minutes : écarté comme après un échec. La conversation passe toujours à la suivante,
+    comme avant ; le journal ne dit ni la conversation ni la clé entière."""
+    local_models(monkeypatch)                                     # le modèle n'est pas ici
+    directory(node(PC, SMALL), node(OTHER, SMALL, tps=10))
+    companion.script = {PC: ("refuse", 503, "busy")}
+    secret = "Mon secret bien gardé"
+    caplog.set_level(logging.INFO, logger="aiodos.net")
+    for n in (1, 2, 3):
+        plan = placement.plan(AUTO, Executor(), public=True)
+        assert plan == [at(PC, SMALL), at(OTHER, SMALL)], n
+        out = list(placement.run(plan, lambda m: public_chat.chat_stream(
+            m, [{"role": "user", "content": secret}], conversation=public_chat.tag(1))))
+        assert [v for k, v in out if k == "route"] == plan        # la suivante répond
+        assert out[-1] == ("content", "Bonjour"), n
+        assert reputation.benched(PC) == (n == 3), n
+    assert public_refusals.count(PC) == 0                         # écartée : tout recommence
+    assert placement.plan(AUTO, Executor(), public=True) == [at(OTHER, SMALL)]
+    assert placement.public_with(SMALL) == [(OTHER, SMALL)]       # ni machine de contrôle
+    lines = [r.getMessage() for r in caplog.records if r.name == "aiodos.net"]
+    said = [line for line in lines if "3 fois en 10 min" in line]
+    assert len(said) == 1 and reputation.short(PC) in said[0] and "busy" in said[0]
+    assert not any(PC in line or secret in line for line in lines)
+
+
+def test_an_isolated_refusal_does_not_set_a_lender_aside(monkeypatch, companion, opened):
+    """La course normale : la place vient d'être prise, et le profil ne le dit pas encore. Un
+    refus, deux même, n'écartent pas ; ni un refus d'une machine qui n'a pas été proposée
+    (pas de choix, choix trop ancien, un autre modèle), ni un refus qui ne contredit pas le
+    profil (injoignable) ; une note de choix ne vaut que pour un essai."""
+    local_models(monkeypatch)
+    directory(node(PC, SMALL))
+    salut = [{"role": "user", "content": "Salut"}]
+
+    def refused(status, code):
+        companion.script = {PC: ("refuse", status, code)}
+        with pytest.raises(public_chat.PublicError) as failed:
+            list(public_chat.chat_stream(at(PC, SMALL), salut))
+        assert failed.value.code == code
+
+    assert placement.plan(AUTO, Executor(), public=True) == [at(PC, SMALL)]
+    refused(503, "busy")
+    assert public_refusals.count(PC) == 1 and not reputation.benched(PC)
+    refused(503, "busy")                                          # sans nouveau choix
+    refused(503, "not_lending")
+    assert public_refusals.count(PC) == 1
+    public_refusals.offered(PC, BIG)                              # un autre modèle annoncé
+    refused(404, "no_model")
+    placement.plan(AUTO, Executor(), public=True)
+    refused(502, "unreachable")                                   # ne contredit rien
+    monkeypatch.setattr(public_refusals, "OFFER_S", 0.1)
+    placement.plan(AUTO, Executor(), public=True)
+    time.sleep(0.2)                                               # choix trop ancien
+    refused(503, "busy")
+    assert public_refusals.count(PC) == 1 and not reputation.benched(PC)
+    # Une réponse servie entre deux n'efface rien, mais une seule de plus non plus n'écarte pas
+    monkeypatch.setattr(public_refusals, "OFFER_S", 120)
+    companion.script = {}
+    placement.plan(AUTO, Executor(), public=True)
+    assert list(public_chat.chat_stream(at(PC, SMALL), salut)) == [("content", "Bonjour")]
+    placement.plan(AUTO, Executor(), public=True)
+    refused(503, "busy")
+    assert public_refusals.count(PC) == 2 and not reputation.benched(PC)
+    assert placement.plan(AUTO, Executor(), public=True) == [at(PC, SMALL)]
+
+
+def test_each_refusal_that_contradicts_the_profile_counts(monkeypatch, companion, opened):
+    """no_model alors que le profil annonçait ce modèle ; too_big ou bad_request sur une
+    demande que nos bornes acceptaient (plus strictes que celles du prêteur) ; un refus dans le
+    flux avant le premier mot : chacun compte. Une machine de contrôle proposée (public_with)
+    aussi."""
+    local_models(monkeypatch)
+    directory(node(PC, SMALL), node(OTHER, SMALL))
+    salut = [{"role": "user", "content": "Salut"}]
+    companion.script = {PC: ("refuse", 404, "no_model")}
+    assert at(PC, SMALL) in placement.plan(AUTO, Executor(), public=True)
+    with pytest.raises(public_chat.PublicError) as refused:
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert refused.value.code == "no_model" and public_refusals.count(PC) == 1
+    companion.script = {PC: ("refuse", 413, "too_big")}
+    assert (PC, SMALL) in placement.public_with(SMALL)           # machine de contrôle
+    with pytest.raises(public_chat.PublicError):
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert public_refusals.count(PC) == 2 and not reputation.benched(PC)
+    companion.script = {PC: ("raw", [(0, {"type": "wait", "stage": "loading"}),
+                                     (0, {"type": "error", "error": "bad_request"})])}
+    placement.plan(AUTO, Executor(), public=True)
+    with pytest.raises(public_chat.PublicError) as streamed:
+        list(public_chat.chat_stream(at(PC, SMALL), salut))
+    assert streamed.value.code == "bad_request"
+    assert reputation.benched(PC) and reputation.is_set_aside(PC)
+    assert placement.plan(AUTO, Executor(), public=True) == [at(OTHER, SMALL)]
+    assert reputation.get(PC) is None                            # rien en base
 
 
 def test_the_first_note_says_the_system_prompt_goes_too(monkeypatch, companion, opened):

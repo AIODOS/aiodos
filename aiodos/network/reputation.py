@@ -15,7 +15,8 @@ pendant 180 s puis rien, une réponse lente, coupée, illisible, trop longue, ou
 s'arrête : public_chat.FAULTS) écarte la machine BENCH_S secondes (bench), en mémoire
 seulement : pendant ce temps, elle n'est pas plus choisie qu'une machine mise de côté
 (is_set_aside). Sans cela, un prêteur qui lisait la conversation puis ne répondait jamais
-restait candidat à chaque message.
+restait candidat à chaque message. Des refus « avant calcul » répétés, qui contredisent le
+profil qu'il annonçait au moment du choix (network/public_refusals.py), l'écartent de même.
 
 Rien n'est partagé avec d'autres machines : pas de liste noire commune, qu'un menteur
 pourrait remplir pour écarter des machines honnêtes. Rien du contenu des conversations n'y

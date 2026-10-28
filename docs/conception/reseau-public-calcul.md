@@ -208,6 +208,15 @@ plafonds pour tout le public.
   pas plus rapide), bornée à 1 000 jetons/s et à la longueur demandée ; elle seule fait passer
   une machine publique devant cette machine (§ 3). Un échec sans preuve de triche écarte le
   prêteur 10 min, en mémoire (§ 3, étape 6), ni candidat ni machine de contrôle.
+- **Refus après lecture** (28/10, `network/public_refusals.py`) : le prêteur reçoit la
+  conversation avant de répondre ; un menteur pouvait la lire puis refuser « avant calcul »
+  (`busy`, `not_lending`, `no_model`, `too_big`, `bad_request`), sans jamais être écarté. Le
+  demandeur note chaque machine que son choix propose (son profil annonce le prêt, une place,
+  le modèle) ; un tel refus reçu d'elle après l'envoi de la demande, dans les 2 min qui
+  suivent ce choix, est compté (`too_big` et `bad_request` aussi : nos bornes, plus strictes,
+  acceptaient la demande). Trois en 10 min : écartée 10 min comme après un échec. Un refus
+  isolé (la place vient d'être prise) n'écarte rien ; la conversation passe toujours à la
+  machine suivante.
 
 ## 9. Ce qu'on ajoute, fichier par fichier
 
@@ -231,7 +240,8 @@ plafonds pour tout le public.
 - `aiodos/network/placement.py` : candidats publics (identifiant `public:<clé>`), ordre du
   § 3.
 - `aiodos/network/spot_check.py` (nouveau) et `aiodos/network/reputation.py` (nouveau,
-  table SQLite) : § 8.
+  table SQLite) : § 8 ; `aiodos/network/public_refusals.py` (nouveau, en mémoire) : les
+  refus « avant calcul » qui contredisent le profil, § 8.
 - `aiodos/llm/reading.py` (nouveau, la lecture imposée), `aiodos/network/lend_reading.py`
   (nouveau : l'action « read » entre mes machines et `POST /public/v1/read`),
   `public_chat.read`, `remote_models.read`, `public_controls.read` : la vraisemblance, § 8.

@@ -36,7 +36,10 @@ Un échec du prêteur qui n'est pas un simple refus (FAULTS : lent, coupé, illi
 long, moteur arrêté ; relecture du 28/10/2026) l'écarte quelques minutes
 (reputation.bench) : il a pu lire la conversation sans jamais répondre, et restait candidat
 à chaque message. Un refus avant tout calcul (occupée, ne prête plus, modèle absent…) ne
-l'écarte pas : c'est la vie normale d'une machine qui prête.
+l'écarte pas : c'est la vie normale d'une machine qui prête. Mais un tel refus (SUSPECT) reçu
+après l'envoi de la demande d'une machine que le choix des machines venait de proposer (son
+profil annonçait une place et ce modèle) est compté, et l'écarte comme un échec s'il se
+répète (network/public_refusals.py : elle a pu lire la conversation pour rien).
 
 Signes de vie (essai réel du 28/10/2026 : un prêteur a mis 45 à 53 s à charger qwen3.5:9b
 avant le premier mot) : tant que son moteur charge le modèle ou lit la demande, le prêteur
@@ -61,7 +64,7 @@ import requests
 
 from aiodos.i18n import t
 from aiodos.llm import reading as _reading
-from aiodos.network import client, public_lending, reputation, route
+from aiodos.network import client, public_lending, public_refusals, reputation, route
 from aiodos.network.client import PeerError
 from aiodos.network.route import NO_PROXY
 
@@ -338,14 +341,21 @@ def chat_stream(model, messages, think=True, stop=None, options=None, stats=Fals
     lire la demande (cf. plus haut). Sans réflexion (le prêteur ne la calcule pas).
     conversation : l'identifiant opaque de la conversation (tag) ; sans lui, une clé
     jetable pour cette seule demande. Un échec de FAULTS écarte le prêteur quelques minutes
-    (reputation.bench)."""
-    data = body(model, messages, options)
-    key = parse(model)[0]
+    (reputation.bench) ; un refus qui contredit son profil est compté (public_refusals)."""
+    data = body(model, messages, options)       # nos bornes : ce qui part, elles l'acceptent
+    key, name = parse(model)
+    # Proposée par le choix des machines (place, prêt et modèle annoncés) ? Lu avant l'envoi
+    promised = public_refusals.promised(key, name)
     try:
         yield from _chat_stream(model, data, stop, stats, conversation)
     except PublicError as exc:
         if exc.code in FAULTS:
             reputation.bench(key, exc.code)
+        elif promised and exc.code in public_refusals.SUSPECT:
+            # Ces codes ne viennent que de la réponse, donc après l'envoi de la demande (statut
+            # ou flux ; « companion », « unreachable »… n'en sont pas) ; notre compagnon ne les
+            # rend que sur une demande que body et parse écartent déjà (en-tête, clé, taille)
+            public_refusals.refused(key, exc.code)
         raise
 
 

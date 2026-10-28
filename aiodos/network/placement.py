@@ -42,7 +42,10 @@ modèle, est occupée, ou pour un modèle plus gros accepté. PUBLIC_TRIES au pl
 Ce que les contrôles au hasard ont appris (network/reputation.py, 28/10/2026) : une machine
 publique mise de côté (contrôle raté), ou écartée quelques minutes après un échec (lente,
 coupée, illisible… : reputation.bench), n'est plus candidate, ni comme machine de contrôle ;
-la vitesse mesurée ici, quand elle est connue, passe avant celle qu'elle annonce.
+la vitesse mesurée ici, quand elle est connue, passe avant celle qu'elle annonce. Chaque
+machine publique proposée (candidate, ou machine de contrôle : public_with) est notée
+(public_refusals.offered) : si elle refuse ensuite « avant calcul » ce que son profil
+annonçait (une place, le modèle), ses refus sont comptés, et trop de refus l'écartent aussi.
 
 Un modèle contrôlable (_controllable) : présent (nom exact) chez CHECKABLE_BY machines
 publiques distinctes qui prêtent, au moins, ou prêté par une de mes machines ; une autre
@@ -83,7 +86,8 @@ from aiodos import settings
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.jobs import queue
-from aiodos.network import peers, public, public_chat, remote_models, reputation, sharing
+from aiodos.network import (peers, public, public_chat, public_refusals, remote_models,
+                            reputation, sharing)
 from aiodos.node import android, identity, speed
 
 log = logging.getLogger("aiodos.placement")
@@ -384,6 +388,8 @@ def public_with(name: str) -> list:
                       None)
         if chosen is not None:
             found.append((-(_speed(node) or 0), node.get("seen_s", 0), node["key"], chosen))
+    for _speed_, _seen, key, chosen in found:
+        public_refusals.offered(key, chosen)        # proposées (cf. _offer)
     return [(key, chosen) for _speed_, _seen, key, chosen in sorted(found)]
 
 
@@ -430,7 +436,16 @@ def _public(name: str, bigger: bool, busy: bool = False) -> list:
             trust="public", params=public_chat.params(chosen), tps=_speed(node),
             seen=int(node.get("seen_s") or 0), ahead=faster or larger is not None or busy))
     found.sort(key=lambda c: (not c.ahead, -(c.params or 0), -(c.tps or 0), c.seen))
-    return found[:PUBLIC_TRIES]
+    return _offer(found[:PUBLIC_TRIES])
+
+
+def _offer(found: list) -> list:
+    """Ces machines publiques sont proposées : leur profil annonce le prêt, une place (moins
+    les conversations que je viens de leur envoyer) et ce modèle. Notées (public_refusals),
+    pour qu'un refus qui le contredit compte. → found."""
+    for c in found:
+        public_refusals.offered(*public_chat.parse(c.model))
+    return found
 
 
 def best_public() -> list:
@@ -451,7 +466,7 @@ def best_public() -> list:
         found = _best(lending, None)
         found.sort(key=lambda c: (not _served_well(c.node_id.removeprefix(public_chat.PREFIX)),
                                   -(c.params or 0), -(c.tps or 0), c.seen))
-    return found[:PUBLIC_TRIES]
+    return _offer(found[:PUBLIC_TRIES])
 
 
 def _best(lending, checkable) -> list:
@@ -658,8 +673,12 @@ def run(models: list, attempt, executor=None, stop=None, interactive: bool = Tru
             if (started or i + 1 == len(models) or (stop is not None and stop.is_set())
                     or not _hands_over(exc)):
                 raise
+            # Une machine publique : sa clé abrégée au journal, comme partout (reputation.short)
+            shown, parsed = model, public_chat.parse(model)
+            if parsed:
+                shown = f"{public_chat.PREFIX}{reputation.short(parsed[0])}:{parsed[1]}"
             log.info("« %s » n'a pas pu répondre (%s) : essai de la machine suivante",
-                     model, exc)
+                     shown, exc)
 
 
 # ------------------------------------------------------- choix proposé à l'interface
