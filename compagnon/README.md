@@ -303,6 +303,7 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
 | Réseau public, requêtes de tout le public | 2 à la fois, 120 par minute ; 503 `busy` au-delà | `public_serve.rs` `GLOBAL_IN_FLIGHT`, `GLOBAL_PER_MINUTE` |
 | Réseau public, requête d'un inconnu | `POST /public/v1/…` seulement (404 sinon) ; en-têtes en 10 s (16 Kio, 32 en-têtes) ; corps de 256 Kio lu en 30 s (8 lus à la fois) | `public_serve.rs` |
 | Réseau public, connexions d'inconnus | 32 (la plus anciennement inactive fermée au-delà), fermées après 2 min sans flux ; 2 flux à la fois chacune | `public_serve.rs` `MAX_CONNECTIONS`, `CONNECTION_IDLE`, `MAX_STREAMS_PER_CONNECTION` |
+| Réseau public, données gardées sans être lues (QUIC) | par connexion au nœud public : 4 flux à sens unique, 512 Kio par flux, 1 Mio en tout, aucun datagramme ; vers une clé jetable : aucun flux ni datagramme ouvert par le prêteur | `public.rs` `MAX_UNI_STREAMS`, `STREAM_WINDOW`, `CONNECTION_WINDOW` ; `public_ask.rs` |
 | Réseau public, demandes de cette machine | une clé jetable par conversation, 32 au plus, oubliée après 15 min ; début de réponse attendu 120 s | `public_ask.rs` |
 
 ## Sécurité
@@ -325,8 +326,10 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
   `Content-Type`, `Accept` et sa vraie clé (`X-Aiodos-Public`) ; jamais `X-Aiodos-Peer`.
   Pour demander, une clé jetable par conversation, en relais seulement, jamais écrite sur
   disque : le prêteur lit la conversation, mais ne voit ni la clé ni l'adresse IP de la
-  machine qui demande. Pas d'enveloppe d'AIODOS ici : seul TLS d'Iroh protège le contenu
-  en route.
+  machine qui demande. Pour trouver le prêteur, seul l'annuaire de n0 est lu (la DHT
+  seulement si elle est le seul annuaire choisi) : un prêteur pourrait sinon forcer une
+  recherche dans la DHT et y voir l'adresse IP du demandeur. Pas d'enveloppe d'AIODOS ici :
+  seul TLS d'Iroh protège le contenu en route.
 - Reste à faire (cf. docs/phase2-internet.md et docs/securite.md) : protéger la clé de la
   machine (DPAPI sous Windows, étape 2.3) ; réserver des places à mes machines (le
   compagnon ne connaît pas le niveau de confiance des machines) ; une clé de compagnon qui
@@ -335,13 +338,14 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
 ## Tests
 
 ```powershell
-cargo test                     # 57 essais unitaires ; à deux compagnons, relais coupés :
+cargo test                     # 58 essais unitaires ; à deux compagnons, relais coupés :
                                # tests/tunnel.rs (8), tests/services.rs (3) et
                                # tests/bornes.rs (14 : tunnel gardé sous une avalanche de
                                # connexions, service tenu, corps et places bornés, réponses
                                # non lues, API locale) ; tests/public.rs (2, réseau public) ;
-                               # tests/public_ask.rs (2 : conversation confiée à un inconnu,
-                               # en direct puis par un relais, et refusée par un autre) ;
+                               # tests/public_ask.rs (3 : conversation confiée à un inconnu,
+                               # en direct puis par un relais, et refusée par un autre ;
+                               # données qu'un inconnu ferait garder au prêteur) ;
                                # tests/relay_only.rs (3, par un relais lancé dans l'essai)
 ```
 

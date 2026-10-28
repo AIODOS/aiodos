@@ -12,7 +12,8 @@
 //! compagnon crée un point de terminaison Iroh **neuf**, à clé tirée au hasard et jamais
 //! écrite sur disque, **en relais seulement** (aucune socket UDP : ni adresse IP directe à
 //! donner, ni perçage), qui ne sert qu'à demander : aucun ALPN accepté, toute connexion
-//! entrante refusée, rien publié dans les annuaires. Le prêteur voit cette clé jetable et
+//! entrante refusée, aucun flux ni datagramme que le prêteur ouvrirait vers elle, rien
+//! publié dans les annuaires. Le prêteur voit cette clé jetable et
 //! l'adresse d'un relais ; jamais l'adresse IP de la machine, ni sa clé, ni celle de son
 //! nœud public. Le point de terminaison est gardé tant que la conversation sert, pour que
 //! ses messages suivants trouvent la connexion ouverte (quelques secondes de moins par un
@@ -23,9 +24,14 @@
 //! **Joindre le prêteur par sa seule clé.** Le compagnon cherche l'adresse du relais du
 //! prêteur dans ses annuaires (DNS de n0 et pkarr, puis DHT Mainline, selon
 //! `--directory`), en lecture seulement : le nœud public du prêteur l'y publie (cf.
-//! public.rs). Les annuaires sont lus l'un après l'autre, celui de n0 d'abord : n0 sait déjà
-//! qui joint qui par ses relais, alors que la DHT est ouverte à tous, et un nœud de la DHT
-//! proche de la clé du prêteur verrait quelle adresse IP la cherche. Puis la connexion passe
+//! public.rs). Quand l'annuaire de n0 est choisi (par défaut), **lui seul** est lu pour
+//! demander, jamais la DHT : n0 sait déjà qui joint qui par ses relais, alors que la DHT est
+//! ouverte à tous, et un nœud de la DHT proche de la clé du prêteur verrait quelle adresse IP
+//! la cherche. Ce nœud peut être le prêteur lui-même, qui forcerait ce repli en ne publiant
+//! rien d'utile chez n0 ; et le client DHT, le même pour toutes les conversations, relierait
+//! les clés jetables entre elles (relecture du 28/10/2026). Un prêteur absent de n0 n'est
+//! donc pas joint ; la DHT ne sert à demander que si elle est le seul annuaire choisi.
+//! Puis la connexion passe
 //! par ce relais, **seulement s'il est l'un des relais de ce compagnon** (ceux de n0 par
 //! défaut, ou ceux choisis) : un prêteur qui annoncerait son propre relais y verrait
 //! arriver l'adresse IP du demandeur (Iroh joint le relais que l'autre annonce, cf.
@@ -61,8 +67,8 @@ use iroh::{
     Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, SecretKey, TransportAddr,
     address_lookup::{AddressLookup, AddressLookupBuilder, DnsAddressLookup, MemoryLookup, PkarrResolver},
     endpoint::{
-        AfterHandshakeOutcome, BeforeConnectOutcome, Connection, EndpointHooks, PortmapperConfig, Side,
-        presets,
+        AfterHandshakeOutcome, BeforeConnectOutcome, Connection, EndpointHooks, PortmapperConfig,
+        QuicTransportConfig, Side, VarInt, presets,
     },
 };
 use iroh_mainline_address_lookup::DhtAddressLookup;
@@ -426,10 +432,19 @@ impl Asker {
     /// seulement, sans annuaire, qui n'accepte rien ; et ses annuaires, en lecture seulement
     /// (aucun `PkarrPublisher` : la clé jetable n'est publiée nulle part), n0 d'abord.
     async fn open(&self) -> Result<Conversation> {
+        // Le prêteur ne peut rien ouvrir vers la clé jetable (aucun flux, aucun datagramme) :
+        // ce qu'il y enverrait, personne ne le lirait, et QUIC le garderait en mémoire ici
+        // (relecture du 28/10/2026). Les réponses reviennent sur les flux ouverts d'ici.
+        let transport = QuicTransportConfig::builder()
+            .max_concurrent_bidi_streams(VarInt::from_u32(0))
+            .max_concurrent_uni_streams(VarInt::from_u32(0))
+            .datagram_receive_buffer_size(None)
+            .build();
         let mut builder = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::generate())
             .alpns(Vec::new())
             .relay_mode(relay_mode(&self.relays))
+            .transport_config(transport)
             .portmapper_config(PortmapperConfig::Disabled)
             .hooks(AskGate);
         if self.relays != Relays::Disabled {
@@ -469,8 +484,9 @@ impl Asker {
         })
     }
 
-    /// Les annuaires où chercher un prêteur, dans l'ordre : ceux de n0, puis la DHT (cf.
-    /// en tête), puis celui des essais. Ils ne sont pas donnés au point de terminaison.
+    /// Les annuaires où chercher un prêteur : ceux de n0 s'ils sont choisis, sinon la DHT
+    /// (jamais les deux : cf. en tête), puis celui des essais. Ils ne sont pas donnés au point
+    /// de terminaison.
     fn directories(&self, endpoint: &Endpoint) -> Result<Vec<Box<dyn AddressLookup>>> {
         let mut directories: Vec<Box<dyn AddressLookup>> = Vec::new();
         if self.directory.n0_dns {
@@ -478,8 +494,7 @@ impl Asker {
             directories.push(Box::new(pkarr.map_err(|err| anyhow!("annuaire de n0 (pkarr) : {err}"))?));
             let dns = DnsAddressLookup::n0_dns().into_address_lookup(endpoint);
             directories.push(Box::new(dns.map_err(|err| anyhow!("annuaire de n0 (DNS) : {err}"))?));
-        }
-        if let Some(dht) = self.dht() {
+        } else if let Some(dht) = self.dht() {
             directories.push(Box::new(dht));
         }
         if let Some(lookup) = &self.lookup {
@@ -748,6 +763,38 @@ mod tests {
         asker.key_of(A).await.unwrap();
         let endpoint = asker.conversations.lock().await[A].endpoint.clone();
         assert!(endpoint.bound_sockets().is_empty(), "relais seulement : aucune adresse IP");
+        asker.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn a_lender_cannot_push_streams_nor_datagrams_to_a_disposable_key() {
+        // Un prêteur malveillant ouvrirait des flux vers la clé jetable (ou lui enverrait
+        // des datagrammes) que personne ne lit : QUIC les garderait en mémoire chez le
+        // demandeur, jusqu'à 1,25 Mo par flux et 100 flux de chaque sorte par connexion
+        let asker = local_asker();
+        let lender = Endpoint::builder(presets::Minimal)
+            .alpns(vec![PUBLIC_ALPN.to_vec()])
+            .relay_mode(RelayMode::Disabled)
+            .clear_ip_transports()
+            .bind_addr("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+            .unwrap()
+            .bind()
+            .await
+            .unwrap();
+        asker.lookup.as_ref().unwrap().add_endpoint_info(EndpointAddr::from_parts(
+            lender.id(),
+            lender.bound_sockets().into_iter().map(TransportAddr::Ip),
+        ));
+        let conversation = asker.conversation(A).await.unwrap();
+        let dial = Dial { timeout: Duration::from_secs(10), allowed: &asker.allowed, direct: true };
+        let accepted = async { lender.accept().await.unwrap().accept().unwrap().await.unwrap() };
+        let (io, conn) = tokio::join!(conversation.stream(lender.id(), &dial), accepted);
+        let _io = io.unwrap();
+        assert!(conn.max_datagram_size().is_none(), "la clé jetable ne reçoit aucun datagramme");
+        let wait = Duration::from_secs(2);
+        assert!(tokio::time::timeout(wait, conn.open_uni()).await.is_err(), "aucun flux vers la clé jetable");
+        assert!(tokio::time::timeout(wait, conn.open_bi()).await.is_err(), "aucun flux vers la clé jetable");
+        lender.close().await;
         asker.shutdown().await;
     }
 

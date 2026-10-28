@@ -35,8 +35,11 @@
 //! remise à zéro de ceux qui passeraient quand même), en-têtes (`HEADER_TIMEOUT`,
 //! `MAX_HEAD`, `MAX_HEADERS`), corps lus en même temps (`MAX_READING`, chacun en
 //! `BODY_TIMEOUT` au plus), réponse que l'appelant ne lit plus (coupée après
-//! `Config::response_stall`, cf. relay_body.rs). La mémoire tenue par des inconnus reste
-//! ainsi de quelques mégaoctets, même sur un téléphone.
+//! `Config::response_stall`, cf. relay_body.rs), et ce que QUIC garde sans que rien ne le
+//! lise (flux à sens unique, données en attente, datagrammes : `public::MAX_UNI_STREAMS`,
+//! `public::CONNECTION_WINDOW` par connexion, aucun datagramme ; aussi sur les connexions
+//! du groupe de discussion). La mémoire que les conversations d'inconnus tiennent reste
+//! ainsi de quelques dizaines de mégaoctets au plus, même sur un téléphone.
 
 use std::{
     collections::{HashMap, VecDeque},

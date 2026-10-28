@@ -10,13 +10,17 @@ mod common;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use aiodos_net::{Config, config::Relays};
+use aiodos_net::{Config, config::Relays, public};
 use bytes::Bytes;
 use common::{LIMIT, Node, TOKEN, call, fake_app, send};
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 use hyper_util::rt::TokioIo;
-use iroh::{RelayUrl, SecretKey, address_lookup::MemoryLookup};
+use iroh::{
+    Endpoint, EndpointId, RelayMode, RelayUrl, SecretKey,
+    address_lookup::MemoryLookup,
+    endpoint::presets,
+};
 use iroh_relay::server::{RelayConfig, Server, ServerConfig};
 use serde_json::{Value, json};
 use tokio::{net::TcpStream, sync::Notify, time::timeout};
@@ -219,6 +223,63 @@ async fn a_stranger_answers_a_conversation_without_knowing_who_asks() {
     assert!(gone["error"] == "unreachable" || gone["error"] == "interrupted", "{gone}");
 
     asker.running.stop().await;
+    lender.running.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stranger_cannot_make_the_lender_hold_unread_data() {
+    // Sur une connexion `aiodos/public/1`, personne ne lit les flux à sens unique ni les
+    // datagrammes : sans bornes, QUIC garderait chez le prêteur 1,25 Mo par flux, pour 100
+    // flux, et des datagrammes, pour chaque connexion d'un inconnu
+    let testnet = n0_mainline::Testnet::new(5).await.unwrap();
+    let lookup = MemoryLookup::new();
+    let lender = node(&testnet.bootstrap, &lookup, Arc::new(Notify::new()), None).await;
+    let lender_key: EndpointId = lend(&lender, true).await.parse().unwrap();
+    let stranger = Endpoint::builder(presets::Minimal)
+        .relay_mode(RelayMode::Disabled)
+        .clear_ip_transports()
+        .bind_addr("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+        .unwrap()
+        .address_lookup(lookup.clone())
+        .bind()
+        .await
+        .unwrap();
+    let conn = timeout(LIMIT, stranger.connect(lender_key, aiodos_net::PUBLIC_ALPN))
+        .await
+        .expect("délai")
+        .unwrap();
+    assert!(conn.max_datagram_size().is_none(), "le nœud public ne reçoit aucun datagramme");
+    let wait = Duration::from_secs(2);
+    let mut streams = Vec::new();
+    for _ in 0..public::MAX_UNI_STREAMS {
+        streams.push(timeout(wait, conn.open_uni()).await.expect("flux permis").unwrap());
+    }
+    assert!(timeout(wait, conn.open_uni()).await.is_err(), "flux à sens unique de trop");
+    // Tout ce que le prêteur accepte sans le lire : borné par connexion
+    let chunk = vec![0u8; 64 << 10];
+    let mut accepted = 0;
+    for stream in &mut streams {
+        while let Ok(Ok(written)) = timeout(Duration::from_millis(500), stream.write(&chunk)).await {
+            accepted += written;
+        }
+    }
+    assert!(accepted <= public::CONNECTION_WINDOW as usize, "{accepted} octets gardés sans être lus");
+    // Cette connexion a épuisé ce qu'elle pouvait envoyer sans être lue ; le prêteur, lui,
+    // sert toujours : une conversation passe sur une autre connexion
+    conn.close(0u32.into(), b"fin");
+    let conn = timeout(LIMIT, stranger.connect(lender_key, aiodos_net::PUBLIC_ALPN))
+        .await
+        .expect("délai")
+        .unwrap();
+    let (mut send, mut recv) = timeout(wait, conn.open_bi()).await.expect("flux").unwrap();
+    // (sans fermer l'envoi : hyper prendrait la demi-fermeture pour un appelant parti)
+    send.write_all(b"POST /public/v1/echo HTTP/1.1\r\nhost: x\r\ncontent-length: 2\r\n\r\nok")
+        .await
+        .unwrap();
+    let answer = timeout(LIMIT, recv.read_to_end(64 << 10)).await.expect("réponse").unwrap();
+    assert!(answer.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&answer));
+    drop(send);
+    stranger.close().await;
     lender.running.stop().await;
 }
 

@@ -95,6 +95,15 @@ const RENEW_EVERY: Duration = Duration::from_secs(6 * 3600);
 const FORGET_AFTER: Duration = Duration::from_secs(5 * 60);
 /// Au plus autant de nœuds dans l'annuaire (les plus anciens sortent).
 const MAX_NODES: usize = 1000;
+/// Flux à sens unique qu'un autre nœud peut ouvrir en même temps sur une connexion : le
+/// groupe de discussion en ouvre un par sujet ; sur une conversation, personne ne les lit.
+pub const MAX_UNI_STREAMS: u32 = 4;
+/// Octets qu'un autre nœud peut envoyer sur un flux avant qu'ils soient lus : une requête
+/// entière (`public_serve::MAX_BODY`, en-têtes compris) tient dans un flux.
+pub const STREAM_WINDOW: u32 = 512 << 10;
+/// Octets qu'un autre nœud peut envoyer sur une connexion, tous flux confondus, avant qu'ils
+/// soient lus : ce que la connexion d'un inconnu tient au plus en mémoire.
+pub const CONNECTION_WINDOW: u32 = 1 << 20;
 /// En dessous de ce nombre de voisins, on cherche d'autres nœuds dans la DHT.
 const WANTED_NEIGHBORS: usize = 4;
 /// Clés proposées au groupe de discussion à chaque recherche.
@@ -333,9 +342,16 @@ impl Public {
         };
         // Flux bidirectionnels qu'un inconnu peut ouvrir en même temps sur une connexion :
         // ceux d'une conversation (cf. public_serve.rs) ; le groupe de discussion n'en ouvre
-        // aucun (flux à sens unique, laissés aux valeurs d'Iroh)
+        // aucun. Et ce qu'il peut faire garder sans que rien ne le lise (relecture du
+        // 28/10/2026) : avec les valeurs d'Iroh, 100 flux à sens unique de 1,25 Mo chacun
+        // (125 Mo par connexion, que personne ne lit sur une conversation) et des
+        // datagrammes ; ici quelques flux, 1 Mio par connexion, aucun datagramme
         let transport = QuicTransportConfig::builder()
             .max_concurrent_bidi_streams(VarInt::from_u32(public_serve::MAX_STREAMS_PER_CONNECTION as u32))
+            .max_concurrent_uni_streams(VarInt::from_u32(MAX_UNI_STREAMS))
+            .stream_receive_window(VarInt::from_u32(STREAM_WINDOW))
+            .receive_window(VarInt::from_u32(CONNECTION_WINDOW))
+            .datagram_receive_buffer_size(None)
             .build();
         let mut builder = Endpoint::builder(presets::Minimal)
             .secret_key(secret)
