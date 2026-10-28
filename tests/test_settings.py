@@ -59,18 +59,22 @@ def test_my_machines_compute_together_from_the_first_launch(monkeypatch):
     """Décision de l'auteur (20/10) : réseau local, Internet, calcul et prêt entre mes
     machines activés dès la première ouverture ; le 27/10, le réseau public, le prêt d'images
     aux amis et l'accès des applications de ce PC aussi ; le 28/10, le prêt aux conversations
-    d'inconnus. Faire calculer les miennes par mes amis reste sur autorisation. Les essais
-    automatiques (AIODOS_QUIET=1) les gardent éteints."""
+    d'inconnus, et les miennes calculées par eux. Faire calculer les miennes par mes amis reste
+    sur autorisation ; un modèle plus gros du réseau public et mes documents chez un inconnu,
+    sur accord demandé une fois (None : pas encore demandé). Les essais automatiques
+    (AIODOS_QUIET=1) les gardent éteints."""
     monkeypatch.delenv("AIODOS_QUIET", raising=False)
     for key in settings.FOR_MY_MACHINES + settings.OPEN_FROM_THE_START:
         assert settings.get(key) is True and settings.get_all()[key] is True
     assert set(settings.OPEN_FROM_THE_START) == {"public_network", "lend_images_friends",
-                                                 "gateway_apps", "lend_public"}
-    for key in ("images_from_friends", "auto_route_friends"):
+                                                 "gateway_apps", "lend_public", "use_public"}
+    for key in ("images_from_friends", "auto_route_friends", "public_warned"):
         assert settings.get(key) is False
+    for key in settings.ASKED_ONCE:
+        assert settings.get(key) is None and settings.get_all()[key] is None
     settings.set_value("internet_enabled", False)          # coupé ensuite : reste coupé
     assert settings.get("internet_enabled") is False
     monkeypatch.setenv("AIODOS_QUIET", "1")
     assert settings.get("network_enabled") is False
     assert settings.get("public_network") is False and settings.get("gateway_apps") is False
-    assert settings.get("lend_public") is False
+    assert settings.get("lend_public") is False and settings.get("use_public") is False

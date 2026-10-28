@@ -20,8 +20,19 @@ d'office. Le choix d'une machine précise (« peer:<machine>:<modèle> », ou le
 pour cette machine) reste possible et passe tel quel, comme un gros modèle réparti entre
 mes machines (« reparti:<modèle> », cluster/group.py).
 
+Les machines du réseau public (network/public_chat.py, 28/10/2026), quand la conversation le
+permet (public, cf. chat/public_consent.py) : celles qui prêtent (« lends »), ont une place
+(« free », moins les conversations que je viens de leur envoyer) et le modèle, au nom exact,
+ou, si l'utilisateur l'a accepté (bigger), un modèle de conversation plus gros (le plus grand
+nombre de paramètres lu dans le nom, public_chat.params) : « le meilleur modèle libre ». Elles
+viennent en dernier, à vitesse comparable ; une machine publique passe devant cette machine
+seulement si sa vitesse annoncée (« tps ») vaut au moins FASTER fois celle de cette machine
+(node/speed.py ; inconnue sur un téléphone : toute vitesse annoncée), ou si elle répond avec
+un modèle plus gros accepté ; jamais devant une de mes machines libres (cette machine, libre,
+passe alors après elles). PUBLIC_TRIES au plus. Identifiant : « public:<clé>:<modèle> ».
+
 Tant qu'aucun mot de la réponse n'est arrivé, une machine qui échoue (injoignable, ne
-prête plus, Ollama arrêté…) cède la place à la suivante (run).
+prête plus, Ollama arrêté, machine publique occupée…) cède la place à la suivante (run).
 
 Une machine qui prête ses modèles indique dans ses nouvelles (ping, profil) combien de
 conversations et d'unités elle traite en ce moment (load_field) ; on y ajoute les
@@ -43,14 +54,17 @@ from aiodos import settings
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.jobs import queue
-from aiodos.network import peers, remote_models, sharing
-from aiodos.node import identity
+from aiodos.network import peers, public, public_chat, remote_models, sharing
+from aiodos.node import android, identity, speed
 
 log = logging.getLogger("aiodos.placement")
 
 PREFIX = "auto:"
 LOAD_TTL = 60               # nouvelles d'une machine plus vieilles : oubliées
 LOAD_MAX = 1000             # valeurs annoncées par une autre machine : bornées
+FASTER = 2                  # une machine publique passe devant celle-ci : deux fois plus rapide
+PUBLIC_TRIES = 3            # machines publiques essayées au plus pour une réponse
+PUBLIC_SEEN_MAX = 150       # nœud public vu il y a plus longtemps (profil toutes les 60 s) : parti
 
 _lock = threading.Lock()
 _loads = {}                 # machine -> (instant monotonic, {"chats": n, "units": n})
@@ -74,7 +88,7 @@ def parse(model) -> str | None:
 
 # Préfixes qui ont un sens pour AIODOS : un modèle d'Ollama qui en porterait un n'est jamais
 # choisi d'office.
-RESERVED = ("auto:", "peer:", "reparti:", "local:")
+RESERVED = ("auto:", "peer:", "reparti:", "local:", "public:")
 
 
 def reserved(name) -> bool:
@@ -136,14 +150,20 @@ def forget():
 @dataclass
 class Candidate:
     model: str                  # identifiant concret : « qwen3.5:9b », « peer:<machine>:… »
-    node_id: str | None         # None : cette machine
+    node_id: str | None         # None : cette machine ; « public:<clé> » : une machine publique
     machine: str                # nom de la machine
-    trust: str                  # « local », « mine » ou « friend »
+    trust: str                  # « local », « mine », « friend » ou « public »
     chats: int = 0              # conversations en cours
     units: int = 0              # unités de travail en cours
     fits: bool | None = None    # le modèle tient-il dans sa mémoire vidéo ?
     loaded: bool = False        # déjà chargé : pas d'attente de chargement
     gpu: int = 0                # occupation du GPU (%), si elle est connue
+    # Machines publiques seulement : paramètres du modèle (milliards), vitesse annoncée,
+    # depuis quand elle a été vue, et si elle passe devant cette machine
+    params: float | None = None
+    tps: float | None = None
+    seen: int = 0
+    ahead: bool = False
 
     @property
     def local(self) -> bool:
@@ -231,27 +251,118 @@ def _remote(name: str) -> list:
     return out
 
 
-def candidates(name: str, executor=None) -> list:
-    """Machines qui peuvent répondre avec ce modèle, la mieux placée d'abord."""
+def _public_nodes() -> list:
+    """Les nœuds du réseau public qui prêtent en ce moment et ont une place, d'après le
+    dernier état lu au compagnon (public.seen), moins les conversations que je viens de leur
+    envoyer ; aucun si le compagnon ne sait pas leur confier une conversation."""
+    if public_chat.ready() is None:
+        return []
+    mine, nodes = public.seen()
+    found = []
+    for node in nodes:
+        key = node.get("key")
+        if key == mine or not public_chat.valid_key(key) or not node.get("lends"):
+            continue
+        if node.get("seen_s", 0) > PUBLIC_SEEN_MAX:
+            continue
+        with _lock:
+            sent = _sent.get(public_chat.PREFIX + key, 0)
+        if int(node.get("free") or 0) - sent < 1:
+            continue
+        found.append(node)
+    return found
+
+
+def _larger(models, base) -> list:
+    """(paramètres, nom) des modèles de conversation plus gros que `base` (milliards)."""
+    if base is None:
+        return []
+    found = []
+    for m in models:
+        size = public_chat.params(m)
+        if size is not None and size > base and public_chat.converses(m) and not reserved(m):
+            found.append((size, m))
+    return found
+
+
+def _public(name: str, bigger: bool) -> list:
+    """Machines du réseau public qui peuvent répondre (cf. le début du module) : chacune avec
+    ce modèle (nom exact), ou, si bigger, avec son plus gros modèle de conversation plus gros
+    que celui-ci ; celles qui passent devant cette machine d'abord, puis le plus gros modèle,
+    la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus."""
+    base = public_chat.params(name)
+    here = speed.median()
+    phone = android.is_android()
+    found = []
+    for node in _public_nodes():
+        chosen = next((m for m in node["models"] if same_model(m, name) and not reserved(m)),
+                      None)
+        larger = max(_larger(node["models"], base), default=None) if bigger else None
+        if larger is not None:
+            chosen = larger[1]
+        if chosen is None:
+            continue
+        tps = node.get("tps")
+        faster = tps is not None and (tps >= FASTER * here if here is not None else phone)
+        found.append(Candidate(
+            model=public_chat.model_id(node["key"], chosen),
+            node_id=public_chat.PREFIX + node["key"], machine=t("placement.public_machine"),
+            trust="public", params=public_chat.params(chosen), tps=tps,
+            seen=int(node.get("seen_s") or 0), ahead=faster or larger is not None))
+    found.sort(key=lambda c: (not c.ahead, -(c.params or 0), -(c.tps or 0), c.seen))
+    return found[:PUBLIC_TRIES]
+
+
+def bigger_public(name: str) -> str | None:
+    """Le plus gros modèle de conversation qu'une machine du réseau public pourrait donner à la
+    place de `name` (la carte d'accord le nomme), ou None."""
+    base = public_chat.params(name)
+    found = [pair for node in _public_nodes() for pair in _larger(node["models"], base)]
+    return max(found)[1] if found else None
+
+
+def candidates(name: str, executor=None, public=False, bigger=False) -> list:
+    """Machines qui peuvent répondre avec ce modèle, la mieux placée d'abord. public : celles
+    du réseau public aussi ; bigger : avec un modèle plus gros, s'il est accepté."""
     found = _remote(name)
     here = _local(name, executor)
     if here:
         found.append(here)
-    return sorted(found, key=Candidate.key)
+    ranked = sorted(found, key=Candidate.key)
+    if public:
+        publics = _public(name, bigger)
+        ahead = [c for c in publics if c.ahead]
+        if ahead and here is not None:
+            # Devant cette machine, jamais devant une de mes machines libres (mes machines
+            # d'abord) : libre, cette machine passe alors après elles ; occupée, elle garde sa
+            # place parmi les machines occupées
+            at = next(i for i, c in enumerate(ranked) if c is here)
+            del ranked[at]
+            if here.chats == 0:
+                at = next((i for i, c in enumerate(ranked) if c.chats > 0), len(ranked))
+            ranked[at:at] = [*ahead, here]
+        else:
+            ranked += ahead
+        ranked += [c for c in publics if not c.ahead]        # à vitesse comparable : en dernier
+    return ranked
 
 
-def plan(model, executor=None) -> list:
+def plan(model, executor=None, public=False, bigger=False) -> list:
     """Identifiants concrets à essayer, dans l'ordre. Un modèle précis (cette machine,
-    une machine appairée) passe tel quel ; « auto:<modèle> » est réparti."""
+    une machine appairée) passe tel quel ; « auto:<modèle> » est réparti. public, bigger :
+    cf. candidates (la conversation le permet, chat/public_consent.py) ; jamais pour un
+    modèle précis."""
     name = parse(model)
     if name is None:
         return [model]
-    ranked = candidates(name, executor)
+    ranked = candidates(name, executor, public, bigger)
     if not ranked:
         raise NoMachine(t("placement.no_machine", model=name))
     log.info("Mode automatique, « %s » : %s", name,
              # i18n: tel quel (journal)
-             ", ".join(f"{c.machine} ({c.chats} conv., {c.units} unités)" for c in ranked))
+             ", ".join(f"{c.machine} ({c.chats} conv., {c.units} unités)" if c.trust != "public"
+                       else f"{c.machine} ({public_chat.parse(c.model)[1]}, {c.tps} j/s)"
+                       for c in ranked))
     return [c.model for c in ranked]
 
 
@@ -259,6 +370,8 @@ def machine_of(model) -> str | None:
     """Nom de la machine qui répond avec cet identifiant concret (None : cette machine)."""
     if cluster.parse(model):
         return t("placement.split")
+    if public_chat.parse(model):
+        return t("placement.public_machine")
     parsed = remote_models.parse(model)
     if not parsed:
         return None
@@ -267,12 +380,24 @@ def machine_of(model) -> str | None:
 
 
 def destination(model) -> str | None:
-    """Niveau de confiance de la machine qui répond : None (cette machine), « mine » ou
-    « friend » (cf. pipeline.build_messages)."""
+    """Niveau de confiance de la machine qui répond : None (cette machine), « mine »,
+    « friend » ou « public » (cf. pipeline.build_messages)."""
+    if public_chat.parse(model):
+        return "public"
     parsed = remote_models.parse(model)
     if not parsed:
         return None
     return peers.trust_of(parsed[0]) or "friend"
+
+
+def _target(model) -> str | None:
+    """La machine (autre que celle-ci) dont cette réponse compte dans la charge : une machine
+    appairée, ou « public:<clé> »."""
+    parsed = remote_models.parse(model)
+    if parsed:
+        return parsed[0]
+    lent = public_chat.parse(model)
+    return public_chat.PREFIX + lent[0] if lent else None
 
 
 # ------------------------------------------------------------------ réponse
@@ -283,29 +408,31 @@ def _occupy(model, executor, interactive: bool = True):
     modèle réparti, qui ne tourne pas seulement ici, garde la règle de chat.py avant le
     mode automatique (pipeline.runs_here) : pas de pause. interactive faux (une appli en
     priorité basse, gateway/scopes.py) : rien n'est suspendu ici pour elle."""
-    parsed = remote_models.parse(model)
-    local = (executor is not None and interactive and not parsed
+    target = _target(model)
+    local = (executor is not None and interactive and target is None
              and not cluster.parse(model))
     if local:
         executor.interactive_begin()
-    elif parsed:
+    elif target:
         with _lock:
-            _sent[parsed[0]] = _sent.get(parsed[0], 0) + 1
+            _sent[target] = _sent.get(target, 0) + 1
     try:
         yield
     finally:
         if local:
             executor.interactive_end()
-        elif parsed:
+        elif target:
             with _lock:
-                left = _sent.get(parsed[0], 1) - 1
+                left = _sent.get(target, 1) - 1
                 if left > 0:
-                    _sent[parsed[0]] = left
+                    _sent[target] = left
                 else:
-                    _sent.pop(parsed[0], None)
+                    _sent.pop(target, None)
 
 
-QUIET = {"route", "summary", "inherit", "sources", "status"}   # n'engage pas encore la réponse
+# N'engage pas encore la réponse (« notice » : une carte ou une note pour l'interface,
+# chat/public_consent.py)
+QUIET = {"route", "summary", "inherit", "sources", "status", "notice"}
 
 
 def _hands_over(exc) -> bool:

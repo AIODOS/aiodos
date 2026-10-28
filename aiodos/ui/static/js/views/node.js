@@ -238,6 +238,16 @@ function shareRow(key, title, text) {
     <label class="switch"><input type="checkbox" data-key="${key}" ${on ? 'checked' : ''}><span></span></label></div>`;
 }
 
+// Un accord demandé une fois dans une conversation (chat-public.js) : un interrupteur, qui dit
+// tant qu'il n'a pas été demandé (null) que la question viendra
+function askedRow(key, title, text) {
+  const value = state.settings?.[key];
+  const pending = value === null || value === undefined;
+  return `<div class="setting-row sub-row"><div class="txt"><b>${esc(title)}</b><small>${esc(text)}</small>${
+    pending ? `<small class="faint">${esc(t('node.not_asked'))}</small>` : ''}</div>
+    <label class="switch"><input type="checkbox" data-key="${key}" ${value === true ? 'checked' : ''}><span></span></label></div>`;
+}
+
 // Les places de cette machine, sur secteur (node/places.py) : ce que permet la puissance prêtée
 function renderPlaces() {
   const line = root && $('#places-line', root);
@@ -300,6 +310,9 @@ function renderShare() {
     ${shareRow('lend_models', t('node.lend_models'), t('node.lend_models_help', { device }))}
     ${shareRow('lend_public', t('node.lend_public'), mobile ? t('node.lend_public_help_phone')
       : t('node.lend_public_help', { device }))}
+    ${shareRow('use_public', t('node.use_public'), t('node.use_public_help', { device }))}
+    ${s.use_public ? askedRow('public_bigger_model', t('node.public_bigger_model'), t('node.public_bigger_model_help'))
+      + askedRow('public_documents', t('node.public_documents'), t('node.public_documents_help')) : ''}
     ${mobile ? '' : shareRow('lend_gpu', t('node.lend_gpu'), t('node.lend_gpu_help'))}
     ${mobile ? '' : shareRow('lend_images_friends', t('node.lend_images'), t('node.lend_images_help'))}
     ${mobile ? '' : idleRows}

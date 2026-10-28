@@ -6,6 +6,7 @@ import { state } from '../state.js';
 
 export const AUTO = 'auto:';
 const CLUSTER = 'reparti:';
+const PUBLIC = 'public:';          // une machine du réseau public (network/public_chat.py)
 
 /** [{ name, size, auto: identifiant automatique ou null, machines: [{ id, label, slow }] }],
  *  du plus puissant au moins puissant (le plus gros d'abord). */
@@ -42,12 +43,13 @@ export function byPower(a, b) {
 }
 
 /** Nom du modèle désigné par un identifiant : « auto:x », « peer:<machine>:x »,
- *  « reparti:x » (gros modèle réparti entre mes machines) ou « x ». */
+ *  « public:<clé>:x » (une machine du réseau public), « reparti:x » (gros modèle réparti entre
+ *  mes machines) ou « x ». */
 export function modelName(id) {
   if (!id) return '';
   if (id.startsWith(AUTO)) return id.slice(AUTO.length);
   if (id.startsWith(CLUSTER)) return id.slice(CLUSTER.length);
-  if (id.startsWith('peer:')) return id.split(':').slice(2).join(':');
+  if (id.startsWith('peer:') || id.startsWith(PUBLIC)) return id.split(':').slice(2).join(':');
   return id;
 }
 
@@ -57,6 +59,7 @@ export function modelName(id) {
  */
 export function modelLabel(id, here = false) {
   if (id?.startsWith(AUTO)) return t('models.label_auto', { name: modelName(id) });
+  if (id?.startsWith(PUBLIC)) return t('models.label_public', { name: modelName(id) });
   const m = state.models.find(x => x.id === id);
   if (m) {
     if (m.peer) return `${m.label} · ${m.peer}`;
@@ -76,5 +79,5 @@ export function defaultChoice(entry) {
 /** Modèle par défaut réglé avant le mode automatique : le nom seul y désignait le modèle,
  *  pas la machine ; il vaut désormais « automatique ». */
 export function asDefault(id) {
-  return id && !/^(auto|peer|reparti):/.test(id) ? AUTO + id : id;
+  return id && !/^(auto|peer|reparti|public):/.test(id) ? AUTO + id : id;
 }

@@ -23,7 +23,7 @@ from aiodos import i18n
 from aiodos.cluster import group as cluster
 from aiodos.gateway import catalog
 from aiodos.i18n import t
-from aiodos.network import placement, remote_models
+from aiodos.network import placement, public_chat, remote_models
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -71,7 +71,11 @@ def is_local(model) -> bool:
 
 def circle_of(model) -> str:
     """Le cercle de la machine qui répondrait avec cet identifiant concret : here, mine
-    (une de mes machines, ou un gros modèle réparti entre elles) ou friends."""
+    (une de mes machines, ou un gros modèle réparti entre elles), friends ou public (une
+    machine du réseau public : jamais dans le plan de la passerelle aujourd'hui, cf.
+    scopes.SERVED)."""
+    if public_chat.parse(model):
+        return "public"
     parsed = remote_models.parse(model)
     if parsed:
         return "friends" if placement.destination(model) == "friend" else "mine"
@@ -82,7 +86,8 @@ def route_info(model) -> dict:
     """Qui répond avec cet identifiant concret : {"model", "machine", "place"} (en-têtes
     X-Aiodos-Model, X-Aiodos-Machine, X-Aiodos-Place)."""
     from aiodos.gateway import model_card
-    place = {"here": "here", "mine": "mine", "friends": "friend"}[circle_of(model)]
+    place = {"here": "here", "mine": "mine", "friends": "friend",
+             "public": "public"}[circle_of(model)]
     machine = placement.machine_of(model) if place != "here" else model_card._machine_name()
     return {"model": model, "machine": machine, "place": place}
 

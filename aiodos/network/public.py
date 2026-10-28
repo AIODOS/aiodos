@@ -15,12 +15,14 @@ le réglage lend_public, et le partage actif, cf. public_lending.lending_now), s
 conversation peut y être prise maintenant (« free » : 1 ou 0) et, si elle est connue, sa
 vitesse (« tps », jetons par seconde, node/speed.py). Le compagnon les publie signés. Les
 nœuds vus sont gardés typés (_node), « free » et « tps » compris : le côté demandeur y
-choisira ses machines.
+choisit ses machines (seen, network/placement.py).
 """
 import asyncio
 import json
 import logging
 import math
+import threading
+import time
 
 from aiodos import __version__, settings
 from aiodos.i18n import t
@@ -78,6 +80,35 @@ def _typed(status) -> dict:
     return dict(status, nodes=[n for n in map(_node, nodes[:MAX_KEPT]) if n is not None])
 
 
+# Le dernier état lu, pour le choix des machines (placement.py), qui n'a pas le gestionnaire
+_lock = threading.Lock()
+_latest = {"key": None, "nodes": [], "at": 0.0}
+
+
+def _remember(status):
+    with _lock:
+        status = status if isinstance(status, dict) and status.get("enabled") else {}
+        _latest.update(key=status.get("key"), nodes=list(status.get("nodes") or []),
+                       at=time.monotonic())
+
+
+def seen() -> tuple:
+    """(clé de cette machine sur le réseau public, nœuds vus) d'après le dernier état lu au
+    compagnon ; « seen_s » de chaque nœud y compte le temps écoulé depuis. Rien si le
+    réseau public n'est pas rejoint."""
+    with _lock:
+        key, nodes, at = _latest["key"], list(_latest["nodes"]), _latest["at"]
+    if not nodes:
+        return key, []
+    age = int(max(0.0, time.monotonic() - at))
+    return key, [dict(node, seen_s=node["seen_s"] + age) for node in nodes]
+
+
+def forget():
+    """Rien de vu (essais)."""
+    _remember(None)
+
+
 class Public:
     def __init__(self, manager):
         self.m = manager
@@ -101,6 +132,7 @@ class Public:
         companion = self.m.internet.companion
         if companion is None or not companion.running:
             self._status, self._sent = None, None
+            _remember(None)
             return
         request = await asyncio.to_thread(self._request)
         # Un nouveau compagnon (réseau ou Internet relancés) repart de zéro : il faut tout
@@ -118,6 +150,7 @@ class Public:
                 if not self._status.get("enabled"):
                     self._sent = None      # le compagnon n'y est plus : redit au prochain tour
             self._error = None
+            _remember(self._status if self.wanted else None)
         except CompanionError as exc:
             if "Chemin inconnu" in str(exc):   # i18n: tel quel (réponse du compagnon, en Rust)
                 self._error = t("net.public_unsupported")

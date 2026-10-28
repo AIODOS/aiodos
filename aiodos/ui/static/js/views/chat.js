@@ -13,6 +13,7 @@ import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia } from './chat-create.js';
 import { mountPermissions } from './chat-permissions.js';
+import { isPublic, mineOnly, showNotice } from './chat-public.js';
 
 let el = {};
 let busy = false;
@@ -298,7 +299,8 @@ async function openConversation(id, { settled = false } = {}) {
   if (mine !== opening || busy) return;
   stopEditing();
   displayed += 1;
-  state.currentConversation = { id: conv.id, title: conv.title, model: conv.model };
+  state.currentConversation = { id: conv.id, title: conv.title, model: conv.model,
+    mine_only: !!conv.mine_only };
   prefs.set('lastConversation', conv.id);
   setTitle(conv.title);
   el.list.innerHTML = '';
@@ -352,7 +354,8 @@ function markTurn() {
   const asked = msgs.filter(n => n.classList.contains('user')).pop();
   if (!asked?.dataset.id) return;
   asked.classList.add('last-turn');
-  const after = msgs.slice(msgs.indexOf(asked) + 1);
+  // Une carte ou une note du réseau public (chat-public.js) n'est pas une réponse
+  const after = msgs.slice(msgs.indexOf(asked) + 1).filter(n => !n.classList.contains('side-note'));
   // Une réponse écrite, même arrêtée (son numéro n'est pas connu ici : seul compte celui
   // de la question) ; une création a « Encore une » et ses retouches
   if (after.length === 1 && after[0].classList.contains('assistant')
@@ -437,7 +440,7 @@ function appendAssistant(model, here = false) {
         </details>
         <div class="md content"><div class="typing"><i></i><i></i><i></i></div></div>
         <div class="meta">
-          <span class="model-tag">${esc(label)}</span>
+          <span class="model-tag${isPublic(model) ? ' public' : ''}">${esc(label)}</span>
           <span class="sources"></span>
           <span class="actions"><button class="icon-btn" data-act="copy" title="${esc(t('chat.copy_answer'))}">${icon('copy')}</button><button class="icon-btn turn-only" data-act="regenerate" title="${esc(t('chat.regenerate'))}">${icon('retry')}</button></span>
         </div>
@@ -476,8 +479,11 @@ function appendAssistant(model, here = false) {
     node,
     route(ev) {                       // mode automatique : la machine choisie, ou qui prend le relais
       if (!model?.startsWith(AUTO)) return;
-      node.querySelector('.model-tag').textContent =
-        `${modelName(ev.model)} · ${ev.machine || t('chat.this_machine')}`;
+      const tag = node.querySelector('.model-tag');
+      // Une machine du réseau public : « Répondu par qwen3.5:9b, sur une machine du réseau public »
+      tag.textContent = isPublic(ev.model) ? modelLabel(ev.model)
+        : `${modelName(ev.model)} · ${ev.machine || t('chat.this_machine')}`;
+      tag.classList.toggle('public', isPublic(ev.model));
     },
     status(text) {                    // mise en place d'un modèle réparti (cluster/group.py)
       statusText = text;
@@ -736,9 +742,10 @@ async function sendNow(asText, replace) {
   let started = false;
   let failure = null;
   try {
+    const mine = mineOnly();       // « Sur mes machines seulement » (chat-public.js)
     await streamChat({
       text, model, web: go.web, peer_libraries: go.peers, attachments: attached,
-      conversation_id: state.currentConversation?.id ?? null, ...swap,
+      conversation_id: state.currentConversation?.id ?? null, mine_only: mine, ...swap,
     }, ev => {
       if (ev.type === 'start') {
         started = true;
@@ -746,12 +753,14 @@ async function sendNow(asText, replace) {
         dropReplaced(replace, asked);              // acceptée : l'ancien échange s'en va
         asked.dataset.id = ev.user_message_id;
         if (state.currentConversation?.id !== ev.conversation_id) {
-          state.currentConversation = { id: ev.conversation_id, title: ev.title || t('chat.new_conversation'), model };
+          state.currentConversation = { id: ev.conversation_id, title: ev.title || t('chat.new_conversation'),
+            model, mine_only: mine };
           prefs.set('lastConversation', ev.conversation_id);
         }
         if (ev.title) { state.currentConversation.title = ev.title; setTitle(ev.title); }
         emit('chat:current');
       } else if (ev.type === 'route') view.route(ev);
+      else if (ev.type === 'notice') showNotice(ev, view.node);   // réseau public : carte, note
       else if (ev.type === 'sources') view.sources(ev.sources);
       else if (ev.type === 'status') view.status(ev.text);
       else if (ev.type === 'thinking') view.think(ev.text);

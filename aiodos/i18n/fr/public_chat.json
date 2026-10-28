@@ -1,0 +1,16 @@
+{
+  "error_busy": "La machine du réseau public est occupée.",
+  "error_not_lending": "La machine du réseau public ne prête plus en ce moment.",
+  "error_no_model": "La machine du réseau public n'a plus ce modèle.",
+  "error_too_big": "Cette conversation est trop longue pour une machine du réseau public.",
+  "error_bad_request": "La machine du réseau public n'a pas compris la demande.",
+  "error_unreachable": "La machine du réseau public est injoignable.",
+  "error_engine": "Le modèle de la machine du réseau public s'est arrêté en route.",
+  "error_slow": "La machine du réseau public n'a pas commencé sa réponse à temps.",
+  "error_cut": "La réponse de la machine du réseau public s'est interrompue.",
+  "error_unreadable": "Réponse illisible de la machine du réseau public.",
+  "error_documents": "Cette réponse s'appuie sur tes documents : sans ton accord, elle ne part pas chez un inconnu, et aucune de tes machines ne peut répondre avec ce modèle en ce moment.",
+  "error_attachments": "Les pièces jointes et les images ne partent jamais chez un inconnu du réseau public.",
+  "error_companion": "Le compagnon réseau (aiodos-net) n'est pas prêt à confier une conversation au réseau public.",
+  "error_refused": "La machine du réseau public a refusé la demande."
+}

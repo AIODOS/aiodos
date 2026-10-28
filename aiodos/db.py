@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -419,6 +419,12 @@ MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS ix_unit_copies_node ON unit_copies(node);
     ALTER TABLE units ADD COLUMN taken REAL;
+    """,
+    # Réseau public qui calcule (network/public_chat.py, chat/public_consent.py) : « Sur mes
+    # machines seulement », par conversation, désactivé par défaut ; activé, rien de cette
+    # conversation ne part chez un inconnu
+    27: """
+    ALTER TABLE conversations ADD COLUMN mine_only INTEGER NOT NULL DEFAULT 0;
     """,
 }
 

@@ -2,5 +2,6 @@
   "this_machine": "cette machine",
   "no_machine": "Aucune machine ne peut répondre avec « {model} » en ce moment : ni cette machine, ni une de tes machines en ligne qui le prête.",
   "split": "réparti entre mes machines",
-  "other_machine": "autre machine"
+  "other_machine": "autre machine",
+  "public_machine": "une machine du réseau public"
 }

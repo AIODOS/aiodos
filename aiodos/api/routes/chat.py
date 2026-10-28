@@ -7,6 +7,9 @@ En mode automatique (« auto:<modèle> »), la machine qui répond est choisie a
 d'envoyer (network/placement.py) ; l'événement « route » dit laquelle.
 La recherche web n'a lieu que si l'envoi la dit validée : même si l'interface était
 contournée, rien ne part sur le web sans accord.
+Une machine du réseau public peut répondre si la conversation le permet (chat/
+public_consent.py) ; l'événement « notice » porte alors une carte d'accord ou la note de la
+première fois, que l'interface montre dans la conversation.
 """
 import asyncio
 import contextvars
@@ -20,10 +23,10 @@ from pydantic import BaseModel
 
 from aiodos import db, render, settings
 from aiodos.api.events import sse
-from aiodos.chat import attachments, conversations, creations, pending, pipeline
+from aiodos.chat import attachments, conversations, creations, pending, pipeline, public_consent
 from aiodos.i18n import t
 from aiodos.jobs.kinds import index
-from aiodos.network import placement
+from aiodos.network import placement, public_chat
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger("aiodos.chat")
@@ -55,6 +58,9 @@ class ChatIn(BaseModel):
     # que l'interface le croit) et la suite sont retirés, une fois la demande acceptée
     replace_from: int | None = None
     replace_text: str | None = None
+    # « Sur mes machines seulement » (rien ne part chez un inconnu du réseau public) : gardé
+    # avec la conversation ; None : ce qu'elle garde déjà (désactivé pour une nouvelle)
+    mine_only: bool | None = None
 
 
 @router.get("/models")
@@ -84,10 +90,6 @@ async def chat(body: ChatIn, request: Request):
         raise HTTPException(400, t("chat.attachment_missing"))
     executor = request.app.state.executor
     bus = request.app.state.bus
-    try:                          # machines à essayer, la mieux placée d'abord
-        plan = await asyncio.to_thread(placement.plan, body.model, executor)
-    except placement.NoMachine as exc:
-        raise HTTPException(400, str(exc))
     conv_id = body.conversation_id
     if conv_id is not None:               # la réponse arrêtée juste avant : en place d'abord
         await asyncio.to_thread(pending.wait, conv_id)
@@ -95,20 +97,32 @@ async def chat(body: ChatIn, request: Request):
             conv_id = None
     if conv_id is None and body.replace_from is not None:
         raise HTTPException(creations.CHANGED_STATUS, creations.changed())
+    mine_only = body.mine_only if body.mine_only is not None else (
+        conv_id is not None and await asyncio.to_thread(conversations.mine_only, conv_id))
+    # Le réseau public, si la conversation le permet (chat/public_consent.py)
+    reach = await asyncio.to_thread(public_consent.reach, body.model, conv_id, mine_only, joined)
+    try:                          # machines à essayer, la mieux placée d'abord
+        plan = await asyncio.to_thread(placement.plan, body.model, executor, reach.public,
+                                       reach.bigger)
+    except placement.NoMachine as exc:
+        raise HTTPException(400, str(exc))
     # Jusqu'à ce que la question soit enregistrée (ou refusée), relire la conversation pour
     # se resynchroniser attend (pending) : l'écran voit ce que le nœud garde. Une
     # conversation neuve n'est créée qu'à l'acceptation (ask)
     marker = pending.begin(conv_id) if conv_id is not None else None
     try:
-        return await _answer(body, request, text, plan, conv_id, executor, bus, joined)
+        return await _answer(body, request, text, plan, conv_id, executor, bus, joined,
+                             mine_only, reach)
     finally:
         if marker is not None:
             pending.end(conv_id, marker)
 
 
-async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
+async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
+                  mine_only=False, reach=public_consent.Reach()):
     """La suite de chat(), une fois la conversation connue. joined : les pièces jointes de
-    la question (attachments.pending)."""
+    la question (attachments.pending) ; mine_only : « Sur mes machines seulement » ; reach :
+    ce que le réseau public peut faire pour ce message (chat/public_consent.py)."""
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -122,7 +136,12 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
         échange sans la nouvelle question). Chaque machine qui peut répondre ne reçoit de
         l'historique que ce qu'elle peut recevoir (pipeline.history_filter)."""
         with db.transaction():
-            cid = conv_id if conv_id is not None else conversations.create(model=body.model)
+            if conv_id is None:
+                cid = conversations.create(model=body.model, mine_only=mine_only)
+            else:
+                cid = conv_id
+                if body.mine_only is not None:
+                    conversations.set_mine_only(cid, body.mine_only)
             stopped = [] if body.replace_from is None else creations.replace(
                 cid, body.replace_from, body.replace_text)
             rows = conversations.history_rows(cid, 30)
@@ -160,9 +179,13 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
             # ne part ensuite vers aucune autre machine. Et l'arrêt va à la
             # recherche web elle-même : Stop (ou le client parti) interrompt la page en cours
             # de lecture, et les suivantes ne sont pas lues
+            notice = public_consent.bigger_notice(reach)
+            if notice:                    # carte d'accord : la réponse part sans l'attendre
+                put(("notice", notice))
             web = pipeline.web_context(text, stop) if body.web and not stop.is_set() else None
             built = {}                    # messages selon la machine qui répond
             read = {}                     # pièces jointes lues, selon que le modèle voit les images
+            memo = {}                     # réseau public : ce qui est su ou montré (public_consent)
 
             def attached(model, messages):
                 """La question avec ses pièces jointes : une image va telle quelle à un modèle
@@ -181,6 +204,10 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
                 if stop.is_set():
                     return
                 level = placement.destination(model)
+                extra_args = {}
+                if level == "public":     # mes documents avec accord, la note de la 1re fois
+                    yield from public_consent.admit(text, libraries, conv_id, memo)
+                    extra_args["conversation"] = public_chat.tag(conv_id)
                 ok = allowed[model]       # passages d'autres machines permis à celle-ci ?
                 if (level, ok) not in built:
                     keep = pipeline.history_filter(level, ok)
@@ -201,7 +228,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
                 yield "sources", sources
                 if stop.is_set():
                     return
-                yield from pipeline.generate(model, messages, think, stop)
+                yield from pipeline.generate(model, messages, think, stop, **extra_args)
 
             for kind, piece in placement.run(plan, attempt, executor, stop):
                 if kind == "route":
@@ -274,6 +301,8 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=()):
                     yield sse({"type": "sources", "sources": data})
                 elif kind == "status":    # mise en place d'un modèle réparti : montré, pas gardé
                     yield sse({"type": "status", "text": data})
+                elif kind == "notice":    # réseau public : carte d'accord, note (pas gardées)
+                    yield sse({"type": "notice", **data})
                 elif kind == "thinking":
                     state["thinking"] += data
                     yield sse({"type": "thinking", "text": data})

@@ -18,7 +18,12 @@ SCOPES = ("chat", "embed", "libraries", "engines:comfyui")
 CIRCLES = ("here", "mine", "friends", "public")
 PRIORITIES = ("interactive", "background")
 # Cercles que cette version sert, par capacité : les conversations partent chez mes machines
-# et mes amis (prêt de modèles), pas encore chez les inconnus ; embeddings et bibliothèques
+# et mes amis (prêt de modèles), pas encore chez les inconnus : depuis le 28/10/2026, les
+# conversations de l'interface d'AIODOS peuvent être calculées par le réseau public
+# (network/public_chat.py), mais pas celles des applis ; leur plan (answer.plan) n'en
+# contient jamais, et « public » n'est montré à l'accord d'aucune appli. L'ouvrir aux applis
+# demandera de le montrer à l'accord, la clé générale (sans filtre de cercles) restant fermée,
+# et les règles de ce qui part (outils, images, format imposé). Embeddings et bibliothèques
 # restent sur ce PC ; les travaux ComfyUI se calculent par le ComfyUI de ce PC et de mes
 # machines (livraison L2b ; les amis et les inconnus viendront en L3 et L4)
 SERVED = {"chat": frozenset({"here", "mine", "friends"}), "embed": frozenset({"here"}),

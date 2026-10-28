@@ -89,6 +89,16 @@ DEFAULTS = {
     # « Prêter ma puissance aux conversations d'inconnus » (network/public_lending.py,
     # 28/10/2026) : après mes machines et mes amis, jamais sur batterie ; activé par défaut
     "lend_public": True,
+    # « Faire calculer mes conversations par des inconnus » (network/public_chat.py,
+    # chat/public_consent.py, 28/10/2026) : en mode automatique, une machine du réseau public
+    # bien plus rapide, ou qui a le modèle quand les miennes ne l'ont pas ; activé par défaut
+    "use_public": True,
+    # Accords demandés une fois, dans une conversation (None : pas encore demandé, puis vrai ou
+    # faux ; se changent dans les Réglages) : un modèle plus gros d'une machine du réseau public
+    # (qwen3.5:9b plutôt que 0.8b), et les passages de mes documents envoyés avec la conversation
+    "public_bigger_model": None,
+    "public_documents": None,
+    "public_warned": False,           # la note « ta conversation part chez un inconnu » vue
     # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
     # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
     # en priorité basse, jamais sur batterie (network/worker.py, docs/arriere-plan.md)
@@ -190,8 +200,12 @@ def rag_threshold(model) -> float:
 FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend_models",
                    "lend_gpu")
 # Activés par défaut depuis le 27/10/2026 (décision de l'auteur), éteints de même en essai ;
-# le prêt aux conversations d'inconnus aussi, depuis le 28/10/2026
-OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps", "lend_public")
+# le prêt aux conversations d'inconnus, et les miennes calculées par eux, depuis le 28/10/2026
+OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps", "lend_public",
+                       "use_public")
+# Réglages à trois états : None (pas encore demandé), vrai ou faux ; toute autre valeur est
+# ignorée à l'enregistrement
+ASKED_ONCE = ("public_bigger_model", "public_documents")
 
 
 def default(key):
@@ -259,6 +273,8 @@ def set_many(values: dict):
                 continue
             if key == "language" and value not in ("auto", *i18n.LANGUAGES):
                 continue                  # une langue qu'AIODOS ne parle pas : rien ne change
+            if key in ASKED_ONCE and value not in (None, True, False):
+                continue
             if key in SECRET_KEYS:
                 if value is None:
                     value = ""

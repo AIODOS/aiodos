@@ -149,6 +149,14 @@ def of_messages(message_ids) -> dict:
     return found
 
 
+def in_conversation(conv_id) -> bool:
+    """Un message de cette conversation porte-t-il une pièce jointe ? (une telle conversation
+    ne part jamais chez un inconnu du réseau public : chat/public_consent.py)"""
+    return db.query_one(
+        "SELECT 1 FROM attachments a JOIN messages m ON m.id = a.message_id "
+        "WHERE m.conversation_id=? LIMIT 1", (conv_id,)) is not None
+
+
 def delete(att_id: str) -> bool:
     """Retire une pièce jointe pas encore envoyée (la croix de la zone de saisie)."""
     row = get(att_id)

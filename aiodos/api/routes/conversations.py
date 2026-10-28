@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from aiodos import db, render
 from aiodos.chat import conversations, creations, pending
 from aiodos.i18n import t
+from aiodos.network import public_chat
 
 router = APIRouter(prefix="/api")
 
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/api")
 class ConversationPatch(BaseModel):
     title: str | None = None
     folder_id: int | None = None
+    mine_only: bool | None = None       # « Sur mes machines seulement » (réseau public)
 
 
 class FolderIn(BaseModel):
@@ -62,6 +64,8 @@ def update(conv_id: int, body: ConversationPatch, request: Request):
             conversations.rename(conv_id, body.title)
         if "folder_id" in body.model_fields_set:          # null = remettre à la racine
             conversations.move(conv_id, body.folder_id)
+        if body.mine_only is not None:
+            conversations.set_mine_only(conv_id, body.mine_only)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     _notify(request)
@@ -91,6 +95,7 @@ def rewind(conv_id: int, body: RewindIn, request: Request):
 @router.delete("/conversations/{conv_id}")
 def delete(conv_id: int, request: Request):
     conversations.delete(conv_id)
+    public_chat.forget_conversation(conv_id)     # son identifiant pour le réseau public
     _notify(request)
     return {"ok": True}
 

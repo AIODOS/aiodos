@@ -98,5 +98,20 @@
   },
   "attachment_missing": "Attachment not found or already sent: attach it again.",
   "abandoned": "Request abandoned.",
-  "changed": "The conversation changed in the meantime (another window?): it is being reloaded."
+  "changed": "The conversation changed in the meantime (another window?): it is being reloaded.",
+  "public_bigger_text": "A machine on the public network has a bigger model ({model}). Use it for your conversations?",
+  "public_bigger_note": "This answer keeps the chosen model. Your choice applies from now on; you can change it in Settings.",
+  "public_documents_text": "This answer relies on your documents. Send the useful passages to a machine on the public network?",
+  "public_documents_note": "This answer did not go to a stranger. Your choice applies from now on; you can change it in Settings.",
+  "public_yes": "Yes",
+  "public_no": "No",
+  "public_saved_yes": "Noted: yes. You can change your mind in Settings (This machine, Sharing computing power).",
+  "public_saved_no": "Noted: no. You can change your mind in Settings (This machine, Sharing computing power).",
+  "public_first_title": "Your conversation goes to a stranger",
+  "public_first_text": "The machine of someone on the public network reads this conversation to answer it, without knowing who is asking; nothing is kept there. What you write may still reveal who you are. To avoid it: “On my machines only” (Permissions, under the message box) for one conversation, or “Have my conversations computed by strangers” in Settings for all of them.",
+  "public_first_ok": "Got it",
+  "this_conversation": "This conversation",
+  "mine_only": "On my machines only",
+  "mine_only_help": "Nothing from this conversation goes to a stranger on the public network.",
+  "mine_only_on": "On my machines only: nothing from this conversation goes to a stranger"
 }

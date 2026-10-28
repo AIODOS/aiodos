@@ -1,0 +1,16 @@
+{
+  "error_busy": "The public network machine is busy.",
+  "error_not_lending": "The public network machine is no longer lending right now.",
+  "error_no_model": "The public network machine no longer has this model.",
+  "error_too_big": "This conversation is too long for a public network machine.",
+  "error_bad_request": "The public network machine did not understand the request.",
+  "error_unreachable": "The public network machine cannot be reached.",
+  "error_engine": "The model of the public network machine stopped midway.",
+  "error_slow": "The public network machine did not start its answer in time.",
+  "error_cut": "The answer from the public network machine was cut off.",
+  "error_unreadable": "Unreadable answer from the public network machine.",
+  "error_documents": "This answer relies on your documents: without your consent it does not go to a stranger, and none of your machines can answer with this model right now.",
+  "error_attachments": "Attachments and images never go to a stranger on the public network.",
+  "error_companion": "The network companion (aiodos-net) is not ready to hand a conversation to the public network.",
+  "error_refused": "The public network machine refused the request."
+}

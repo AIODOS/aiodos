@@ -13,7 +13,9 @@ des miens, dans un bloc marqué non vérifié, et seulement pour un modèle auto
 Quand la réponse est calculée par une autre machine (modèle prêté, choisi à la main ou
 par le mode automatique, cf. network/placement.py), le sommaire et les extraits ne
 viennent que des bibliothèques qui peuvent aller chez elle (visible_libraries) : rien
-d'une bibliothèque gardée sur ce PC, ni de la mémoire des conversations.
+d'une bibliothèque gardée sur ce PC, ni de la mémoire des conversations. Chez une machine du
+réseau public (network/public_chat.py), rien de mes bibliothèques sans l'accord
+« public_documents » (chat/public_consent.py), et jamais les passages des autres machines.
 """
 import logging
 import re
@@ -23,7 +25,7 @@ from aiodos.chat import conversations, creations
 from aiodos.cluster import group as cluster
 from aiodos.i18n import t
 from aiodos.knowledge import search, store
-from aiodos.network import placement, remote_models, remote_search, sharing
+from aiodos.network import placement, public_chat, remote_models, remote_search, sharing
 from aiodos.services import ollama, web
 
 log = logging.getLogger("aiodos.chat")
@@ -87,7 +89,7 @@ def runs_here(model) -> bool:
     automatique, on ne le sait qu'une fois la machine choisie (placement.run) ; un gros
     modèle réparti ne tourne pas seulement ici."""
     return not (remote_models.parse(model) or placement.parse(model)
-                or cluster.parse(model))
+                or cluster.parse(model) or public_chat.parse(model))
 
 
 def sees_images(model) -> bool:
@@ -124,13 +126,16 @@ def peers_allowed(model) -> bool:
     - un gros modèle réparti : il tourne ici, avec les cartes de mes seules machines
       (cluster/group.py) ;
     - un modèle prêté par une de mes machines.
-    En mode automatique (« auto: »), chaque machine essayée est jugée à son tour (routes/
-    chat.py) : ici, vrai si au moins une de celles qui peuvent répondre est autorisée."""
+    Jamais une machine du réseau public. En mode automatique (« auto: »), chaque machine
+    essayée est jugée à son tour (routes/chat.py) : ici, vrai si au moins une de celles qui
+    peuvent répondre (sans le réseau public) est autorisée."""
     if placement.parse(model):
         try:
             return any(peers_allowed(m) for m in placement.plan(model))
         except placement.NoMachine:
             return False
+    if public_chat.parse(model):
+        return False
     lent = remote_models.parse(model)
     if lent:
         return sharing.level(lent[0]) == sharing.MINE
@@ -215,13 +220,35 @@ def visible_libraries(destination) -> set | None:
     """Bibliothèques dont le sommaire et les extraits peuvent accompagner une conversation,
     selon la machine qui répond (placement.destination) : None, cette machine : toutes ;
     « mine », une de mes machines : toutes sauf celles gardées sur ce PC ; « friend », la
-    machine d'un ami : celles partagées avec mes amis. La mémoire des conversations ne
-    va qu'à cette machine (build_messages)."""
+    machine d'un ami : celles partagées avec mes amis ; « public », une machine du réseau
+    public : avec l'accord public_documents, comme pour mes machines (public_libraries),
+    sinon aucune. La mémoire des conversations ne va qu'à cette machine (build_messages)."""
     if destination is None:
         return None
+    if destination == "public":
+        return public_libraries() if settings.get("public_documents") is True else set()
     if destination == "mine":
-        return {c["id"] for c in store.list_collections() if c["scope"] != "local"}
+        return public_libraries()
     return store.shareable_ids()
+
+
+def public_libraries() -> set:
+    """Les bibliothèques qui peuvent quitter cette machine : toutes sauf celles gardées sur ce
+    PC (vers mes machines, et vers le réseau public avec l'accord public_documents)."""
+    return {c["id"] for c in store.list_collections() if c["scope"] != "local"}
+
+
+def documents_found(question, libraries: bool, conversation_id=None) -> bool:
+    """Une réponse à cette question s'appuierait-elle sur mes documents, s'ils pouvaient
+    partir chez une machine du réseau public ? Des passages pertinents dans les bibliothèques
+    qui le pourraient avec l'accord (public_libraries ; la mémoire des conversations, elle,
+    ne part jamais). Sert à demander cet accord, ou à garder la conversation chez moi sans
+    lui (chat/public_consent.py)."""
+    if not libraries:
+        return False
+    only = public_libraries()
+    return bool(only) and bool(_knowledge_context(question, True, False, [], conversation_id,
+                                                  only))
 
 
 def history_filter(destination, peers_ok: bool):
@@ -469,9 +496,13 @@ def build_messages(history, question, *, libraries, conversations, web_search,
     return messages, sources
 
 
-def generate(model, messages, think=True, stop=None):
-    """Couples (genre, texte) depuis le modèle local, d'une machine appairée, ou réparti."""
-    if remote_models.parse(model):
+def generate(model, messages, think=True, stop=None, conversation=None):
+    """Couples (genre, texte) depuis le modèle local, d'une machine appairée, réparti, ou
+    d'une machine du réseau public (conversation : son identifiant opaque, public_chat.tag)."""
+    if public_chat.parse(model):
+        yield from public_chat.chat_stream(model, messages, think, stop,
+                                           conversation=conversation)
+    elif remote_models.parse(model):
         yield from remote_models.chat_stream(model, messages, think, stop)
     elif cluster.parse(model):
         yield from cluster.chat_stream(model, messages, think, stop)

@@ -49,10 +49,13 @@ def data_dir(tmp_path, monkeypatch):
     client._turns.clear()
     client._lingering.clear()
     # Vitesse mesurée des réponses (profil public) et pause après une conversation publique
-    from aiodos.network import public_lending
+    from aiodos.network import public, public_chat, public_lending
     from aiodos.node import speed
     speed.forget()
     public_lending.forget()
+    # Côté demandeur : nœuds publics vus, identifiants des conversations (public_chat.tag)
+    public.forget()
+    public_chat.forget()
     # Applications (gateway/) : clés en cache, demandes d'accès, limites
     from aiodos.gateway import access_flow, apps, limits, open_page
     apps.forget_all()

@@ -48,13 +48,25 @@ def list_tree() -> dict:
     }
 
 
-def create(title=None, model=None, folder_id=None) -> int:
-    """title : sans titre, celui d'une conversation neuve (default_title)."""
+def create(title=None, model=None, folder_id=None, mine_only=False) -> int:
+    """title : sans titre, celui d'une conversation neuve (default_title). mine_only : « Sur
+    mes machines seulement » (rien ne part chez un inconnu du réseau public)."""
     title = default_title() if title is None else title
     now = db.now()
     return db.execute(
-        "INSERT INTO conversations(title, folder_id, model, created, updated) "
-        "VALUES(?, ?, ?, ?, ?)", (title, folder_id, model, now, now)).lastrowid
+        "INSERT INTO conversations(title, folder_id, model, created, updated, mine_only) "
+        "VALUES(?, ?, ?, ?, ?, ?)", (title, folder_id, model, now, now, int(bool(mine_only)))
+    ).lastrowid
+
+
+def mine_only(conv_id) -> bool:
+    """« Sur mes machines seulement » pour cette conversation ? (faux si elle n'existe pas)"""
+    row = db.query_one("SELECT mine_only FROM conversations WHERE id=?", (conv_id,))
+    return bool(row and row["mine_only"])
+
+
+def set_mine_only(conv_id, value: bool):
+    db.execute("UPDATE conversations SET mine_only=? WHERE id=?", (int(bool(value)), conv_id))
 
 
 def get(conv_id) -> dict | None:
@@ -62,6 +74,7 @@ def get(conv_id) -> dict | None:
     if row is None:
         return None
     conv = dict(row)
+    conv["mine_only"] = bool(conv.get("mine_only"))
     conv["messages"] = [
         dict(m, sources=json.loads(m["sources"] or "[]"),
              media=json.loads(m["media"]) if m["media"] else None)

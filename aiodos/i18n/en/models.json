@@ -4,5 +4,6 @@
   "label_auto": "{name} · automatic",
   "label_split": "{name} · split",
   "label_here": "{name} · this machine",
-  "label_other": "{name} · another machine"
+  "label_other": "{name} · another machine",
+  "label_public": "Answered by {name}, on a machine on the public network"
 }

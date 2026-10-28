@@ -101,5 +101,20 @@
   },
   "attachment_missing": "Pièce jointe introuvable ou déjà envoyée : joins-la de nouveau.",
   "abandoned": "Demande abandonnée.",
-  "changed": "La conversation a changé entre-temps (autre fenêtre ?) : elle est rechargée."
+  "changed": "La conversation a changé entre-temps (autre fenêtre ?) : elle est rechargée.",
+  "public_bigger_text": "Une machine du réseau public a un modèle plus gros ({model}). L'utiliser pour tes conversations ?",
+  "public_bigger_note": "Cette réponse-ci garde le modèle choisi. Ton choix vaut pour la suite ; il se change dans les Réglages.",
+  "public_documents_text": "Cette réponse s'appuie sur tes documents. Envoyer les passages utiles à une machine du réseau public ?",
+  "public_documents_note": "Cette réponse-ci n'est pas partie chez un inconnu. Ton choix vaut pour la suite ; il se change dans les Réglages.",
+  "public_yes": "Oui",
+  "public_no": "Non",
+  "public_saved_yes": "C'est noté : oui. Tu peux changer d'avis dans les Réglages (Cette machine, Partage de puissance).",
+  "public_saved_no": "C'est noté : non. Tu peux changer d'avis dans les Réglages (Cette machine, Partage de puissance).",
+  "public_first_title": "Ta conversation part chez un inconnu",
+  "public_first_text": "La machine d'une personne du réseau public lit cette conversation pour y répondre, sans savoir qui la demande ; rien n'y est gardé. Ce que tu écris peut quand même dire qui tu es. Pour l'éviter : « Sur mes machines seulement » (Autorisations, sous la zone de saisie) pour une conversation, ou « Faire calculer mes conversations par des inconnus » dans les Réglages pour toutes.",
+  "public_first_ok": "Compris",
+  "this_conversation": "Cette conversation",
+  "mine_only": "Sur mes machines seulement",
+  "mine_only_help": "Rien de cette conversation ne part chez un inconnu du réseau public.",
+  "mine_only_on": "Sur mes machines seulement : rien de cette conversation ne part chez un inconnu"
 }

@@ -109,5 +109,12 @@
   "renamed": "Nœud renommé.",
   "autostart_unsupported": "Démarrer avec l'appareil : seulement sous Windows et sur Android.",
   "autostart_shortcut_failed": "raccourci de démarrage impossible : {error}",
-  "autostart_shortcut_description": "AIODOS, en arrière-plan"
+  "autostart_shortcut_description": "AIODOS, en arrière-plan",
+  "use_public": "Faire calculer mes conversations par des inconnus",
+  "use_public_help": "En mode automatique, une machine du réseau public peut répondre à tes conversations, sans savoir qui tu es : après tes machines, ou avant {device} si elle est deux fois plus rapide. Jamais tes pièces jointes ; tes documents, seulement avec ton accord. « Sur mes machines seulement », dans les Autorisations sous la zone de saisie, garde une conversation chez toi.",
+  "public_bigger_model": "Utiliser un modèle plus gros du réseau public",
+  "public_bigger_model_help": "En mode automatique, une machine du réseau public qui a un modèle plus gros que celui choisi (qwen3.5:9b plutôt que 0.8b) répond à sa place.",
+  "public_documents": "Envoyer les passages de mes documents au réseau public",
+  "public_documents_help": "Quand une réponse s'appuie sur tes bibliothèques, les passages utiles partent avec la conversation chez la machine de l'inconnu ; jamais la mémoire des conversations, ni les bibliothèques gardées sur cette machine. Sans accord, une telle conversation reste sur tes machines.",
+  "not_asked": "Pas encore demandé : la question viendra dans une conversation, la première fois."
 }

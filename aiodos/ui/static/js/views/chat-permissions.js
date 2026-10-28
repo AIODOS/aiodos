@@ -2,12 +2,15 @@
 // mémoire, web et réflexion. Un bouton (avec le nombre d'autorisations actives) ouvre un petit
 // panneau où chacune s'active ou se coupe d'un interrupteur, avec sa courte explication.
 // Chacune reste un réglage du nœud (PUT /settings), comme quand elles étaient dans l'en-tête.
+// En dessous, « Sur mes machines seulement », propre à la conversation (chat-public.js) ; un
+// cadenas sur le bouton le dit quand il est activé.
 import { put } from '../api.js';
 import { h, esc } from '../dom.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on } from '../state.js';
 import { errorToast } from '../ui.js';
+import { bindMineOnly, mineOnly, mineOnlyRow } from './chat-public.js';
 
 // Réglage, icône, nom et explication (chat.json)
 const FLAGS = [
@@ -26,19 +29,21 @@ export function mountPermissions(row) {
   root = h(`
     <div class="perm">
       <button class="perm-btn" type="button" aria-haspopup="true" aria-expanded="false"
-        title="${esc(t('chat.permissions_title'))}">${icon('shield')}<span class="perm-label">${esc(t('chat.permissions'))}</span><span class="perm-count"></span>${icon('chev-right', 'perm-chev')}</button>
+        title="${esc(t('chat.permissions_title'))}">${icon('shield')}<span class="perm-label">${esc(t('chat.permissions'))}</span><span class="perm-count"></span><span class="perm-lock" hidden title="${esc(t('chat.mine_only_on'))}">${icon('lock')}</span>${icon('chev-right', 'perm-chev')}</button>
       <div class="perm-panel" role="group" aria-label="${esc(t('chat.permissions'))}" hidden>
         <div class="perm-head">${esc(t('chat.permissions'))}</div>
         ${FLAGS.map(f => `
         <label class="perm-row" data-flag="${f.flag}">${icon(f.ico)}
           <span class="txt"><b>${esc(t(f.label))}</b><small>${esc(t(f.help))}</small></span>
           <span class="switch"><input type="checkbox"><span></span></span></label>`).join('')}
+        ${mineOnlyRow()}
       </div>
     </div>`);
   row.prepend(root);
   const button = root.querySelector('.perm-btn');
   button.onclick = () => show(!opened);
-  root.querySelectorAll('.perm-row').forEach(line => {
+  bindMineOnly(root, sync);
+  root.querySelectorAll('.perm-row[data-flag]').forEach(line => {
     const input = line.querySelector('input');
     input.onchange = () => setFlag(line.dataset.flag, input.checked);
   });
@@ -71,7 +76,8 @@ function sync() {
   if (!root) return;
   const settings = state.settings;
   let active = 0;
-  root.querySelectorAll('.perm-row').forEach(line => {
+  root.querySelector('.perm-lock').hidden = !(settings?.use_public && mineOnly());
+  root.querySelectorAll('.perm-row[data-flag]').forEach(line => {
     const enabled = !!settings?.[line.dataset.flag];
     line.querySelector('input').checked = enabled;
     line.classList.toggle('on', enabled);

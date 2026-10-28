@@ -109,5 +109,12 @@
   "renamed": "Node renamed.",
   "autostart_unsupported": "Start with the device: only on Windows and Android.",
   "autostart_shortcut_failed": "cannot create the startup shortcut: {error}",
-  "autostart_shortcut_description": "AIODOS, in the background"
+  "autostart_shortcut_description": "AIODOS, in the background",
+  "use_public": "Have my conversations computed by strangers",
+  "use_public_help": "In automatic mode, a machine on the public network can answer your conversations without knowing who you are: after your machines, or before {device} if it is twice as fast. Never your attachments; your documents only with your consent. “On my machines only”, in Permissions under the message box, keeps a conversation with you.",
+  "public_bigger_model": "Use a bigger model from the public network",
+  "public_bigger_model_help": "In automatic mode, a machine on the public network that has a bigger model than the chosen one (qwen3.5:9b rather than 0.8b) answers instead.",
+  "public_documents": "Send passages from my documents to the public network",
+  "public_documents_help": "When an answer relies on your libraries, the useful passages go with the conversation to the stranger's machine; never the conversation memory, nor the libraries kept on this machine. Without consent, such a conversation stays on your machines.",
+  "not_asked": "Not asked yet: the question will come up in a conversation, the first time."
 }
