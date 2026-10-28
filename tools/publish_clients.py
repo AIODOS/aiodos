@@ -36,7 +36,10 @@ OUT = ROOT / "build" / "clients"
 OTHERS = [Path(r"C:\_22eme ARKANE\PROJETS\PANDORA"), Path(r"C:\_22eme ARKANE\PROJETS\ARKLIGHT PC")]
 SPDX = "SPDX-License-Identifier: Apache-2.0"
 MIN_LINE = 40                 # une ligne plus courte se retrouve partout (imports, accolades)
-SKIP_DIRS = {"node_modules", ".git", "__pycache__", "dist", "build", ".venv", "venv"}
+# aiodos_client : la copie fidèle du client que PANDORA embarque (tools/update_aiodos_client.py
+# chez lui) va d'AIODOS vers PANDORA ; la lire ferait prendre chaque ligne pour un emprunt
+SKIP_DIRS = {"node_modules", ".git", "__pycache__", "dist", "build", ".venv", "venv",
+             "aiodos_client", "vendor"}
 
 
 class Problem(Exception):
