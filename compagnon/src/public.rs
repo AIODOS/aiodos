@@ -7,22 +7,36 @@
 //! Un nœud public a sa **propre clé**, distincte de celle de la machine : ni ses amis ni
 //! les inconnus ne peuvent relier son identité publique à ses machines appairées. Son
 //! **point de terminaison est à part** aussi : il n'accepte que le groupe de discussion
-//! public (ALPN d'`iroh-gossip`), et le point de terminaison privé garde sa liste
-//! blanche. Il passe **par les relais seulement** : son adresse IP n'est pas donnée aux
-//! inconnus (le relais la voit). Limite connue (relecture du 20/10) : Iroh joint le relais
-//! qu'un autre nœud annonce, et un inconnu qui fait tourner son propre relais verrait donc
-//! l'adresse IP de ce nœud ; le crochet de connexion d'Iroh 1.3 passe avant la recherche
-//! d'adresse, il ne permet pas de l'empêcher ici. Sans relais (essais en local), direct.
+//! public (ALPN d'`iroh-gossip`) et, depuis le 28/10/2026, les conversations que des
+//! inconnus lui confient (`PUBLIC_ALPN`, de toute clé, en entrée seulement : cf.
+//! public_serve.rs) ; le point de terminaison privé garde sa liste blanche. Il passe **par
+//! les relais seulement** : son adresse IP n'est pas donnée aux inconnus (le relais la
+//! voit). Limite connue (relecture du 20/10) : Iroh joint le relais qu'un autre nœud
+//! annonce, et un inconnu qui fait tourner son propre relais verrait donc l'adresse IP de
+//! ce nœud ; le crochet de connexion d'Iroh 1.3 passe avant la recherche d'adresse, il ne
+//! permet pas de l'empêcher ici. Le demandeur d'une conversation, lui, s'en garde : sa clé
+//! jetable ne joint un prêteur que par l'un de ses propres relais, adresse cherchée par le
+//! compagnon et non par Iroh (cf. public_ask.rs). Sans relais (essais en local), direct.
+//!
+//! Joint par sa seule clé : le nœud publie l'adresse de son relais (jamais ses adresses IP,
+//! filtre par défaut d'Iroh) dans l'annuaire DNS de n0 (pkarr) et dans la DHT Mainline,
+//! selon `--directory` ; c'est ainsi que le groupe de discussion rejoint les clés trouvées
+//! par le rendez-vous, et que la clé jetable d'un demandeur le trouve (cf. public_ask.rs).
 //!
 //! Le nœud trouve quelques autres clés par la DHT (rendezvous.rs), rejoint le sujet
 //! « aiodos/public/1 » du groupe de discussion, et y diffuse son profil signé chaque
 //! minute (public_profile.rs) ; il garde en mémoire les profils reçus depuis moins de
-//! 5 minutes.
+//! 5 minutes. Les conversations ne sont relayées à AIODOS que tant que le nœud tourne
+//! (réglage « Rejoindre le réseau public ») et que son profil dit qu'il prête (`lends`).
 
 use std::{
     collections::{BTreeSet, HashMap},
+    net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -30,7 +44,10 @@ use anyhow::{Context, Result, bail};
 use iroh::{
     Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey, TransportAddr,
     address_lookup::{DnsAddressLookup, MemoryLookup, PkarrPublisher, PkarrResolver},
-    endpoint::{AfterHandshakeOutcome, BeforeConnectOutcome, Connection, EndpointHooks, PortmapperConfig, presets},
+    endpoint::{
+        AfterHandshakeOutcome, BeforeConnectOutcome, Connection, EndpointHooks, PortmapperConfig,
+        QuicTransportConfig, Side, VarInt, presets,
+    },
     protocol::Router,
 };
 use iroh_gossip::{
@@ -47,10 +64,11 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use crate::{
-    close,
+    PUBLIC_ALPN, close,
     config::{Config, Directory, Relays},
     dns, identity,
     public_profile::{self, MAX_MESSAGE, Profile},
+    public_serve::{self, Limits},
     rendezvous,
 };
 
@@ -117,9 +135,18 @@ pub struct Public {
     data_dir: PathBuf,
     relays: Relays,
     directory: Directory,
-    bind: Option<std::net::SocketAddr>,
+    bind: Option<SocketAddr>,
     dht_bootstrap: Option<Vec<String>>,
     lookup: Option<MemoryLookup>,
+    /// Serveur réseau local d'AIODOS, qui reçoit aussi les conversations des inconnus.
+    forward: SocketAddr,
+    /// Réponse qu'un inconnu ne lit plus depuis ce temps : flux coupé.
+    response_stall: Duration,
+    /// Le profil dit que cette machine prête aux inconnus (sinon 503 `not_lending`).
+    lends: Arc<AtomicBool>,
+    /// Bornes des conversations servies aux inconnus, gardées d'une session à l'autre (en
+    /// mémoire seulement).
+    limits: Limits,
     state: Arc<Mutex<State>>,
     session: tokio::sync::Mutex<Option<Session>>,
 }
@@ -133,6 +160,10 @@ impl Public {
             bind: config.bind,
             dht_bootstrap: config.public_dht_bootstrap.clone(),
             lookup: config.public_lookup.clone(),
+            forward: config.forward,
+            response_stall: config.response_stall,
+            lends: Arc::new(AtomicBool::new(false)),
+            limits: Limits::default(),
             state: Arc::new(Mutex::new(State::default())),
             session: tokio::sync::Mutex::new(None),
         }
@@ -141,6 +172,7 @@ impl Public {
     /// Démarre, arrête, ou met à jour le profil. → l'état (cf. `snapshot`).
     pub async fn configure(&self, wanted: Wanted) -> Value {
         let profile = wanted.profile.clean();
+        self.lends.store(profile.lends, Ordering::SeqCst);
         let changed = {
             let mut state = self.state.lock().expect("état du réseau public");
             let changed = state.profile != profile;
@@ -181,7 +213,9 @@ impl Public {
         self.snapshot()
     }
 
-    /// État pour AIODOS : la clé publique du nœud, ses voisins, les nœuds vus.
+    /// État pour AIODOS : la clé publique du nœud, ses voisins, les nœuds vus (avec leurs
+    /// places libres et leur vitesse, `null` si leur profil ne les dit pas), et les
+    /// conversations servies aux inconnus.
     pub fn snapshot(&self) -> Value {
         let state = self.state.lock().expect("état du réseau public");
         let mut nodes: Vec<(&EndpointId, &Seen)> =
@@ -196,8 +230,11 @@ impl Public {
                 "version": seen.profile.version,
                 "models": seen.profile.models,
                 "lends": seen.profile.lends,
+                "free": seen.profile.free,
+                "tps": seen.profile.tps,
                 "seen_s": seen.at.elapsed().as_secs(),
             })).collect::<Vec<_>>(),
+            "served": self.limits.snapshot(),
             "rendezvous": {
                 "announced_at": state.announced_at,
                 "found": state.found,
@@ -222,14 +259,33 @@ impl Public {
         let endpoint = self.bind_endpoint(secret.clone()).await?;
         let id = endpoint.id();
         if let Some(lookup) = &self.lookup {
-            // Essais en local : chaque nœud dit où le joindre directement
+            // Essais en local : chaque nœud dit où le joindre, en direct ou par ses relais
+            // (comme l'annuaire de n0 le dirait de son relais)
+            let relays = match &self.relays {
+                Relays::Custom(urls) => urls.clone(),
+                _ => Vec::new(),
+            };
             lookup.add_endpoint_info(EndpointAddr {
                 id,
-                addrs: endpoint.bound_sockets().into_iter().map(TransportAddr::Ip).collect(),
+                addrs: endpoint
+                    .bound_sockets()
+                    .into_iter()
+                    .map(TransportAddr::Ip)
+                    .chain(relays.into_iter().map(TransportAddr::Relay))
+                    .collect(),
             });
         }
         let gossip = Gossip::builder().max_message_size(MAX_MESSAGE).spawn(endpoint.clone());
-        let router = Router::builder(endpoint).accept(GOSSIP_ALPN, gossip.clone()).spawn();
+        let serve = public_serve::Serve::new(
+            self.forward,
+            self.response_stall,
+            self.lends.clone(),
+            self.limits.clone(),
+        );
+        let router = Router::builder(endpoint)
+            .accept(GOSSIP_ALPN, gossip.clone())
+            .accept(PUBLIC_ALPN, serve)
+            .spawn();
         let mut dht = Dht::builder();
         if let Some(bootstrap) = &self.dht_bootstrap {
             dht.bootstrap(bootstrap);
@@ -261,10 +317,17 @@ impl Public {
             Relays::Custom(urls) => RelayMode::custom(urls.iter().cloned()),
             Relays::Disabled => RelayMode::Disabled,
         };
+        // Flux bidirectionnels qu'un inconnu peut ouvrir en même temps sur une connexion :
+        // ceux d'une conversation (cf. public_serve.rs) ; le groupe de discussion n'en ouvre
+        // aucun (flux à sens unique, laissés aux valeurs d'Iroh)
+        let transport = QuicTransportConfig::builder()
+            .max_concurrent_bidi_streams(VarInt::from_u32(public_serve::MAX_STREAMS_PER_CONNECTION as u32))
+            .build();
         let mut builder = Endpoint::builder(presets::Minimal)
             .secret_key(secret)
-            .alpns(vec![GOSSIP_ALPN.to_vec()])
+            .alpns(vec![GOSSIP_ALPN.to_vec(), PUBLIC_ALPN.to_vec()])
             .relay_mode(relay_mode)
+            .transport_config(transport)
             .portmapper_config(PortmapperConfig::Disabled)
             .hooks(PublicGate);
         if self.directory.n0_dns {
@@ -299,9 +362,17 @@ async fn stop(session: Session) {
     let _ = tokio::time::timeout(Duration::from_secs(3), session.router.shutdown()).await;
 }
 
-/// Le point de terminaison public n'accepte que le groupe de discussion public.
+/// Le point de terminaison public n'accepte que le groupe de discussion public, dans les
+/// deux sens, et les conversations des inconnus (`PUBLIC_ALPN`), de toute clé, en entrée
+/// seulement : ce nœud ne demande jamais rien lui-même (le demandeur a sa clé jetable, cf.
+/// public_ask.rs), sa clé publique n'est jamais celle qui demande.
 #[derive(Debug)]
 struct PublicGate;
+
+/// Ce que la porte du nœud public laisse passer : ALPN, et sens de la connexion.
+fn gate_allows(alpn: &[u8], side: Side) -> bool {
+    alpn == GOSSIP_ALPN || (alpn == PUBLIC_ALPN && side == Side::Server)
+}
 
 impl EndpointHooks for PublicGate {
     async fn before_connect<'a>(
@@ -309,7 +380,7 @@ impl EndpointHooks for PublicGate {
         _remote_addr: &'a iroh::EndpointAddr,
         alpn: &'a [u8],
     ) -> BeforeConnectOutcome {
-        if alpn == GOSSIP_ALPN {
+        if gate_allows(alpn, Side::Client) {
             BeforeConnectOutcome::Accept
         } else {
             BeforeConnectOutcome::Reject
@@ -317,7 +388,7 @@ impl EndpointHooks for PublicGate {
     }
 
     async fn after_handshake<'a>(&'a self, conn: &'a Connection) -> AfterHandshakeOutcome {
-        if conn.alpn() == GOSSIP_ALPN {
+        if gate_allows(conn.alpn(), conn.side()) {
             AfterHandshakeOutcome::Accept
         } else {
             AfterHandshakeOutcome::Reject { error_code: close::REFUSED.into(), reason: b"refused".to_vec() }

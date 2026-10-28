@@ -32,10 +32,7 @@ use hyper::{
     body::{Body as HttpBody, Frame, SizeHint},
     header::CONTENT_LENGTH,
 };
-use tokio::{
-    sync::OwnedSemaphorePermit,
-    time::{Instant, Sleep},
-};
+use tokio::time::{Instant, Sleep};
 
 use crate::reply::{self, Body, BoxError};
 
@@ -99,8 +96,10 @@ where
 /// La réponse relayée, qui rend la place de la machine (cf. pool::relay_slot) quand elle
 /// est entièrement renvoyée ou que le flux est abandonné, et note son avancement
 /// (`progress`, cf. inbound.rs) : une machine ne garde pas une place en ne lisant jamais
-/// la réponse.
-pub fn guarded(permit: OwnedSemaphorePermit, progress: Arc<Progress>, body: Body) -> Body {
+/// la réponse. La place est une `OwnedSemaphorePermit` entre machines appairées, l'entrée
+/// comptée d'un inconnu sur le réseau public (cf. public_serve.rs), ou une conversation en
+/// cours chez le demandeur (cf. public_ask.rs) : rendue quand elle est lâchée.
+pub fn guarded<P: Send + Unpin + 'static>(permit: P, progress: Arc<Progress>, body: Body) -> Body {
     reply::boxed(Guarded { inner: body, progress, _permit: permit })
 }
 
@@ -249,13 +248,13 @@ impl HttpBody for Watched {
 }
 
 /// Corps de réponse qui tient une place (pool::relay_slot) jusqu'à sa fin.
-struct Guarded {
+struct Guarded<P> {
     inner: Body,
     progress: Arc<Progress>,
-    _permit: OwnedSemaphorePermit,
+    _permit: P,
 }
 
-impl HttpBody for Guarded {
+impl<P: Unpin> HttpBody for Guarded<P> {
     type Data = Bytes;
     type Error = BoxError;
 

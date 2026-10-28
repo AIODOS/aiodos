@@ -24,12 +24,19 @@ pub struct QuicIo {
     send: SendStream,
     recv: RecvStream,
     finished: bool,
-    _activity: Activity,
+    _activity: Option<Activity>,
 }
 
 impl QuicIo {
+    /// Flux d'une connexion du pool, compté dans son activité (cf. pool.rs).
     pub fn new(send: SendStream, recv: RecvStream, activity: Activity) -> Self {
-        QuicIo { send, recv, finished: false, _activity: activity }
+        QuicIo { send, recv, finished: false, _activity: Some(activity) }
+    }
+
+    /// Flux d'une connexion hors du pool (réseau public, cf. public_serve.rs et
+    /// public_ask.rs), qui compte ses flux elle-même.
+    pub fn bare(send: SendStream, recv: RecvStream) -> Self {
+        QuicIo { send, recv, finished: false, _activity: None }
     }
 }
 

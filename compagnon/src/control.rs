@@ -20,6 +20,9 @@
 //!   gardé) ; `DELETE /net/v1/tunnels/<port>` le ferme
 //! - `GET  /net/v1/public`   : réseau public (clé du nœud, voisins, nœuds vus) ; `PUT` le
 //!   rejoint ou le quitte, avec le profil à diffuser (cf. public.rs)
+//! - `POST /net/v1/public/ask/<clé>/public/v1/…` : conversation confiée au nœud public
+//!   `<clé>`, par la clé jetable de la conversation `X-Aiodos-Conversation` ; réponse en
+//!   flux (cf. public_ask.rs)
 
 use std::{
     convert::Infallible,
@@ -49,6 +52,7 @@ use crate::{
     outbound,
     pool::Pool,
     public::{Public, Wanted},
+    public_ask::{self, Asker},
     reply::{self, Body},
     status, tunnel,
 };
@@ -65,6 +69,8 @@ pub struct Ctx {
     pub started: Instant,
     pub network_changes: Arc<AtomicU64>,
     pub public: Arc<Public>,
+    /// Conversations confiées au réseau public, une clé jetable chacune.
+    pub asker: Arc<Asker>,
 }
 
 /// Sert l'API locale jusqu'à l'arrêt du compagnon.
@@ -125,6 +131,9 @@ async fn route(ctx: &Ctx, ticket: &Ticket, req: Request<Incoming>) -> Response<B
         let tail = format!("/{tail}{query}");
         let target = target.to_string();
         return outbound::proxy(&ctx.pool, req, &target, &tail).await;
+    }
+    if let Some(rest) = path.strip_prefix(public_ask::ROUTE) {
+        return ctx.asker.ask(req, rest).await;
     }
     match (req.method(), path.as_str()) {
         (&Method::GET, "/net/v1/status") => reply::json(StatusCode::OK, status::snapshot(ctx)),

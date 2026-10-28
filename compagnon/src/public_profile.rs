@@ -6,13 +6,22 @@
 //! clé publique du nœud : le groupe de discussion relaie les messages de proche en
 //! proche, et la machine qui en remet un n'en est pas l'auteur. Un profil trop vieux, ou
 //! daté du futur, est refusé (un ancien message rejoué ne fait pas revivre un nœud).
+//!
+//! Le 28/10/2026 (réseau public qui calcule, docs/conception/reseau-public-calcul.md § 3) :
+//! deux champs **facultatifs**, `free` (places de conversation libres) et `tps` (vitesse
+//! mesurée, en jetons par seconde), pour que le demandeur choisisse une machine. Absents,
+//! ils ne sont pas écrits : un nœud d'avant les ignore (champs inconnus, le profil reste lu
+//! et sa signature porte sur le texte tel quel), et un profil d'avant se lit encore (`None`).
+//! Le profil signé tient toujours dans un message (4 Kio) : au besoin, les derniers modèles
+//! de la liste sont laissés de côté.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use bytes::Bytes;
 use iroh::{EndpointId, SecretKey, Signature};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use tracing::debug;
 
 /// Taille maximale d'un message du groupe de discussion public.
 pub const MAX_MESSAGE: usize = 4096;
@@ -31,6 +40,28 @@ pub struct Profile {
     pub models: Vec<String>,
     #[serde(default)]
     pub lends: bool,
+    /// Places de conversation libres en ce moment (0 à 255), si AIODOS les dit.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "free_places")]
+    pub free: Option<u8>,
+    /// Vitesse mesurée, en jetons par seconde (0 à 65535), si AIODOS la dit.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "tokens_per_second")]
+    pub tps: Option<u16>,
+}
+
+/// Un nombre JSON quelconque (entier ou non, négatif, trop grand) ramené dans `0..=max` et
+/// arrondi : AIODOS peut donner une vitesse mesurée à virgule, et un nœud d'une autre
+/// version un nombre hors bornes, sans que tout le profil soit refusé pour autant.
+fn clamped<'de, D: Deserializer<'de>>(deserializer: D, max: f64) -> Result<Option<f64>, D::Error> {
+    let value = Option::<f64>::deserialize(deserializer)?;
+    Ok(value.filter(|v| v.is_finite()).map(|v| v.round().clamp(0.0, max)))
+}
+
+fn free_places<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u8>, D::Error> {
+    Ok(clamped(deserializer, f64::from(u8::MAX))?.map(|v| v as u8))
+}
+
+fn tokens_per_second<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<u16>, D::Error> {
+    Ok(clamped(deserializer, f64::from(u16::MAX))?.map(|v| v as u16))
 }
 
 impl Profile {
@@ -73,21 +104,26 @@ fn seconds(now: SystemTime) -> u64 {
     now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
-/// Le message à diffuser pour ce profil, signé par la clé publique du nœud.
+/// Le message à diffuser pour ce profil, signé par la clé publique du nœud. Des noms de
+/// modèles longs, en caractères hors ASCII ou pleins de guillemets (échappés deux fois :
+/// dans le corps, puis dans le message) dépasseraient les 4 Kio : les derniers modèles de
+/// la liste sont alors laissés de côté, plutôt que de ne plus rien diffuser.
 pub fn seal(secret: &SecretKey, profile: &Profile, now: SystemTime) -> Result<Bytes> {
-    let body = Body {
-        v: 1,
-        key: secret.public().to_string(),
-        ts: seconds(now),
-        profile: profile.clone().clean(),
-    };
-    let text = serde_json::to_string(&body)?;
-    let signature = secret.sign(text.as_bytes());
-    let wire = serde_json::to_vec(&Wire { p: text, s: hex(&signature.to_bytes()) })?;
-    if wire.len() > MAX_MESSAGE {
-        bail!("profil public trop long");
+    let mut profile = profile.clone().clean();
+    loop {
+        let body = Body { v: 1, key: secret.public().to_string(), ts: seconds(now), profile };
+        let text = serde_json::to_string(&body)?;
+        let signature = secret.sign(text.as_bytes());
+        let wire = serde_json::to_vec(&Wire { p: text, s: hex(&signature.to_bytes()) })?;
+        if wire.len() <= MAX_MESSAGE {
+            return Ok(wire.into());
+        }
+        profile = body.profile;
+        if profile.models.pop().is_none() {
+            bail!("profil public trop long");
+        }
+        debug!("Profil public trop long : un modèle laissé de côté");
     }
-    Ok(wire.into())
 }
 
 /// Un profil reçu : sa signature, sa date et ses bornes vérifiées. → (auteur, date, profil).
@@ -131,7 +167,108 @@ mod tests {
     use super::*;
 
     fn profile() -> Profile {
-        Profile { version: "2.1.0".into(), models: vec!["embeddinggemma".into()], lends: true }
+        Profile {
+            version: "2.1.0".into(),
+            models: vec!["embeddinggemma".into()],
+            lends: true,
+            ..Profile::default()
+        }
+    }
+
+    /// Le message tel qu'un nœud d'une version d'avant le 28/10 le signait.
+    fn old_message(secret: &SecretKey, now: SystemTime) -> Vec<u8> {
+        let text = serde_json::json!({
+            "v": 1, "key": secret.public().to_string(), "ts": seconds(now),
+            "version": "2.0.9", "models": ["qwen3.5:9b"], "lends": true,
+        })
+        .to_string();
+        let signature = hex(&secret.sign(text.as_bytes()).to_bytes());
+        serde_json::to_vec(&Wire { p: text, s: signature }).unwrap()
+    }
+
+    /// Profil tel qu'un nœud d'avant le 28/10 le lit.
+    #[derive(Deserialize)]
+    struct OldProfile {
+        #[serde(default)]
+        models: Vec<String>,
+        #[serde(default)]
+        lends: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct OldBody {
+        v: u8,
+        #[serde(flatten)]
+        profile: OldProfile,
+    }
+
+    #[test]
+    fn free_places_and_speed_travel_signed_with_the_rest() {
+        let secret = SecretKey::generate();
+        let now = SystemTime::now();
+        let busy = Profile { free: Some(2), tps: Some(41), ..profile() };
+        let message = seal(&secret, &busy, now).unwrap();
+        let (_, _, got) = open(&message, now).unwrap();
+        assert_eq!((got.free, got.tps), (Some(2), Some(41)));
+        // Changer la vitesse annoncée sans la clé : la signature ne correspond plus
+        let mut wire: Wire = serde_json::from_slice(&message).unwrap();
+        wire.p = wire.p.replace("\"tps\":41", "\"tps\":4100");
+        assert!(open(&serde_json::to_vec(&wire).unwrap(), now).is_err());
+    }
+
+    #[test]
+    fn old_and_new_profiles_still_read_each_other() {
+        let secret = SecretKey::generate();
+        let now = SystemTime::now();
+        // Un profil d'avant (sans `free` ni `tps`) se lit encore : rien n'est inventé
+        let (author, _, got) = open(&old_message(&secret, now), now).unwrap();
+        assert_eq!(author, secret.public());
+        assert_eq!((got.free, got.tps), (None, None));
+        assert_eq!(got.models, vec!["qwen3.5:9b".to_string()]);
+        // Un nœud d'avant lit un profil d'aujourd'hui en ignorant les nouveaux champs
+        let message = seal(&secret, &Profile { free: Some(1), tps: Some(30), ..profile() }, now).unwrap();
+        let wire: Wire = serde_json::from_slice(&message).unwrap();
+        let old: OldBody = serde_json::from_str(&wire.p).unwrap();
+        assert_eq!(old.v, 1);
+        assert!(old.profile.lends);
+        assert_eq!(old.profile.models, vec!["embeddinggemma".to_string()]);
+        // Sans ces champs, le profil d'aujourd'hui s'écrit comme celui d'avant
+        assert!(!serde_json::to_string(&profile()).unwrap().contains("free"));
+    }
+
+    #[test]
+    fn free_places_and_speed_are_clamped_not_refused() {
+        let read = |text: &str| serde_json::from_str::<Profile>(text).unwrap();
+        let got = read(r#"{"free": 300, "tps": 12.6}"#);
+        assert_eq!((got.free, got.tps), (Some(255), Some(13)));
+        let got = read(r#"{"free": -3, "tps": 1e9}"#);
+        assert_eq!((got.free, got.tps), (Some(0), Some(u16::MAX)));
+        let got = read(r#"{"free": null}"#);
+        assert_eq!((got.free, got.tps), (None, None));
+        assert!(serde_json::from_str::<Profile>(r#"{"free": "beaucoup"}"#).is_err());
+        // Tel qu'AIODOS l'envoie (`PUT /net/v1/public`), à côté de `enabled`
+        let wanted: crate::public::Wanted =
+            serde_json::from_str(r#"{"enabled": true, "lends": true, "free": 1, "tps": 25}"#).unwrap();
+        assert_eq!((wanted.profile.free, wanted.profile.tps), (Some(1), Some(25)));
+    }
+
+    #[test]
+    fn a_profile_full_of_long_model_names_still_fits_in_a_message() {
+        // 24 noms de 64 guillemets : échappés deux fois, bien plus de 4 Kio
+        let full = Profile {
+            models: (0..MAX_MODELS).map(|i| format!("{i:02}{}", "\"".repeat(62))).collect(),
+            free: Some(3),
+            tps: Some(65535),
+            ..profile()
+        };
+        let secret = SecretKey::generate();
+        let now = SystemTime::now();
+        let message = seal(&secret, &full, now).unwrap();
+        assert!(message.len() <= MAX_MESSAGE);
+        let (_, _, got) = open(&message, now).unwrap();
+        assert!(!got.models.is_empty() && got.models.len() < MAX_MODELS, "{}", got.models.len());
+        assert_eq!(got.models[0], full.models[0], "les premiers modèles restent");
+        assert_eq!((got.free, got.tps), (Some(3), Some(65535)));
     }
 
     #[test]
@@ -168,6 +305,7 @@ mod tests {
             version: "x".repeat(500),
             models: (0..100).map(|i| format!("modèle-{i}\n")).collect(),
             lends: false,
+            ..Profile::default()
         }
         .clean();
         assert_eq!(long.version.len(), MAX_TEXT);

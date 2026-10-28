@@ -21,6 +21,7 @@ use crate::{
     endpoint, identity, inbound, netmon,
     pool::Pool,
     public::Public,
+    public_ask::Asker,
 };
 
 /// Délai laissé aux autres machines pour prendre acte de la fermeture des connexions.
@@ -38,6 +39,7 @@ pub struct Running {
     pub endpoint: Endpoint,
     pool: Arc<Pool>,
     public: Arc<Public>,
+    asker: Arc<Asker>,
     tasks: JoinSet<()>,
 }
 
@@ -67,6 +69,7 @@ pub async fn start(config: Config) -> Result<Running> {
     );
     let network_changes = Arc::new(AtomicU64::new(0));
     let public = Arc::new(Public::new(&config));
+    let asker = Arc::new(Asker::new(&config));
     info!(
         "Compagnon {} : clé {} ({}), relais {}{}, annuaire {}, API locale {listen}, vers {}",
         env!("CARGO_PKG_VERSION"),
@@ -86,11 +89,13 @@ pub async fn start(config: Config) -> Result<Running> {
         started: Instant::now(),
         network_changes: network_changes.clone(),
         public: public.clone(),
+        asker: asker.clone(),
     });
     let mut tasks = JoinSet::new();
     tasks.spawn(inbound::accept_loop(pool.clone()));
     tasks.spawn(control::serve(listener, ctx));
     tasks.spawn(netmon::watch(endpoint.clone(), network_changes, shutdown.clone()));
+    tasks.spawn(asker.clone().sweep_loop(shutdown.clone()));
     pool.spawn_sweeper();
     Ok(Running {
         id: endpoint.id(),
@@ -100,6 +105,7 @@ pub async fn start(config: Config) -> Result<Running> {
         endpoint,
         pool,
         public,
+        asker,
         tasks,
     })
 }
@@ -115,6 +121,7 @@ impl Running {
     pub async fn stop(mut self) {
         self.pool.shutdown.cancel();
         self.public.shutdown().await;
+        self.asker.shutdown().await;
         self.pool.close_all();
         let _ = tokio::time::timeout(CLOSE_TIMEOUT, self.endpoint.close()).await;
         self.tasks.abort_all();

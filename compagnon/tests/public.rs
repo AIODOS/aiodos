@@ -34,7 +34,9 @@ async fn public(node: &Node) -> Value {
 }
 
 async fn join(node: &Node, models: &[&str]) -> String {
-    let wanted = json!({ "enabled": true, "version": "2.1.0", "models": models, "lends": true });
+    let wanted = json!({
+        "enabled": true, "version": "2.1.0", "models": models, "lends": true, "free": 2, "tps": 41.4,
+    });
     let (status, body) = call(node, Method::PUT, "/net/v1/public", wanted).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body["error"].is_null(), "{body}");
@@ -78,6 +80,8 @@ async fn two_public_nodes_meet_through_the_dht_and_a_third_stays_silent() {
     assert_eq!(seen["models"], json!(["qwen3.5:9b"]));
     assert_eq!(seen["version"], "2.1.0");
     assert_eq!(seen["lends"], true);
+    // Places libres et vitesse : signées avec le reste, et lues par les autres
+    assert_eq!((seen["free"].clone(), seen["tps"].clone()), (json!(2), json!(41)));
     assert_eq!(sees(&b, &ka).await["models"], json!(["embeddinggemma"]));
     assert!(public(&a).await["neighbors"].as_u64().unwrap() >= 1);
 

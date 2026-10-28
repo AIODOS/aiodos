@@ -74,8 +74,9 @@ impl hyper::body::Body for Zeros {
 type AppBody = http_body_util::combinators::UnsyncBoxBody<Bytes, Infallible>;
 
 /// Faux serveur réseau d'AIODOS :
-/// - `/p2p/v1/echo` renvoie le chemin, le corps et les en-têtes vus ;
-/// - `/p2p/v1/stream/slow` répond « un », puis « deux » quand le test le permet ;
+/// - `/p2p/v1/echo` (et tout autre chemin) renvoie le chemin, le corps et les en-têtes vus ;
+/// - `/p2p/v1/stream/slow` et `/public/v1/stream/slow` répondent « un », puis « deux » quand
+///   le test le permet ;
 /// - `/p2p/v1/stream/big` répond 256 Mio, faits à mesure qu'ils sont lus.
 pub async fn fake_app(release: Arc<Notify>) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -102,7 +103,14 @@ async fn answer(req: Request<Incoming>, release: Arc<Notify>) -> Response<AppBod
         req.headers().get(name).map(|v| v.to_str().unwrap_or("?").to_string())
     };
     let (peer, token) = (header("x-aiodos-peer"), header("x-aiodos-net-token"));
-    if path == "/p2p/v1/stream/slow" {
+    let seen = json!({
+        "public": header("x-aiodos-public"),
+        "conversation": header("x-aiodos-conversation"),
+        "user_agent": header("user-agent"),
+        "forwarded_for": header("x-forwarded-for"),
+        "content_type": header("content-type"),
+    });
+    if path == "/p2p/v1/stream/slow" || path == "/public/v1/stream/slow" {
         let (tx, rx) = mpsc::channel(4);
         tokio::spawn(async move {
             tx.send(Bytes::from_static(b"un\n")).await.unwrap();
@@ -115,12 +123,13 @@ async fn answer(req: Request<Incoming>, release: Arc<Notify>) -> Response<AppBod
         return Response::new(Zeros(256 << 20).boxed_unsync());
     }
     let body = req.into_body().collect().await.unwrap().to_bytes();
-    let reply = json!({
+    let mut reply = json!({
         "path": path,
         "peer": peer,
         "token": token,
         "body": String::from_utf8_lossy(&body),
     });
+    reply.as_object_mut().unwrap().extend(seen.as_object().unwrap().clone());
     Response::new(Full::new(Bytes::from(reply.to_string())).boxed_unsync())
 }
 

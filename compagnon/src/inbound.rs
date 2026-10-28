@@ -35,7 +35,7 @@ use tokio::net::TcpStream;
 use tracing::{debug, info};
 
 use crate::{
-    PEER_HEADER, TOKEN_HEADER, close,
+    PEER_HEADER, PUBLIC_HEADER, TOKEN_HEADER, close,
     pool::{Pool, Tracked},
     relay_body::{self, Progress},
     reply::{self, Body, BoxError},
@@ -166,6 +166,8 @@ async fn forward(
     let headers = req.headers_mut();
     reply::strip_hop_by_hop(headers);
     headers.remove(TOKEN_HEADER);
+    // Un ami ne passe pas non plus pour un inconnu du réseau public (cf. public_serve.rs)
+    headers.remove(PUBLIC_HEADER);
     headers.insert(
         PEER_HEADER,
         HeaderValue::from_str(&peer.to_string()).expect("clé en hexadécimal"),
@@ -239,7 +241,9 @@ fn too_large(max: usize) -> Response<Body> {
     response
 }
 
-async fn send_local(addr: SocketAddr, req: Request<Body>) -> Result<Response<Incoming>, BoxError> {
+/// Envoie une requête au serveur réseau local d'AIODOS (aussi pour le réseau public, cf.
+/// public_serve.rs).
+pub(crate) async fn send_local(addr: SocketAddr, req: Request<Body>) -> Result<Response<Incoming>, BoxError> {
     let tcp = tokio::time::timeout(LOCAL_CONNECT_TIMEOUT, TcpStream::connect(addr)).await??;
     tcp.set_nodelay(true)?;
     let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(tcp)).await?;

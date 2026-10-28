@@ -198,8 +198,9 @@ Toutes les requêtes portent l'en-tête `X-Aiodos-Net-Token`.
 | `PUT /net/v1/peers` | remplace la liste blanche : `{"peers": [{"id": "<clé>", "addrs": ["ip:port"], "relays": ["https://…"]}, {"ticket": "endpoint…"}]}` ; les connexions des clés retirées sont fermées |
 | `GET /net/v1/ticket` | ticket Iroh à donner à une autre machine (clé, relais, adresses) ; il ne contient aucun secret et ne fait pas entrer dans la liste blanche à lui seul. Juste après le démarrage, il attend que le relais soit joint (4 s au plus après le démarrage) |
 | `POST /net/v1/shutdown` | arrêt propre |
-| `GET /net/v1/public` | réseau public (phase 3.0) : `enabled`, `key` (la clé publique du nœud, distincte de celle de la machine), `neighbors`, `nodes` (les nœuds publics vus depuis moins de 5 minutes : clé, version, modèles, prête ou non, `seen_s`), `rendezvous` (dernière inscription dans la DHT, clés trouvées, erreur) |
-| `PUT /net/v1/public` | rejoint ou quitte le réseau public, avec le profil à diffuser : `{"enabled": true, "version": "…", "models": ["…"], "lends": false}` ; désactivé tant qu'AIODOS ne le demande pas (docs/phase3-reseau-public.md) |
+| `GET /net/v1/public` | réseau public (phase 3.0) : `enabled`, `key` (la clé publique du nœud, distincte de celle de la machine), `neighbors`, `nodes` (les nœuds publics vus depuis moins de 5 minutes : clé, version, modèles, prête ou non, `free` et `tps` ou `null`, `seen_s`), `served` (conversations servies aux inconnus : `in_flight`, `relayed`, `refused`), `rendezvous` (dernière inscription dans la DHT, clés trouvées, erreur) |
+| `PUT /net/v1/public` | rejoint ou quitte le réseau public, avec le profil à diffuser : `{"enabled": true, "version": "…", "models": ["…"], "lends": false, "free": 1, "tps": 30}` (`free` : places de conversation libres, 0-255 ; `tps` : jetons par seconde, 0-65535 ; facultatifs, ramenés dans leurs bornes) ; désactivé tant qu'AIODOS ne le demande pas (docs/phase3-reseau-public.md). Tant qu'il tourne et que `lends` est vrai, le nœud public relaie à AIODOS les conversations des inconnus (`POST /public/v1/…`, en-tête `X-Aiodos-Public`, cf. plus bas) |
+| `POST /net/v1/public/ask/<clé>/public/v1/…` | conversation confiée au nœud public `<clé>` (hexadécimal), avec l'en-tête `X-Aiodos-Conversation` (16 à 64 caractères `A-Za-z0-9_-`) : une clé jetable par conversation, en relais seulement, oubliée 15 min après sa dernière requête (32 au plus). Réponse du prêteur en flux. Refus du compagnon : `{"error", "detail"}` avec 400 `conversation` ou `bad_key`, 404 `not_found`, 405 `method`, 413 `too_large`, 502 `unreachable` ou `interrupted`, 504 `timeout` ; du prêteur : 503 `busy` ou `not_lending` (docs/conception/reseau-public-calcul.md) |
 | `PUT /net/v1/exposed` | remplace la liste des services TCP locaux (127.0.0.1) ouverts à des machines nommées : `{"services": [{"name": "rpc-…", "port": 50123, "peers": ["<clé>"], "hold": true}]}`. 64 services au plus ; nom en minuscules, chiffres et tirets, 64 caractères au plus. `"hold": true` : le compagnon **tient** le service (cf. plus bas) ; refusé (400) si ce système ne dit pas quel programme se connecte. Tout est vérifié avant de changer quoi que ce soit. Réponse `{"ok": true, "exposed": <nombre>}` |
 | `POST /net/v1/tunnels` | port local (127.0.0.1) relié au service `name` de la machine `peer` : `{"peer": "<clé>", "name": "rpc-…", "await_owner": true, "max_connections": 4}`, ou `"owner_pid": <numéro>` si le programme est déjà connu. Avec l'un ou l'autre, le tunnel est **gardé** (cf. plus bas). `max_connections` : de 1 à 8 (8 par défaut). Réponse `{"port", "guarded", "max_connections"}`. Refus : 400 (clé, nom, `max_connections` ou `owner_pid` invalide), 403 (machine absente de la liste blanche), 501 (tunnel gardé demandé là où le système ne dit pas quel programme se connecte) |
 | `PUT /net/v1/tunnels/<port>` | `{"owner_pid": <numéro>}` : le seul programme dont ce tunnel gardé relaie les connexions, une fois pour toutes (le même numéro peut être redonné). 409 si le tunnel n'est pas gardé, ou s'il est déjà réservé à un autre programme ; 404 sans tunnel sur ce port |
@@ -257,6 +258,7 @@ joindrait s'en servirait. D'où deux gardes, une de chaque côté (audit du 20/1
 | `body-pace` | corps reçus d'une autre machine coupés sous un débit minimal, réponses jamais lues coupées | toujours |
 | `tunnel-owner` | tunnels gardés | si le système dit quel programme se connecte : Windows, Linux (pas macOS, ni un Android qui ferme `/proc/net` aux applis) |
 | `service-hold` | services tenus | comme `tunnel-owner` |
+| `public-ask` | conversations du réseau public : servies aux inconnus (`aiodos/public/1`), demandées par une clé jetable (`/net/v1/public/ask/…`) ; `free` et `tps` dans le profil public | toujours |
 
 AIODOS refuse d'emprunter une carte sans `tunnel-owner`, et d'en prêter une sans
 `service-usage` et `service-hold` : il ne demande jamais à un compagnon plus ancien ce
@@ -297,6 +299,11 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
 | Connexions en attente du contrôle de leur programme | 512, contrôlées par lots de 1024 au plus | `tunnel.rs` `MAX_CHECKING`, `MAX_BATCH` |
 | Attente du programme nommé | 30 s | `tunnel.rs` `OWNER_WAIT` |
 | Service tenu : connexions gardées par le compagnon ; table relue | 2 ; chaque seconde | `hold.rs` `KEPT`, `CHECK_EVERY` |
+| Réseau public, requêtes d'une même clé | 1 à la fois, 30 par heure ; 503 `busy` au-delà ; clé oubliée après 10 min sans requête | `public_serve.rs` `PER_KEY_IN_FLIGHT`, `PER_KEY_PER_HOUR`, `FORGET_KEY_AFTER` |
+| Réseau public, requêtes de tout le public | 2 à la fois, 120 par minute ; 503 `busy` au-delà | `public_serve.rs` `GLOBAL_IN_FLIGHT`, `GLOBAL_PER_MINUTE` |
+| Réseau public, requête d'un inconnu | `POST /public/v1/…` seulement (404 sinon) ; en-têtes en 10 s (16 Kio, 32 en-têtes) ; corps de 256 Kio lu en 30 s (8 lus à la fois) | `public_serve.rs` |
+| Réseau public, connexions d'inconnus | 32 (la plus anciennement inactive fermée au-delà), fermées après 2 min sans flux ; 2 flux à la fois chacune | `public_serve.rs` `MAX_CONNECTIONS`, `CONNECTION_IDLE`, `MAX_STREAMS_PER_CONNECTION` |
+| Réseau public, demandes de cette machine | une clé jetable par conversation, 32 au plus, oubliée après 15 min ; début de réponse attendu 120 s | `public_ask.rs` |
 
 ## Sécurité
 
@@ -313,6 +320,13 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
 - Le contenu des échanges est chiffré deux fois : par QUIC (TLS 1.3, clés éphémères) et
   par l'enveloppe d'AIODOS (clé de la paire). Un relais voit qui parle à qui, quand et
   combien, pas le contenu.
+- Réseau public : le nœud public sert toute clé, mais seulement `POST /public/v1/…`, dans
+  les bornes plus haut, et AIODOS ne reçoit de l'appelant que le chemin, le corps,
+  `Content-Type`, `Accept` et sa vraie clé (`X-Aiodos-Public`) ; jamais `X-Aiodos-Peer`.
+  Pour demander, une clé jetable par conversation, en relais seulement, jamais écrite sur
+  disque : le prêteur lit la conversation, mais ne voit ni la clé ni l'adresse IP de la
+  machine qui demande. Pas d'enveloppe d'AIODOS ici : seul TLS d'Iroh protège le contenu
+  en route.
 - Reste à faire (cf. docs/phase2-internet.md et docs/securite.md) : protéger la clé de la
   machine (DPAPI sous Windows, étape 2.3) ; réserver des places à mes machines (le
   compagnon ne connaît pas le niveau de confiance des machines) ; une clé de compagnon qui
@@ -321,11 +335,13 @@ basses que celles d'AIODOS (`aiodos/network/body_limit.py`).
 ## Tests
 
 ```powershell
-cargo test                     # 40 essais unitaires ; à deux compagnons, relais coupés :
+cargo test                     # 57 essais unitaires ; à deux compagnons, relais coupés :
                                # tests/tunnel.rs (8), tests/services.rs (3) et
                                # tests/bornes.rs (14 : tunnel gardé sous une avalanche de
                                # connexions, service tenu, corps et places bornés, réponses
                                # non lues, API locale) ; tests/public.rs (2, réseau public) ;
+                               # tests/public_ask.rs (2 : conversation confiée à un inconnu,
+                               # en direct puis par un relais, et refusée par un autre) ;
                                # tests/relay_only.rs (3, par un relais lancé dans l'essai)
 ```
 
