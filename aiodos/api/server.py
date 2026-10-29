@@ -14,6 +14,8 @@ from aiodos.api.routes import (attachments, autostart, chat, cluster, comfy_crea
                                conversations, creations, engines, gateway, gateway_apps, i18n,
                                images, jobs, knowledge, legal, model_install, network, node,
                                system, updates)
+from aiodos.api.routes import lent                       # le travail fait pour d'autres
+from aiodos.api.routes import model_menu                 # le menu des modèles
 from aiodos.chat import attachments as chat_attachments
 from aiodos.engines import comfy_instance
 from aiodos.gateway import access_flow, apps, retention
@@ -25,6 +27,7 @@ from aiodos.jobs.executor import Executor
 from aiodos.jobs.kinds import reindex
 from aiodos.api.routes import library_folders           # dossiers suivis, modèle d'embeddings
 from aiodos.knowledge import embed_model, folder_watch
+from aiodos.network import lent_history
 from aiodos.network.manager import NetworkManager
 from aiodos.node import identity, keep_awake
 from aiodos.updates.service import UpdateService
@@ -62,6 +65,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
     @asynccontextmanager
     async def lifespan(app):
         bus.bind(asyncio.get_running_loop())
+        # Un calcul pour d'autres commence ou finit : la vue Tâches, « Pour d'autres », suit
+        lent_history.listen(bus.publish)
         node_id = await asyncio.to_thread(identity.node_id)
         executor = Executor(node_id, bus.publish, slots)
         app.state.executor = executor
@@ -101,6 +106,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         await app.state.network.shutdown()
         await executor.stop()
         await asyncio.to_thread(images_engine.stop)      # sd-server : mémoire rendue
+        lent_history.listen(None)
 
     app = FastAPI(title="AIODOS", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
@@ -112,6 +118,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         app.include_router(module.router)
     app.include_router(system.window_router)
     app.include_router(library_folders.router)
+    app.include_router(lent.router)
+    app.include_router(model_menu.router)
 
     css = render.pygments_css()
 

@@ -4,7 +4,9 @@ Le chat est la tâche interactive : il ne passe pas par la file, il démarre
 tout de suite et suspend les nouvelles unités GPU le temps de répondre (si le
 modèle tourne ici ; servi par une machine appairée, c'est elle qui suspend les siennes).
 En mode automatique (« auto:<modèle> »), la machine qui répond est choisie au moment
-d'envoyer (network/placement.py) ; l'événement « route » dit laquelle.
+d'envoyer (network/placement.py) ; l'événement « route » dit laquelle. « Automatique »
+(placement.BEST, « auto:best », le choix par défaut d'une nouvelle conversation) choisit aussi le
+modèle : le plus puissant disponible.
 La recherche web n'a lieu que si l'envoi la dit validée : même si l'interface était
 contournée, rien ne part sur le web sans accord.
 Une machine du réseau public peut répondre si la conversation le permet (chat/

@@ -7,16 +7,20 @@ a choisis, passe par ce PC le temps de la réponse, chiffré, et n'y est pas
 enregistré. Désactivé tant que l'utilisateur de ce PC ne l'a pas activé.
 
 Pendant la réponse, ce PC suspend ses propres unités GPU de fond, comme pour
-une conversation locale : l'interactif d'abord.
+une conversation locale : l'interactif d'abord. L'historique de la vue Tâches
+(network/lent_history.py) en garde une ligne sans le texte : pour quelle machine, le
+modèle, la durée, les jetons rendus, l'issue.
 
 La demande peut aussi porter (passerelle vers les autres outils, gateway/) des réglages
 d'échantillonnage (« options », seulement ceux de SAMPLING : un réglage de chargement
 comme num_ctx rechargerait le modèle ici) et « stats » : un dernier morceau donne alors le
 nombre de jetons. Une machine d'une version précédente ignore les deux.
 """
+import time
+
 from aiodos import settings
 from aiodos.i18n import t
-from aiodos.network import activity, lend_queue
+from aiodos.network import activity, lend_queue, lent_history
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
 
@@ -82,6 +86,11 @@ def chat(manager, sender, payload, stop):
     if payload.get("stats"):
         extra["stats"] = True
 
+    circle = lent_history.circle_of(sender)
+
+    def stopped() -> bool:                # stop peut manquer (appel direct, sans arrêt)
+        return stop is not None and stop.is_set()
+
     def answer():
         # Une à la fois ; mes machines, puis qui m'a le plus donné, passent d'abord
         # (lend_queue.py). En attendant, un signe de vie toutes les KEEPALIVE_S secondes :
@@ -91,14 +100,33 @@ def chat(manager, sender, payload, stop):
             while not lend_queue.wait(ticket, stop, tick=KEEPALIVE_S):
                 yield {"queued": lend_queue.position(ticket)}
             manager.executor.interactive_begin()
+            # L'historique de la vue Tâches : pour qui, le modèle, la durée, les jetons rendus
+            lent = lent_history.begin(lent_history.CHAT, circle, peer_id=sender, model=model)
+            began, tokens, counted = time.monotonic(), 0, None
             try:
                 with activity.chat("for", sender, stop):    # « répond à sa conversation »
                     for kind, text in ollama.chat_stream(model, messages, think=think,
                                                          stop=stop, **extra):
+                        if kind in ("content", "thinking"):
+                            tokens += 1
+                        elif kind == "stats" and isinstance(text, dict):
+                            counted = text.get("completion_tokens")
                         yield {kind: text}
+                if not stopped():
+                    produced = counted if isinstance(counted, int) and counted > 0 else tokens
+                    lent.end(lent_history.DONE, None, time.monotonic() - began,
+                             tokens=produced)
+            except Exception:
+                if not stopped():
+                    lent.end(lent_history.FAILED, "engine", time.monotonic() - began,
+                             tokens=tokens)
+                raise
             finally:
                 manager.executor.interactive_end()
+                # Sans fin dite plus haut : arrêtée en route (Stop, machine partie)
+                lent.end(lent_history.STOPPED, "left", time.monotonic() - began, tokens=tokens)
         except lend_queue.Busy:
+            lent_history.refused(lent_history.CHAT, circle, "busy", peer_id=sender, model=model)
             raise PeerError(t("lending.busy", name=manager.name())) from None
         except lend_queue.Cancelled:
             return                                       # elle est partie avant son tour

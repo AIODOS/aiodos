@@ -160,6 +160,21 @@ def test_a_video_made_like_sd_server_s_is_rewritten_without_its_tags():
     assert times == [round(i / FPS, 3) for i in range(FRAMES)]         # retimées à la cadence
 
 
+def test_a_video_with_its_sound_is_kept_as_a_webm_without_it():
+    """LTX-2.5 et MiniMax H3 : sd-server écrit leur son en PCM, que le WebM n'admet pas ;
+    libwebm marque alors le fichier « matroska » (examples/common/media_io.cpp, master-1027).
+    Il est lu, et seule sa piste vidéo reste, en WebM."""
+    sound = el(0xAE, uint(0xD7, 2) + uint(0x73C5, 7) + uint(0x83, 2)
+               + el(0x86, b"A_PCM/INT/LIT"))
+    made = sd_webm(doc="matroska", tracks=track() + sound)
+    # L'en-tête de libwebm, compact : sa marque dans les 64 premiers octets
+    assert generate.is_webm(bytes.fromhex("1a45dfa39f4286810142f7810142f2810442f381084282")
+                            + b"\x88matroska" + bytes(40))
+    clean = webm.check(made, SIDE, SIDE, FRAMES, FPS)
+    assert b"A_PCM" not in clean and b"matroska" not in clean and generate.is_webm(clean)
+    assert [p for _, p in frames_in(clean)] == list(vp8_frames(SIDE, SIDE, FRAMES))
+
+
 def test_the_segment_and_its_clusters_may_have_an_unknown_size():
     clean = webm.check(sd_webm(unknown=True), SIDE, SIDE, FRAMES, FPS)
     assert len(frames_in(clean)) == FRAMES
@@ -199,7 +214,7 @@ REFUSED_FILES = [
     ("autre taille", sd_webm(), (SIDE + 16, SIDE), FRAMES),
     ("moins d'images", sd_webm(frames=FRAMES - 4), (SIDE, SIDE), FRAMES),
     ("plus d'images", sd_webm(frames=FRAMES + 4), (SIDE, SIDE), FRAMES),
-    ("pas un WebM", sd_webm(doc="matroska"), (SIDE, SIDE), FRAMES),
+    ("ni WebM ni Matroska", sd_webm(doc="avi"), (SIDE, SIDE), FRAMES),
     ("deux pistes vidéo", sd_webm(tracks=track() + track(number=2)), (SIDE, SIDE), FRAMES),
     ("aucune piste vidéo", sd_webm(tracks=track(kind_=2)), (SIDE, SIDE), FRAMES),
     ("un autre codec", sd_webm(tracks=track(codec="V_MPEG4/ISO/AVC")), (SIDE, SIDE), FRAMES),
@@ -341,7 +356,8 @@ def test_the_same_settings_as_images():
     assert "lend_images_public" in settings.OPEN_FROM_THE_START
     assert public_video.MARKER == "image:" and public_video.MARKER in placement.RESERVED
     spec = catalog.model(MODEL)
-    assert public_video.lendable(MODEL) and not public_video.lendable("minimax-h3")
+    # MiniMax H3 aussi, malgré sa licence restrictive (décision de l'auteur du 29/10/2026)
+    assert public_video.lendable(MODEL) and public_video.lendable("minimax-h3")
     assert not public_video.lendable("z-image-turbo")
     assert all(public_video.fits(spec, w, h) for w, h, _ in spec["sizes"])     # ses formats
     assert all(public_video.frames_allowed(spec, n) for n, _ in spec["durations"])  # ses durées
@@ -386,7 +402,7 @@ def test_every_bound_is_checked_before_anything_is_taken(lender, monkeypatch):
     refused = [
         (ask(model="inconnu"), 404, "no_model"),
         (ask(model="z-image-turbo"), 404, "no_model"),         # une image : sa route à elle
-        (ask(model="minimax-h3"), 404, "no_model"),            # licence restrictive
+        (ask(model="minimax-h3"), 404, "no_model"),            # pas sur cette machine
         (ask(prompt="x" * (public_video.MAX_PROMPT + 1)), 413, "too_big"),
         (ask(negative="x" * (public_video.MAX_PROMPT + 1)), 413, "too_big"),
         (ask(init_image="data:image/png;base64,AAAA"), 413, "too_big"),
@@ -394,7 +410,7 @@ def test_every_bound_is_checked_before_anything_is_taken(lender, monkeypatch):
         (ask(fps=60), 413, "too_big"),                         # la cadence : celle du modèle
         (ask(width=300), 413, "too_big"),                      # pas un multiple de 16
         (ask(width=240), 413, "too_big"),                      # sous la borne du modèle
-        (ask(width=832, height=832), 413, "too_big"),          # plus de 832 × 480 pixels
+        (ask(width=832, height=832), 413, "too_big"),          # plus de 864 × 480 pixels
         (ask(frames=10), 413, "too_big"),                      # pas 4k + 1
         (ask(frames=85), 413, "too_big"),                      # plus de 5 s
         (ask(frames=161), 413, "too_big"),                     # permis ici, pas pour un inconnu
@@ -559,9 +575,12 @@ def test_the_public_profile_announces_the_lent_video_models(monkeypatch):
     assert public._models() == ["qwen3.5:9b"]                # rien de prêté (essais)
     settings.set_value("lend_images_public", True)
     assert public._models() == ["qwen3.5:9b", MARKED]
-    # Jamais un modèle à licence restrictive (MiniMax H3), même complet ici
+    # Un modèle à licence restrictive aussi (MiniMax H3, LTX-2.5), complet ici : décision de
+    # l'auteur du 29/10/2026 (qui le prête a un avertissement, api/routes/images.lend_warnings)
     monkeypatch.setattr(public_video, "_ready", lambda model: True)
-    assert public._models() == ["qwen3.5:9b", MARKED]
+    videos = [m for m, spec in catalog.MODELS.items() if spec.get("kind") == "video"]
+    assert public._models() == ["qwen3.5:9b"] + [public_video.MARKER + m for m in videos]
+    assert "image:minimax-h3" in public._models() and MARKED in public._models()
     assert all(len(public_video.MARKER + m) <= public.MAX_TEXT for m in catalog.MODELS)
 
 
@@ -603,7 +622,7 @@ def test_lenders_are_those_that_lend_this_video_model(companion, opened):
               node(OTHER, "image:z-image-turbo", tps=90),             # des images seulement
               node(THIRD, MARKED, free=0),                             # pas de place
               node("d4" * 32, MARKED, lends=False),                    # ne prête pas
-              node("e5" * 32, "image:minimax-h3", "video:" + MODEL),   # ni l'un ni l'autre
+              node("e5" * 32, "image:inconnu", "video:" + MODEL),      # ni l'un ni l'autre
               node("f6" * 32, MARKED, "image:z-image-turbo", tps=10))
     assert public_video_ask.offered_models() == [MODEL]
     assert public_video_ask.lenders(MODEL) == [(PC, MODEL), ("f6" * 32, MODEL)]
@@ -633,7 +652,7 @@ def test_the_request_stays_within_the_lender_bounds():
                         (params(width=832, height=832), "too_big"),
                         (params(prompt="x" * 2001), "too_big"),
                         (params(model="z-image-turbo"), "bad_request"),
-                        (params(model="minimax-h3"), "bad_request"),
+                        (params(model="inconnu"), "bad_request"),
                         (params(prompt=" "), "bad_request"), (params(frames="long"), "bad_request"),
                         (params(prompt=FORBIDDEN), "refused_content")):
         with pytest.raises(PublicError) as found:

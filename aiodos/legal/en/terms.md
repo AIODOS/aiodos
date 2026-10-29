@@ -1,6 +1,6 @@
 # AIODOS Terms of Use
 
-*Version 5, October 29, 2026*
+*Version 6, October 29, 2026*
 
 ## 1. Purpose
 
@@ -43,7 +43,10 @@ have their own terms:
 
 - Part of your requests can be computed by other machines: yours, your friends', those of
   the public network. They travel encrypted, but the machine that computes them has to read
-  them to process them. AIODOS is designed to keep nothing on the machine that computes; the
+  them to process them. AIODOS is designed to keep nothing of the request on the machine
+  that computes (its history, in the Tasks view, only notes the kind of computation, the
+  model, the size, the duration and, for a friend or one of its owner's machines, the name
+  of the machine that asks); the
   publisher cannot guarantee that another person's program has not been modified.
 - From the first launch, and until you turn it off: your machine joins the public network's
   directory (it announces its AIODOS version, the list of its models, whether it lends, its
@@ -75,10 +78,11 @@ have their own terms:
 - **Strangers' conversations on your machine** ("Lend my computing power to strangers'
   conversations"): your machine computes them within the limit of the "Power lent" (60% by
   default), never on battery, a phone only while charging and on Wi-Fi, and after your own
-  work, your machines and your friends. It keeps nothing, neither the conversation nor who
-  is asking, and does not show it to you: you don't choose and you don't see what it
-  computes. A stranger could therefore ask it for an illegal text: your machine would only
-  run a public model on it, without keeping any of it. Everyone remains responsible for
+  work, your machines and your friends. It keeps neither the conversation nor who is
+  asking, and does not show it to you: you don't choose and you don't see what it computes
+  (the Tasks view only keeps a line without content: the time, the model, the duration, the
+  number of tokens computed). A stranger could therefore ask it for an illegal text: your
+  machine would only run a public model on it, without keeping anything of the request. Everyone remains responsible for
   what they ask (part 6). If this doesn't suit you, turn this lending off in Settings.
 - **Strangers' images and videos on your graphics card**: this lending is on by default.
   Your graphics card creates them within the same limits as their conversations (the
@@ -118,7 +122,11 @@ have their own terms:
 
 AI models are not provided by the publisher: others publish them, under their own licenses,
 some of which restrict commercial use or certain uses. AIODOS shows a model's license when
-it is restrictive and asks you to confirm it; it is up to you to respect it. The same goes
+it is restrictive and asks you to confirm it; it is up to you to respect it. AIODOS also
+offers models whose license is non-commercial, free only below a revenue threshold, or
+excludes some countries or computing for third parties (for example MiniMax H3, whose
+license excludes the European Union): it is up to you to decide to download, use and lend
+them, and you alone are responsible for it. The same goes
 for the engines AIODOS can use (llama.cpp, stable-diffusion.cpp, Ollama, ComfyUI…).
 
 ## 8. Updates

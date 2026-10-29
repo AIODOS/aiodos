@@ -34,7 +34,13 @@ DEFAULTS = {
     # --- Langue des textes (i18n/) : « auto » (celle du système), « fr » ou « en » ---
     "language": "auto",
     # --- Conversation ---
-    "default_model": "qwen3.5:9b",
+    # Le modèle d'une nouvelle conversation : « Automatique » (network/placement.BEST, le plus
+    # puissant disponible, 29/10/2026), ou un modèle choisi dans Réglages → Modèles
+    "default_model": "auto:best",
+    # Ceux d'une image et d'une vidéo (mode « Créer », views/chat-create.js) : vide,
+    # « Automatique » (le serveur prend le plus puissant disponible), ou un modèle du catalogue
+    "default_image_model": "",
+    "default_video_model": "",
     "think": True,                    # laisser les modèles « réfléchir » (Qwen3…)
     # Vide : les consignes par défaut, dans la langue en cours (i18n/*/settings.json)
     "system_prompt": "",
@@ -146,6 +152,12 @@ DEFAULTS = {
     # Faire calculer mes images par mes amis qui le proposent : activé par défaut (décision de
     # l'auteur du 29/10/2026), comme lend_images_friends
     "images_from_friends": True,
+    # Les modèles d'images et de vidéos dont j'ai accepté la licence restrictive (identifiants
+    # du catalogue) : en les téléchargeant, ou en les choisissant dans le menu pour une autre
+    # machine (imaging/catalog.accepted). « Automatique » ne prend un tel modèle chez un ami
+    # ou un inconnu que si sa licence est ici (décision de l'auteur du 29/10/2026 : chacun
+    # décide, et en répond)
+    "licenses_accepted": [],
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,

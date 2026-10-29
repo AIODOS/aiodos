@@ -127,6 +127,22 @@ anciennes (_seniority), puis le plus gros modèle. Il n'y a rien ici à quoi com
 « modèle plus gros », ni son accord. L'interface ne le propose que dans ce cas
 (chat/public_consent.py, entry), et l'API le refuse sinon (public_consent.reach).
 
+« Automatique » (BEST, « auto:best », 29/10/2026, docs/conception/modeles-auto.md) : le choix par
+défaut d'une nouvelle conversation. Il prend **le modèle de conversation le plus puissant
+disponible** (own_ranked) : parmi ceux de cette machine et de mes machines qui répondent d'office
+(eligible : celles d'un ami seulement si auto_route_friends le permet), le plus grand nombre de
+paramètres lu dans le nom (public_chat.params ; un nom qui n'en dit rien : estimé d'après la
+taille de ses fichiers, power), puis, à égalité, celui qui tient dans la mémoire vidéo d'une
+machine, déjà chargé quelque part, par nom. Pour ce modèle, les machines se choisissent comme
+pour « auto:<modèle> » (candidates), le réseau public compris si la conversation le permet, avec
+ses règles (même modèle, modèle plus gros accepté, règle des petits réseaux, amorce, marque « non
+vérifiable pour l'instant ») ; puis, en repli, les machines des modèles plus modestes, chez cette
+machine et mes machines seulement. Sans aucun modèle ici ni sur mes machines : comme
+« Automatique · réseau public » (best_public), si la conversation peut partir chez un inconnu.
+Les gros modèles répartis (« reparti: ») n'en font pas partie : ils demandent une mise en place.
+« best » n'est le nom d'aucun modèle proposé : un modèle qui s'appellerait ainsi ne se choisit
+qu'avec sa machine.
+
 Tant qu'aucun mot de la réponse n'est arrivé, une machine qui échoue (injoignable, ne
 prête plus, Ollama arrêté, machine publique occupée…) cède la place à la suivante (run).
 
@@ -160,6 +176,11 @@ PREFIX = "auto:"
 # « Automatique · réseau public » : le meilleur modèle d'une machine du réseau public, quand je
 # n'en ai aucun (« * » n'est le nom d'aucun modèle ; parse le dit automatique)
 PUBLIC_BEST = PREFIX + "*"
+# « Automatique » : le modèle de conversation le plus puissant disponible (cf. le début du module)
+BEST = PREFIX + "best"
+# La puissance d'un modèle dont le nom ne dit pas la taille (power) : ses fichiers, à 4 bits
+# environ, comptent ~0,7 Go par milliard de paramètres (qwen3.5:9b : 6,55 Go)
+BYTES_PER_BILLION = 0.7e9
 LOAD_TTL = 60               # nouvelles d'une machine plus vieilles : oubliées
 LOAD_MAX = 1000             # valeurs annoncées par une autre machine : bornées
 FASTER = 2                  # une machine publique passe devant celle-ci : deux fois plus rapide
@@ -657,13 +678,14 @@ def _offer(found: list) -> list:
     return found
 
 
-def best_public() -> list:
+def best_public(offer: bool = True) -> list:
     """« Automatique · réseau public » (PUBLIC_BEST) : chaque machine du réseau public qui prête
     et a une place, avec son meilleur modèle de conversation contrôlable (_controllable ; le
     plus grand nombre de paramètres lu dans le nom, public_chat.params ; un nom qui n'en dit
     rien passe après), le meilleur d'abord, puis les établies, la plus rapide, la plus
     récemment vue. Aucun modèle contrôlable : n'importe lequel, en repli (ci-dessous).
-    PUBLIC_TRIES au plus."""
+    PUBLIC_TRIES au plus. offer faux : rien n'est noté (le menu des modèles dit seulement ce
+    que prendrait « Automatique », chat/model_menu.py)."""
     lending = _lending()
     found = _best(lending, _controllable(lending))
     if not found:
@@ -679,7 +701,7 @@ def best_public() -> list:
         found.sort(key=lambda c: (not c.established,
                                   not _served_well(c.node_id.removeprefix(public_chat.PREFIX)),
                                   -_seniority(c.known), -(c.params or 0), -(c.tps or 0), c.seen))
-    return _offer(found[:PUBLIC_TRIES])
+    return _offer(found[:PUBLIC_TRIES]) if offer else found[:PUBLIC_TRIES]
 
 
 def _best(lending, checkable) -> list:
@@ -759,6 +781,76 @@ def bigger_public(name: str) -> str | None:
     return max(found)[1] if found else None
 
 
+# ------------------------------------------------- « Automatique » : le meilleur modèle
+def power(name, size=0) -> float:
+    """La puissance d'un modèle de conversation : ses milliards de paramètres lus dans le nom
+    (public_chat.params), sinon estimés d'après la taille de ses fichiers (BYTES_PER_BILLION)."""
+    found = public_chat.params(name)
+    if found is not None:
+        return found
+    finite = isinstance(size, (int, float)) and not isinstance(size, bool) and math.isfinite(size)
+    return size / BYTES_PER_BILLION if finite and size > 0 else 0.0
+
+
+def own_ranked() -> list:
+    """Les noms des modèles de conversation que cette machine et mes machines peuvent servir
+    d'office (eligible : celles d'un ami si auto_route_friends le permet), chacun une fois :
+    d'abord ceux qui tiennent dans la mémoire vidéo d'une machine (« une machine qui peut le
+    faire tourner », demande de l'auteur du 29/10/2026 : un modèle de 35 milliards sur une
+    carte de 8 Go répondrait au processeur, très lentement), le plus puissant d'abord (power),
+    puis, à égalité, déjà chargé quelque part, par nom (cf. le début du module)."""
+    found = {}
+    profiles = [_local_profile()] + [peer.get("profile") for peer in peers.list_peers()
+                                     if eligible(peer)]
+    for profile in profiles:
+        for m in remote_models.chat_models(profile):
+            name = m["name"]
+            if reserved(name) or not public_chat.converses(name):
+                continue
+            seen = found.setdefault(name, {"size": 0, "fits": False, "loaded": False})
+            seen["size"] = max(seen["size"], m["size"])
+            seen["fits"] = seen["fits"] or m["fits_vram"] is True
+            seen["loaded"] = seen["loaded"] or m["loaded"] is True
+    return sorted(found, key=lambda n: (not found[n]["fits"], -power(n, found[n]["size"]),
+                                        not found[n]["loaded"], n))
+
+
+def best_name() -> str | None:
+    """Le modèle que prendrait « Automatique » parmi les miens (own_ranked), ou None : aucun
+    modèle de conversation ici ni sur mes machines."""
+    ranked = own_ranked()
+    return ranked[0] if ranked else None
+
+
+def public_offers() -> list:
+    """Les modèles de conversation que prêtent en ce moment des machines du réseau public qui
+    ont une place, et qu'une autre machine peut contrôler (_controllable : un nom seul ne fait
+    pas un modèle), chacun une fois : ceux que le menu des modèles propose (chat/model_menu.py,
+    « auto:<modèle> »). Rien n'est noté ni essayé."""
+    lending = _lending()
+    checkable = _controllable(lending)
+    return sorted({m for node in _with_room(lending) for m in node["models"]
+                   if public_chat.converses(m) and not reserved(m) and _tagged(m) in checkable})
+
+
+def _automatic(executor=None, public=False, bigger=False) -> list:
+    """« Automatique » (BEST) : les machines du plus puissant de mes modèles (candidates, le
+    réseau public compris si public, avec ses règles), puis, en repli, celles des modèles plus
+    modestes, chez cette machine et mes machines seulement. Aucun modèle à moi : le meilleur du
+    réseau public (best_public), si public."""
+    names = own_ranked()
+    if not names:
+        return best_public() if public else []
+    ranked = candidates(names[0], executor, public, bigger)
+    seen = {c.model for c in ranked}
+    for name in names[1:]:
+        for c in candidates(name, executor):
+            if c.model not in seen:
+                seen.add(c.model)
+                ranked.append(c)
+    return ranked
+
+
 def candidates(name: str, executor=None, public=False, bigger=False) -> list:
     """Machines qui peuvent répondre avec ce modèle, la mieux placée d'abord. public : celles
     du réseau public aussi ; bigger : avec un modèle plus gros, s'il est accepté. Cette
@@ -796,7 +888,8 @@ def plan(model, executor=None, public=False, bigger=False, unverified=None) -> l
     une machine appairée) passe tel quel ; « auto:<modèle> » est réparti. public, bigger :
     cf. candidates (la conversation le permet, chat/public_consent.py) ; jamais pour un
     modèle précis. « Automatique · réseau public » (PUBLIC_BEST) : les machines du réseau
-    public seules (best_public), si public. unverified : un ensemble, s'il est donné, qui
+    public seules (best_public), si public. « Automatique » (BEST) : le plus puissant de mes
+    modèles, puis les plus modestes (_automatic). unverified : un ensemble, s'il est donné, qui
     reçoit les identifiants des machines publiques passées devant par la règle des petits
     réseaux (cf. le début du module) : leur réponse est « non vérifiable pour l'instant ».
 
@@ -813,6 +906,10 @@ def plan(model, executor=None, public=False, bigger=False, unverified=None) -> l
         ranked = best_public() if public else []
         if not ranked:
             raise NoMachine(t("placement.no_public" if public else "placement.public_closed"))
+    elif model == BEST:
+        ranked = _automatic(executor, public, bigger)
+        if not ranked:
+            raise NoMachine(t("placement.no_public" if public else "placement.no_model"))
     else:
         ranked = candidates(name, executor, public, bigger)
         if not ranked:

@@ -115,6 +115,7 @@ function onEvent(ev) {
     case 'job': onJob(ev.job); break;
     case 'executor': state.executor = ev; emit('executor:changed'); break;
     case 'jobs_reset': loadJobs().then(updateBadge); break;
+    case 'lent': emit('lent:changed'); break;              // un calcul pour d'autres (jobs-lent.js)
     case 'conversations': emit('conversations:changed'); break;
     case 'knowledge': emit('knowledge:changed'); break;
     case 'settings': loadSettings(); break;

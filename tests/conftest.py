@@ -69,6 +69,10 @@ def data_dir(tmp_path, monkeypatch):
     limits.forget()
     open_page.forget()
     yield tmp_path
+    # L'historique du travail pour d'autres : ses lignes écrites dans la base de cet essai,
+    # pas dans celle du suivant ; plus rien en cours
+    from aiodos.network import lent_history
+    lent_history.forget()
     db.close()
 
 

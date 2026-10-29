@@ -11,6 +11,9 @@ const PUBLIC = 'public:';          // une machine du réseau public (network/pub
 // « Automatique · réseau public » : le meilleur modèle d'une machine du réseau public, quand ni
 // cette machine ni mes machines n'en ont (network/placement.py, PUBLIC_BEST)
 export const PUBLIC_AUTO = 'auto:*';
+// « Automatique » : le modèle de conversation le plus puissant disponible, puis sa machine
+// (network/placement.py, BEST) ; le choix par défaut d'une nouvelle conversation
+export const BEST_AUTO = 'auto:best';
 
 /** Le réseau public dans le choix du modèle (chat/public_consent.py, entry) : { id, ready,
  *  models, searching (la première minute : ses machines se cherchent encore) } quand aucune
@@ -72,6 +75,7 @@ export function modelName(id) {
  * here : préciser « cette machine » pour un modèle local (conversation en mode automatique).
  */
 export function modelLabel(id, here = false) {
+  if (id === BEST_AUTO) return t('model_menu.automatic');
   if (id === PUBLIC_AUTO) return t('models.public_auto');
   if (id?.startsWith(AUTO)) return t('models.label_auto', { name: modelName(id) });
   if (id?.startsWith(PUBLIC)) return t('models.label_public', { name: modelName(id) });

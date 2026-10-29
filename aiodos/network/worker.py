@@ -65,7 +65,7 @@ from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
 from aiodos.knowledge import embed_model
-from aiodos.network import client, crypto, peers, route, sharing, wire, work
+from aiodos.network import client, crypto, lent_history, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
 from aiodos.node import android, identity, keep_awake, places, power, priority
@@ -577,7 +577,9 @@ class Worker:
 
     def _process(self, a: Assignment) -> str:
         """Calcule l'unité. → ce qui en est advenu, qui ne va qu'au journal (_run) : en
-        français, comme lui."""
+        français, comme lui. L'historique de la vue Tâches (lent_history) en garde une ligne :
+        le genre, pour qui, le modèle, la durée de calcul, la taille, l'issue (ended : son
+        code et sa raison courte), jamais le fichier ni son nom."""
         started, waited = time.perf_counter(), pacing.waited()
         folder = paths.work_dir() / f"{a.peer_id[:8]}-{int(a.order['id'])}"
 
@@ -585,8 +587,12 @@ class Worker:
             # Les attentes (conversation, pauses sur batterie) ne sont pas du calcul
             return max(0.0, time.perf_counter() - started - (pacing.waited() - waited))
         awake = False
+        lent, ended, output, compute_s = None, (lent_history.FAILED, "error"), None, None
         try:
             mine = sharing.level(a.peer_id) == sharing.MINE
+            lent = lent_history.begin(circle=lent_history.MINE if mine else lent_history.FRIEND,
+                                      peer_id=a.peer_id, peer=a.peer_name,
+                                      **lent_history.unit_fields(a.order))
             spec = registry.TASKS.get(a.order["task"])
             if spec is None or not spec.portable:
                 raise _BadOrder("worker.unknown_task", task=str(a.order["task"])[:60])
@@ -613,30 +619,37 @@ class Worker:
             compute_s = computed()
             reply = self._send_result(a, output, compute_s)
             if not reply.get("accepted"):
+                ended = (lent_history.FAILED, "result_refused")
                 return f"résultat refusé ({reply.get('reason')})"   # i18n: tel quel (journal)
+            ended = (lent_history.DONE, None)
             peers.account(a.peer_id, given_s=compute_s, given_units=1)
             self._rest_gpu(a, compute_s)
             return f"faite en {compute_s:.1f} s"                    # i18n: tel quel (journal)
         except registry.Interrupted:
+            ended = (lent_history.STOPPED, "interrupted")
             self._quiet(a, "work/release")
             return "interrompue et rendue"                          # i18n: tel quel (journal)
         except _NotForFriends:
+            ended = (lent_history.REFUSED, "mine_only")
             self._quiet(a, "work/release")
             # Elle me la redonnerait aussitôt (une version d'avant me confie encore ses
             # pages) : plus rien ne lui est demandé pendant un moment
             self._rest(a.peer_id, DEFAULT_SLOTS, REFUSED_RETRY)
             return "réservée à mes machines : rendue"               # i18n: tel quel (journal)
         except _NotNow:
+            ended = (lent_history.REFUSED, "not_now")
             self._quiet(a, "work/release")
             # i18n: tel quel (journal)
             return "téléphone hors charge ou hors Wi-Fi : rendue à l'ami"
         except _NoRoom:
+            ended = (lent_history.REFUSED, "no_room")
             self._quiet(a, "work/release")
             # Rien d'autre de cette machine pendant un moment : elle redonnerait la même
             self._rest(a.peer_id, DEFAULT_SLOTS, NO_ROOM_RETRY)
             # i18n: tel quel (journal)
             return "pas assez de place ici pour son fichier : unité rendue"
         except media.WhisperMissing:
+            ended = (lent_history.REFUSED, "no_model")
             # Ni l'unité ni ce fichier n'y sont pour rien : rendue sans compter d'échec (un
             # ami me mettrait de côté au bout de dix). Ses autres sons demanderaient le même
             # modèle : plus de cette ressource pour elle pendant un moment
@@ -647,6 +660,7 @@ class Worker:
             return (f"modèle Whisper « {model} » absent ici, non téléchargé pour cette "
                     "machine : unité rendue")
         except embed_model.Missing as exc:
+            ended = (lent_history.REFUSED, "no_model")
             # De même pour son modèle d'embeddings (knowledge/embed_model.py) : ni l'unité ni
             # son fichier n'y sont pour rien ; ses autres unités le demanderaient aussi
             self._quiet(a, "work/release")
@@ -654,6 +668,7 @@ class Worker:
             # i18n: tel quel (journal)
             return f"modèle d'embeddings « {exc.model[:40]} » absent ici : unité rendue"
         except _TooBig as exc:
+            ended = (lent_history.FAILED, "too_big")
             # Dit au propriétaire dans la langue d'ici (error) et dans la sienne (error_t)
             told = i18n.lazy("worker.result_too_big", **exc.sizes)
             self._quiet(a, "work/fail", error=i18n.render(told), error_t=told, too_big=True,
@@ -661,12 +676,17 @@ class Worker:
             # i18n: tel quel (journal)
             return f"résultat trop volumineux pour son propriétaire ({exc}) : rendu en échec"
         except PeerError as exc:
+            ended = (lent_history.FAILED, "unreachable")
             return f"propriétaire injoignable ({exc})"              # i18n: tel quel (journal)
         except Exception as exc:
             if engine_down(exc):
+                ended = (lent_history.FAILED, "engine")
                 self.executor.cooldown[a.resource] = time.monotonic() + ENGINE_RETRY_DELAY
                 self._quiet(a, "work/release")
                 return "Ollama injoignable ici : unité rendue"      # i18n: tel quel (journal)
+            # Un ordre qui ne tient pas est refusé avant tout calcul ; le reste : un échec
+            ended = (lent_history.REFUSED, "bad_order") if isinstance(exc, _BadOrder) \
+                else (lent_history.FAILED, "error")
             self._quiet(a, "work/fail", error=self._reason(a, exc), error_t=self._told(a, exc),
                         compute_s=computed())
             return f"échec : {exc}"                                 # i18n: tel quel (journal)
@@ -674,6 +694,9 @@ class Worker:
             if awake:
                 keep_awake.release("unité de moteur")   # i18n: tel quel (clé interne)
             shutil.rmtree(folder, ignore_errors=True)
+            if lent is not None:
+                lent.end(*ended, compute_s if compute_s is not None else computed(),
+                         **lent_history.unit_sizes(a.order, output))
 
     @staticmethod
     def _told(a: Assignment, exc) -> list | None:

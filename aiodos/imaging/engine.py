@@ -15,7 +15,10 @@ il y en a une autre).
 
 sd-server n'a pas de clé d'accès, et il répond à toute page web qui le demande : il
 renvoie l'origine de la page dans Access-Control-Allow-Origin, avec Allow-Credentials
-(version f0aac52 ; aucune option ne l'en empêche, cf. sd-server --help). Il n'écoute donc
+(versions f0aac52 et e7b7ec6, revu le 29/10/2026 ; aucune option ne l'en empêche, cf.
+sd-server --help). Depuis master-1027 (e7b7ec6), son API sait aussi charger et décharger un
+modèle : son dossier de modèles est vide (empty_models), rien d'autre ne peut y être chargé ;
+le décharger reste possible, comme le faire tomber (cf. plus bas). Il n'écoute donc
 que sur 127.0.0.1, et sur un port que les navigateurs refusent de joindre (listen_port) :
 aucune page web, même ouverte sur cette machine, ne peut lui parler (sauf si une stratégie
 d'entreprise ou une préférence du navigateur rouvre ce port : Firefox le permet pour
@@ -44,7 +47,7 @@ from pathlib import Path
 
 import requests
 
-from aiodos import settings
+from aiodos import paths, settings
 from aiodos.cluster.engine import NO_WINDOW, EngineError, Process
 from aiodos.i18n import t
 from aiodos.imaging import catalog, local_copies
@@ -65,6 +68,7 @@ _INTEGRATED = re.compile(r"(?i)\b(UHD|Iris|Radeon\(TM\) Graphics|Graphics Contro
 NO_PROXY = {"http": None, "https": None}
 
 _versions = {}                    # (programme, date) -> version : lue une fois par programme
+_helps = {}                       # (programme, date) -> texte de --help : lu une fois aussi
 _devices = {"at": 0.0, "key": None, "value": []}
 _lock = threading.Lock()          # un lancement à la fois
 _state = {"process": None, "model": None, "busy": 0, "used": 0.0, "reaper": None}
@@ -370,8 +374,41 @@ def _answers(port: int) -> bool:
         return False
 
 
+def accepts(option: str) -> bool:
+    """Le sd-server de cette machine connaît-il cette option (son --help, lu une fois par
+    programme) ? Une version plus ancienne (réglage sdcpp_dir) refuserait de démarrer avec
+    une option qu'elle ne connaît pas."""
+    found = info()
+    if found is None:
+        return False
+    program = Path(found["folder"]) / platforms.executable(SERVER)
+    try:
+        key = (str(program), program.stat().st_mtime_ns)
+    except OSError:
+        return False
+    if key not in _helps:
+        try:
+            _helps[key] = _run(program, "--help")
+        except EngineError as exc:
+            log.warning("Aide de stable-diffusion.cpp illisible : %s", exc)
+            return False
+    return option in _helps[key]
+
+
+def empty_models() -> Path:
+    """Le dossier de modèles de sd-server (--model-dir) : vide, dans les données d'AIODOS.
+    Depuis master-1027, son API charge et décharge des modèles pris dans ce dossier
+    (/sdcpp/v1/models/load ; « ./models » par défaut, relatif au dossier courant d'AIODOS) :
+    rien d'autre que le modèle d'AIODOS ne peut ainsi y être chargé (cf. le début du module)."""
+    folder = paths.data_dir() / "images" / "sd-server-models"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def arguments(model_id: str, port: int, device: str | None) -> list:
     args = ["--listen-ip", "127.0.0.1", "--listen-port", str(port), "--log-level", "info"]
+    if accepts("--model-dir"):
+        args += ["--model-dir", str(empty_models())]
     for part, path in catalog.files(model_id).items():
         args += [catalog.FLAGS[part], str(path)]
     args += list(catalog.model(model_id).get("server_args") or [])

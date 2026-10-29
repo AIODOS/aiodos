@@ -47,9 +47,11 @@ machine débranchée…), « engine » (le moteur a failli). Sans réflexion (th
 texte de la réponse part, et la machine ne calcule pas ce que personne ne lira.
 
 Rien n'est gardé : ni la conversation, ni la clé de l'appelant (lue pour savoir que la
-demande vient du réseau public, puis oubliée) ; rien en base, et le journal ne dit que le
-modèle, le nombre de jetons et la durée. Pendant le calcul, en mémoire seulement, le modèle
-et l'heure du début, pour « Machines connectées » (serving, activity.public_live).
+demande vient du réseau public, puis oubliée) ; le journal ne dit que le modèle, le nombre de
+jetons et la durée, et l'historique de la vue Tâches (network/lent_history.py) une ligne
+sans contenu ni demandeur : le genre, le modèle, la durée, les jetons, l'issue (un refus et
+son code compris). Pendant le calcul, en mémoire seulement, le modèle et l'heure du début,
+pour « Machines connectées » (serving, activity.public_live).
 
 La lecture de textes pour le contrôle d'un demandeur (POST /public/v1/read,
 network/lend_reading.py) passe par la même admission (admit) et la même tenue de compte du
@@ -79,7 +81,7 @@ from aiodos import __version__, settings
 from aiodos.gateway import limits
 from aiodos.gateway.errors import ApiError
 from aiodos.jobs.models import GPU_BOUND
-from aiodos.network import connections, lend_queue
+from aiodos.network import connections, lend_queue, lent_history
 from aiodos.node import android, places, power, speed
 from aiodos.services import ollama
 
@@ -123,11 +125,13 @@ def serving() -> list:
 
 
 class Refused(Exception):
-    """Une demande refusée avant tout calcul : son statut HTTP et son code."""
+    """Une demande refusée avant tout calcul : son statut HTTP et son code. model : le modèle
+    demandé, seulement une fois vérifié (installé ici, ou du catalogue) : l'historique du
+    travail pour d'autres (lent_history.py) n'écrit jamais un nom venu tel quel d'un inconnu."""
 
-    def __init__(self, status: int, code: str):
+    def __init__(self, status: int, code: str, model: str | None = None):
         super().__init__(code)
-        self.status, self.code = status, code
+        self.status, self.code, self.model = status, code, model
 
 
 def forget():
@@ -390,7 +394,11 @@ def admit(manager, raw: bytes) -> dict:
     body = _parse(raw)
     asked = {"model": _model(body), "messages": _messages(body.get("messages")),
              "options": _options(body.get("options"))}
-    asked["place"] = _take_place(manager)
+    try:
+        asked["place"] = _take_place(manager)
+    except Refused as exc:
+        exc.model = asked["model"]                  # installé ici (lent_history)
+        raise
     return asked
 
 
@@ -458,6 +466,8 @@ def answer(manager, asked: dict, stop, clock: _Clock | None = None):
     began = None                    # premier jeton : la génération commence (journal)
     done, why = threading.Event(), []
     number = begin(manager, model)
+    # L'historique du travail pour d'autres : le modèle, la durée, les jetons, jamais le texte
+    lent = lent_history.begin(lent_history.CHAT, lent_history.PUBLIC, model=model)
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -489,6 +499,8 @@ def answer(manager, asked: dict, stop, clock: _Clock | None = None):
             # i18n: tel quel (journal)
             log.info("Conversation pour le réseau public : %s, arrêtée (%s)", model,
                      why[0] if why else "engine")
+            lent.end(lent_history.STOPPED if why else lent_history.FAILED,
+                     why[0] if why else "engine", clock.counted(), tokens=tokens)
             yield {"type": "error", "error": why[0] if why else "engine"}
         elif not stop.is_set():
             seconds = round(time.monotonic() - started, 1)
@@ -498,8 +510,11 @@ def answer(manager, asked: dict, stop, clock: _Clock | None = None):
             log.info("Conversation pour le réseau public : %s, %d jetons, %s s de génération, "
                      "%s s de calcul, sur %s s", model, produced, generating,
                      round(clock.counted(), 1), seconds)
+            lent.end(lent_history.DONE, None, clock.counted(), tokens=produced)
             yield {"type": "done", "tokens": produced, "seconds": seconds}
     finally:
+        # Sans fin dite plus haut : l'appelant est parti en route (stop levé par _Stream)
+        lent.end(lent_history.STOPPED, "left", clock.counted())
         end(manager, number, done, clock, place)
 
 
@@ -629,6 +644,8 @@ def mount(app, manager):
         try:
             asked = await asyncio.to_thread(admit, manager, raw)
         except Refused as exc:
+            lent_history.refused(lent_history.CHAT, lent_history.PUBLIC, exc.code,
+                                 model=exc.model)
             return JSONResponse({"error": exc.code}, status_code=exc.status)
         stop, clock = threading.Event(), _Clock()
         return _Stream(answer(manager, asked, stop, clock), asked["place"], stop,

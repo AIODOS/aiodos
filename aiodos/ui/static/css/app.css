@@ -354,6 +354,70 @@ a.source:hover { color: var(--text); border-color: var(--line-2); }
 .perm-row .txt { flex: 1; min-width: 0; }
 .perm-row .txt b { display: block; font-weight: 500; font-size: 13px; }
 .perm-row .txt small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+/* Le choix du modèle (js/views/model-menu.js) : un bouton sous la saisie (ou dans Réglages →
+   Modèles) et son panneau à quatre onglets, « Automatique » en tête ; en bas de l'écran sur un
+   téléphone */
+.mm { position: relative; flex: 0 1 auto; min-width: 0; }
+.mm-btn { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 7px 0 8px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.mm-btn:hover, .mm-btn[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+.mm-btn .icon { width: 15px; height: 15px; flex: none; }
+.mm-ico { display: inline-flex; flex: none; }
+.mm-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mm-btn .mm-chev { width: 13px; height: 13px; transform: rotate(90deg); transition: transform .15s; }
+.mm-btn[aria-expanded="true"] .mm-chev { transform: rotate(-90deg); }
+.composer-tools .mm-btn { max-width: 320px; }
+.mm-panel { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 40; width: min(400px, calc(100vw - 20px));
+  max-height: min(70vh, 560px); display: flex; flex-direction: column; background: var(--panel-2);
+  border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 14px 40px var(--bg); }
+.mm.down .mm-panel { right: auto; left: 0; bottom: auto; top: calc(100% + 6px); }
+.mm-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px 0; border-bottom: 1px solid var(--line-2); flex: none; }
+.mm-tabs { display: flex; flex: 1; min-width: 0; }
+.mm-tab { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 36px; padding: 0 4px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted);
+  font-size: 12.5px; white-space: nowrap; }
+.mm-tab span { overflow: hidden; text-overflow: ellipsis; }
+.mm-tab:hover { color: var(--text); }
+.mm-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--cyan); }
+.mm-tab .icon { width: 14px; height: 14px; flex: none; }
+.mm-close { display: none; flex: none; }
+.mm-body { overflow-y: auto; padding: 5px; min-height: 0; }
+.mm-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); text-align: left; cursor: pointer; }
+.mm-item:hover, .mm-item:focus-visible { background: var(--panel-3); outline: none; }
+.mm-item:focus-visible { box-shadow: inset 0 0 0 1px #2f9e80; }
+.mm-mark { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px solid var(--line-2); }
+.mm-item[aria-checked="true"] .mm-mark { border-color: var(--cyan); background: var(--cyan); box-shadow: inset 0 0 0 3px var(--panel-2); }
+.mm-item .mm-mark-ico { width: 16px; height: 16px; color: var(--faint); }
+.mm-item .mm-go { width: 14px; height: 14px; color: var(--faint); }
+.mm-txt { flex: 1; min-width: 0; }
+.mm-txt b { display: block; font-weight: 500; font-size: 13px; overflow-wrap: anywhere; }
+.mm-txt small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.mm-auto b { color: #ddf7ee; }
+.mm-pill { flex: none; }
+.mm-warn { color: var(--warn); cursor: help; }
+.mm-sub { padding: 10px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+.mm-dl .mm-txt b { color: var(--muted); }
+.mm-suggest { margin-top: 4px; border: 1px dashed var(--line-2); }
+.mm-suggest small { color: var(--text); }
+.mm-empty { display: flex; align-items: center; gap: 10px; padding: 14px 12px; color: var(--muted); font-size: 13px; }
+.mm-empty .icon { width: 17px; height: 17px; color: var(--faint); flex: none; }
+.mm-backdrop { display: none; }
+/* Réglages → Modèles : le choix par défaut de chaque genre, une ligne chacun */
+.mm-defaults { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.mm-default { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.mm-default-name { flex: none; width: 90px; color: var(--muted); font-size: 13px; }
+.mm-default .mm-btn { height: 30px; border: 1px solid var(--line-2); color: var(--text); }
+@media (max-width: 760px) {
+  .mm-panel, .mm.down .mm-panel { position: fixed; left: 0; right: 0; top: auto; bottom: 0; z-index: 55;
+    width: auto; max-height: 82vh; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .mm-backdrop { display: block; position: fixed; inset: 0; z-index: 54; background: rgba(2, 5, 4, .55); }
+  .mm-close { display: grid; }
+  .mm-tab { height: 44px; }
+  .mm-item { min-height: 48px; }
+  .composer-tools .mm-btn { max-width: none; }
+}
+
 /* « Sur mes machines seulement » (chat-public.js) : à part, propre à la conversation ; un
    cadenas sur le bouton quand il est activé */
 .perm-group { margin-top: 5px; padding-top: 3px; border-top: 1px solid var(--line-2); }
@@ -600,6 +664,37 @@ details.fold.job > .fold-body { display: flex; flex-direction: column; gap: 10px
 .workers-places { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 4px 0 0 17px; font-size: 11.5px;
   color: var(--faint); white-space: normal; }
 .workers-copy { color: var(--violet); }
+/* Deux onglets (js/views/jobs.js) : « Pour moi », la file ; « Pour d'autres », ce que cette
+   machine calcule pour d'autres et son historique (js/views/jobs-lent.js) */
+.jobs-tabs { margin: -8px 0 18px; }
+.segmented .seg-count { display: inline-block; margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: rgba(52, 209, 166, .18); color: var(--cyan); font-size: 11px; line-height: 18px;
+  text-align: center; font-variant-numeric: tabular-nums; }
+.lent-totals { margin-bottom: 20px; }
+.lent-totals h2 .icon, .lent-block h3 .icon { width: 16px; height: 16px; color: var(--cyan); }
+.lent-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lent-table th { text-align: left; color: var(--faint); font-weight: 500; font-size: 12px; padding: 6px 8px; }
+.lent-table thead th { border-bottom: 1px solid var(--line); }
+.lent-table tbody th { color: var(--muted); font-size: 13px; }
+.lent-table td { padding: 6px 8px; vertical-align: top; font-variant-numeric: tabular-nums; }
+.lent-table td .faint { font-size: 12px; }
+.lent-table tbody tr + tr > * { border-top: 1px solid var(--line); }
+.lent-table tr.lent-sum > * { font-weight: 600; color: var(--text); }
+.lent-block { margin-bottom: 20px; }
+.lent-block h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.lent-none { margin: 4px 0; font-size: 13px; color: var(--faint); }
+.lent-empty { padding: 18px 16px; border: 1px dashed var(--line); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--muted); }
+.lent-day h4 { margin: 14px 0 2px; font-size: 12px; font-weight: 600; color: var(--faint); }
+.lent-day h4::first-letter { text-transform: uppercase; }
+.lent-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line);
+  font-size: 13px; }
+.lent-row > .icon { width: 16px; height: 16px; margin-top: 2px; color: var(--muted); }
+.lent-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.lent-reason { margin-top: 2px; font-size: 12px; color: var(--muted); }
+.lent-end { flex: none; display: flex; align-items: center; gap: 10px; }
+.lent-end time { min-width: 3em; text-align: right; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.lent-more { margin-top: 12px; }
 /* Le chantier en direct d'un travail ouvert (js/views/chantier.js) : les machines du chantier
    et leurs places, puis chaque fragment, sa machine, son avancement et ses doublons */
 .job-chantier:empty { display: none; }
@@ -1135,6 +1230,11 @@ details.mx[open] .mx-chev { transform: rotate(90deg); }
   .lang-pick .select { flex: 1; min-width: 0; }
   /* Compteurs : chaque ligne remplie, le dernier s'étend s'il est seul */
   .stat { flex: 1 1 96px; min-width: 0; }
+  /* « Pour d'autres » : l'issue et l'heure passent sous le texte de la ligne */
+  .lent-row { flex-wrap: wrap; gap: 4px 10px; }
+  .lent-text { flex: 1 1 calc(100% - 26px); }
+  .lent-end { flex: 1 1 100%; padding-left: 26px; justify-content: space-between; }
+  .lent-table th, .lent-table td { padding: 6px 4px; }
   /* Ressources de cette machine : le libellé sur sa ligne, puis deux colonnes alignées */
   .slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
   .slots > span:first-child { grid-column: 1 / -1; }

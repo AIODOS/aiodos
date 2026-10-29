@@ -58,6 +58,17 @@ _TEXTS = {
 }
 
 
+def _sampling(spec: dict, steps, cfg) -> dict:
+    """sample_params : pas, guidage, et ceux du modèle (échantillonneur, décalage) quand le
+    catalogue les dit ; sinon ceux que sd-server choisit pour son architecture."""
+    sample = {"sample_steps": int(steps), "guidance": {"txt_cfg": float(cfg)}}
+    if spec.get("sampler"):
+        sample["sample_method"] = spec["sampler"]
+    if spec.get("flow_shift"):
+        sample["flow_shift"] = float(spec["flow_shift"])
+    return sample
+
+
 def request_body(params: dict) -> dict:
     """Le corps de img_gen ; une retouche part de l'image de départ (init_png, octets) avec
     sa force (strength) : l'API native de sd-server l'attend en data URL."""
@@ -67,10 +78,8 @@ def request_body(params: dict) -> dict:
         "negative_prompt": params.get("negative") or "",
         "width": int(params["width"]), "height": int(params["height"]),
         "seed": int(params["seed"]), "batch_count": 1,
-        "sample_params": {
-            "sample_steps": int(params.get("steps") or spec["steps"]),
-            "guidance": {"txt_cfg": float(params.get("cfg") or spec["cfg"])},
-        },
+        "sample_params": _sampling(spec, params.get("steps") or spec["steps"],
+                                   params.get("cfg") or spec["cfg"]),
         "embed_image_metadata": False,
         "preview": "none",
         "output_format": "png",
@@ -83,13 +92,12 @@ def request_body(params: dict) -> dict:
 
 
 def video_body(params: dict) -> dict:
+    """Le corps de vid_gen ; pour Wan 2.2 A14B, les réglages de l'expert « bruit fort »
+    (high_noise_sample_params ; ses pas à -1 : selon la frontière des experts)."""
     spec = catalog.model(params["model"])
-    sample = {"sample_steps": int(params.get("steps") or spec["steps"]),
-              "sample_method": spec.get("sampler") or "euler",
-              "guidance": {"txt_cfg": float(params.get("cfg") or spec["cfg"])}}
-    if spec.get("flow_shift"):
-        sample["flow_shift"] = float(spec["flow_shift"])
-    return {
+    sample = _sampling({"sampler": "euler", **spec}, params.get("steps") or spec["steps"],
+                       params.get("cfg") or spec["cfg"])
+    body = {
         "prompt": params["prompt"],
         "negative_prompt": params.get("negative") or spec.get("default_negative") or "",
         "width": int(params["width"]), "height": int(params["height"]),
@@ -103,6 +111,15 @@ def video_body(params: dict) -> dict:
         "preview": "none",
         "output_format": "webm",
     }
+    high = spec.get("high_noise")
+    if high:
+        body["high_noise_sample_params"] = {
+            "sample_steps": int(high.get("steps") or -1),
+            "sample_method": high.get("sampler") or "euler",
+            "guidance": {"txt_cfg": float(high.get("cfg") or spec["cfg"])}}
+        if high.get("flow_shift"):
+            body["high_noise_sample_params"]["flow_shift"] = float(high["flow_shift"])
+    return body
 
 
 def png_size(data: bytes) -> tuple:
@@ -113,7 +130,11 @@ def png_size(data: bytes) -> tuple:
 
 
 def is_webm(data: bytes) -> bool:
-    return len(data) > 32 and data.startswith(WEBM_SIGNATURE) and b"webm" in data[:64]
+    """Un WebM, ou un Matroska : sd-server écrit le son de LTX-2.5 et de MiniMax H3 en PCM
+    (A_PCM/INT/LIT, examples/common/media_io.cpp de master-1027), que le WebM n'admet pas ;
+    libwebm marque alors le fichier « matroska »."""
+    return len(data) > 32 and data.startswith(WEBM_SIGNATURE) \
+        and (b"webm" in data[:64] or b"matroska" in data[:64])
 
 
 def _detail(reply) -> str:

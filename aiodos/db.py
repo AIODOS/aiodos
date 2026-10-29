@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 32
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -489,6 +489,39 @@ MIGRATIONS = {
         job_id    INTEGER,
         PRIMARY KEY (folder_id, rel)
     );
+    """,
+    # Ce que cette machine calcule pour d'autres (network/lent_history.py, 29/10/2026) : une
+    # ligne par calcul fini, refusé ou arrêté, pour le réseau public, un ami ou une de mes
+    # machines (son nom, jamais pour le réseau public) ; le genre, le modèle, la durée, la
+    # taille, l'issue et sa raison courte ; des refus ou arrêts identiques réunis (times).
+    # Jamais le contenu, ni rien qui identifie un demandeur du réseau public. 90 jours et
+    # 5 000 lignes au plus
+    31: """
+    CREATE TABLE IF NOT EXISTS lent_history (
+        id       INTEGER PRIMARY KEY,
+        at       REAL NOT NULL,
+        kind     TEXT NOT NULL,
+        circle   TEXT NOT NULL,
+        peer     TEXT,
+        model    TEXT,
+        seconds  REAL,
+        tokens   INTEGER,
+        width    INTEGER,
+        height   INTEGER,
+        frames   INTEGER,
+        passages INTEGER,
+        outcome  TEXT NOT NULL,
+        reason   TEXT,
+        times    INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS ix_lent_history_at ON lent_history(at);
+    """,
+    # « Automatique » (auto:best) devient le modèle de texte par défaut (décision de l'auteur
+    # du 29/10/2026, chat/model_menu.py) : le choix par défaut d'avant s'enregistrait à chaque
+    # changement de modèle dans une conversation ; il est oublié une fois, et se règle
+    # désormais dans Réglages → Modèles
+    32: """
+    DELETE FROM settings WHERE key = 'default_model';
     """,
 }
 

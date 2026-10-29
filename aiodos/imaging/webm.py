@@ -28,6 +28,9 @@ MAX_BYTES = 64 * 1024 ** 2        # au-delà, pas lue (les bornes de l'appelant 
 MAX_ELEMENTS = 100_000            # éléments lus, au plus : 81 images en font moins de 600
 CODECS = {"V_VP8", "V_VP9", "V_AV1"}
 DOC_TYPE_TEXT = "webm"
+# Lus : le WebM, et le Matroska que sd-server écrit quand la vidéo a du son (LTX-2.5, MiniMax
+# H3 : son en PCM, que le WebM n'admet pas) ; la piste vidéo seule est gardée, en WebM
+DOC_TYPES_READ = {DOC_TYPE_TEXT, "matroska"}
 APP = "AIODOS"                    # MuxingApp, WritingApp de la vidéo réécrite
 
 # Les identifiants EBML et Matroska lus ou écrits ici (avec leurs bits de longueur)
@@ -132,7 +135,7 @@ def _header(reader: _Reader, start: int, stop: int):
     for ident, body, end in reader.children(start, stop):
         if ident == DOC_TYPE:
             doc = reader.text(body, end)
-    if doc != DOC_TYPE_TEXT:
+    if doc not in DOC_TYPES_READ:
         raise _bad("header")
 
 

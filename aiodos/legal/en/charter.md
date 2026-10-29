@@ -1,6 +1,6 @@
 # AIODOS Charter
 
-*Version 5, October 29, 2026*
+*Version 6, October 29, 2026*
 
 AIODOS is a free and open AI workshop. It connects, over the Internet, the machines of people
 who don't know each other, to pool their power: those of public network participants, of
@@ -11,8 +11,10 @@ spirit in which we use it together. It goes with the terms of use.
 ## 1. The spirit of AIODOS
 
 - **Your AI belongs to you.** Your conversations, libraries and creations are stored on your
-  machines. When another machine computes for you, AIODOS keeps nothing there, and you can
-  always keep a piece of work on your own machines (part 3).
+  machines. When another machine computes for you, AIODOS keeps nothing of your request
+  there: only, in its history, the kind of computation, its size and duration (and your
+  machine's name if it belongs to a friend or to its owner); and you can always keep a piece
+  of work on your own machines (part 3).
 - **Share rather than consume.** Computing power is pooled. Reciprocity is flexible: no one
   is blocked, but when a machine is busy, those who have given it the most go first.
 - **Free and transparent.** The code is open (Apache 2.0 license): anyone can read it, check
@@ -54,8 +56,10 @@ Alone or with other machines, you agree not to use AIODOS to:
 - **For a stranger, your machine only computes.** It keeps nothing, neither the
   conversation, nor the description of an image or a video, nor what it created, nor who is
   asking, and does not show them to you: you don't choose and you don't see what it
-  computes. A stranger could therefore ask it for an illegal text, image or video: your
-  machine would only run a public model on it, without keeping any of it. Everyone remains
+  computes. Only a history without content stays with you, in the Tasks view: the time, the
+  kind of computation, the model, its size and duration. A stranger could therefore ask it
+  for an illegal text, image or video: your machine would only run a public model on it,
+  without keeping anything of the request. Everyone remains
   responsible for what they ask. If this doesn't suit you, turn this lending off in
   Settings.
 - **A filter in front of strangers' images and videos.** Before any computation, your

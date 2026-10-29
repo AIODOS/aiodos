@@ -54,8 +54,9 @@ s'arrête.
 
 Rien n'est gardé : sd-server rend la vidéo en mémoire (base64) ; ni la description, ni la
 vidéo, ni la clé ne restent après la réponse ; le journal ne dit que le modèle, la taille, le
-nombre d'images et de pas, les durées. Hors d'AIODOS, comme pour une image : sd-server garde
-sa tâche finie en mémoire jusqu'à son arrêt.
+nombre d'images et de pas, les durées, et l'historique de la vue Tâches (network/
+lent_history.py) le modèle, la taille, le nombre d'images, la durée et l'issue. Hors d'AIODOS,
+comme pour une image : sd-server garde sa tâche finie en mémoire jusqu'à son arrêt.
 
 Le profil public annonce les modèles de vidéos prêtés (offered) sous la marque des images,
 public_imaging.MARKER (« image:wan2.1-t2v-1.3b ») : le catalogue dit qu'ils sont des vidéos.
@@ -77,7 +78,7 @@ from fastapi.responses import JSONResponse
 
 from aiodos import __version__, settings
 from aiodos.imaging import catalog, webm
-from aiodos.network import connections, public_imaging, public_lending
+from aiodos.network import connections, lent_history, public_imaging, public_lending
 from aiodos.network.public_lending import Refused
 
 log = public_imaging.log
@@ -86,9 +87,10 @@ PATH = "/public/v1/video"
 MARKER = public_imaging.MARKER     # la marque des images, pour les vidéos aussi (cf. plus haut)
 FIELDS = {"v", "model", "prompt", "negative", "width", "height", "frames", "steps", "seed"}
 MAX_PROMPT = public_imaging.MAX_PROMPT
-# Pixels d'une image de la vidéo, au plus : les formats proposés de Wan 2.1 (832 × 480,
-# 480 × 832, 624 × 624) y tiennent
-MAX_PIXELS = 832 * 480
+# Pixels d'une image de la vidéo, au plus : les premiers formats proposés de Wan 2.1 et 2.2
+# (832 × 480, 480 × 832, 624 × 624), de LTX-2.5 (768 × 512) et de MiniMax H3 (864 × 480,
+# prêté depuis le 29/10/2026) y tiennent
+MAX_PIXELS = 864 * 480
 # Images d'une vidéo, au plus : la plus longue durée proposée de Wan 2.1, 5 s à 16 images par
 # seconde (81 images : 2,5 fois le calcul des 2 s mesurées, environ 8 min sur une RTX 4070)
 MAX_FRAMES = 81
@@ -103,10 +105,10 @@ FORMAT = "webm"
 
 # ------------------------------------------------------------- prêter, ou non
 def lendable(model_id) -> bool:
-    """Un modèle du catalogue qu'on prête aux inconnus, et qu'on leur demande : une vidéo, sans
-    licence restrictive (qui demande un accord lu)."""
+    """Un modèle du catalogue qu'on prête aux inconnus, et qu'on leur demande : une vidéo,
+    licence restrictive comprise depuis le 29/10/2026 (public_imaging.lendable)."""
     spec = catalog.MODELS.get(str(model_id or ""))
-    return bool(spec) and spec.get("kind") == "video" and not spec.get("notice")
+    return bool(spec) and spec.get("kind") == "video"
 
 
 def max_steps(spec: dict) -> int:
@@ -194,10 +196,14 @@ def admit(manager, raw: bytes) -> dict:
     if not public_imaging.lending_images(manager):
         raise Refused(503, "not_lending")
     params = _request(raw)                         # rien de pris pour une demande refusée
-    # ni pour une description interdite (i18n: tel quel, journal)
-    public_imaging._filtered(manager, params, "Vidéo refusée par le filtre (%s)")
-    return {"model": params["model"], "params": params,
-            "place": public_lending._take_place(manager)}
+    try:
+        # ni pour une description interdite (i18n: tel quel, journal)
+        public_imaging._filtered(manager, params, "Vidéo refusée par le filtre (%s)")
+        place = public_lending._take_place(manager)
+    except Refused as exc:
+        exc.model = params["model"]                # du catalogue (lent_history)
+        raise
+    return {"model": params["model"], "params": params, "place": place}
 
 
 # ------------------------------------------------------------------- réponse
@@ -233,6 +239,10 @@ def answer(manager, asked: dict, stop, clock=None):
     started = time.monotonic()
     done, why = threading.Event(), []
     number = public_lending.begin(manager, model)
+    # L'historique du travail pour d'autres : le modèle, la taille, le nombre d'images, la
+    # durée ; ni la description, ni la vidéo
+    lent = lent_history.begin(lent_history.VIDEO, lent_history.PUBLIC, model=model)
+    sizes = {"width": params["width"], "height": params["height"], "frames": params["frames"]}
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -257,6 +267,8 @@ def answer(manager, asked: dict, stop, clock=None):
             # i18n: tel quel (journal)
             log.info("Vidéo pour le réseau public : %s, arrêtée (%s)", model,
                      why[0] if why else "engine")
+            lent.end(lent_history.STOPPED if why else lent_history.FAILED,
+                     why[0] if why else "engine", clock.counted(), **sizes)
             yield {"type": "error", "error": why[0] if why else "engine"}
             return
         if stop.is_set():
@@ -275,7 +287,11 @@ def answer(manager, asked: dict, stop, clock=None):
         log.info("Vidéo pour le réseau public : %s, %d × %d, %d images, %d pas, %s s de calcul,"
                  " sur %s s", model, params["width"], params["height"], params["frames"],
                  params["steps"], seconds, round(time.monotonic() - started, 1))
+        lent.end(lent_history.DONE, None, seconds if seconds is not None else clock.counted(),
+                 **sizes)
     finally:
+        # Sans fin dite plus haut : l'appelant est parti en route (vidéo faite ou non)
+        lent.end(lent_history.STOPPED, "left", clock.counted(), **sizes)
         public_lending.end(manager, number, done, clock, place)
 
 
@@ -291,6 +307,8 @@ def mount(app, manager):
         try:
             asked = await asyncio.to_thread(admit, manager, raw)
         except Refused as exc:
+            lent_history.refused(lent_history.VIDEO, lent_history.PUBLIC, exc.code,
+                                 model=exc.model)
             return JSONResponse({"error": exc.code}, status_code=exc.status)
         stop, clock = threading.Event(), public_lending._Clock()
         return public_lending._Stream(answer(manager, asked, stop, clock), asked["place"], stop,

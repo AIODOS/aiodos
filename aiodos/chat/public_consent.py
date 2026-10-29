@@ -30,6 +30,11 @@ machine » sans explication. Demandé alors que cette machine ou mes machines on
 (pipeline.own_models : l'interface ne le propose pas, mais une autre application peut
 l'envoyer), il est refusé aussi (« own_models ») : il prenait le plus gros modèle du réseau
 public sans l'accord public_bigger_model (relecture du 28/10/2026).
+
+« Automatique » (placement.BEST, 29/10/2026) : le modèle plus gros se compare au plus puissant de
+mes modèles (placement.best_name), comme pour « auto:<modèle> » ; sans aucun modèle à moi, il
+prend le meilleur du réseau public, comme « Automatique · réseau public », donc sans carte ; un
+refus (closed) se dit de même (refusal).
 """
 import threading
 from dataclasses import dataclass
@@ -89,6 +94,8 @@ def reach(model, conv_id, mine_only, joined=()) -> Reach:
     if why is not None:
         return Reach(closed=why)
     name = placement.parse(model)
+    if model == placement.BEST:                 # « Automatique » : le plus puissant des miens
+        name = placement.best_name()
     if name is None or model == placement.PUBLIC_BEST:
         return Reach(public=True)
     consent = settings.get("public_bigger_model")
@@ -101,10 +108,11 @@ def bigger_notice(reach_: Reach) -> dict | None:
 
 
 def refusal(model, reach_: Reach) -> str | None:
-    """« Automatique · réseau public » refusé à ce message (rien ici ni sur mes machines ne
-    répondrait à la place) : pourquoi, lisible ; None pour un autre modèle, ou si la
-    conversation pouvait partir (placement.plan dit alors qu'aucune machine ne répond)."""
-    if model != placement.PUBLIC_BEST or reach_.closed is None:
+    """« Automatique · réseau public », ou « Automatique » sans aucun modèle à moi, refusé à ce
+    message (rien ici ni sur mes machines ne répondrait à la place) : pourquoi, lisible ; None
+    pour un autre modèle, ou si la conversation pouvait partir (placement.plan dit alors
+    qu'aucune machine ne répond)."""
+    if model not in (placement.PUBLIC_BEST, placement.BEST) or reach_.closed is None:
         return None
     return t(f"public_chat.closed_{reach_.closed}")
 

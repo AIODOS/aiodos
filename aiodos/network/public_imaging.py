@@ -54,7 +54,8 @@ veille s'arrête : un utilisateur qui revient pendant l'envoi ne gâche pas une 
 
 Rien n'est gardé : sd-server rend l'image en mémoire (base64), rien n'est écrit sur le disque
 ici ; la description, l'image et la clé de l'appelant sont oubliées à la fin de la réponse, et
-le journal ne dit que le modèle, la taille, le nombre de pas et les durées. Hors d'AIODOS :
+le journal ne dit que le modèle, la taille, le nombre de pas et les durées (l'historique de la
+vue Tâches, network/lent_history.py : le modèle, la taille, la durée et l'issue). Hors d'AIODOS :
 sd-server garde sa tâche finie (description et image) en mémoire jusqu'à son arrêt
 (imaging/engine.IDLE_S après la dernière image), et son journal (data/logs/sd-server.log, niveau
 « info ») dit la taille et la graine, pas la description.
@@ -82,7 +83,7 @@ from fastapi.responses import JSONResponse
 
 from aiodos import __version__, settings
 from aiodos.imaging import catalog, prompt_filter
-from aiodos.network import connections, public_lending
+from aiodos.network import connections, lent_history, public_lending
 from aiodos.network.public_lending import Refused
 
 log = logging.getLogger("aiodos.net")
@@ -114,9 +115,14 @@ def lending_images(manager) -> bool:
 
 def lendable(model_id) -> bool:
     """Un modèle du catalogue qu'on prête aux inconnus, et qu'on leur demande : une image (une
-    vidéo : network/public_video.py), sans licence restrictive (qui demande un accord lu)."""
+    vidéo : network/public_video.py). Une licence restrictive aussi, depuis le 29/10/2026
+    (décision de l'auteur : « chacun est responsable de ses actes ») : qui le prête a lu sa
+    licence en le téléchargeant, et un avertissement s'il encadre le prêt
+    (catalog.lend_notice, GET /api/images/models) ; qui le demande ne le prend pas en
+    « Automatique » sans l'avoir ici ou chez ses machines, ou sans avoir accepté
+    sa licence ici (imaging/ranking.py, catalog.accepted)."""
     spec = catalog.MODELS.get(str(model_id or ""))
-    return bool(spec) and spec.get("kind", "image") == "image" and not spec.get("notice")
+    return bool(spec) and spec.get("kind", "image") == "image"
 
 
 def max_steps(spec: dict) -> int:
@@ -200,9 +206,13 @@ def admit(manager, raw: bytes) -> dict:
     if not lending_images(manager):
         raise Refused(503, "not_lending")
     params = _request(raw)                         # rien de pris pour une demande refusée
-    _filtered(manager, params)                     # ni pour une description interdite
-    return {"model": params["model"], "params": params,
-            "place": public_lending._take_place(manager)}
+    try:
+        _filtered(manager, params)                 # ni pour une description interdite
+        place = public_lending._take_place(manager)
+    except Refused as exc:
+        exc.model = params["model"]                # du catalogue (lent_history)
+        raise
+    return {"model": params["model"], "params": params, "place": place}
 
 
 # ------------------------------------------------------------------- réponse
@@ -249,6 +259,10 @@ def answer(manager, asked: dict, stop, clock=None):
     started = time.monotonic()
     done, why = threading.Event(), []
     number = public_lending.begin(manager, model)
+    # L'historique du travail pour d'autres : le modèle, la taille, la durée ; ni la
+    # description, ni l'image
+    lent = lent_history.begin(lent_history.IMAGE, lent_history.PUBLIC, model=model)
+    sizes = {"width": params["width"], "height": params["height"]}
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -272,12 +286,15 @@ def answer(manager, asked: dict, stop, clock=None):
             # i18n: tel quel (journal)
             log.info("Image pour le réseau public : %s, arrêtée (%s)", model,
                      why[0] if why else "engine")
+            lent.end(lent_history.STOPPED if why else lent_history.FAILED,
+                     why[0] if why else "engine", clock.counted(), **sizes)
             yield {"type": "error", "error": why[0] if why else "engine"}
             return
         if stop.is_set():
             return
         done.set()                     # l'image est faite : la veille s'arrête (cf. plus haut)
         png, width, height, seconds = found
+        sizes = {"width": width, "height": height}
         yield {"type": "image", "format": "png", "bytes": len(png), "width": width,
                "height": height, "seconds": seconds}
         for at in range(0, len(png), PART):
@@ -289,7 +306,11 @@ def answer(manager, asked: dict, stop, clock=None):
         log.info("Image pour le réseau public : %s, %d × %d, %d pas, %s s de calcul, sur %s s",
                  model, width, height, params["steps"], seconds,
                  round(time.monotonic() - started, 1))
+        lent.end(lent_history.DONE, None, seconds if seconds is not None else clock.counted(),
+                 **sizes)
     finally:
+        # Sans fin dite plus haut : l'appelant est parti en route (image faite ou non)
+        lent.end(lent_history.STOPPED, "left", clock.counted(), **sizes)
         public_lending.end(manager, number, done, clock, place)
 
 
@@ -305,6 +326,8 @@ def mount(app, manager):
         try:
             asked = await asyncio.to_thread(admit, manager, raw)
         except Refused as exc:
+            lent_history.refused(lent_history.IMAGE, lent_history.PUBLIC, exc.code,
+                                 model=exc.model)
             return JSONResponse({"error": exc.code}, status_code=exc.status)
         stop, clock = threading.Event(), public_lending._Clock()
         return public_lending._Stream(answer(manager, asked, stop, clock), asked["place"], stop,

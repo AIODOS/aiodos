@@ -1,6 +1,6 @@
 # Charte d'utilisation d'AIODOS
 
-*Version 5, 29 octobre 2026*
+*Version 6, 29 octobre 2026*
 
 AIODOS est un atelier d'intelligence artificielle libre. Il relie par Internet les machines
 de personnes qui ne se connaissent pas, pour mettre leur puissance en commun : celles des
@@ -12,7 +12,9 @@ d'utilisation.
 
 - **Ton IA t'appartient.** Tes conversations, tes bibliothèques et tes créations sont
   enregistrées sur tes machines. Quand une autre machine calcule pour toi, AIODOS n'y garde
-  rien, et tu peux toujours garder un travail chez toi (partie 3).
+  rien de ta demande : seulement, dans son historique, le genre de calcul, sa taille et sa
+  durée (et le nom de ta machine si c'est celle d'un ami ou une des siennes) ; et tu peux
+  toujours garder un travail chez toi (partie 3).
 - **Partager plutôt que consommer.** La puissance de calcul se met en commun. La réciprocité
   est souple : personne n'est bloqué, mais quand une machine est occupée, ceux qui lui ont le
   plus donné passent devant.
@@ -58,9 +60,10 @@ Seul ou avec d'autres machines, tu t'engages à ne pas te servir d'AIODOS pour :
 - **Pour un inconnu, ta machine ne fait que calculer.** Elle ne garde rien, ni la
   conversation, ni la description d'une image ou d'une vidéo, ni ce qu'elle a créé, ni qui
   le demande, et ne te les montre pas : tu ne choisis pas et tu ne vois pas ce qu'elle
-  calcule. Un inconnu pourrait donc lui demander un texte, une image ou une vidéo
-  illicite : ta machine ne ferait que faire tourner un modèle public dessus, sans rien en
-  garder. Chacun reste responsable de ce qu'il demande. Si cela ne te convient pas, coupe
+  calcule. Seul un historique sans contenu reste chez toi, dans la vue Tâches : l'heure, le
+  genre de calcul, le modèle, sa taille et sa durée. Un inconnu pourrait donc lui demander
+  un texte, une image ou une vidéo illicite : ta machine ne ferait que faire tourner un
+  modèle public dessus, sans rien garder de la demande. Chacun reste responsable de ce qu'il demande. Si cela ne te convient pas, coupe
   ces prêts dans les Réglages.
 - **Un filtre devant les images et les vidéos d'inconnus.** Avant tout calcul, ta machine
   refuse les descriptions interdites par cette charte (partie 2), notamment toute image ou

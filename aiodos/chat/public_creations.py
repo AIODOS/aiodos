@@ -12,7 +12,9 @@ une image ou une vidéo, une machine du réseau public peut la créer (choose) :
   public rejoint, pas « Sur mes machines seulement » pour cette conversation, pas d'image
   jointe : une image de départ ne part jamais chez un inconnu dans cette version) ;
 - si une machine du réseau public prête un modèle de ce genre et a une place
-  (public_image_ask.offered_models, public_video_ask.offered_models) ;
+  (public_image_ask.offered_models, public_video_ask.offered_models) : le modèle demandé s'il
+  y est, sinon le plus puissant (imaging/ranking.public_choices), jamais une licence
+  restrictive que je n'ai pas choisie moi-même (« only_restricted » s'il n'y a qu'elles) ;
 - avec l'accord public_images, demandé une fois, le même pour les images et les vidéos (comme
   images_from_friends pour mes amis, et comme le dit la charte, version 4 : « faire créer tes
   images et tes vidéos par la machine d'un inconnu », un seul accord) : tant qu'il ne l'est
@@ -36,6 +38,7 @@ from dataclasses import dataclass
 from aiodos import settings
 from aiodos.chat import public_consent
 from aiodos.i18n import t
+from aiodos.imaging import catalog, ranking
 from aiodos.network import public_image_ask, public_video_ask
 
 ASK = "ask"                       # la carte d'accord (CreationError.public)
@@ -80,7 +83,15 @@ def choose(preferred=None, mine_only=False, pictures=(), media_kind: str = "imag
     if consent is not True:
         # public_images.closed_refused, public_videos.closed_refused
         return Choice(message=t(f"{texts}.closed_refused"))
-    return Choice(model=preferred if preferred in found else found[0])
+    if preferred in found:
+        return Choice(model=preferred)
+    usable = ranking.public_choices(found)
+    if not usable:
+        # Seulement des licences restrictives : à choisir soi-même, sa licence lue (le menu)
+        # public_images.only_restricted, public_videos.only_restricted
+        names = ", ".join(catalog.label(m) for m in ranking.ordered(found))
+        return Choice(message=t(f"{texts}.only_restricted", models=names))
+    return Choice(model=usable[0])
 
 
 def offerable() -> set:

@@ -69,7 +69,8 @@ def _license(name: str):
 
 def default_of(wanted_kind: str) -> str | None:
     """Le modèle qu'AIODOS prend lui-même, en nom complet : celui de ses conversations
-    (default_model, « auto:qwen3.5:9b », « peer:… »…) ou de ses bibliothèques (embed_model).
+    (default_model, « auto:qwen3.5:9b », « peer:… »… ; « Automatique », « auto:best » : le plus
+    puissant de mes modèles en ce moment) ou de ses bibliothèques (embed_model).
     Une appli qui n'a pas de préférence prend celui-là (« default » dans les fiches) : pour
     les embeddings, des vecteurs d'un même modèle d'un jour à l'autre."""
     wanted = settings.get("embed_model" if wanted_kind == "embed" else "default_model")
@@ -77,6 +78,10 @@ def default_of(wanted_kind: str) -> str | None:
         model = catalog.internal(wanted)
     except catalog.UnknownModel:
         return None
+    if model == placement.BEST:           # « Automatique » : le plus puissant du moment
+        model = placement.best_name()
+        if model is None:
+            return None
     peer = remote_models.parse(model)
     name = peer[1] if peer else placement.parse(model) or cluster.parse(model) or model
     return llm_models.full_name(name)

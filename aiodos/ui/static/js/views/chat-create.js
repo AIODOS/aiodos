@@ -1,7 +1,11 @@
 // Créer une image ou une vidéo dans la conversation, comme dans les autres assistants
-// (chat/creations.py). Le bouton à côté du message ouvre le mode « Créer » : modèle, format,
-// durée, nombre ; sans lui, une demande écrite (« Crée une image d'un phare… ») est reconnue
-// avant l'envoi. La réponse de l'assistant montre les images à mesure qu'elles arrivent,
+// (chat/creations.py). Le bouton à côté du message ouvre le mode « Créer » : format, durée,
+// nombre ; le modèle se choisit dans le menu des modèles, sous la saisie (model-menu.js,
+// onglets Images et Vidéos) : « Automatique » (le choix par défaut, Réglages → Modèles) envoie
+// une demande sans modèle, et le nœud prend le plus puissant disponible ; le format et la durée
+// partent alors en forme (« portrait ») et en secondes. Sans le mode « Créer », une demande
+// écrite (« Crée une image d'un phare… ») est reconnue avant l'envoi. La réponse de l'assistant
+// montre les images à mesure qu'elles arrivent,
 // calculées ici ou par tes machines qui ont le modèle ; sinon, une image ou une vidéo peut être
 // créée par une machine du réseau public, avec l'accord demandé une fois, le même pour les deux
 // (chat/public_creations.py). Les recettes de ComfyUI et mes workflows prêts ici ou chez mes
@@ -18,6 +22,10 @@ import { mineOnly } from './chat-public.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const COUNTS = [1, 2, 4, 8];
+// « Automatique » : le format en forme et la durée en secondes, valables pour tout modèle
+const SHAPES = ['square', 'landscape', 'portrait'];
+const SECONDS = [1, 2, 3, 5];
+const SHAPE = { image: 'square', video: 'landscape' };
 // Les textes de chaque genre : chat_create.kind_image, create_image, placeholder_image,
 // no_model_image, count_image… (et _video)
 const KINDS = { image: { icon: 'image' }, video: { icon: 'video' } };
@@ -26,6 +34,10 @@ const kindOf = media => (KINDS[media.kind] ? media.kind : 'image');
 let info = null;              // modèles d'images et de vidéos (GET /images/models)
 let comfy = [];               // recettes de ComfyUI et mes workflows prêts (GET /chat/create/comfyui)
 let mode = null;              // null, 'image' ou 'video' : le mode « Créer » du message
+// Le modèle choisi dans le menu pour chaque genre (null : « Automatique ») ; absent : celui des
+// Réglages (default_image_model, default_video_model). Une nouvelle conversation les reprend
+let picked = {};
+let shown = null;             // le modèle de la barre (ses formats et durées), null : « Automatique »
 let preset = {};              // « Reprendre » : la graine, pour la prochaine création seulement
 let ui = {};                  // éléments du compositeur
 let onGrow = () => {};        // la conversation suit les images qui arrivent
@@ -42,7 +54,6 @@ export function mountCreate(footer, input, grow) {
     button: h(`<button class="icon-btn create-btn" title="${esc(t('chat_create.button'))}">${icon('image')}</button>`),
     bar: h(`<div class="create-bar" hidden>
       <button class="create-kind" data-c="close" title="${esc(t('chat_create.close'))}"></button>
-      <select class="select" data-c="model" title="${esc(t('chat_create.model'))}"></select>
       <select class="select" data-c="format" title="${esc(t('chat_create.format'))}"></select>
       <select class="select" data-c="frames" title="${esc(t('chat_create.duration'))}" hidden></select>
       <select class="select" data-c="count" title="${esc(t('chat_create.count'))}"></select>
@@ -58,9 +69,11 @@ export function mountCreate(footer, input, grow) {
   ui.button.addEventListener('pointerenter', () => { if (!info) load(); }, { once: true });
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   field('close').onclick = () => setMode(null);
-  field('model').onchange = () => { prefs.set(`create.model.${mode}`, field('model').value); fill(); };
-  field('format').onchange = () => prefs.set(`images.format.${field('model').value}`, field('format').value);
-  field('frames').onchange = () => prefs.set(`images.frames.${field('model').value}`, Number(field('frames').value));
+  // Le format et la durée gardés pour ce modèle, ou pour « Automatique » de ce genre
+  field('format').onchange = () => prefs.set(shown ? `images.format.${shown.id}` : `images.shape.${mode}`,
+    field('format').value);
+  field('frames').onchange = () => prefs.set(shown ? `images.frames.${shown.id}` : `images.seconds.${mode}`,
+    Number(field('frames').value));
   field('count').onchange = () => prefs.set(`create.count.${mode}`, Number(field('count').value));
   ui.bar.querySelector('.create-seed').onclick = () => { delete preset.seed; fill(); };
   input.addEventListener('keydown', e => {      // Échap : retour à la conversation
@@ -69,6 +82,8 @@ export function mountCreate(footer, input, grow) {
   on('images:changed', () => { if (mode) load(); });
   on('chat:mine-only', () => { if (mode) fill(); });   // le réseau public, ou non (viaPublic)
   on('chat:create', p => { emit('view:show', 'chat'); setMode(p?.kind || 'image', p || {}); });
+  on('chat:new', () => { picked = {}; if (mode) fill(); });    // les choix des Réglages
+  on('settings:loaded', () => { if (mode) fill(); });
   on('jobs:changed', follow);
   setInterval(() => {                 // le temps qui passe, pour les créations en cours
     if (state.view !== 'chat') return;
@@ -85,13 +100,14 @@ export function setMode(kind, p = {}) {
   ui.button.classList.toggle('on', !!kind);
   ui.input.placeholder = kind ? t(`chat_create.placeholder_${kind}`) : ui.placeholder;
   if (ui.hint) ui.hint.textContent = kind ? t('chat_create.hint') : ui.hintText;
+  emit('create:changed');             // le bouton du menu des modèles dit le genre en cours
   if (!kind) { ui.input.focus(); return; }
   if (p.prompt) {
     ui.input.value = p.prompt;
     ui.input.dispatchEvent(new Event('input'));
   }
   if (p.model) {                      // repris : ses réglages deviennent ceux de la barre
-    prefs.set(`create.model.${kind}`, p.model);
+    picked[kind] = p.model;
     if (p.width && p.height) prefs.set(`images.format.${p.model}`, `${p.width}x${p.height}`);
     if (p.frames) prefs.set(`images.frames.${p.model}`, Number(p.frames));
   }
@@ -100,12 +116,35 @@ export function setMode(kind, p = {}) {
   ui.input.focus();
 }
 
+/** Le genre du mode « Créer » ouvert ('image' ou 'video'), ou null. */
+export const createKind = () => mode;
+
+/** Le modèle choisi pour ce genre (le menu, sinon les Réglages), null : « Automatique ». */
+export function createChoice(kind) {
+  const id = kind in picked ? picked[kind] : state.settings?.[`default_${kind}_model`];
+  return id || null;
+}
+
+/** Un choix du menu des modèles (id null : « Automatique ») : le mode « Créer » de ce genre. */
+export function pickCreate(kind, id) {
+  picked[kind] = id || null;
+  if (mode !== kind) { setMode(kind); return; }
+  fill();
+  ui.input.focus();
+}
+
+/** Le nom d'un modèle d'images ou de vidéos (ou d'une recette), d'après les modèles lus. */
+export function createLabel(id) {
+  return [...(info?.models || []), ...comfy].find(m => m.id === id)?.label || id;
+}
+
 async function load() {
   // ComfyUI fermé ou absent : seulement les modèles d'AIODOS
   const recipes = get('/chat/create/comfyui').then(r => r.models || [], () => []);
   try { info = await get('/images/models'); } catch (err) { errorToast(err); return; }
   comfy = await recipes;
   if (mode) fill();
+  emit('create:changed');             // les noms des modèles sont connus
 }
 
 // Une recette de ComfyUI : prête ici (« here ») ou chez mes machines (helpers)
@@ -122,46 +161,51 @@ function showModels() {
   emit('settings:focus', 'modeles');
 }
 
-/** Les listes de la barre, selon le genre et le modèle choisis (règles du catalogue). */
+/** Les listes de la barre, selon le genre et le modèle choisis (règles du catalogue). Un
+ *  modèle choisi qui ne peut plus calculer laisse la place à « Automatique ». */
 function fill() {
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   const k = KINDS[mode];
   ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${esc(t(`chat_create.kind_${mode}`))}${icon('x')}`;
   const models = [...(info?.models || []).filter(m => (m.kind || 'image') === mode).sort(byPower),
     ...comfy.filter(m => m.kind === mode)];
-  const select = field('model');
-  const wanted = prefs.get(`create.model.${mode}`, '') || select.value;
-  select.innerHTML = models.map(m => {
-    const text = !usable(m) ? t('chat_create.model_to_install', { label: m.label })
-      : viaPublic(m) ? t('public_images.model_public', { label: m.label })
-      : m.engine === 'comfyui' ? (m.here ? m.label : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') }))
-      : m.state === 'ready' && info.engine.found ? m.label
-      : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') });
-    return `<option value="${esc(m.id)}"${usable(m) ? '' : ' disabled'}>${esc(text)}</option>`;
-  }).join('');
   const ready = models.filter(usable);
-  select.value = ready.some(m => m.id === wanted) ? wanted : ready[0]?.id || models[0]?.id || '';
-  const model = models.find(m => m.id === select.value);
+  const wanted = createChoice(mode);
+  shown = ready.find(m => m.id === wanted) || null;
+  // Un modèle choisi qui ne peut plus calculer (les modèles lus) : « Automatique », bouton compris
+  if (info && wanted && !shown) picked[mode] = null;
   const note = ui.bar.querySelector('.create-note');
   note.innerHTML = !info ? `<span class="faint">${esc(t('chat.loading_models'))}</span>` : ready.length ? ''
     : `<span class="faint">${esc(t(`chat_create.no_model_${mode}`))}</span>
        <button class="btn sm" data-go-models>${icon('download')}${esc(t('chat_create.choose_model'))}</button>`;
   note.querySelector('[data-go-models]')?.addEventListener('click', showModels);
-  for (const name of ['format', 'frames', 'count']) field(name).hidden = !model || !ready.length;
-  if (!model) return;
-  field('format').hidden ||= !model.sizes.length;     // une recette sans largeur ni hauteur
-  // « Portrait » suffit ici ; les dimensions sont dans la galerie
-  const sizes = model.sizes.map(([w, hgt, label]) => [`${w}x${hgt}`, label.split(' · ')[0]]);
+  for (const name of ['format', 'frames', 'count']) field(name).hidden = !ready.length;
+  emit('create:changed');
+  if (!ready.length) return;
   const format = field('format');
-  const shape = prefs.get(`images.format.${model.id}`, '');
-  format.innerHTML = sizes.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
-  format.value = sizes.some(([v]) => v === shape) ? shape : sizes[0]?.[0] || '';
   const frames = field('frames');
-  frames.hidden = mode !== 'video' || !ready.length || !(model.durations || []).length;
-  frames.innerHTML = (model.durations || []).map(([n, l]) => `<option value="${n}">${esc(l)}</option>`).join('');
-  const frameCount = String(prefs.get(`images.frames.${model.id}`, model.default_frames || ''));
-  frames.value = (model.durations || []).some(([n]) => String(n) === frameCount) ? frameCount
-    : String(model.default_frames || model.durations?.[0]?.[0] || '');
+  if (shown) {
+    format.hidden = !shown.sizes.length;             // une recette sans largeur ni hauteur
+    // « Portrait » suffit ici ; les dimensions sont dans la galerie
+    const sizes = shown.sizes.map(([w, hgt, label]) => [`${w}x${hgt}`, label.split(' · ')[0]]);
+    const kept = prefs.get(`images.format.${shown.id}`, '');
+    format.innerHTML = sizes.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+    format.value = sizes.some(([v]) => v === kept) ? kept : sizes[0]?.[0] || '';
+    frames.hidden = mode !== 'video' || !(shown.durations || []).length;
+    frames.innerHTML = (shown.durations || []).map(([n, l]) => `<option value="${n}">${esc(l)}</option>`).join('');
+    const frameCount = String(prefs.get(`images.frames.${shown.id}`, shown.default_frames || ''));
+    frames.value = (shown.durations || []).some(([n]) => String(n) === frameCount) ? frameCount
+      : String(shown.default_frames || shown.durations?.[0]?.[0] || '');
+  } else {
+    // « Automatique » : le nœud choisit le modèle ; la forme et la durée valent pour tous
+    const kept = prefs.get(`images.shape.${mode}`, SHAPE[mode]);
+    format.innerHTML = SHAPES.map(s => `<option value="${s}">${esc(t(`model_menu.shape_${s}`))}</option>`).join('');
+    format.value = SHAPES.includes(kept) ? kept : SHAPE[mode];
+    frames.hidden = mode !== 'video';
+    const seconds = String(prefs.get(`images.seconds.${mode}`, 2));
+    frames.innerHTML = SECONDS.map(n => `<option value="${n}">${esc(t('format.seconds', { n }))}</option>`).join('');
+    frames.value = SECONDS.map(String).includes(seconds) ? seconds : '2';
+  }
   const count = field('count');
   const n = String(prefs.get(`create.count.${mode}`, 1));
   count.innerHTML = COUNTS.map(c =>
@@ -172,31 +216,37 @@ function fill() {
   seed.innerHTML = preset.seed == null ? '' : `${esc(t('chat_create.seed', { seed: preset.seed }))} ${icon('x')}`;
 }
 
-/** La demande du mode « Créer », s'il est ouvert : la description est le message. */
+/** La demande du mode « Créer », s'il est ouvert : la description est le message. Avec
+ *  « Automatique », sans modèle (le nœud prend le plus puissant disponible), la forme et la
+ *  durée en secondes. */
 export function creationRequest(text) {
   if (!mode) return null;
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
+  const video = mode === 'video';
   const [width, height] = (field('format').value || '').split('x').map(Number);
-  const request = { kind: mode, model: field('model').value || null, prompt: text,
-    width: width || null, height: height || null, count: Number(field('count').value) || 1,
-    frames: mode === 'video' ? Number(field('frames').value) || null : null,
+  const chosen = shown
+    ? { model: shown.id, width: width || null, height: height || null,
+      frames: video ? Number(field('frames').value) || null : null }
+    : { model: null, shape: field('format').value || null,
+      seconds: video ? Number(field('frames').value) || null : null };
+  const request = { kind: mode, prompt: text, ...chosen, count: Number(field('count').value) || 1,
     seed: preset.seed ?? null };
   delete preset.seed;                   // la graine reprise ne sert qu'une fois
   fill();
   return request;
 }
 
-/** La demande reconnue dans un message (preflight) : le modèle préféré de ce genre, son
- *  format habituel si la phrase n'en dit rien. */
+/** La demande reconnue dans un message (preflight) : le modèle choisi de ce genre (ou aucun,
+ *  « Automatique » : le nœud choisit), son format habituel si la phrase n'en dit rien. */
 export function autoRequest(found) {
   if (found.followup) {           // retouche ou variante : les réglages de la dernière création
     return { kind: found.kind, followup: found.followup, count: found.count };
   }
-  const model = prefs.get(`create.model.${found.kind}`, found.model) || found.model;
-  const [width, height] = String(prefs.get(`images.format.${model}`, '')).split('x').map(Number);
+  const model = createChoice(found.kind);
+  const [width, height] = model ? String(prefs.get(`images.format.${model}`, '')).split('x').map(Number) : [];
   return { kind: found.kind, model, prompt: found.prompt, count: found.count, shape: found.shape,
     seconds: found.seconds, width: width || null, height: height || null,
-    frames: found.kind === 'video' && !found.seconds ? prefs.get(`images.frames.${model}`, null) : null };
+    frames: model && found.kind === 'video' && !found.seconds ? prefs.get(`images.frames.${model}`, null) : null };
 }
 
 // ------------------------------------------------------------ la réponse de l'assistant

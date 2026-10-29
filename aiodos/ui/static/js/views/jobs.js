@@ -1,14 +1,16 @@
-// Tâches : la file d'attente (travaux découpés en unités), priorités, commandes. Une ligne
-// repliable par travail (titre, état, progression, pause ou reprise, annulation), le détail à
-// l'ouverture, avec le chantier en direct (chantier.js) ; en bas, les machines au travail
-// (jobs-workers.js).
+// Tâches, deux onglets : « Pour moi », la file d'attente (travaux découpés en unités),
+// priorités, commandes, avec une ligne repliable par travail (titre, état, progression, pause
+// ou reprise, annulation), le détail à l'ouverture, le chantier en direct (chantier.js) et, en
+// bas, les machines au travail (jobs-workers.js) ; « Pour d'autres », ce que cette machine
+// calcule pour d'autres et son historique (jobs-lent.js).
 import { get, post, patch } from '../api.js';
-import { $, h, esc, duration, ago } from '../dom.js';
+import { $, $$, h, esc, duration, ago } from '../dom.js';
 import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
-import { state, on, emit } from '../state.js';
+import { state, on, emit, prefs } from '../state.js';
 import { toast, errorToast, confirmDanger, menu } from '../ui.js';
 import { showChantier, forgetChantier } from './chantier.js';
+import { mountLent, showLent, liveCount } from './jobs-lent.js';
 import { mountWorkers, renderWorkers, peerName } from './jobs-workers.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
@@ -23,6 +25,10 @@ let root;
 const rows = new Map();              // job id → { el, shape, facts, notes }
 const expanded = new Set();          // lignes ouvertes (fermées par défaut)
 const failuresCache = new Map();     // job id → { count, list }
+// L'onglet ouvert (« mine » : pour moi ; « others » : pour d'autres), repris d'une fois à l'autre
+const TABS = [['mine', 'jobs_lent.tab_mine'], ['others', 'jobs_lent.tab_others']];
+let tab = prefs.get('jobsTab', 'mine') === 'others' ? 'others' : 'mine';
+const mineShown = () => state.view === 'jobs' && tab === 'mine';
 
 /** Le titre d'un travail, dans la langue de l'interface s'il est venu traduisible
  *  (title_t, cf. jobs/queue.py), sinon tel qu'il a été écrit à sa création. */
@@ -33,25 +39,63 @@ export function mountJobs(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head">
         <div><h1>${esc(t('jobs.title'))}</h1>
-          <div class="sub">${esc(t('jobs.intro'))}</div></div>
+          <div class="sub" id="jobs-intro"></div></div>
         <div class="grow"></div>
         <button class="btn" id="jobs-pause-all">${icon('pause')}${esc(t('jobs.pause_all'))}</button>
         <button class="btn" id="jobs-clear">${icon('trash')}${esc(t('jobs.clear_finished'))}</button>
       </div>
-      <div class="stats" id="jobs-stats"></div>
-      <div class="slots" id="jobs-slots"></div>
-      <div class="jobs" id="jobs-list"></div>
-      <div class="jobs-workers" id="jobs-workers"></div>
+      <div class="toolbar jobs-tabs">
+        <div class="segmented" role="tablist" aria-label="${esc(t('jobs_lent.tabs_label'))}">${TABS.map(([name, label]) =>
+          `<button type="button" role="tab" data-jobs-tab="${name}">${esc(t(label))}<span class="seg-count" hidden></span></button>`).join('')}</div>
+      </div>
+      <div id="jobs-mine">
+        <div class="stats" id="jobs-stats"></div>
+        <div class="slots" id="jobs-slots"></div>
+        <div class="jobs" id="jobs-list"></div>
+        <div class="jobs-workers" id="jobs-workers"></div>
+      </div>
+      <div id="jobs-others" hidden></div>
     </div></div>`);
   container.append(root);
   mountWorkers($('#jobs-workers', root));
+  mountLent($('#jobs-others', root));
   $('#jobs-clear', root).onclick = clearFinished;
   $('#jobs-pause-all', root).onclick = e => pauseAll(e.currentTarget);
-  on('jobs:changed', () => { if (state.view === 'jobs') render(); });
-  on('executor:changed', () => { if (state.view === 'jobs') { renderSlots(); renderWorkers(); } });
-  on('network:loaded', () => { if (state.view === 'jobs') renderWorkers(); });
-  on('view:shown', view => { if (view === 'jobs') render(); });
-  setInterval(() => { if (state.view === 'jobs') render(); }, 2000);   // durées vivantes
+  $$('[data-jobs-tab]', root).forEach(b => { b.onclick = () => showTab(b.dataset.jobsTab); });
+  showTab(tab);
+  on('jobs:changed', () => { if (mineShown()) render(); });
+  on('executor:changed', () => { if (mineShown()) { renderSlots(); renderWorkers(); } });
+  on('network:loaded', () => { if (mineShown()) renderWorkers(); });
+  on('view:shown', view => { if (view === 'jobs') showTab(tab); });
+  on('lent:live', renderTabCount);                        // calculs pour d'autres en cours
+  setInterval(() => { if (mineShown()) render(); }, 2000);   // durées vivantes
+}
+
+// Un onglet : sa page, son texte d'en-tête ; les commandes de la file, pour moi seulement
+function showTab(name) {
+  tab = name === 'others' ? 'others' : 'mine';
+  prefs.set('jobsTab', tab);
+  $$('[data-jobs-tab]', root).forEach(b => {
+    b.classList.toggle('on', b.dataset.jobsTab === tab);
+    b.setAttribute('aria-selected', String(b.dataset.jobsTab === tab));
+  });
+  $('#jobs-mine', root).hidden = tab !== 'mine';
+  $('#jobs-others', root).hidden = tab !== 'others';
+  $('#jobs-pause-all', root).hidden = tab !== 'mine';
+  $('#jobs-clear', root).hidden = tab !== 'mine';
+  $('#jobs-intro', root).textContent = t(tab === 'mine' ? 'jobs.intro' : 'jobs_lent.intro');
+  if (state.view !== 'jobs') return;
+  if (tab === 'mine') render();
+  showLent();                          // ouvert, ou le compte à côté de son nom
+}
+
+// « Pour d'autres » : combien de calculs pour d'autres en ce moment, à côté de son nom
+function renderTabCount() {
+  const badge = root && $('[data-jobs-tab="others"] .seg-count', root);
+  if (!badge) return;
+  const n = liveCount();
+  badge.hidden = !n;
+  badge.textContent = n ? String(n) : '';
 }
 
 export async function loadJobs() {

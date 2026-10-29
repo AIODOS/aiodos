@@ -30,7 +30,8 @@ sur Ollama, 404 « no_reading » (ou un refus lisible entre mes machines) ; une 
 d'avant n'a pas la route ni l'action (404) : le demandeur compare alors les textes seuls.
 
 Rien n'est gardé : ni les messages, ni les textes, ni la clé de l'appelant ; le journal ne
-dit que le modèle, le nombre de textes et de jetons lus, et la durée.
+dit que le modèle, le nombre de textes et de jetons lus, et la durée, et l'historique de la vue
+Tâches (network/lent_history.py) le modèle, la durée, les jetons lus et l'issue.
 """
 import asyncio
 import logging
@@ -43,7 +44,8 @@ from fastapi.responses import JSONResponse
 from aiodos import __version__, settings
 from aiodos.i18n import t
 from aiodos.llm import reading
-from aiodos.network import activity, connections, lend_queue, lending, public_lending, sharing
+from aiodos.network import (activity, connections, lend_queue, lending, lent_history,
+                            public_lending, sharing)
 from aiodos.network.client import PeerError
 from aiodos.network.public_lending import Refused
 from aiodos.services import ollama
@@ -79,7 +81,12 @@ def texts(raw) -> list:
 def _logged(model, found, began) -> str:
     # i18n: tel quel (journal) ; des nombres seulement
     return "%s, %d texte(s), %d jetons lus, %.1f s" % (
-        model, len(found), sum(r["n"] for r in found if r), time.monotonic() - began)
+        model, len(found), _tokens(found), time.monotonic() - began)
+
+
+def _tokens(found) -> int:
+    """Jetons lus, d'après les résumés rendus (None : un texte non lu)."""
+    return sum(r["n"] for r in found if r)
 
 
 # ---------------------------------------------------------------- mes machines
@@ -113,20 +120,32 @@ def read(manager, sender, payload, stop):
                 yield {"queued": lend_queue.position(ticket)}
             began = time.monotonic()
             manager.executor.interactive_begin()
+            lent = lent_history.begin(lent_history.READING, lent_history.MINE, peer_id=sender,
+                                      model=model)
             try:
                 with activity.chat("for", sender, stop):
                     found = reading.read(model, messages, wanted, stop=stop)
             except reading.ReadingError as exc:
                 if stop.is_set():
                     return
+                lent.end(lent_history.FAILED, "engine", time.monotonic() - began)
                 raise PeerError(t("lending.read_failed", name=manager.name())) from exc
             except reading.Unavailable as exc:
+                lent.end(lent_history.REFUSED, "no_reading")
                 raise PeerError(t("lending.read_unavailable", name=manager.name())) from exc
+            else:
+                lent.end(lent_history.DONE, None, time.monotonic() - began,
+                         tokens=_tokens(found))
             finally:
                 manager.executor.interactive_end()
+                # Sans fin dite plus haut : partie en route, ou une erreur imprévue
+                lent.end(*((lent_history.STOPPED, "left") if stop.is_set()
+                           else (lent_history.FAILED, "error")), time.monotonic() - began)
             log.info("Lecture pour une de mes machines : " + _logged(model, found, began))
             yield {"readings": found}
         except lend_queue.Busy:
+            lent_history.refused(lent_history.READING, lent_history.MINE, "busy",
+                                 peer_id=sender, model=model)
             raise PeerError(t("lending.busy", name=manager.name())) from None
         except lend_queue.Cancelled:
             return                                       # elle est partie avant son tour
@@ -164,6 +183,7 @@ def answer(manager, asked: dict, stop, clock=None):
     began = time.monotonic()
     done, why = threading.Event(), []
     number = public_lending.begin(manager, model)
+    lent = lent_history.begin(lent_history.READING, lent_history.PUBLIC, model=model)
     try:
         yield {"type": "meta", "model": model, "version": __version__}
         if stop.is_set():
@@ -183,11 +203,15 @@ def answer(manager, asked: dict, stop, clock=None):
             # i18n: tel quel (journal)
             log.info("Lecture pour le réseau public : %s, arrêtée (%s)", model,
                      why[0] if why else "engine")
+            lent.end(lent_history.STOPPED if why else lent_history.FAILED,
+                     why[0] if why else "engine", clock.counted())
             yield {"type": "error", "error": why[0] if why else "engine"}
         elif not stop.is_set() and found is not None:
             log.info("Lecture pour le réseau public : " + _logged(model, found, began))
+            lent.end(lent_history.DONE, None, clock.counted(), tokens=_tokens(found))
             yield {"type": "reading", "readings": found}
     finally:
+        lent.end(lent_history.STOPPED, "left", clock.counted())    # parti en route
         public_lending.end(manager, number, done, clock, place)
 
 
@@ -203,6 +227,8 @@ def mount(app, manager):
         try:
             asked = await asyncio.to_thread(admit, manager, raw)
         except Refused as exc:
+            lent_history.refused(lent_history.READING, lent_history.PUBLIC, exc.code,
+                                 model=exc.model)
             return JSONResponse({"error": exc.code}, status_code=exc.status)
         stop, clock = threading.Event(), public_lending._Clock()
         return public_lending._Stream(answer(manager, asked, stop, clock), asked["place"], stop,

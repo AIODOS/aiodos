@@ -1,6 +1,6 @@
 # Conditions d'utilisation d'AIODOS
 
-*Version 5, 29 octobre 2026*
+*Version 6, 29 octobre 2026*
 
 ## 1. Objet
 
@@ -43,8 +43,10 @@ ont leurs propres conditions :
 
 - Une partie de tes demandes peut être calculée par d'autres machines : les tiennes, celles
   de tes amis, celles du réseau public. Elles voyagent chiffrées, mais la machine qui calcule
-  doit les lire pour les traiter. AIODOS est conçu pour ne rien garder chez celle qui
-  calcule ; l'éditeur ne peut pas garantir que le programme d'une autre personne n'a pas été
+  doit les lire pour les traiter. AIODOS est conçu pour ne rien garder de la demande chez
+  celle qui calcule (son historique, dans la vue Tâches, ne note que le genre de calcul, le
+  modèle, la taille, la durée et, pour un ami ou une de ses machines, le nom de la machine
+  qui demande) ; l'éditeur ne peut pas garantir que le programme d'une autre personne n'a pas été
   modifié.
 - Dès la première ouverture, et jusqu'à ce que tu le coupes : ta machine rejoint l'annuaire
   du réseau public (elle y annonce sa version d'AIODOS, la liste de ses modèles, si elle
@@ -77,10 +79,12 @@ ont leurs propres conditions :
 - **Les conversations d'inconnus sur ta machine** (« Prêter ma puissance aux conversations
   d'inconnus ») : ta machine les calcule dans la limite de la « Puissance prêtée » (60 % par
   défaut), jamais sur batterie, un téléphone seulement en charge et en Wi-Fi, et après tes
-  propres travaux, tes machines et tes amis. Elle ne garde rien, ni la conversation ni qui
-  la demande, et ne te la montre pas : tu ne choisis pas et tu ne vois pas ce qu'elle
-  calcule. Un inconnu pourrait donc lui demander un texte illicite : ta machine ne ferait
-  que faire tourner un modèle public dessus, sans rien en garder. Chacun reste responsable
+  propres travaux, tes machines et tes amis. Elle ne garde ni la conversation ni qui la
+  demande, et ne te la montre pas : tu ne choisis pas et tu ne vois pas ce qu'elle calcule
+  (la vue Tâches n'en garde qu'une ligne sans contenu : l'heure, le modèle, la durée, le
+  nombre de mots calculés). Un inconnu pourrait donc lui demander un texte illicite : ta
+  machine ne ferait que faire tourner un modèle public dessus, sans rien garder de la
+  demande. Chacun reste responsable
   de ce qu'il demande (partie 6). Si cela ne te convient pas, coupe ce prêt dans les
   Réglages.
 - **Les images et les vidéos d'inconnus sur ta carte graphique** : ce prêt est activé par
@@ -124,7 +128,11 @@ ont leurs propres conditions :
 Les modèles d'IA ne sont pas fournis par l'éditeur : d'autres les publient, sous leurs
 propres licences, dont certaines limitent l'usage commercial ou certains usages. AIODOS
 affiche la licence d'un modèle quand elle est restrictive et te demande de la confirmer ; il
-t'appartient de la respecter. Il en va de même des moteurs dont AIODOS peut se servir
+t'appartient de la respecter. AIODOS propose aussi des modèles dont la licence est non
+commerciale, gratuite seulement sous un seuil de chiffre d'affaires, ou qui exclut certains
+pays ou le calcul pour des tiers (par exemple MiniMax H3, dont la licence exclut l'Union
+européenne) : c'est à toi de décider de les télécharger, de t'en servir et de les prêter,
+et tu en es seul responsable. Il en va de même des moteurs dont AIODOS peut se servir
 (llama.cpp, stable-diffusion.cpp, Ollama, ComfyUI…).
 
 ## 8. Mises à jour

@@ -1,20 +1,21 @@
 // Conversation : choix du modèle, messages en streaming, validations. Les autorisations
 // (bibliothèques, web…) sont dans chat-permissions.js.
-import { get, post, put, patch, streamChat, openExternal, inNativeWindow } from '../api.js';
-import { $, h, esc, bytes, duration, linkAction, linkKind } from '../dom.js';
+import { get, post, patch, streamChat, openExternal, inNativeWindow } from '../api.js';
+import { $, h, esc, duration, linkAction, linkKind } from '../dom.js';
 import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
-import { AUTO, PUBLIC_AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName,
+import { AUTO, BEST_AUTO, PUBLIC_AUTO, asDefault, catalog, defaultChoice, modelLabel, modelName,
   publicChoice, unverifiedTag } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated } from './model-install.js';
 import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
-  resetMedia } from './chat-create.js';
+  resetMedia, setMode, createKind, createChoice, createLabel, pickCreate } from './chat-create.js';
 import { mountPermissions } from './chat-permissions.js';
 import { isPublic, mineOnly, showNotice } from './chat-public.js';
+import { menuData, modelMenu } from './model-menu.js';
 
 let el = {};
 let busy = false;
@@ -23,6 +24,10 @@ let sending = false;       // un envoi en préparation (preflight, validations) 
 let displayed = 0;         // change à chaque conversation affichée (créations en route)
 let controller = null;
 let entries = [];          // modèles proposés, une fois chacun (cf. models.js)
+// Le modèle de conversation choisi (« auto:best », « auto:<modèle> », « peer:… », « reparti:… ») ;
+// la machine d'un modèle se choisit à côté (#machine-select)
+let textChoice = '';
+let menu = null;           // le bouton « Modèle » et son panneau (model-menu.js)
 let editing = null;        // { node } : le dernier message de l'utilisateur, en cours de modification
 let opening = 0;           // ouvertures de conversation : seule la dernière s'affiche
 let installing = null;     // installation d'un modèle en cours (avancement)
@@ -52,7 +57,6 @@ export function mountChat(container) {
         </div>
         <div class="composer-tools">
           <span class="grow"></span>
-          <select class="select" id="model-select" title="${esc(t('chat.model_select'))}"></select>
           <select class="select" id="machine-select" hidden
             title="${esc(t('chat.machine_select'))}"></select>
         </div>
@@ -61,7 +65,7 @@ export function mountChat(container) {
     </div>`);
   container.append(chat);
   el = {
-    chat, title: $('#chat-title'), model: $('#model-select'), machine: $('#machine-select'),
+    chat, title: $('#chat-title'), machine: $('#machine-select'),
     banner: $('#chat-banner'), editBar: $('#edit-bar'),
     scroll: $('#messages'), list: $('#messages-inner'), input: $('#composer'), send: $('#send'),
   };
@@ -89,9 +93,7 @@ export function mountChat(container) {
   on('chat:open', () => showList(false));
   on('chat:new', () => showList(false));
   el.scroll.addEventListener('click', () => showList(false));
-  el.model.onchange = onModelChange;
   on('cluster:changed', showPreparation);
-  el.machine.onchange = rememberModel;
   el.input.addEventListener('input', autoresize);
   el.input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
@@ -114,6 +116,21 @@ export function mountChat(container) {
   mountCreate(chat.querySelector('.composer'), el.input, () => scrollBottom());
   mountAttach(chat, el.input);              // trombone, fichier glissé, image collée
   mountPermissions(chat.querySelector('.composer-tools'));   // sous la saisie, avant le modèle
+  // Le modèle : le texte de la conversation, ou celui du mode « Créer » ouvert (chat-create.js)
+  menu = modelMenu({
+    kindNow: () => createKind() || 'text',
+    chosen: kind => (kind === 'text' ? (textChoice && textChoice !== BEST_AUTO ? textChoice : null)
+      : kind === 'audio' ? null : createChoice(kind)),
+    pick: pickModel,
+    mineOnly,
+    name: (kind, id) => (kind === 'text' ? modelName(id) : createLabel(id)),
+    // Texte : la machine choisie à côté ne change pas le modèle ; un gros modèle réparti est
+    // un autre choix que le même modèle sur une seule machine
+    same: (kind, a, b) => a === b || (kind === 'text' && !/^reparti:/.test(a) && !/^reparti:/.test(b)
+      && modelName(a) === modelName(b)),
+  });
+  el.machine.before(menu.root);
+  on('create:changed', () => menu.refresh());
 
   on('chat:new', newConversation);
   on('chat:open', openConversation);
@@ -136,7 +153,6 @@ export function mountChat(container) {
     if (publicSettings !== null && now !== publicSettings && state.modelsLoaded) emit('models:reload');
     publicSettings = now;
   });
-  el.model.innerHTML = `<option value="">${esc(t('chat.loading_models'))}</option>`;
   showWelcome();
 }
 
@@ -145,46 +161,30 @@ function vramTotal() {
   return Math.max(0, ...(state.node?.gpus || []).map(g => g.vram_total));
 }
 
-/** Modèle choisi : « auto:… » (la machine se choisit seule), un modèle d'une machine
- *  précise, un gros modèle réparti, ou « Automatique · réseau public ». */
+const isSplit = id => /^reparti:/.test(id || '');
+
+/** Modèle choisi : « Automatique » (« auto:best » : le modèle et la machine se choisissent
+ *  seuls), « auto:… » (la machine se choisit seule), un modèle d'une machine précise, un gros
+ *  modèle réparti ; '' tant que les modèles ne sont pas lus. */
 function selectedModel() {
-  const value = el.model.value;
-  if (/^reparti:/.test(value) || value === PUBLIC_AUTO) return value;
-  const entry = entries.find(e => e.name === value);
-  return entry ? (el.machine.value || defaultChoice(entry)) : '';
+  if (!textChoice || textChoice === BEST_AUTO || isSplit(textChoice)) return textChoice;
+  const entry = entries.find(e => e.name === modelName(textChoice));
+  // Un modèle du réseau public seulement (le menu le propose) : « auto:<modèle> » tel quel
+  return entry ? (el.machine.value || defaultChoice(entry)) : textChoice;
 }
 
+/** Le modèle d'une nouvelle conversation : celui des Réglages (« Automatique » par défaut). */
+const defaultText = () => asDefault(state.settings?.default_model) || BEST_AUTO;
+
 function fillModels() {
-  const wanted = selectedModel() || state.currentConversation?.model
-    || asDefault(state.settings?.default_model);
+  const wanted = selectedModel() || state.currentConversation?.model || defaultText();
   entries = catalog();
   const local = state.models.filter(m => m.group === 'local');
   const remote = state.models.filter(m => m.group === 'remote');
-  const cluster = state.models.filter(m => m.group === 'cluster').sort(byPower);
+  const cluster = state.models.filter(m => m.group === 'cluster');
   // Rien ici ni sur mes machines : le réseau public, si cette conversation peut y partir
   filledMine = mineOnly();
   const open = entries.length || cluster.length ? null : publicChoice(filledMine);
-  el.model.innerHTML = '';
-  const group = (label, items) => {
-    if (!items.length) return;
-    const g = document.createElement('optgroup');
-    g.label = label;
-    items.forEach(([value, text]) => g.append(new Option(text, value)));
-    el.model.append(g);
-  };
-  // Chaque modèle une fois, même s'il est sur plusieurs machines : la machine se choisit à côté
-  // Sans mode automatique (prêté seulement par un ami…), l'option dit qui le prête
-  group(t(remote.length ? 'chat.group_auto' : 'chat.group_here'),
-    entries.map(e => [e.name, e.auto ? `${e.name} · ${bytes(e.size)}`
-      : `${e.name} · ${e.machines.map(m => m.label).join(', ')} · ${bytes(e.size)}`]));
-  group(t('chat.group_cluster'), cluster.map(m => [m.id,
-    t(m.complete ? 'chat.cluster_option' : 'chat.cluster_option_partial',
-      { label: m.label, size: bytes(m.size), machines: m.machines.join(', ') })]));
-  if (open?.ready) {                      // le meilleur modèle d'une machine du réseau public
-    const option = new Option(t('models.public_auto'), PUBLIC_AUTO);
-    option.title = t('models.public_auto_title', { models: (open.models || []).join(', ') });
-    el.model.append(option);
-  }
   selectModel(wanted);
   // Sans modèle ici : le dire (« ce téléphone » ou « ce PC »), et proposer d'en installer un ;
   // le réseau public, s'il peut répondre, qu'on cherche encore ses machines (la première
@@ -214,30 +214,31 @@ function fillModels() {
   el.banner.querySelector('[data-install-cancel]')?.addEventListener('click', cancelInstall);
 }
 
-/** Sélectionne un modèle d'après son identifiant (« auto:x », « peer:…:x », « x »,
- *  « reparti:x », « Automatique · réseau public »). */
+/** Un modèle que l'on peut encore choisir : « Automatique », un modèle d'ici ou de mes
+ *  machines, un gros modèle réparti, ou un modèle que le menu propose (réseau public). */
+function known(id) {
+  if (!id || id === BEST_AUTO) return !!id;
+  if (isSplit(id)) return state.models.some(m => m.id === id);
+  if (entries.some(e => e.name === modelName(id))) return true;
+  return !!menuData(mineOnly())?.text?.models?.some(m => m.ready && m.id === id);
+}
+
+/** Sélectionne un modèle d'après son identifiant (« auto:best », « auto:x », « peer:…:x »,
+ *  « x », « reparti:x ») ; un modèle qui n'est plus là, ou « Automatique · réseau public »
+ *  (le plus puissant du réseau public : ce que fait « Automatique » sans modèle à moi),
+ *  laisse la place à « Automatique ». */
 function selectModel(id) {
-  const value = /^reparti:/.test(id || '') || id === PUBLIC_AUTO ? id : modelName(id);
-  const values = [...el.model.options].map(o => o.value);
-  // Sans choix connu : un modèle de cette machine d'abord, puis un de mes machines
-  const here = entries.find(e => e.machines.some(m => m.local))?.name;
-  const usable = values.filter(Boolean);
-  if (!values.includes(value) && !here && !usable.length) {
-    // Sans modèle, la première minute : on cherche encore les machines du réseau public
-    const open = publicChoice(filledMine);
-    const empty = open && !open.ready && open.searching ? 'chat.public_searching' : 'chat.no_model_ready';
-    if (!values.includes('')) el.model.prepend(new Option(t(empty), ''));
-    el.model.value = '';
-  } else {
-    el.model.value = values.includes(value) ? value : (here || usable[0] || values[0] || '');
-  }
+  // Avant la lecture des modèles (une conversation rouverte au démarrage) : gardé tel quel
+  textChoice = known(id) || (id && !state.modelsLoaded) ? id : BEST_AUTO;
   fillMachines(id);
+  menu?.refresh();
 }
 
 /** Machines du modèle choisi : « Automatique », puis chacune pour la désigner (cachées
- *  quand une seule machine a ce modèle). */
+ *  quand une seule machine a ce modèle, ou pour « Automatique » qui choisit aussi le modèle). */
 function fillMachines(wanted) {
-  const entry = entries.find(e => e.name === el.model.value);
+  const entry = textChoice === BEST_AUTO || isSplit(textChoice) ? null
+    : entries.find(e => e.name === modelName(textChoice));
   el.machine.innerHTML = '';
   if (!entry) { el.machine.hidden = true; return; }
   const vram = vramTotal();
@@ -252,10 +253,17 @@ function fillMachines(wanted) {
   el.machine.value = values.includes(wanted) ? wanted : defaultChoice(entry);
 }
 
-function onModelChange() {
-  fillMachines(null);                     // mode automatique par défaut
-  rememberModel();
+/** Un choix du menu des modèles : un modèle de conversation (le mode « Créer » se ferme), ou
+ *  un modèle d'images ou de vidéos (le mode « Créer » de ce genre s'ouvre, chat-create.js).
+ *  Il vaut pour cette conversation ; le choix par défaut se règle dans Réglages → Modèles. */
+function pickModel(kind, id) {
+  if (kind === 'audio') return;                   // bientôt (docs/conception/modeles-auto.md)
+  if (kind !== 'text') { pickCreate(kind, id); return; }
+  if (createKind()) setMode(null);
+  textChoice = id || BEST_AUTO;
+  fillMachines(null);                             // la machine se choisit seule par défaut
   prepareCluster();
+  el.input.focus();
 }
 
 /** Modèle réparti choisi : le groupe se forme et le modèle se charge pendant qu'on écrit
@@ -279,15 +287,6 @@ function showPreparation(ev) {
     : `${icon('network')}<div>${esc(t('chat.cluster_preparing', { status: tt(ev.status_t, ev.status || '') || t('chat.cluster_cards') }))}</div>`;
   // Toujours « prêt » six secondes plus tard (pas une autre préparation entre-temps) : rangé
   if (ev.state === 'ready') setTimeout(() => { if (box.dataset.state === 'ready') box.hidden = true; }, 6000);
-}
-
-async function rememberModel() {
-  const id = selectedModel();
-  // « Automatique · réseau public » n'est pas un modèle par défaut (les applis s'en servent) :
-  // il revient seul tant qu'aucune de mes machines n'a de modèle
-  if (id && id !== PUBLIC_AUTO) {
-    try { state.settings = await put('/settings', { default_model: id }); } catch { /* sans gravité */ }
-  }
 }
 
 function setTitle(title) {
@@ -315,6 +314,7 @@ function newConversation() {
   state.currentConversation = null;
   prefs.set('lastConversation', null);
   setTitle(null);
+  if (state.modelsLoaded) selectModel(defaultText());    // le modèle des Réglages : « Automatique »
   resetMedia();
   showWelcome();
   emit('chat:current');
@@ -769,7 +769,10 @@ async function sendNow(asText, replace) {
       false, replace, null, joined);
     return true;
   }
-  if (!model) {
+  // « Automatique » sans aucun modèle ici ni sur mes machines : le réseau public seul, s'il
+  // peut répondre (le nœud prend alors le meilleur de ses modèles, network/placement.py)
+  const alone = model === BEST_AUTO && !entries.length && !state.models.some(m => m.group === 'cluster');
+  if (!model || !state.modelsLoaded || (alone && !publicChoice(mineOnly())?.ready)) {
     if (!state.modelsLoaded) toast(t('chat.models_loading'));
     else if (publicChoice(mineOnly())?.searching) toast(t('chat.public_searching'));   // la première minute
     else if (publicChoice(mineOnly())) toast(t('placement.no_public'), 'err');   // aucune ne prête
@@ -779,7 +782,7 @@ async function sendNow(asText, replace) {
   }
   // Une pièce jointe ne part jamais chez un inconnu, et rien ici ne la lirait : le message
   // reste dans la zone de saisie (le nœud le refuserait de même, chat/public_consent.py)
-  if (model === PUBLIC_AUTO && attached.length) {
+  if ((model === PUBLIC_AUTO || alone) && attached.length) {
     toast(t('public_chat.closed_attachments'), 'err', 8000);
     return false;
   }

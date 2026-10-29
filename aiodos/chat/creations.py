@@ -11,9 +11,14 @@ La réponse de l'assistant garde la demande (colonne media : lot, travail, modè
 description) ; son texte la résume pour le modèle de conversation (historique, mémoire),
 qui sait ainsi ce qui a été créé, sans voir les images.
 
-Quand ni cette machine ni mes machines ne peuvent calculer une image ou une vidéo, une machine
-du réseau public peut la créer, avec l'accord demandé une fois (chat/public_creations.py,
-29/10/2026 ; le même pour les deux) : le travail porte alors « public »
+Le modèle : celui demandé s'il peut se calculer, sinon « Automatique » (model vide ou
+« auto ») : le plus puissant qu'une machine a et peut faire tourner, où qu'elle soit, ce PC,
+mes machines, mes amis, le réseau public, recettes de ComfyUI comprises, classées selon leur
+modèle
+(imaging/ranking.py, docs/conception/modeles-auto.md § 2, 29/10/2026). Une machine du réseau
+public ne crée qu'avec l'accord demandé une fois (chat/public_creations.py, 29/10/2026 ; le
+même pour les deux) ; tant qu'il ne l'est pas, elle ne compte que si rien d'autre ne peut
+calculer (la carte d'accord). Le travail porte alors « public »
 (jobs/kinds/public_images.py, jobs/kinds/public_videos.py), la réponse aussi (media), et
 l'image vient sans image de départ (ni retouche à partir de la précédente, ni image jointe).
 Avant, le filtre des descriptions (imaging/prompt_filter.py) : la base sur le message, avant
@@ -28,7 +33,7 @@ from aiodos import db, settings
 from aiodos.chat import (attachments, comfy_creations, conversations, enrich, public_creations,
                          retouches)
 from aiodos.i18n import t
-from aiodos.imaging import catalog, gallery, lenders, prompt_filter
+from aiodos.imaging import catalog, gallery, lenders, prompt_filter, ranking
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import comfy_create
 from aiodos.jobs.kinds import images as kind
@@ -256,8 +261,8 @@ def shape_of(text: str) -> str | None:
 
 # ----------------------------------------------------------------- modèle et réglages
 def usable(media_kind: str | None = None) -> list:
-    """Modèles qui peuvent se calculer en ce moment (ici, ou chez mes machines en ligne),
-    dans l'ordre du catalogue, ceux à licence restrictive en dernier."""
+    """Modèles qui peuvent se calculer en ce moment (ici, chez mes machines en ligne, ou mes
+    amis si je l'accepte), du plus puissant au plus modeste (imaging/ranking.py)."""
     others = lenders.helpers()
     found = []
     for model_id, spec in catalog.MODELS.items():
@@ -266,15 +271,14 @@ def usable(media_kind: str | None = None) -> list:
         here, away = lenders.can_compute(model_id, others)
         if here or away:
             found.append(model_id)
-    return sorted(found, key=lambda m: bool(catalog.MODELS[m].get("notice")))
+    return ranking.ordered(found)
 
 
 def pick(media_kind: str, preferred: str | None = None) -> str | None:
-    """Le modèle préféré s'il peut se calculer, sinon le premier qui le peut."""
-    models = usable(media_kind)
-    if preferred in models:
-        return preferred
-    return models[0] if models else None
+    """Le modèle préféré s'il peut se calculer (ici, mes machines, mes amis), sinon celui
+    qu'« Automatique » prend parmi eux (imaging/ranking.choose, sans ComfyUI ni réseau
+    public)."""
+    return ranking.choose(media_kind, preferred, comfy=False, public=False).model
 
 
 def size_for(model_id: str, shape: str | None) -> tuple | None:
@@ -342,13 +346,19 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
             return {**found, "model": wanted, "label": comfy_creations.ready(wanted)}
         except comfy_creations.Unavailable:
             pass
-    model_id = pick(found["kind"], wanted)
-    if model_id is None:                           # ni sd.cpp : une recette de ComfyUI ?
-        recipe = comfy_creations.first(found["kind"])
-        if recipe is not None:
-            return {**found, "model": recipe["id"], "label": recipe["label"]}
-    return {**found, "model": model_id,
-            "label": catalog.label(model_id) if model_id else None}
+    # « Automatique » (imaging/ranking.py), réseau public compris s'il est accepté ; sans
+    # accord encore demandé, rien (la carte viendra à la création)
+    mine_only = conversation_id is not None and conversations.mine_only(conversation_id)
+    choice = ranking.choose(found["kind"], wanted, bool(mine_only))
+    if choice.model is None or choice.ask:
+        return {**found, "model": None, "label": None}
+    if choice.engine == ranking.COMFYUI:
+        try:
+            label = comfy_creations.ready(choice.model)
+        except comfy_creations.Unavailable:
+            return {**found, "model": None, "label": None}
+        return {**found, "model": choice.model, "label": label}
+    return {**found, "model": choice.model, "label": catalog.label(choice.model)}
 
 
 # ------------------------------------------------------------------- dans la conversation
@@ -371,11 +381,15 @@ def _nothing_can(media_kind: str, public=None) -> CreationError:
     return CreationError(t(f"chat_create.nothing_ready_{what}"), status=409)
 
 
-def _public_model(media_kind: str, preferred, mine_only, pictures) -> str:
-    """Une image ou une vidéo que rien ici ni chez mes machines ne peut calculer : le modèle
-    qu'une machine du réseau public créerait (public_creations.choose), ou CreationError. Des
-    amis qui le pourraient, si je les y autorise, passent d'abord, sauf si j'ai déjà accepté le
-    réseau public."""
+def _public_model(media_kind: str, preferred, mine_only, pictures, ranked=None) -> str:
+    """Une image ou une vidéo qu'une machine du réseau public créera : le modèle
+    qu'« Automatique » a pris là-bas (ranked, imaging/ranking.Choice), sinon (rien ici ni chez
+    mes machines) celui que public_creations.choose dit, ou CreationError. Des amis qui le
+    pourraient, si je les y autorise, passent d'abord, sauf si j'ai déjà accepté le réseau
+    public ; la carte d'accord, si elle n'est pas encore demandée."""
+    if ranked is not None and ranked.where == ranking.PUBLIC and ranked.model \
+            and not ranked.ask:
+        return ranked.model
     choice = public_creations.choose(preferred, mine_only, pictures, media_kind)
     if choice.model is None:
         raise _nothing_can(media_kind, choice)
@@ -466,17 +480,21 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
         if plan is not None:
             return plan
         request = {**request, "model": None}        # disparue ou nulle part : un autre modèle
-    model_id = pick(media_kind, request.get("model"))
-    if model_id is None:          # ni sd.cpp ici ni chez mes machines : ComfyUI, avant le public
-        recipe = comfy_creations.first(media_kind)
-        plan = None if recipe is None else _comfy_plan(
-            text, {**request, "model": recipe["id"]}, found, media_kind, conv_id, chat_model,
-            joined, mine_only)
+    # Le modèle choisi s'il peut se calculer, sinon « Automatique » : le plus puissant qu'une
+    # machine a, où qu'elle soit (imaging/ranking.py), recettes de ComfyUI comprises
+    choice = ranking.choose(media_kind, request.get("model"), bool(mine_only), pictures)
+    if choice.engine == ranking.COMFYUI:
+        plan = _comfy_plan(text, {**request, "model": choice.model}, found, media_kind,
+                           conv_id, chat_model, joined, mine_only)
         if plan is not None:
             return plan
-    public = model_id is None
+        choice = ranking.choose(media_kind, request.get("model"), bool(mine_only), pictures,
+                                comfy=False)
+    public = choice.model is None or choice.where == ranking.PUBLIC or choice.ask
+    model_id = choice.model
     if public:                        # ni ici ni chez mes machines : peut-être le réseau public
-        model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures)
+        model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures,
+                                 choice)
         for asked in (text, request.get("prompt")):    # la base, avant de rien réécrire
             if asked and prompt_filter.base(asked) is not None:
                 raise refused_content(media_kind)

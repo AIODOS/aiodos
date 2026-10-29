@@ -1,15 +1,20 @@
-// Réglages → Modèles : ceux des discussions et ceux des images et des vidéos, du plus puissant
-// au moins puissant, ceux à télécharger en bas. Le téléchargement (Hugging Face, ou copie depuis
-// mes machines, fichiers déjà sur ce PC repris d'abord) se fait ici ; l'onglet Images (images.js)
-// n'en montre qu'un résumé, avec un lien vers cette section.
+// Réglages → Modèles : le choix par défaut de chaque genre (« Automatique » ou un modèle, avec le
+// panneau du menu des modèles, model-menu.js), puis ceux des discussions et ceux des images et
+// des vidéos, du plus puissant au moins puissant, ceux à télécharger en bas. Le téléchargement
+// (Hugging Face, ou copie depuis mes machines, fichiers déjà sur ce PC repris d'abord) se fait
+// ici ; l'onglet Images (images.js) n'en montre qu'un résumé, avec un lien vers cette section.
 import { get, post, put, del } from '../api.js';
-import { bytes, esc } from '../dom.js';
+import { bytes, esc, h } from '../dom.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
-import { errorToast, modal } from '../ui.js';
-import { byPower, catalog } from './models.js';
+import { errorToast, modal, toast } from '../ui.js';
+import { BEST_AUTO, asDefault, byPower, catalog, modelName } from './models.js';
 import { chooseModel, progressBar, cancelInstall, isPhone } from './model-install.js';
+import { loadMenu, menuData, modelMenu } from './model-menu.js';
+
+// Le réglage du choix par défaut de chaque genre (settings.py) ; l'audio viendra
+const DEFAULTS = { text: 'default_model', image: 'default_image_model', video: 'default_video_model' };
 
 let info = null;                 // modèles d'images et de vidéos (GET /images/models)
 let installing = null;           // installation d'un modèle de discussion en cours
@@ -49,6 +54,62 @@ export function bindModels(box) {
       loadImageModels();
     };
   });
+}
+
+// ------------------------------------------------------------- par défaut
+/** Le choix par défaut de ce genre : un identifiant, ou null pour « Automatique ». */
+function defaultOf(kind) {
+  const value = state.settings?.[DEFAULTS[kind]];
+  if (kind !== 'text') return value || null;
+  const id = asDefault(value) || BEST_AUTO;
+  return id === BEST_AUTO ? null : id;
+}
+
+async function saveDefault(kind, id) {
+  if (!DEFAULTS[kind]) return;
+  const value = kind === 'text' ? id || BEST_AUTO : id || '';
+  try { state.settings = await put('/settings', { [DEFAULTS[kind]]: value }); }
+  catch (err) { errorToast(err); return; }
+  toast(t('model_menu.saved'), 'ok');
+  emit('settings:loaded');
+}
+
+let defaults = null;             // { root, menus } : construit une fois, gardé d'un rendu à l'autre
+
+/** Le choix par défaut de chaque genre : une ligne par genre, chacune avec le bouton du menu
+ *  des modèles, ouvert sur son onglet (une nouvelle conversation les reprend). Construit une
+ *  fois : le formulaire des Réglages se redessine souvent (un réglage reçu…), un panneau ouvert
+ *  le reste. */
+export function mountDefaults(box) {
+  if (!box) return;
+  if (!defaults) defaults = buildDefaults();
+  box.append(defaults.root);
+  defaults.menus.forEach(menu => menu.refresh());
+  if (!menuData()) loadMenu().catch(() => {});     // les noms des modèles, pour les boutons
+}
+
+function buildDefaults() {
+  const box = h(`<div><h3 class="settings-sub">${icon('check')}${esc(t('model_menu.defaults'))}</h3>
+    <p class="hint">${esc(t('model_menu.defaults_help'))}</p>
+    <div class="mm-defaults">${['text', 'image', 'video', 'audio'].map(kind => `
+      <div class="mm-default" data-kind="${kind}"><span class="mm-default-name">${esc(t(`model_menu.tab_${kind}`))}</span></div>`).join('')}</div></div>`);
+  const menus = [];
+  for (const row of box.querySelectorAll('.mm-default')) {
+    const kind = row.dataset.kind;
+    if (!DEFAULTS[kind]) {                       // l'audio : bientôt
+      row.insertAdjacentHTML('beforeend', `<span class="faint">${esc(t('model_menu.soon'))}</span>`);
+      continue;
+    }
+    const menu = modelMenu({
+      kindNow: () => kind, chosen: defaultOf, pick: saveDefault, prefix: false, drop: 'down',
+      name: (k, id) => (k === 'text' ? modelName(id) : info?.models.find(m => m.id === id)?.label || id),
+      same: (k, a, b) => a === b || (k === 'text' && modelName(a) === modelName(b)
+        && !/^reparti:/.test(a) && !/^reparti:/.test(b)),
+    });
+    row.append(menu.root);
+    menus.push(menu);
+  }
+  return { root: box, menus };
 }
 
 // ------------------------------------------------------------- discussions

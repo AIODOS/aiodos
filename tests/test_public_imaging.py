@@ -399,10 +399,14 @@ def test_the_public_profile_announces_the_lent_image_models(monkeypatch):
         raise RuntimeError("Ollama arrêté")
     monkeypatch.setattr(ollama, "list_models", down)
     assert public._models() == ["image:z-image-turbo"]
-    # Ni une vidéo (les siennes : public_video.offered, tests/test_public_videos.py), ni un
-    # modèle à licence restrictive, n'est prêté comme modèle d'images
+    # Pas une vidéo (les siennes : public_video.offered, tests/test_public_videos.py) ; un
+    # modèle à licence restrictive, si (décision de l'auteur du 29/10/2026 : qui le prête a lu
+    # sa licence, imaging/ranking.py ne le demande pas sans qu'on l'ait choisi)
     monkeypatch.setattr(public_imaging, "_ready", lambda model: True)
-    assert public._models() == ["image:z-image-turbo"]
+    images = [m for m, spec in catalog.MODELS.items() if spec.get("kind", "image") == "image"]
+    assert public._models() == [public_imaging.MARKER + m for m in images]
+    assert "image:flux-3-image-klein" in public._models()
+    assert not any(m.startswith("image:wan") for m in public._models())
     assert all(len(public_imaging.MARKER + m) <= public.MAX_TEXT for m in catalog.MODELS)
 
 
@@ -999,10 +1003,13 @@ def test_my_own_machines_are_not_filtered(monkeypatch):
     """Une image créée ici ou par mes machines ne passe pas par le filtre (seul le réseau
     public le demande)."""
     from aiodos.chat import creations
+    from aiodos.imaging import ranking
 
     def called(*args, **kwargs):
         pytest.fail("filtre appelé pour mes machines")
-    monkeypatch.setattr(creations, "pick", lambda kind_, preferred=None: MODEL)
+    # « Automatique » le prend chez une de mes machines (imaging/ranking.py)
+    monkeypatch.setattr(ranking, "choose", lambda *args, **kwargs: ranking.Choice(
+        MODEL, ranking.MINE, "PC fixe"))
     monkeypatch.setattr(prompt_filter, "check", called)
     monkeypatch.setattr(prompt_filter, "base", called)
     settings.set_value("images_enrich", False)

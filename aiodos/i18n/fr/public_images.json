@@ -17,5 +17,6 @@
   "failed": "aucune machine du réseau public n'a pu la créer ({error})",
   "refused_content": "Cette image ne part pas sur le réseau public : son filtre refuse la description (un mineur, une personne réelle ou des violences, dans un contexte sexuel ou dénudé). Ni le réseau public ni AIODOS ne créent ce genre d'image, et rien n'est parti chez un inconnu. Si ta demande n'avait rien de tel, reformule-la : le filtre se fie à certains mots.",
   "refused_filter": "le filtre du réseau public refuse cette description : rien n'est parti chez un inconnu",
-  "refused_remote": "la machine du réseau public refuse cette description : son filtre la juge interdite"
+  "refused_remote": "la machine du réseau public refuse cette description : son filtre la juge interdite",
+  "only_restricted": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Le réseau public ne le pourrait qu'avec un modèle à licence restrictive ({models}) : choisis-le toi-même dans le menu des modèles, après avoir lu sa licence."
 }

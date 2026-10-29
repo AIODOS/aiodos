@@ -40,15 +40,17 @@ ENGINES = {
         },
     },
     IMAGES: {
-        # 17/10/2026 : celle des mesures de docs/generation-repartie.md
-        "build": "master-973-f0aac52",
+        # 29/10/2026 : la dernière publiée (FLUX.3 Image Klein, Qwen Image 2.1, LTX-2.5,
+        # Wan 2.2, Ming-Image, HiDream-O1 ; docs/conception/modeles-auto.md). Avant :
+        # master-973-f0aac52 (17/10/2026), celle des mesures de docs/generation-repartie.md
+        "build": "master-1027-e7b7ec6",
         "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/{build}/{name}",
         "assets": {
-            # Version Vulkan : toutes les cartes graphiques, 29 Mo (sans le RPC de ggml)
+            # Version Vulkan : toutes les cartes graphiques, 30 Mo (sans le RPC de ggml)
             "windows-x86_64": {
-                "name": "sd-master-f0aac52-bin-win-vulkan-x64.zip",
-                "size": 29363455,
-                "sha256": "64ae41edf331723871ff6925f6f9d8bb46f6407d49e51f2073ef11f646765cb2",
+                "name": "sd-master-e7b7ec6-bin-win-vulkan-x64.zip",
+                "size": 29745686,
+                "sha256": "2d0d65f51f059588740a82fc983b9d4afdf28839729ab0db4af2701c4f17a701",
             },
         },
     },

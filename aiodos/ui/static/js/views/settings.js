@@ -13,10 +13,10 @@ import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
 import { appsCard, bindApps } from './gateway-apps.js';
 import { loadEmbed } from './embed-model.js';
 import { bindEngines, enginesCard, loadEngines } from './engines.js';
-import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
+import { BEST_AUTO, asDefault, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
 import { renderApproval } from './approval.js';
-import { modelsCard, bindModels, loadImageModels, mountModels } from './settings-models.js';
+import { modelsCard, bindModels, loadImageModels, mountDefaults, mountModels } from './settings-models.js';
 import { mountNode, refreshNode } from './node.js';
 import { mountAbout } from './legal.js';
 
@@ -24,8 +24,7 @@ import { mountAbout } from './legal.js';
 // à l'affichage. Le choix d'une liste : [valeur, clé de son libellé].
 const SECTIONS = [
   { id: 'conversation', title: 'settings.section_conversation', icon: 'chat',
-    sub: () => modelLabel(asDefault(state.settings.default_model)), fields: [
-    { key: 'default_model', label: 'settings.default_model', type: 'model' },
+    sub: () => modelLabel(asDefault(state.settings.default_model) || BEST_AUTO), fields: [
     { key: 'auto_route_friends', label: 'settings.auto_route_friends', type: 'switch',
       help: 'settings.auto_route_friends_help' },
     { key: 'think', label: 'settings.think', type: 'switch', help: 'settings.think_help' },
@@ -39,9 +38,11 @@ const SECTIONS = [
       help: 'settings.web_search_enabled_help' },
     { key: 'web_results', label: 'settings.web_results', type: 'number', min: 1, max: 8 },
   ] },
-  // Les modèles : ceux des discussions, puis ceux des images et des vidéos (settings-models.js),
-  // du plus puissant au moins puissant ; l'onglet Images y renvoie (« settings:focus »)
+  // Les modèles : le choix par défaut de chaque genre (le panneau du menu des modèles), ceux des
+  // discussions, puis ceux des images et des vidéos (settings-models.js), du plus puissant au
+  // moins puissant ; l'onglet Images y renvoie (« settings:focus »)
   { id: 'modeles', title: 'settings.section_models', icon: 'layers', fields: [
+    { type: 'model-defaults' },
     { type: 'models' },
     { type: 'subhead', label: 'settings.models_images' },
     { key: 'images_enrich', label: 'settings.images_enrich', type: 'switch', help: 'settings.images_enrich_help' },
@@ -224,6 +225,7 @@ function field(f, section) {
   if (f.type === 'approval') return '<div id="approval-box"></div>';
   if (f.type === 'engines') return `<div id="engines-box">${enginesCard()}</div>`;
   if (f.type === 'models') return `<div id="models-box">${modelsCard()}</div>`;
+  if (f.type === 'model-defaults') return '<div id="model-defaults-box"></div>';
   if (f.type === 'subhead') return `<h3 class="settings-sub">${esc(t(f.label))}</h3>`;
   const id = `set-${f.key}`;
   const help = f.help ? `<div class="help">${esc(t(f.help))}</div>` : '';
@@ -234,9 +236,9 @@ function field(f, section) {
   let control;
   if (f.type === 'textarea') {
     control = `<textarea class="textarea" id="${id}" data-key="${f.key}" rows="4">${esc(s[f.key])}</textarea>`;
-  } else if (f.type === 'select' || f.type === 'model') {
-    const current = f.type === 'model' ? asDefault(s[f.key]) : s[f.key];
-    const options = f.type === 'model' ? modelOptions(current) : choices(f);
+  } else if (f.type === 'select') {
+    const current = s[f.key];
+    const options = choices(f);
     // Seul champ de sa section, sans libellé (la langue) : le titre de la section le nomme
     const named = f.label ? '' : ` aria-label="${esc(t(section.title))}"`;
     control = `<select class="select" id="${id}" data-key="${f.key}"${named}>${options.map(([v, l]) =>
@@ -267,14 +269,6 @@ function field(f, section) {
 function choices(f) {
   if (typeof f.options === 'function') return f.options();
   return f.options.map(([value, key]) => [value, t(key)]);
-}
-
-/** Modèles proposés par défaut : chacun une fois, en mode automatique (la machine qui
- *  répond se choisit seule) ; le réglage actuel reste, même s'il désigne une machine. */
-function modelOptions(current) {
-  const options = catalog().map(e => [defaultChoice(e), e.name]);
-  if (current && !options.some(([v]) => v === current)) options.unshift([current, modelLabel(current)]);
-  return options;
 }
 
 function render() {
@@ -316,6 +310,7 @@ function render() {
   bindGateway(form);
   bindEngines(form);
   bindModels($('#models-box', root));
+  mountDefaults($('#model-defaults-box', root));
   renderApproval($('#approval-box', root));
   $('#settings-save', root).onclick = save;
   $('#settings-cancel', root).onclick = render;           // le formulaire revient aux réglages
