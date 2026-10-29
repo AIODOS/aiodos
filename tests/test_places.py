@@ -91,3 +91,22 @@ def test_a_lower_gpu_share_chosen_before_is_kept():
         assert db.query_one("SELECT 1 FROM settings WHERE key='share_max_gpu'") is None
         places.forget()
         assert places.share() == expected
+
+
+def test_the_memory_of_aiodos_engines_counts_as_available(monkeypatch):
+    """Le modèle chargé par AIODOS pour servir ne rend pas la machine « pleine » : la mémoire
+    de ses moteurs (node/children.resident) compte comme disponible (PC de l'auteur,
+    29/10/2026 : 8,7 Go chargés sur 32, 19 % disponibles, plus aucune place annoncée)."""
+    gib = 2 ** 30
+    monkeypatch.delenv(places.SIMULATE_MEMORY_ENV)
+    monkeypatch.setattr(places.identity, "memory",
+                        lambda: {"total": 32 * gib, "available": 6 * gib})
+    monkeypatch.setattr(places.children, "resident", lambda: 0)
+    places.forget()
+    assert not places.memory_room()                     # 19 % : sous le seuil de 20 %
+    monkeypatch.setattr(places.children, "resident", lambda: int(8.7 * gib))
+    places.forget()
+    assert places.memory_room() and round(places.memory_free(), 2) == 0.46
+    monkeypatch.setattr(places.children, "resident", lambda: 40 * gib)    # jamais plus que tout
+    places.forget()
+    assert places.memory_free() == 1.0

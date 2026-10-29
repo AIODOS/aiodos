@@ -9,9 +9,15 @@ la carte graphique.
 Ailleurs, rien de plus : AIODOS les arrête lui-même à sa fermeture. (Sous Linux,
 PR_SET_PDEATHSIG suit la fin du thread qui a lancé le programme, pas celle du processus :
 un thread de passage l'arrêterait trop tôt.)
+
+La mémoire vive qu'ils occupent, eux et ce qu'ils lancent (les modèles du routeur llama.cpp),
+se lit aussi ici (resident) : celle des moteurs d'AIODOS, que node/places.py ne compte pas
+contre ce qui est laissé à l'utilisateur (PC de l'auteur, 29/10/2026 : le modèle de
+conversation chargé, 8,7 Go sur 32, et la machine se disait pleine pour le réseau public).
 """
 import ctypes
 import logging
+import os
 import sys
 import threading
 
@@ -19,6 +25,8 @@ log = logging.getLogger("aiodos")
 
 _lock = threading.Lock()
 _job = {"handle": None}
+_pids = set()          # ailleurs que sous Windows : les programmes lancés (resident)
+MAX_LISTED = 512       # processus de l'objet de travail lus, au plus
 
 if sys.platform == "win32":
     from ctypes import wintypes
@@ -63,6 +71,54 @@ if sys.platform == "win32":
     _kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
     _kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
     _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.QueryInformationJobObject.restype = wintypes.BOOL
+    _kernel32.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int,
+                                                    ctypes.c_void_p, wintypes.DWORD,
+                                                    ctypes.c_void_p]
+    _kernel32.K32GetProcessMemoryInfo.restype = wintypes.BOOL
+    _kernel32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
+                                                  wintypes.DWORD]
+    JOB_OBJECT_BASIC_PROCESS_ID_LIST = 3
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+    class _ProcessIds(ctypes.Structure):
+        _fields_ = [("NumberOfAssignedProcesses", wintypes.DWORD),
+                    ("NumberOfProcessIdsInList", wintypes.DWORD),
+                    ("ProcessIdList", ctypes.c_size_t * MAX_LISTED)]
+
+    class _MemoryCounters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    *((name, ctypes.c_size_t) for name in (
+                        "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                        "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage",
+                        "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage"))]
+
+    def _windows_resident() -> int:
+        """Les pages en mémoire (working set) de tous les processus de l'objet de travail :
+        les programmes rattachés et ceux qu'ils ont lancés, qui y entrent d'eux-mêmes."""
+        with _lock:
+            job = _job["handle"]
+        if job is None:
+            return 0
+        listed = _ProcessIds()
+        if not _kernel32.QueryInformationJobObject(job, JOB_OBJECT_BASIC_PROCESS_ID_LIST,
+                                                   ctypes.byref(listed), ctypes.sizeof(listed),
+                                                   None):
+            raise OSError(ctypes.get_last_error(), "QueryInformationJobObject")
+        total = 0
+        for pid in listed.ProcessIdList[:listed.NumberOfProcessIdsInList]:
+            process = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not process:
+                continue                    # fini entre-temps
+            try:
+                counters = _MemoryCounters()
+                counters.cb = ctypes.sizeof(counters)
+                if _kernel32.K32GetProcessMemoryInfo(process, ctypes.byref(counters),
+                                                     counters.cb):
+                    total += counters.WorkingSetSize
+            finally:
+                _kernel32.CloseHandle(process)
+        return total
 
     def _windows_job():
         """L'objet de travail d'AIODOS, créé au premier programme ; son descripteur reste
@@ -87,6 +143,8 @@ if sys.platform == "win32":
 def bind(pid: int) -> bool:
     """Le programme `pid` s'arrêtera avec AIODOS. Vrai si c'est garanti (Windows)."""
     if sys.platform != "win32":
+        with _lock:
+            _pids.add(pid)                  # sa mémoire, pour resident
         return False
     try:
         job = _windows_job()
@@ -102,3 +160,49 @@ def bind(pid: int) -> bool:
     except OSError as exc:                 # jamais bloquant : AIODOS l'arrêtera lui-même
         log.warning("Programme %s non rattaché à AIODOS : %s", pid, exc)
         return False
+
+
+def resident() -> int:
+    """La mémoire vive qu'occupent en ce moment les programmes lancés par AIODOS et ceux
+    qu'ils ont lancés eux-mêmes, en octets ; 0 si elle ne se lit pas."""
+    try:
+        return _windows_resident() if sys.platform == "win32" else _proc_resident()
+    except OSError as exc:
+        log.debug("Mémoire des programmes d'AIODOS illisible : %s", exc)  # i18n: tel quel
+        return 0
+
+
+def _proc_resident(proc: str = "/proc") -> int:
+    """Linux et Android : les programmes rattachés encore en vie et leurs descendants
+    (/proc/<pid>/stat : le parent), pages résidentes de /proc/<pid>/statm."""
+    with _lock:
+        roots = set(_pids)
+    if not roots:
+        return 0
+    parents = {}
+    for entry in os.listdir(proc):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"{proc}/{entry}/stat", "rb") as f:
+                stat = f.read()
+            parents[int(entry)] = int(stat[stat.rindex(b")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            continue                        # fini entre-temps
+    alive = roots & set(parents)
+    with _lock:
+        _pids.intersection_update(alive | (_pids - roots))    # les finis oubliés
+    ours, grew = set(alive), bool(alive)
+    while grew:
+        found = {pid for pid, parent in parents.items() if parent in ours} - ours
+        ours |= found
+        grew = bool(found)
+    page = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
+    total = 0
+    for pid in ours:
+        try:
+            with open(f"{proc}/{pid}/statm", encoding="ascii") as f:
+                total += int(f.read().split()[1]) * page
+        except (OSError, ValueError, IndexError):
+            continue
+    return total

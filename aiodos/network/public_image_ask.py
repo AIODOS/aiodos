@@ -99,11 +99,15 @@ def _nodes() -> list:
 
 
 def offered_models(offers=None) -> list:
-    """Les modèles d'images qu'une machine du réseau public peut créer pour moi en ce moment,
-    dans l'ordre du catalogue ; aucun sans compagnon prêt ni réseau public rejoint. offers :
-    ce qu'un nœud prête (offered_by ; celui des vidéos : network/public_video_ask.py)."""
+    """Les modèles d'images qu'une machine du réseau public prête, dans l'ordre du catalogue,
+    même sans place en ce moment : la création est acceptée et son unité attend son tour
+    (jobs/kinds/public_images.in_turn). Sinon une machine occupée, ou dont la mémoire était
+    juste sous le seuil, faisait dire « aucun modèle » au téléphone sans modèle d'images (S23
+    de l'auteur, 29/10/2026 : le PC prêtait z-image-turbo, « free » à 0). Aucun sans
+    compagnon prêt ni réseau public rejoint. offers : ce qu'un nœud prête (offered_by ;
+    celui des vidéos : network/public_video_ask.py)."""
     offers = offers or offered_by
-    seen = {model for node in _nodes() for model in offers(node)}
+    seen = {model for node in placement._lending() for model in offers(node)}
     return [model for model in catalog.MODELS if model in seen]
 
 

@@ -545,6 +545,18 @@ def test_lenders_are_those_that_lend_this_model_with_a_place(companion, opened):
     assert public_image_ask.offered_models() == [] and public_image_ask.lenders(MODEL) == []
 
 
+def test_a_lender_without_a_place_right_now_is_still_offered(companion, opened):
+    """La seule machine qui prête le modèle est occupée (ou sa mémoire juste sous le seuil) :
+    la création est quand même proposée, son unité attendra son tour (in_turn). S23 de
+    l'auteur, 29/10/2026 : le PC prêtait z-image-turbo avec « free » à 0, le téléphone disait
+    « aucun modèle »."""
+    directory(node(PC, "image:z-image-turbo", free=0))
+    assert public_image_ask.offered_models() == [MODEL] and public_image_ask.lent(MODEL)
+    assert public_image_ask.lenders(MODEL) == []                 # personne à qui l'envoyer… encore
+    directory(node(PC, "image:z-image-turbo", free=0, lends=False))
+    assert public_image_ask.offered_models() == []               # elle ne prête plus : rien
+
+
 def test_an_image_model_is_never_taken_for_a_conversation_model(companion, opened):
     directory(node(PC, "image:z-image-turbo"), node(OTHER, "llama3:latest", "image:z-image-turbo"))
     assert public_imaging.MARKER in placement.RESERVED

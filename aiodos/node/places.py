@@ -13,7 +13,12 @@ part s'applique :
 - à la mémoire vive : rien de nouveau ne commence quand il en reste moins de la moitié de la
   part gardée (20 % à 60 %). La conception proposait toute la part gardée (40 %) : sur un
   portable de 8 Go avec un navigateur ouvert, ou un téléphone (Android remplit sa mémoire
-  de caches), rien ne serait jamais calculé ;
+  de caches), rien ne serait jamais calculé. La mémoire des moteurs d'AIODOS (le routeur
+  llama.cpp et ses modèles, sd-server… : node/children.resident) compte comme disponible :
+  c'est celle que la part prêtée utilise, pas celle de l'utilisateur, et le routeur décharge
+  le plus ancien de ses modèles. Sinon un modèle chargé pour servir rendait la machine
+  « pleine » (PC de l'auteur, 29/10/2026 : 8,7 Go chargés sur 32, 19 % disponibles, plus
+  aucune place annoncée au réseau public, le téléphone ne trouvait plus personne) ;
 - ni au réseau (« net »), ni aux embeddings, qui ne prennent presque rien : leurs places ne
   changent pas, sauf une seule place d'embeddings sous 50 %.
 
@@ -27,7 +32,7 @@ import time
 
 from aiodos import settings
 from aiodos.jobs.models import DEFAULT_SLOTS
-from aiodos.node import identity
+from aiodos.node import children, identity
 
 DEFAULT_SHARE = 60
 MIN_SHARE, MAX_SHARE = 10, 100
@@ -86,7 +91,9 @@ def memory_free() -> float | None:
         if time.monotonic() - _memory["at"] < TTL:
             return _memory["free"]
     found = identity.memory()
-    free = found["available"] / found["total"] if found.get("total") else None
+    total = found.get("total") or 0
+    # Celle des moteurs d'AIODOS compte comme disponible (cf. le début du module)
+    free = min(found["available"] + children.resident(), total) / total if total else None
     with _lock:
         _memory.update(at=time.monotonic(), free=free)
     return free
