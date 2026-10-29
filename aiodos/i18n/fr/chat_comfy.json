@@ -1,0 +1,7 @@
+{
+  "label": "{name} · ComfyUI",
+  "gone": "Cette recette de ComfyUI n'existe plus sur ce PC.",
+  "nowhere": "Ni ce PC ni tes machines ne peuvent calculer « {name} » en ce moment : ouvre ComfyUI, ou télécharge ses modèles dans la vue Images et vidéos.",
+  "no_prompt": "« {name} » n'a pas de description à remplir : crée-la depuis la vue Images et vidéos.",
+  "no_picture": "Une image jointe ne part pas dans une recette de ComfyUI : choisis un modèle d'images d'AIODOS pour partir de ton image."
+}

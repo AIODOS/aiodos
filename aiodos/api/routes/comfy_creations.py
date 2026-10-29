@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.engines import (catalogue, comfy_client, comfy_download, comfy_find, comfy_instance,
+from aiodos.engines import (catalogue, comfy_download, comfy_find, comfy_instance,
                             comfy_workflows, comfyui, machines, recipes)
 from aiodos.i18n import t
 from aiodos.jobs import queue
@@ -51,13 +51,7 @@ def _installable() -> bool:
 
 def _inventory():
     """L'inventaire du ComfyUI de ce PC s'il est accordé et ouvert, sinon None."""
-    found = engine.instance_here()
-    if found is None:
-        return None
-    try:
-        return comfyui.inventory(found.url)
-    except comfy_client.Unreachable:
-        return None
+    return comfy_create.inventory_here()
 
 
 def comfy_state() -> dict:

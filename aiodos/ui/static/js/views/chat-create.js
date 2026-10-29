@@ -4,7 +4,8 @@
 // avant l'envoi. La réponse de l'assistant montre les images à mesure qu'elles arrivent,
 // calculées ici ou par tes machines qui ont le modèle ; sinon, une image ou une vidéo peut être
 // créée par une machine du réseau public, avec l'accord demandé une fois, le même pour les deux
-// (chat/public_creations.py).
+// (chat/public_creations.py). Les recettes de ComfyUI et mes workflows prêts ici ou chez mes
+// machines s'ajoutent aux modèles (GET /chat/create/comfyui, chat/comfy_creations.py).
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { t } from '../i18n.js';
@@ -23,6 +24,7 @@ const KINDS = { image: { icon: 'image' }, video: { icon: 'video' } };
 const kindOf = media => (KINDS[media.kind] ? media.kind : 'image');
 
 let info = null;              // modèles d'images et de vidéos (GET /images/models)
+let comfy = [];               // recettes de ComfyUI et mes workflows prêts (GET /chat/create/comfyui)
 let mode = null;              // null, 'image' ou 'video' : le mode « Créer » du message
 let preset = {};              // « Reprendre » : la graine, pour la prochaine création seulement
 let ui = {};                  // éléments du compositeur
@@ -99,11 +101,16 @@ export function setMode(kind, p = {}) {
 }
 
 async function load() {
+  // ComfyUI fermé ou absent : seulement les modèles d'AIODOS
+  const recipes = get('/chat/create/comfyui').then(r => r.models || [], () => []);
   try { info = await get('/images/models'); } catch (err) { errorToast(err); return; }
+  comfy = await recipes;
   if (mode) fill();
 }
 
-const here = m => (m.state === 'ready' && info?.engine.found) || m.helpers.length > 0;
+// Une recette de ComfyUI : prête ici (« here ») ou chez mes machines (helpers)
+const here = m => (m.engine === 'comfyui' ? m.here : m.state === 'ready' && info?.engine.found)
+  || m.helpers.length > 0;
 // Ni ici ni chez mes machines : une machine du réseau public le prête, et la conversation peut
 // partir chez un inconnu (le nœud redit tout à l'envoi, avec la carte d'accord s'il le faut)
 const viaPublic = m => !here(m) && !!m.public && !mineOnly();
@@ -120,12 +127,14 @@ function fill() {
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   const k = KINDS[mode];
   ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${esc(t(`chat_create.kind_${mode}`))}${icon('x')}`;
-  const models = (info?.models || []).filter(m => (m.kind || 'image') === mode).sort(byPower);
+  const models = [...(info?.models || []).filter(m => (m.kind || 'image') === mode).sort(byPower),
+    ...comfy.filter(m => m.kind === mode)];
   const select = field('model');
   const wanted = prefs.get(`create.model.${mode}`, '') || select.value;
   select.innerHTML = models.map(m => {
     const text = !usable(m) ? t('chat_create.model_to_install', { label: m.label })
       : viaPublic(m) ? t('public_images.model_public', { label: m.label })
+      : m.engine === 'comfyui' ? (m.here ? m.label : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') }))
       : m.state === 'ready' && info.engine.found ? m.label
       : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') });
     return `<option value="${esc(m.id)}"${usable(m) ? '' : ' disabled'}>${esc(text)}</option>`;
@@ -140,14 +149,15 @@ function fill() {
   note.querySelector('[data-go-models]')?.addEventListener('click', showModels);
   for (const name of ['format', 'frames', 'count']) field(name).hidden = !model || !ready.length;
   if (!model) return;
+  field('format').hidden ||= !model.sizes.length;     // une recette sans largeur ni hauteur
   // « Portrait » suffit ici ; les dimensions sont dans la galerie
   const sizes = model.sizes.map(([w, hgt, label]) => [`${w}x${hgt}`, label.split(' · ')[0]]);
   const format = field('format');
   const shape = prefs.get(`images.format.${model.id}`, '');
   format.innerHTML = sizes.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
-  format.value = sizes.some(([v]) => v === shape) ? shape : sizes[0][0];
+  format.value = sizes.some(([v]) => v === shape) ? shape : sizes[0]?.[0] || '';
   const frames = field('frames');
-  frames.hidden = mode !== 'video' || !ready.length;
+  frames.hidden = mode !== 'video' || !ready.length || !(model.durations || []).length;
   frames.innerHTML = (model.durations || []).map(([n, l]) => `<option value="${n}">${esc(l)}</option>`).join('');
   const frameCount = String(prefs.get(`images.frames.${model.id}`, model.default_frames || ''));
   frames.value = (model.durations || []).some(([n]) => String(n) === frameCount) ? frameCount
@@ -333,8 +343,9 @@ export function appendMedia(list, media, messageId = null) {
 
 /** Ce travail est-il celui de cette création ? Les numéros des travaux retirés de la liste
  *  sont repris par les suivants (le serveur fait la même vérification). */
-const sameJob = (job, media) => !!job && job.kind === 'generate_images'
-  && job.params?.batch === media.batch;
+const sameJob = (job, media) => !!job && (job.kind === 'comfy_create'
+  ? job.params?.creation?.batch === media.batch
+  : job.kind === 'generate_images' && job.params?.batch === media.batch);
 
 const active = view => !!view.job && ACTIVE.includes(view.job.status);
 

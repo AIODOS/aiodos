@@ -25,10 +25,12 @@ rien n'est envoyé. Une création faite ici ou par mes machines n'y passe pas.
 import re
 
 from aiodos import db, settings
-from aiodos.chat import attachments, conversations, enrich, public_creations, retouches
+from aiodos.chat import (attachments, comfy_creations, conversations, enrich, public_creations,
+                         retouches)
 from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, lenders, prompt_filter
 from aiodos.jobs import queue
+from aiodos.jobs.kinds import comfy_create
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.models import URGENT
 
@@ -334,7 +336,17 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
                      "followup": followup, "model_wanted": last.get("model")}
     if found is None:
         return None
-    model_id = pick(found["kind"], found.pop("model_wanted", None))
+    wanted = found.pop("model_wanted", None)
+    if comfy_creations.is_comfy(wanted):           # la dernière création venait de ComfyUI
+        try:
+            return {**found, "model": wanted, "label": comfy_creations.ready(wanted)}
+        except comfy_creations.Unavailable:
+            pass
+    model_id = pick(found["kind"], wanted)
+    if model_id is None:                           # ni sd.cpp : une recette de ComfyUI ?
+        recipe = comfy_creations.first(found["kind"])
+        if recipe is not None:
+            return {**found, "model": recipe["id"], "label": recipe["label"]}
     return {**found, "model": model_id,
             "label": catalog.label(model_id) if model_id else None}
 
@@ -388,7 +400,9 @@ def _followed(request: dict, text: str, conv_id, chat_model, before=None) -> dic
                 # Retouche : même graine, la composition reste ; variante : une autre
                 "seed": last.get("seed") if edit else None}
     single = int(last.get("count") or 1) == 1 and int(count or 1) == 1
-    start_from = _first_image(last) if edit and single and last.get("kind") != "video" else None
+    # Une recette de ComfyUI ne part pas d'une image (chat/comfy_creations.py)
+    start_from = _first_image(last) if edit and single and last.get("kind") != "video" \
+        and not comfy_creations.is_comfy(last.get("model")) else None
     if start_from is not None:        # une image retouchée part de la précédente
         followed["init_path"] = str(start_from)
         followed["strength"] = retouches.strength_for(text)
@@ -446,7 +460,20 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     mine_only = request.get("mine_only")
     if mine_only is None:
         mine_only = conv_id is not None and conversations.mine_only(conv_id)
+    if comfy_creations.is_comfy(request.get("model")):     # une recette de ComfyUI choisie
+        plan = _comfy_plan(text, request, found, media_kind, conv_id, chat_model, joined,
+                           mine_only)
+        if plan is not None:
+            return plan
+        request = {**request, "model": None}        # disparue ou nulle part : un autre modèle
     model_id = pick(media_kind, request.get("model"))
+    if model_id is None:          # ni sd.cpp ici ni chez mes machines : ComfyUI, avant le public
+        recipe = comfy_creations.first(media_kind)
+        plan = None if recipe is None else _comfy_plan(
+            text, {**request, "model": recipe["id"]}, found, media_kind, conv_id, chat_model,
+            joined, mine_only)
+        if plan is not None:
+            return plan
     public = model_id is None
     if public:                        # ni ici ni chez mes machines : peut-être le réseau public
         model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures)
@@ -501,6 +528,33 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
             "mine_only": bool(mine_only)}
 
 
+def _comfy_plan(text, request, found, media_kind, conv_id, chat_model, joined,
+                mine_only) -> dict | None:
+    """Une création par une recette de ComfyUI ou un de mes workflows (chat/comfy_creations.py),
+    calculée ici ou chez mes machines seulement : le plan qu'accept() enregistre ; None si
+    elle ne peut se calculer nulle part en ce moment (un autre modèle la remplace)."""
+    model_id = request["model"]
+    try:
+        comfy_creations.ready(model_id)
+    except comfy_creations.Unavailable:
+        return None
+    if any(r["kind"] == "image" for r in joined):
+        raise CreationError(t("chat_comfy.no_picture"))
+    prompt = request.get("prompt") or found.get("prompt") or text
+    if not request.get("followup") and enrich.wanted(prompt):
+        prompt = enrich.enrich(prompt, media_kind, chat_model)
+    try:
+        params = comfy_creations.prepare(model_id, request, found, prompt)
+    except comfy_creations.Unavailable as exc:   # partie entre-temps (ComfyUI fermé…)
+        raise CreationError(str(exc), status=exc.status) from exc
+    except ValueError as exc:
+        raise CreationError(str(exc)) from exc
+    return {"text": text, "conv_id": conv_id, "chat_model": chat_model, "model_id": model_id,
+            "params": params, "auto": bool(request.get("auto")),
+            "attachments": [r["id"] for r in joined], "reference": False,
+            "mine_only": bool(mine_only), "engine": "comfyui"}
+
+
 def _for_public(params: dict, chat_model=None) -> dict:
     """Les réglages d'une image ou d'une vidéo que le réseau public créera : dans les bornes
     de ses machines (network/public_imaging.py, network/public_video.py : pas au-delà de leur
@@ -552,14 +606,20 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
         user_message_id = conversations.add_message(conv_id, "user", text)
         attachments.link(attachments.pending(plan.get("attachments")), user_message_id)
         title = conversations.auto_title(conv_id, text)
-        job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
-                                  URGENT)
-        media = {"kind": "video" if catalog.is_video(model_id) else "image", "model": model_id,
-                 "label": catalog.label(model_id), "prompt": params["prompt"],
-                 "count": params["count"], "batch": params["batch"], "job_id": job_id,
-                 "width": params["width"], "height": params["height"], "seed": params["seed"]}
-        if "frames" in params:
-            media["frames"] = params["frames"]
+        if plan.get("engine") == "comfyui":      # ici ou chez mes machines, jamais ailleurs
+            job_id = queue.create_job(comfy_create.KIND, {**params, "conversation_id": conv_id},
+                                      URGENT, reach=",".join(comfy_create.WHERE))
+            media = comfy_creations.media(params, job_id)
+        else:
+            job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
+                                      URGENT)
+            media = {"kind": "video" if catalog.is_video(model_id) else "image",
+                     "model": model_id, "label": catalog.label(model_id),
+                     "prompt": params["prompt"], "count": params["count"],
+                     "batch": params["batch"], "job_id": job_id, "width": params["width"],
+                     "height": params["height"], "seed": params["seed"]}
+            if "frames" in params:
+                media["frames"] = params["frames"]
         if plan["auto"]:
             media["auto"] = True      # reconnue dans le message : « Répondre en texte » possible
         if plan.get("reference"):
@@ -627,8 +687,12 @@ def replace(conv_id, message_id, expect=None) -> list:
 def same_job(job: dict | None, media: dict) -> bool:
     """Ce travail est-il bien celui de cette création ? Les numéros des travaux retirés de
     la liste (« Retirer les terminés ») sont repris par les suivants."""
-    return bool(job) and job.get("kind") == "generate_images" \
-        and (job.get("params") or {}).get("batch") == media.get("batch")
+    if not job:
+        return False
+    params = job.get("params") or {}
+    if job.get("kind") == comfy_create.KIND:       # une recette de ComfyUI : son lot à part
+        return (params.get("creation") or {}).get("batch") == media.get("batch")
+    return job.get("kind") == "generate_images" and params.get("batch") == media.get("batch")
 
 
 def view(media: dict | None) -> dict | None:

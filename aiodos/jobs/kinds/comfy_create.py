@@ -24,7 +24,8 @@ import shutil
 from pathlib import Path
 
 from aiodos import i18n, paths
-from aiodos.engines import catalogue, comfy_graph, comfy_instance, comfy_workflows, machines
+from aiodos.engines import (catalogue, comfy_client, comfy_graph, comfy_instance,
+                            comfy_workflows, comfyui, machines)
 from aiodos.engines import media, recipes
 from aiodos.i18n import t
 from aiodos.imaging import gallery
@@ -126,6 +127,18 @@ def normalize(body, inventory: dict | None = None) -> dict:
 
 
 # ------------------------------------------------------------------- où
+def inventory_here():
+    """L'inventaire du ComfyUI de ce PC s'il est accordé et ouvert, sinon None (la vue Images
+    et vidéos, la conversation : chat/comfy_creations.py)."""
+    found = engine.instance_here()
+    if found is None:
+        return None
+    try:
+        return comfyui.inventory(found.url)
+    except comfy_client.Unreachable:
+        return None
+
+
 def places(params: dict, inventory: dict | None) -> dict:
     """{"here": ce PC peut-il la calculer, "machines": mes machines qui ont ComfyUI et ses
     modèles} : sans l'un ni l'autre, rien n'est mis en file."""

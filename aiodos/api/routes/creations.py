@@ -2,14 +2,16 @@
 l'utilisateur et la réponse qui montrera les images s'ajoutent à la conversation, et le
 travail part dans la file, calculé ici ou par mes machines qui ont le modèle ; une image que
 rien de cela ne peut calculer, par une machine du réseau public, avec l'accord demandé une fois
-(chat/public_creations.py : un refus 409 qui porte « public »: « ask » montre la carte)."""
+(chat/public_creations.py : un refus 409 qui porte « public »: « ask » montre la carte).
+Les recettes de ComfyUI et mes workflows prêts ici ou chez mes machines s'y proposent comme
+des modèles (GET /api/chat/create/comfyui, chat/comfy_creations.py)."""
 import asyncio
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from aiodos.chat import creations, pending
+from aiodos.chat import comfy_creations, creations, pending
 from aiodos.i18n import t
 
 router = APIRouter(prefix="/api/chat")
@@ -38,6 +40,12 @@ class CreateIn(BaseModel):
     # « Sur mes machines seulement » (rien ne part chez un inconnu du réseau public) ; None : ce
     # que garde la conversation (désactivé pour une nouvelle)
     mine_only: bool | None = None
+
+
+@router.get("/create/comfyui")
+async def comfy_models():
+    """Les recettes de ComfyUI et mes workflows que ce PC ou mes machines peuvent calculer."""
+    return {"models": await asyncio.to_thread(comfy_creations.choices)}
 
 
 @router.post("/create/{message_id}/undo")

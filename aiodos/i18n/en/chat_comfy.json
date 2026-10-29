@@ -1,0 +1,7 @@
+{
+  "label": "{name} · ComfyUI",
+  "gone": "This ComfyUI recipe no longer exists on this PC.",
+  "nowhere": "Neither this PC nor your machines can run “{name}” right now: open ComfyUI, or download its models in the Images and videos view.",
+  "no_prompt": "“{name}” has no description to fill in: create it from the Images and videos view.",
+  "no_picture": "An attached image cannot go into a ComfyUI recipe: pick one of AIODOS's image models to start from your image."
+}
