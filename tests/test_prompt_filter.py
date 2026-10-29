@@ -364,6 +364,18 @@ def test_the_model_adds_refusals_with_the_base_code(model):
     assert pf.check("a red fox in the snow", model="m") == OTHER
 
 
+def test_a_tiny_model_never_judges(model):
+    """Un modèle de moins de JUDGE_MIN_PARAMS milliards répond au hasard : la base décide
+    seule (S23 de l'auteur, qwen3.5:0.8b, 29/10/2026 : « un samouraï démon » refusé)."""
+    model.answer = "YES"
+    for tiny in ("qwen3.5:0.8b", "auto:qwen3.5:0.8b", "gemma3:270m", "qwen3.5:2b"):
+        assert pf.check("a demon samurai in dark armor, glowing red eyes", model=tiny) is None
+    assert model.calls == []
+    assert pf.check("a naked child", model="qwen3.5:0.8b") == MINOR    # la base, toujours
+    assert pf.check("a demon samurai", model="qwen3.5:9b") == OTHER    # un grand modèle juge
+    assert pf.judges("qwen3.5:4b") and pf.judges("mon-modele") and not pf.judges("x:1.5b")
+
+
 def test_the_model_is_not_asked_when_the_base_refuses(model):
     assert pf.check("a naked child", model="m") == MINOR
     assert model.calls == []

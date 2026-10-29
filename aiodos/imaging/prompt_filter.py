@@ -43,7 +43,10 @@ dise pourquoi).
    doute (une autre réponse), de panne ou d'échéance dépassée, la base décide seule ; une
    consigne glissée dans la description ne peut donc qu'obtenir le jugement de la base. Côté
    prêteur, seulement un modèle déjà chargé (warm_model) : jamais un chargement, qui
-   prendrait la carte graphique au moteur d'images.
+   prendrait la carte graphique au moteur d'images. Jamais un modèle de moins de
+   JUDGE_MIN_PARAMS milliards de paramètres (lus dans son nom ; taille inconnue : il juge) :
+   un tout petit modèle répond au hasard. Le S23 de l'auteur (qwen3.5:0.8b) refusait « un
+   samouraï démon » (29/10/2026), que la base laisse passer ; qwen3.5:9b, mesuré, 28 sur 28.
 
 Rien n'est gardé ni écrit au journal : ni la description, ni les termes trouvés ; l'appelant
 dit le code s'il le veut. Ce qu'un filtre ne fait pas : lire une langue qu'il ne connaît pas
@@ -73,6 +76,7 @@ MAX_TEXT = 8000                 # caractères lus au plus (une description en fa
 MAX_GLUED = 40                  # un mot collé plus long n'est pas découpé
 MAX_FORMS = 6                   # lectures d'un mot, au plus (chiffres, lettres répétées)
 CHECK_S = 6.0                   # le modèle, au plus : au-delà, la base décide seule
+JUDGE_MIN_PARAMS = 3.0          # milliards : un modèle plus petit ne juge pas (judges)
 ANSWER_TOKENS = 4               # « YES », « NO » : un ou deux jetons
 LEGAL_AGE = 18
 
@@ -499,6 +503,13 @@ def _answer(text: str) -> bool | None:
     return True if word.group() in _YES else False if word.group() in _NO else None
 
 
+def judges(model: str) -> bool:
+    """Ce modèle est-il assez grand pour juger une description (cf. le début du module) ?"""
+    from aiodos.network import public_chat
+    size = public_chat.params(model)
+    return size is None or size >= JUDGE_MIN_PARAMS
+
+
 def model_says(model: str, prompt: str, timeout: float = CHECK_S) -> bool | None:
     """Le modèle juge-t-il la description interdite ? True (YES), False (NO) ; None : doute,
     panne, ou pas de réponse en `timeout` secondes (l'appel continue seul, puis s'arrête)."""
@@ -556,7 +567,7 @@ def check(prompt: str, negative: str = "", model: str | None = None,
     """Le code d'une description interdite, ou None : la base, puis, si elle la laisse passer
     et qu'un modèle est donné (model : son nom), le modèle (cf. le début du module)."""
     code = base(prompt, negative)
-    if code is not None or not model:
+    if code is not None or not model or not judges(model):
         return code
     if model_says(model, prompt, timeout):
         return _hint(found(prompt))
