@@ -23,6 +23,8 @@ from aiodos.imaging import engine as images_engine
 from aiodos.jobs import kinds  # noqa: F401  (enregistre les types de travaux)
 from aiodos.jobs.executor import Executor
 from aiodos.jobs.kinds import reindex
+from aiodos.api.routes import library_folders           # dossiers suivis, modèle d'embeddings
+from aiodos.knowledge import embed_model, folder_watch
 from aiodos.network.manager import NetworkManager
 from aiodos.node import identity, keep_awake
 from aiodos.updates.service import UpdateService
@@ -68,6 +70,14 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         # Modèle d'embedding changé (réglage, mise à jour) ou réindexation à reprendre
         if await asyncio.to_thread(reindex.schedule, resume=True):
             executor.wake()
+        # Modèle d'embeddings absent, revenu ou pris d'office : la vue Tâches et les
+        # bibliothèques le disent, la file repart (knowledge/embed_model.py)
+        unlisten = embed_model.on_change(lambda: (bus.publish({"type": "jobs_reset"}),
+                                                  bus.publish({"type": "knowledge"}),
+                                                  executor.wake()))
+        # Dossiers des bibliothèques suivis : relus peu après l'ouverture, puis régulièrement
+        watching = asyncio.create_task(folder_watch.loop(executor, bus),
+                                       name="aiodos-suivi-dossiers")
         await app.state.network.apply()          # ne démarre que si le réseau est activé
         app.state.updates = UpdateService(bus, executor, app.state.network, windowed)
         app.state.updates.start()
@@ -81,6 +91,8 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
         keep_awake.start()                     # pas de veille pendant un travail d'appli
         yield
         keep_awake.stop()
+        watching.cancel()
+        unlisten()
         keeping.cancel()
         tidying.cancel()
         await asyncio.to_thread(comfy_instance.stop_instance)   # le ComfyUI lancé par AIODOS
@@ -99,6 +111,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
                    legal, model_install, network, node, system, updates):
         app.include_router(module.router)
     app.include_router(system.window_router)
+    app.include_router(library_folders.router)
 
     css = render.pygments_css()
 

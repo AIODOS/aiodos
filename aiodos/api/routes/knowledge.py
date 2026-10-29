@@ -1,6 +1,7 @@
 """Bibliothèques de connaissance : collections, entrées, lancement d'indexations, ce qui
 en est consultable par mes machines et mes amis, et la recherche dans ce qu'ils m'ouvrent."""
 import asyncio
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.jobs.models import NORMAL
-from aiodos.knowledge import store, visibility
+from aiodos.knowledge import folders, store, visibility
 from aiodos.network import remote_search
 
 router = APIRouter(prefix="/api")
@@ -175,11 +176,33 @@ async def _launch(request: Request, kind: str, params: dict, priority: int):
 
 @router.post("/index")
 async def index_paths(body: IndexPathsIn, request: Request):
+    """Chaque dossier devient un dossier suivi de la bibliothèque (knowledge/folders.py), lu
+    tout de suite ; les fichiers choisis un à un, un travail comme avant. → job_id (le
+    premier), jobs, et ce qu'on sait de chaque dossier (folders : fichiers à lire, non pris
+    en charge…), pour dire tout de suite qu'un dossier n'a aucun fichier lisible."""
     if not body.paths:
         raise HTTPException(400, t("index.no_paths"))
-    return await _launch(request, "index_paths",
-                         {"paths": body.paths, "collection_id": body.collection_id},
-                         body.priority)
+    dirs = [p for p in body.paths if await asyncio.to_thread(Path(p).is_dir)]
+    others = [p for p in body.paths if p not in dirs]
+    jobs, found = [], []
+    for folder in dirs:
+        try:
+            outcome = await asyncio.to_thread(folders.add, body.collection_id, folder,
+                                              body.priority)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        found.append(outcome)
+        if outcome.get("job_id"):
+            jobs.append(outcome["job_id"])
+            request.app.state.executor.publish_job(outcome["job_id"], force=True)
+    if others:
+        jobs.append((await _launch(request, "index_paths",
+                                   {"paths": others, "collection_id": body.collection_id},
+                                   body.priority))["job_id"])
+    request.app.state.executor.wake()
+    if dirs:
+        _notify(request)
+    return {"job_id": jobs[0] if jobs else None, "jobs": jobs, "folders": found}
 
 
 @router.post("/index_urls")

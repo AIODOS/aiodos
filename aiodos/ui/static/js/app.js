@@ -101,7 +101,9 @@ function onJob(job) {
         title: jobTitle(job), n, where: t(conv ? 'app.ready_in_conversation' : 'app.ready_in_images'),
       }), job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
     }
-  } else if (finished && job.kind !== 'index_conversation') {
+  } else if (finished && job.kind !== 'index_conversation'
+             && !(job.params?.auto && job.status === 'done' && !job.failed)) {
+    // (un dossier suivi relu de lui-même, sans erreur : rien à annoncer, cf. folder_watch.py)
     const kind = job.status === 'done' && !job.failed ? 'ok' : job.status === 'cancelled' ? 'info' : 'err';
     toast(job.result?.indexed !== undefined
       ? t('app.job_indexed', { title: jobTitle(job), n: job.result.indexed }) : jobTitle(job), kind, 6000);

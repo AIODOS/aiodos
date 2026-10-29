@@ -26,6 +26,8 @@ import time
 
 from aiodos import i18n, settings
 from aiodos.jobs.registry import Interrupted
+from aiodos.knowledge import embed_model
+from aiodos.llm import integrated
 from aiodos.node import power
 from aiodos.services import ollama
 
@@ -222,11 +224,19 @@ def paced(call, stop=None, gpu: bool = True):
 
 
 def embed(texts: list, model=None, stop=None) -> list:
-    """ollama.embed par lots, chacun cédant la place et se reposant comme il faut."""
+    """ollama.embed par lots, chacun cédant la place et se reposant comme il faut. Le modèle
+    absent de cette machine lève embed_model.Missing : ce n'est pas le fichier qui échoue
+    (jobs/executor.py rend l'unité sans compter d'essai)."""
     vectors = []
-    for start in range(0, len(texts), EMBED_BATCH):
-        batch = texts[start:start + EMBED_BATCH]
-        vectors.extend(paced(lambda: ollama.embed(batch, model=model), stop))
+    try:
+        for start in range(0, len(texts), EMBED_BATCH):
+            batch = texts[start:start + EMBED_BATCH]
+            vectors.extend(paced(lambda: ollama.embed(batch, model=model), stop))
+    except (integrated.ModelMissing, integrated.Incompatible) as exc:
+        missing = embed_model.from_engine(exc, model or settings.get("embed_model"))
+        if missing is None:
+            raise
+        raise missing from exc
     return vectors
 
 

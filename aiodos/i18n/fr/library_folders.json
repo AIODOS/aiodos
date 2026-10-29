@@ -1,0 +1,57 @@
+{
+  "title": "Dossiers suivis",
+  "hint": "Relus à l'ouverture d'AIODOS puis toutes les 10 minutes : les fichiers nouveaux ou modifiés sont indexés, ceux supprimés retirés.",
+  "indexed": {
+    "one": "{n} indexé",
+    "other": "{n} indexés"
+  },
+  "pending": "{n} en attente",
+  "failed": "{n} en échec",
+  "unread": {
+    "one": "{n} non lu",
+    "other": "{n} non lus"
+  },
+  "cancelled": {
+    "one": "{n} annulé",
+    "other": "{n} annulés"
+  },
+  "scanned": "lu {when}",
+  "never_scanned": "pas encore lu",
+  "offline": "Introuvable pour l'instant (disque débranché ?) : rien n'en est retiré tant qu'il manque.",
+  "no_readable": "Aucun fichier lisible dans ce dossier.",
+  "ignored": {
+    "one": "{n} fichier non pris en charge : {types}.",
+    "other": "{n} fichiers non pris en charge : {types}."
+  },
+  "rescan": "Relire",
+  "rescan_hint": "Lire de nouveau ce dossier : les fichiers nouveaux ou modifiés, et ceux en échec",
+  "rescan_started": {
+    "one": "« {name} » relu : {n} fichier à indexer.",
+    "other": "« {name} » relu : {n} fichiers à indexer."
+  },
+  "rescan_nothing": "« {name} » relu : rien de nouveau.",
+  "rescan_busy": "« {name} » est déjà en cours d'indexation.",
+  "rescan_offline": "« {name} » est introuvable (disque débranché ?) : rien n'en a été retiré.",
+  "remove": "Retirer",
+  "remove_hint": "Ne plus suivre ce dossier et retirer ses passages de la bibliothèque",
+  "remove_title": "Retirer le dossier",
+  "remove_text": "« {path} » ne sera plus suivi, et ses passages quitteront la bibliothèque. Tes fichiers ne sont pas touchés.",
+  "removed": "Dossier retiré de la bibliothèque.",
+  "problems": "Fichiers non lus",
+  "problems_more": "… et d'autres.",
+  "added": {
+    "one": "« {name} » ajouté et suivi : {n} fichier à indexer.",
+    "other": "« {name} » ajouté et suivi : {n} fichiers à indexer."
+  },
+  "added_again": "« {name} » était déjà suivi : relu.",
+  "added_empty": "« {name} » n'a aucun fichier lisible.",
+  "job_rescan": {
+    "one": "Relire le dossier « {name} » → {target} ({n} fichier)",
+    "other": "Relire le dossier « {name} » → {target} ({n} fichiers)"
+  },
+  "nothing_to_read": "Rien de nouveau à lire dans ce dossier.",
+  "not_found": "Dossier suivi introuvable.",
+  "removed_meanwhile": "dossier retiré de la bibliothèque entre-temps",
+  "aiodos_folder": "Ce dossier appartient à AIODOS : il ne s'indexe pas.",
+  "not_a_folder": "« {path} » n'est pas un dossier, ou il est introuvable."
+}

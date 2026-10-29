@@ -41,6 +41,7 @@ import requests
 
 from aiodos.jobs import endgame, leases, pacing, queue, registry
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from aiodos.knowledge import embed_model
 from aiodos.node import places, priority
 from aiodos.services import ollama
 
@@ -52,12 +53,20 @@ LEASE_CHECK_EVERY = 10       # vérification des baux échus (unités confiées 
 
 def engine_down(exc) -> bool:
     """Vrai si l'erreur vient d'Ollama injoignable (arrêté, en redémarrage, en
-    mise à jour…) : passager, l'unité n'y est pour rien. Une page web
+    mise à jour…), ou du routeur du moteur intégré qui repart (liste des modèles changée,
+    llm/engine.py : la demande en cours est coupée, constaté le 29/10/2026 pendant une
+    indexation d'images) : passager, l'unité n'y est pour rien. Une page web
     introuvable, elle, reste une vraie erreur."""
     if not isinstance(exc, (requests.ConnectionError, requests.Timeout)):
         return False
     url = getattr(getattr(exc, "request", None), "url", "") or ""
-    return url.startswith(ollama.base())
+    if url.startswith(ollama.base()):
+        return True
+    # Le routeur écoute sur 127.0.0.1, à un port tiré à chaque départ ; ses routes : /v1/…
+    return ollama.use_integrated() and url.startswith(ROUTER_PREFIX) and "/v1/" in url
+
+
+ROUTER_PREFIX = "http://127.0.0.1:"       # i18n: tel quel (adresse du routeur)
 
 
 def _run_unit(task, payload, stop=None, claim=None) -> tuple:
@@ -273,6 +282,19 @@ class Executor:
                          unit["id"], ENGINE_RETRY_DELAY)
                 await asyncio.to_thread(queue.release_unit, unit["id"], False, mine)
                 self.cooldown[unit["resource"]] = time.monotonic() + ENGINE_RETRY_DELAY
+                job_id, finished = unit["job_id"], False
+            elif isinstance(exc, embed_model.Missing):
+                # Le modèle d'embeddings manque ici : ni l'unité ni son fichier n'y sont pour
+                # rien. Un autre modèle déjà là est pris d'office au premier indexage (essais
+                # de chargement : l'unité reste à cette machine le temps de les faire), sinon
+                # cette machine ne prend plus ces unités et chaque travail le dit, une fois
+                # (knowledge/embed_model.py). Puis rendue sans compter d'essai ni de remise
+                halt.set()                     # finie ici : rien à arrêter (_halt_withdrawn)
+                try:
+                    await asyncio.to_thread(embed_model.on_missing, exc.model)
+                except Exception:
+                    log.exception("Modèle d'embeddings absent : suite impossible")
+                await asyncio.to_thread(queue.release_unit, unit["id"], False, mine, False)
                 job_id, finished = unit["job_id"], False
             else:
                 log.warning("Unité %s (%s) en échec : %s", unit["id"], unit["task"], exc)

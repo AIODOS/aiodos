@@ -26,8 +26,8 @@ from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import BACKGROUND, QUEUED
 from aiodos.jobs.registry import (TASKS, Interrupted, SampleMismatch, TaskSpec, UnitSpec,
                                  register_job_kind, register_portable, task)
-from aiodos.knowledge import chunking, store
-from aiodos.services import addresses, extract, media, ollama, web
+from aiodos.knowledge import chunking, embed_model, store
+from aiodos.services import addresses, extract, media, ollama, vision_image, web
 
 # Dossiers jamais parcourus (outils de dev, corbeille…)
 SKIP_DIRS = {"node_modules", "__pycache__", "venv", "$RECYCLE.BIN",
@@ -152,7 +152,7 @@ def _secret(name: str) -> bool:
             or any(fnmatch.fnmatchcase(lowered, pattern) for pattern in SECRET_PATTERNS))
 
 
-def _walk(folder: Path):
+def _walk(folder: Path, errors: list | None = None):
     """Fichiers d'un dossier, récursivement, dans l'ordre des noms. Ce qu'un parcours
     ramasse en passant ne comprend pas ce qui contient souvent des secrets : fichiers et
     dossiers cachés (nom en « . », ou attribut caché ou système de Windows), fichiers de
@@ -161,7 +161,8 @@ def _walk(folder: Path):
     ni vers un fichier (un lien dans un dépôt cloné peut viser une clé ou AppData). Un
     dossier d'AIODOS (ou l'un de ses sous-dossiers, cf. _inside_aiodos) n'est jamais
     parcouru, même choisi directement. Un fichier que l'utilisateur choisit nommément,
-    lui, est indexé (split_index_paths)."""
+    lui, est indexé (split_index_paths). errors : y sont ajoutés les dossiers qui n'ont pas
+    pu être lus (un dossier suivi n'en retire pas les fichiers, knowledge/folders.py)."""
     protected = _aiodos_roots() | _app_data_roots()
     if _inside_aiodos(folder):
         return
@@ -172,6 +173,8 @@ def _walk(folder: Path):
             with os.scandir(current) as found:
                 entries = sorted(found, key=lambda e: e.name)
         except OSError:
+            if errors is not None:
+                errors.append(current)
             continue
         subfolders = []
         for entry in entries:
@@ -192,6 +195,9 @@ def _walk(folder: Path):
 
 
 def split_index_paths(params):
+    if params.get("folder_id") is not None:        # un dossier suivi : ce qui a changé
+        from aiodos.knowledge import folders
+        return folders.split(params)
     collection_id = params["collection_id"]
     paths = [Path(p) for p in params["paths"]]
     units, skipped = [], Counter()
@@ -275,7 +281,13 @@ def _compute_index_file(payload, file, options, stop):
         transcribe = lambda p: media.transcribe(
             p, options["whisper"], stop=stop, threads=pacing.threads(media.WHISPER_THREADS),
             pace=pace)
-    text = extract.extract_text(path, vision=vision, transcribe=transcribe, pace=pace)
+    try:
+        text = extract.extract_text(path, vision=vision, transcribe=transcribe, pace=pace)
+    except vision_image.Unreadable as exc:
+        # Image que ni AIODOS ni le modèle de vision ne savent lire (HEIC sans son greffon,
+        # fichier abîmé) : sautée avec sa raison, pas un échec obscur
+        return {"skipped": True, "ext": path.suffix.lower() or t("index.no_extension"),
+                "reason": str(exc)}
     if stop is not None and stop.is_set():
         raise Interrupted()
     if not text or not text.strip():
@@ -294,6 +306,11 @@ def assimilate_index_file(payload, output):
     _refuse_unchecked(output)
     if output.get("skipped"):
         return _skipped(output)
+    if payload.get("folder_id") is not None:
+        from aiodos.knowledge import folders
+        if not folders.watched(payload["folder_id"]):       # retiré pendant le calcul
+            return {"skipped": True, "ext": Path(payload["path"]).suffix.lower() or "?",
+                    "reason": t("library_folders.removed_meanwhile")}
     store.upsert_entry(payload["collection_id"], payload["source"], payload["kind"],
                        payload["path"], list(zip(output["pieces"], output["vectors"])))
     return {"chunks": len(output["pieces"])}
@@ -475,9 +492,11 @@ def check_embedded(payload, output):
         raise ValueError(t("index.wrong_dimension", got=vectors.shape[1], expected=dim))
 
 
+# here : tant que le modèle d'embeddings manque ici, cette machine ne prend plus ces unités
+# (elles attendent une de mes machines qui l'a, ou le modèle : knowledge/embed_model.py)
 register_portable("index_file", compute_index_file, assimilate_index_file, file_key="path",
                   options=index_options, requires=requires_index, validate=check_embedded,
-                  sample=sample_embedded, checkable=checkable_here)
+                  sample=sample_embedded, checkable=checkable_here, here=embed_model.here)
 
 
 def finalize_index(job_id, params, units):
@@ -489,6 +508,9 @@ def finalize_index(job_id, params, units):
     planned = json.loads(job["result"] or "{}").get("skipped_types", {})
     for ext, n in planned.items():
         skipped[ext] += n
+    if params.get("folder_id") is not None:        # un dossier suivi : l'état de ses fichiers
+        from aiodos.knowledge import folders
+        folders.sync(params["folder_id"])
     return {"indexed": sum(1 for u in units if u["status"] == "done"),
             "chunks": sum(u["result"].get("chunks", 0) for u in units),
             "skipped_types": dict(skipped.most_common())}
@@ -549,7 +571,8 @@ def assimilate_index_url(payload, output):
 # le texte. Ma machine refuse alors l'unité (network/worker.py).
 register_portable("index_url", compute_index_url, assimilate_index_url,
                   options=index_options, requires=requires_index, validate=check_embedded,
-                  shared_keys=("url",), sample=sample_embedded, mine_only=True)
+                  shared_keys=("url",), sample=sample_embedded, mine_only=True,
+                  here=embed_model.here)
 
 
 def run_index_url_here(payload, file=None, options=None, stop=None):
@@ -563,7 +586,7 @@ def run_index_url_here(payload, file=None, options=None, stop=None):
 
 # Tâche simple (sans assimilate : non portable), enregistrée sans le décorateur task, qui
 # ne transmet pas l'arrêt (stop) à la fonction
-TASKS["index_url_here"] = TaskSpec("index_url_here", run_index_url_here)
+TASKS["index_url_here"] = TaskSpec("index_url_here", run_index_url_here, here=embed_model.here)
 
 
 register_job_kind("index_urls", split_index_urls, finalize_index)
@@ -646,6 +669,10 @@ def run_index_conversation(payload):
         elif drop or gone:
             store.drop_message_chunks(collection_id, str(conv_id), drop + gone)
     return {"chunks": len(still)}
+
+
+# Comme les fichiers : pas ici tant que le modèle d'embeddings y manque
+TASKS["index_conversation"].here = embed_model.here
 
 
 def queue_conversation(conv_id) -> int | None:

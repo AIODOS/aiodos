@@ -21,13 +21,24 @@ MIN, MAX = 2048, 131072
 HIGH_VRAM = 7.5e9
 
 
+_seen = {"vram": 0}           # la mémoire vidéo lue la dernière fois qu'elle l'a été
+
+
 def _vram() -> int:
+    """La mémoire de la carte graphique. Une lecture manquée (nvidia-smi qui ne répond pas
+    dans ses 5 s quand la carte calcule, node/identity.gpus) garde la dernière connue : sinon
+    le contexte passait de 16 384 à 8 192 jetons, les préréglages changeaient, et le routeur
+    repartait en coupant la demande en cours (PC de l'auteur, 29/10/2026 : une dizaine de
+    départs pendant une indexation d'images, chacun rechargeant le modèle de vision)."""
     try:
         from aiodos.services import model_install
-        return int(model_install.device().get("vram") or 0)
+        found = int(model_install.device().get("vram") or 0)
     except Exception as exc:
         log.debug("Mémoire vidéo inconnue : %s", exc)
-        return 0
+        found = 0
+    if found > 0:
+        _seen["vram"] = found
+    return found or _seen["vram"]
 
 
 def auto() -> int:

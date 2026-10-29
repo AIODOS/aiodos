@@ -11,6 +11,7 @@ import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
 import { bindGateway, gatewayCard, loadGateway } from './gateway.js';
 import { appsCard, bindApps } from './gateway-apps.js';
+import { loadEmbed } from './embed-model.js';
 import { bindEngines, enginesCard, loadEngines } from './engines.js';
 import { asDefault, catalog, defaultChoice, modelLabel } from './models.js';
 import { bindUpdates, loadUpdates, updatesStatus } from './updates.js';
@@ -66,7 +67,7 @@ const SECTIONS = [
       help: 'settings.conversations_enabled_help' },
     { key: 'peer_libraries_enabled', label: 'settings.peer_libraries_enabled', type: 'switch',
       help: 'settings.peer_libraries_enabled_help' },
-    { key: 'embed_model', label: 'settings.embed_model', type: 'text', help: 'settings.embed_model_help' },
+    { key: 'embed_model', label: 'settings.embed_model', type: 'embed', help: 'settings.embed_model_help' },
     { key: 'rag_min_score', label: 'settings.rag_min_score', type: 'number',
       min: 0, max: 1, step: 0.01, help: 'settings.rag_min_score_help' },
     { type: 'subhead', label: 'settings.section_media' },
@@ -163,9 +164,12 @@ export function mountSettings(container) {
   const refresh = () => { if (state.view !== 'settings' || !Object.keys(draft).length) render(); };
   on('settings:loaded', refresh);
   on('models:loaded', refresh);
+  on('embed:loaded', refresh);              // les modèles d'embeddings de cette machine
   window.addEventListener('pywebviewready', refresh);     // les boutons « Choisir… » des dossiers
   on('view:shown', view => {
-    if (view === 'settings') { render(); loadUpdates(); loadGateway(); loadEngines(); loadImageModels(); }
+    if (view === 'settings') {
+      render(); loadUpdates(); loadGateway(); loadEngines(); loadImageModels(); loadEmbed();
+    }
   });
   mountModels();
   const refreshModels = () => {
@@ -241,6 +245,11 @@ function field(f, section) {
     control = `<div class="folder-field"><input class="input" type="text" id="${id}" data-key="${f.key}"
       value="${esc(s[f.key])}">${window.pywebview?.api?.pick_folder
         ? `<button class="btn" type="button" data-pick="${id}">${icon('folder')}${esc(t('settings.choose'))}</button>` : ''}</div>`;
+  } else if (f.type === 'embed') {        // le modèle d'embeddings : ceux de cette machine proposés
+    const names = [...new Set([s[f.key], ...(state.embed?.candidates || [])].filter(Boolean))];
+    control = `<input class="input" type="text" id="${id}" data-key="${f.key}" value="${esc(s[f.key])}"
+      list="${id}-choices"><datalist id="${id}-choices">${names.map(n =>
+        `<option value="${esc(n)}">`).join('')}</datalist>`;
   } else if (f.type === 'list') {         // une liste : les valeurs séparées par des virgules
     control = `<input class="input" type="text" id="${id}" data-key="${f.key}" data-list="1"
       value="${esc((s[f.key] || []).join(', '))}">`;

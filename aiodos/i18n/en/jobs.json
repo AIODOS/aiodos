@@ -19,6 +19,7 @@
   "status_failed": "Failed",
   "status_cancelled": "Cancelled",
   "status_done_errors": "Done with errors",
+  "status_blocked": "Waiting for the model",
   "stat_running": "running",
   "stat_queued": "waiting",
   "stat_paused": "paused",

@@ -1,0 +1,57 @@
+{
+  "title": "Watched folders",
+  "hint": "Read again when AIODOS opens, then every 10 minutes: new or changed files are indexed, deleted ones removed.",
+  "indexed": {
+    "one": "{n} indexed",
+    "other": "{n} indexed"
+  },
+  "pending": "{n} waiting",
+  "failed": "{n} failed",
+  "unread": {
+    "one": "{n} unread",
+    "other": "{n} unread"
+  },
+  "cancelled": {
+    "one": "{n} cancelled",
+    "other": "{n} cancelled"
+  },
+  "scanned": "read {when}",
+  "never_scanned": "not read yet",
+  "offline": "Not found right now (unplugged drive?): nothing is removed while it is missing.",
+  "no_readable": "No readable file in this folder.",
+  "ignored": {
+    "one": "{n} unsupported file: {types}.",
+    "other": "{n} unsupported files: {types}."
+  },
+  "rescan": "Read again",
+  "rescan_hint": "Read this folder again: new or changed files, and failed ones",
+  "rescan_started": {
+    "one": "“{name}” read again: {n} file to index.",
+    "other": "“{name}” read again: {n} files to index."
+  },
+  "rescan_nothing": "“{name}” read again: nothing new.",
+  "rescan_busy": "“{name}” is already being indexed.",
+  "rescan_offline": "“{name}” cannot be found (unplugged drive?): nothing was removed.",
+  "remove": "Remove",
+  "remove_hint": "Stop watching this folder and remove its passages from the library",
+  "remove_title": "Remove the folder",
+  "remove_text": "“{path}” will no longer be watched, and its passages will leave the library. Your files are not touched.",
+  "removed": "Folder removed from the library.",
+  "problems": "Unread files",
+  "problems_more": "… and more.",
+  "added": {
+    "one": "“{name}” added and watched: {n} file to index.",
+    "other": "“{name}” added and watched: {n} files to index."
+  },
+  "added_again": "“{name}” was already watched: read again.",
+  "added_empty": "“{name}” has no readable file.",
+  "job_rescan": {
+    "one": "Read folder “{name}” again → {target} ({n} file)",
+    "other": "Read folder “{name}” again → {target} ({n} files)"
+  },
+  "nothing_to_read": "Nothing new to read in this folder.",
+  "not_found": "Watched folder not found.",
+  "removed_meanwhile": "folder removed from the library meanwhile",
+  "aiodos_folder": "This folder belongs to AIODOS: it is not indexed.",
+  "not_a_folder": "“{path}” is not a folder, or cannot be found."
+}

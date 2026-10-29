@@ -1,0 +1,21 @@
+{
+  "missing": "The embedding model “{model}” is not on this machine.",
+  "job_blocked": "Waiting: the embedding model “{model}” is not on this machine. Pick one that is here, or download it (Libraries).",
+  "banner": "The embedding model “{model}” is not on this machine: pick one that is here, or download it. Indexing waits, without counting anything as failed.",
+  "banner_vectors": "Your libraries already hold passages: switching embedding models will recompute them all.",
+  "no_other": "No other embedding model on this machine.",
+  "use": "Use {model}",
+  "download": "Download {model}",
+  "settings": "Settings",
+  "fix": "Fix",
+  "use_title": "Switch embedding model",
+  "use_text": "Every passage already indexed will be recomputed with “{model}” (reindexing).",
+  "use_confirm": "Switch",
+  "used": "Embedding model: {model}.",
+  "download_title": "Download {model}",
+  "download_text": "{size}, license: {license}. Once installed it will index your libraries; indexing resumes by itself.",
+  "download_confirm": "Download",
+  "download_started": "Download of {model} started: follow it in Settings, Models.",
+  "auto": "As “{missing}” is not on this machine, AIODOS took “{model}”, already here, as the embedding model for this first indexing. You can change it in Settings, Knowledge: everything would then be recomputed.",
+  "auto_ok": "Got it"
+}

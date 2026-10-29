@@ -46,10 +46,19 @@ def version():
     return f"llama.cpp {info['version']}" if info and info.get("version") else "llama.cpp"
 
 
+class ModelMissing(RuntimeError):
+    """Le modèle demandé n'est pas sur cette machine (name : son nom). Dit à part : pour un
+    travail de fond, ce n'est pas le fichier qui échoue (knowledge/embed_model.py)."""
+
+    def __init__(self, message: str, name: str = ""):
+        super().__init__(message)
+        self.name = str(name or "")
+
+
 def _model(name) -> registry.Model:
     model = registry.find(name)
     if model is None:
-        raise RuntimeError(t("llm.model_missing", name=name))
+        raise ModelMissing(t("llm.model_missing", name=name), name)
     return model
 
 
@@ -78,7 +87,11 @@ def _janitor():
 
 
 class Incompatible(RuntimeError):
-    """Un modèle que llama.cpp ne sait pas charger : écarté pour de bon."""
+    """Un modèle que llama.cpp ne sait pas charger : écarté pour de bon (name : son nom)."""
+
+    def __init__(self, message: str, name: str = ""):
+        super().__init__(message)
+        self.name = str(name or "")
 
 
 def _url(model: registry.Model) -> str:
@@ -90,7 +103,8 @@ def _url(model: registry.Model) -> str:
         # llama-server seul (llm/direct.py) : le modèle se charge au lancement du serveur
         if "failed to load" in str(exc):
             registry.mark_incompatible(model, str(exc))
-            raise Incompatible(t("llm.model_incompatible", name=model.name)) from exc
+            raise Incompatible(t("llm.model_incompatible", name=model.name),
+                               model.name) from exc
         raise
     _used(model.id)
     return url
@@ -123,7 +137,7 @@ def _send(model: registry.Model, path: str, body: dict, stream=False, timeout=(1
         if "failed to load" in text:
             response.close()
             registry.mark_incompatible(model, text)
-            raise Incompatible(t("llm.model_incompatible", name=model.name))
+            raise Incompatible(t("llm.model_incompatible", name=model.name), model.name)
     return response
 
 
@@ -222,8 +236,8 @@ def embed(texts, model=None, timeout=180) -> list:
     """Vecteurs normés (longueur 1, comme ceux d'Ollama), par lots."""
     from aiodos import settings
     found = _model(model or settings.get("embed_model"))
-    if not found.embedding:
-        raise RuntimeError(t("llm.not_embedding", name=found.name))
+    if not found.embedding:            # pas de modèle d'embedding de ce nom ici
+        raise ModelMissing(t("llm.not_embedding", name=found.name), found.name)
     vectors = []
     for start in range(0, len(texts), BATCH):
         batch = list(texts[start:start + BATCH])

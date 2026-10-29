@@ -19,6 +19,7 @@
   "status_failed": "Échec",
   "status_cancelled": "Annulé",
   "status_done_errors": "Terminé avec erreurs",
+  "status_blocked": "En attente du modèle",
   "stat_running": "en cours",
   "stat_queued": "en attente",
   "stat_paused": "en pause",

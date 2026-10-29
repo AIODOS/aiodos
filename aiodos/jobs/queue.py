@@ -227,7 +227,8 @@ def expire_waiting(now: float | None = None) -> list:
     return out
 
 
-def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
+def release_unit(unit_id, interrupt: bool = False, node: str | None = None,
+                 handout: bool = True):
     """Remet en file une unité en cours sans compter d'essai : ce n'est pas elle qui a
     échoué (moteur injoignable, pause « tout de suite », machine qui la rend…).
     interrupt : AIODOS s'arrête pendant son calcul ici (interrupts + 1 ; au-delà de
@@ -235,7 +236,9 @@ def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
     seulement si elle est confiée à cette machine ; si cette machine n'en calcule qu'un
     doublon (fin de partie, endgame.py), seul le doublon s'arrête. D'un travail annulé, elle
     est annulée ; si un doublon tourne encore, il prend la suite sans rien compter ; remise
-    trop de fois, elle échoue. → (travail, terminé ?) ou None si elle n'était pas en cours."""
+    trop de fois, elle échoue. handout=False : cette remise ne compte pas non plus (le modèle
+    d'embeddings manquait ici, knowledge/embed_model.py : rien à voir avec l'unité).
+    → (travail, terminé ?) ou None si elle n'était pas en cours."""
     with db.transaction() as c:
         row = c.execute(
             "SELECT u.job_id, u.interrupts, u.handouts, u.node, j.status AS job_status "
@@ -253,14 +256,14 @@ def release_unit(unit_id, interrupt: bool = False, node: str | None = None):
             return job_id, False
         if endgame.promote(c, unit_id, now):
             return job_id, False
-        if row["handouts"] >= MAX_HANDOUTS:
+        if handout and row["handouts"] >= MAX_HANDOUTS:
             return job_id, _fail_locked(c, unit_id, job_id, i18n.t("jobs.no_progress"), 0.0)
         interrupts = row["interrupts"] + (1 if interrupt else 0)
         given_back = 0 if interrupt and interrupts > MAX_INTERRUPTS else 1
         c.execute("UPDATE units SET status=?, node=NULL, lease_until=NULL, queued_at=?, "
                   "place=NULL, progress=NULL, taken=NULL, interrupts=?, "
-                  "attempts=MAX(attempts - ?, 0) WHERE id=?",
-                  (QUEUED, now, interrupts, given_back, unit_id))
+                  "attempts=MAX(attempts - ?, 0), handouts=MAX(handouts - ?, 0) WHERE id=?",
+                  (QUEUED, now, interrupts, given_back, 0 if handout else 1, unit_id))
         return job_id, False
 
 
@@ -408,6 +411,9 @@ def _summary(row, remote, local, names=None, copies=None) -> dict:
     if job.get("owner_app"):                        # l'appli qui l'a déposé (vue Travaux)
         names = _app_names([job["owner_app"]]) if names is None else names
         job["app_name"] = names.get(job["owner_app"])
+    # Le modèle d'embeddings manque ici : le travail le dit (knowledge/embed_model.py)
+    from aiodos.knowledge import embed_model
+    job["blocked"] = embed_model.job_note(job["kind"], job["status"])
     return job
 
 

@@ -112,7 +112,7 @@ function render() {
 }
 
 function shape(j) {
-  return [j.status, j.priority, !!j.failed, !!j.params?.conversation_id].join('|');
+  return [j.status, j.priority, !!j.failed, !!j.params?.conversation_id, !!j.blocked].join('|');
 }
 
 function processedOf(j) {
@@ -192,6 +192,8 @@ function row(j) {
   let cls = STATUS[j.status] || 'idle';
   let label = STATUS[j.status] ? t(`jobs.status_${j.status}`) : j.status;
   if (j.status === 'done' && j.failed) [cls, label] = ['warn', t('jobs.status_done_errors')];
+  // Le modèle d'embeddings manque ici (knowledge/embed_model.py) : dit sur la ligne même
+  if (j.blocked && active) [cls, label] = ['warn', t('jobs.status_blocked')];
   const title = jobTitle(j);
   const el = h(`
     <details class="fold job"${expanded.has(j.id) ? ' open' : ''}>
@@ -203,7 +205,9 @@ function row(j) {
           <span class="job-pct"></span>
           <span class="actions"></span>
         </span>
-        <span class="fold-chev">${icon('chev-right')}</span></summary>
+        <span class="fold-chev">${icon('chev-right')}</span>
+        ${j.blocked && active ? `<span class="job-blocked">${icon('warn')}<span>${esc(tt(j.blocked.message))}</span>
+          <button class="btn sm ghost" data-fix>${esc(t('embed_model.fix'))}</button></span>` : ''}</summary>
       <div class="fold-body">
         <dl class="facts job-facts"></dl>
         <div class="job-notes"></div>
@@ -239,6 +243,12 @@ function row(j) {
   el.querySelector('[data-open-chat]')?.addEventListener('click', () => {
     emit('view:show', 'chat');
     emit('chat:open', j.params.conversation_id);
+  });
+  // « Régler » : la bibliothèque, où le bandeau propose les modèles présents et le
+  // téléchargement (embed-model.js)
+  el.querySelector('[data-fix]')?.addEventListener('click', e => {
+    e.preventDefault();
+    emit('view:show', 'library');
   });
   el.addEventListener('toggle', () => {
     if (!el.open) { expanded.delete(j.id); return; }

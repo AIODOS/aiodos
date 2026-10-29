@@ -29,8 +29,8 @@ from aiodos import db, i18n, settings
 from aiodos.i18n import t
 from aiodos.jobs import pacing, queue
 from aiodos.jobs.models import NORMAL, PAUSED, QUEUED, RUNNING
-from aiodos.jobs.registry import UnitSpec, register_job_kind, task
-from aiodos.knowledge import chunking, search, store
+from aiodos.jobs.registry import TASKS, UnitSpec, register_job_kind, task
+from aiodos.knowledge import chunking, embed_model, search, store
 from aiodos.services import extract
 
 log = logging.getLogger("aiodos.reindex")
@@ -135,6 +135,10 @@ def run_reindex_entry(payload):
     if not store.replace_chunks(payload["entry_id"], list(zip(pieces, pacing.embed(pieces)))):
         return {"skipped": True, "reason": t("index.entry_removed")}
     return {"chunks": len(pieces), "reread": bool(fresh)}
+
+
+# Pas ici tant que le modèle d'embeddings y manque (knowledge/embed_model.py)
+TASKS["reindex_entry"].here = embed_model.here
 
 
 def _read(path):

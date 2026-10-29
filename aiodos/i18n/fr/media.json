@@ -6,5 +6,9 @@
   "child_unexpected": "Réponse inattendue du programme de transcription.",
   "whisper_missing": "Modèle Whisper « {model} » absent de cette machine : elle ne télécharge d'elle-même que celui de son réglage. Pour qu'elle le télécharge, choisis « {model} » dans ses réglages (Images, audio et vidéo : Transcrire l'audio et la vidéo, Modèle Whisper).",
   "transcription_failed": "Transcription impossible : {error}",
-  "transcription_header": "[Transcription de {name} · langue : {language}]"
+  "transcription_header": "[Transcription de {name} · langue : {language}]",
+  "image_format_unread": "format d'image non lu ({format}) : convertis-la en JPEG ou en PNG",
+  "image_too_big": "image trop grande pour être lue",
+  "image_damaged": "image abîmée ou incomplète : illisible",
+  "image_refused": "le modèle de vision ne sait pas lire cette image"
 }

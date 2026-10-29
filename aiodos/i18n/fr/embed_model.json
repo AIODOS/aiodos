@@ -1,0 +1,21 @@
+{
+  "missing": "Le modèle d'embeddings « {model} » n'est pas sur cette machine.",
+  "job_blocked": "En attente : le modèle d'embeddings « {model} » n'est pas sur cette machine. Choisis-en un présent, ou télécharge-le (Bibliothèques).",
+  "banner": "Le modèle d'embeddings « {model} » n'est pas sur cette machine : choisis-en un présent, ou télécharge-le. L'indexation attend, sans rien compter en échec.",
+  "banner_vectors": "Tes bibliothèques ont déjà des passages : changer de modèle d'embeddings les fera tous recalculer.",
+  "no_other": "Aucun autre modèle d'embeddings sur cette machine.",
+  "use": "Prendre {model}",
+  "download": "Télécharger {model}",
+  "settings": "Réglages",
+  "fix": "Régler",
+  "use_title": "Changer de modèle d'embeddings",
+  "use_text": "Les passages déjà indexés seront tous recalculés avec « {model} » (réindexation).",
+  "use_confirm": "Changer",
+  "used": "Modèle d'embeddings : {model}.",
+  "download_title": "Télécharger {model}",
+  "download_text": "{size}, licence : {license}. Il servira à indexer tes bibliothèques une fois installé ; l'indexation reprendra d'elle-même.",
+  "download_confirm": "Télécharger",
+  "download_started": "Téléchargement de {model} lancé : son avancement se voit dans Réglages, Modèles.",
+  "auto": "« {missing} » n'étant pas sur cette machine, AIODOS a pris « {model} », déjà là, comme modèle d'embeddings pour ce premier indexage. Tu peux en changer dans Réglages, Connaissances : tout serait alors recalculé.",
+  "auto_ok": "Compris"
+}

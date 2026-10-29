@@ -14,7 +14,7 @@ from pathlib import Path
 from aiodos import settings
 from aiodos.i18n import t
 from aiodos.node import children, priority
-from aiodos.services import ollama
+from aiodos.services import ollama, vision_image
 
 # Consignes au modèle de vision, selon ce qu'on garde des images (media_prompts.json), dans
 # la langue du nœud qui calcule : la description vient en français ou en anglais
@@ -23,10 +23,17 @@ _PROMPTS = {"ocr": "media_prompts.ocr", "describe": "media_prompts.describe",
 
 
 def vision_extract(path, model: str, mode: str = "both") -> str:
-    with open(path, "rb") as f:
-        image = base64.b64encode(f.read()).decode()
-    text = ollama.generate_with_images(model, t(_PROMPTS.get(mode, _PROMPTS["both"])),
-                                       [image])
+    """Ce que le modèle de vision lit et voit sur l'image. Elle part sous une forme que tout
+    moteur sait lire (services/vision_image.py : WebP, TIFF, AVIF… réécrits en JPEG) ;
+    vision_image.Unreadable si ni AIODOS ni le moteur ne savent la lire."""
+    image = base64.b64encode(vision_image.prepared(path)).decode()
+    try:
+        text = ollama.generate_with_images(model, t(_PROMPTS.get(mode, _PROMPTS["both"])),
+                                           [image])
+    except RuntimeError as exc:
+        if vision_image.refused(exc):
+            raise vision_image.Unreadable(t("media.image_refused")) from exc
+        raise
     return f"{t('media.image_header', name=path.name)}\n{text}" if text else ""
 
 

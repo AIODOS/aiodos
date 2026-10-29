@@ -64,6 +64,7 @@ from aiodos.jobs import leases, pacing, registry
 from aiodos.jobs.executor import ENGINE_RETRY_DELAY, engine_down
 from aiodos.jobs.kinds import engine as engine_kind
 from aiodos.jobs.models import DEFAULT_SLOTS, GPU_BOUND
+from aiodos.knowledge import embed_model
 from aiodos.network import client, crypto, peers, route, sharing, wire, work
 from aiodos.network.client import PeerError
 from aiodos.network.envelope import b64d
@@ -645,6 +646,13 @@ class Worker:
             # i18n: tel quel (journal)
             return (f"modèle Whisper « {model} » absent ici, non téléchargé pour cette "
                     "machine : unité rendue")
+        except embed_model.Missing as exc:
+            # De même pour son modèle d'embeddings (knowledge/embed_model.py) : ni l'unité ni
+            # son fichier n'y sont pour rien ; ses autres unités le demanderaient aussi
+            self._quiet(a, "work/release")
+            self._rest(a.peer_id, {a.resource}, REFUSED_RETRY)
+            # i18n: tel quel (journal)
+            return f"modèle d'embeddings « {exc.model[:40]} » absent ici : unité rendue"
         except _TooBig as exc:
             # Dit au propriétaire dans la langue d'ici (error) et dans la sienne (error_t)
             told = i18n.lazy("worker.result_too_big", **exc.sizes)

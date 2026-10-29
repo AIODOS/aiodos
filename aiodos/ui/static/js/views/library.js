@@ -1,13 +1,17 @@
-// Bibliothèques : collections, arborescence du contenu, ajouts, mémoire, ouverture à la
-// consultation (opening.js) et recherche chez les autres (consult.js).
+// Bibliothèques : collections, arborescence du contenu, ajouts, dossiers suivis
+// (library-folders.js), modèle d'embeddings absent ou pris d'office (embed-model.js), mémoire,
+// ouverture à la consultation (opening.js) et recherche chez les autres (consult.js).
 import { get, post, patch, del, pickFiles, pickFolder } from '../api.js';
 import { $, h, esc, debounce } from '../dom.js';
-import { t } from '../i18n.js';
+import { t, tt } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, prefs, emit } from '../state.js';
 import { ask, confirmDanger, menu, modal, toast, errorToast } from '../ui.js';
 import { mountConsult, refreshConsult } from './consult.js';
+import { loadEmbed, renderEmbedBanner } from './embed-model.js';
 import { jobTitle } from './jobs.js';
+import { announceAdded, loadFolders, removeFolder as removeWatched, renderFolders,
+  watchedFolders } from './library-folders.js';
 import { closedControls, openBadge, openingMenu, setClosed } from './opening.js';
 
 const KIND_FILTERS = [['all', 'library.filter_all'], ['file', 'library.filter_file'],
@@ -52,6 +56,7 @@ export function mountLibrary(container) {
   on('network:changed', () => { if (state.view === 'library') refreshConsult(); });
   on('jobs:changed', () => { if (state.view === 'library') renderJobStrip(); });
   on('settings:loaded', renderMemory);
+  on('embed:loaded', () => renderEmbedBanner($('#lib-embed', root)));
   on('view:shown', view => { if (view === 'library') load(); });
 }
 
@@ -63,12 +68,15 @@ async function load() {
     entries = list;
   } catch (e) { errorToast(e); return; }
   if (!collections.some(c => c.id === selected)) selected = collections[0]?.id ?? null;
+  loadEmbed();
+  await loadFolders(selected);
   renderCollections();
   // Même bibliothèque : on ne refait que l'arborescence (la barre d'outils reste,
   // un clic pendant une indexation n'est donc pas perdu)
   if (shownCollection === selected && $('#ktree', root)) {
     $('#lib-title', root).textContent = collections.find(c => c.id === selected)?.name || '';
     renderJobStrip();
+    renderFolders($('#lib-folders', root));
     renderTree();
   } else {
     renderContent();
@@ -93,11 +101,12 @@ function renderCollections() {
           <input type="checkbox" ${c.enabled ? 'checked' : ''}><span></span></label>
         <button class="icon-btn" title="${esc(t('library.options'))}">${icon('more')}</button>
       </div>`);
-    item.onclick = e => {
+    item.onclick = async e => {
       if (e.target.closest('.switch, .icon-btn')) return;
       selected = c.id;
       prefs.set(SELECTED, selected);
       renderCollections();
+      await loadFolders(selected);
       renderContent();
     };
     item.querySelector('input').onchange = async e => {
@@ -179,7 +188,9 @@ function renderContent() {
       <button class="btn sm" data-add="folder">${icon('folder')}${esc(t('library.add_folder'))}</button>
       <button class="btn sm" data-add="urls">${icon('globe')}${esc(t('library.add_urls'))}</button>
     </div>
+    <div class="lib-embed" id="lib-embed"></div>
     <div class="job-strip" id="job-strip"></div>
+    <div class="lib-folders" id="lib-folders" hidden></div>
     <div class="toolbar">
       <div class="segmented">${KIND_FILTERS.map(([k, label]) =>
         `<button data-kind="${k}" class="${k === kindFilter ? 'on' : ''}">${esc(t(label))}</button>`).join('')}</div>
@@ -194,7 +205,9 @@ function renderContent() {
   });
   box.querySelector('[data-tree="open"]').onclick = () => { allDirs(tree()).forEach(p => openDirs.add(p)); renderTree(); };
   box.querySelector('[data-tree="close"]').onclick = () => { openDirs.clear(); renderTree(); };
+  renderEmbedBanner($('#lib-embed', box));
   renderJobStrip();
+  renderFolders($('#lib-folders', box));
   renderTree();
 }
 
@@ -302,6 +315,9 @@ async function removeEntry(entry) {
 }
 
 async function removeFolder(path, count) {
+  // Le dossier lui-même d'un dossier suivi : il n'est plus suivi (sinon il reviendrait)
+  const watched = watchedFolders().find(f => f.root === path);
+  if (watched) { removeWatched(watched); return; }
   const ok = await confirmDanger(t('library.remove_folder_title'),
     t('library.remove_folder_text', { n: count, path }), t('library.remove'));
   if (!ok) return;
@@ -323,10 +339,14 @@ async function manualPaths() {
   if (r.ok) launch(r.value.split('\n').map(s => s.trim()).filter(Boolean));
 }
 
+// Un dossier devient un dossier suivi : la réponse dit tout de suite combien de fichiers il
+// a à indexer, ou qu'il n'en a aucun de lisible (library-folders.js)
 async function launch(paths) {
   try {
-    await post('/index', { paths, collection_id: selected });
-    toast(t('library.index_started'), 'ok');
+    const r = await post('/index', { paths, collection_id: selected });
+    const folders = r.folders || [];
+    announceAdded(folders);
+    if (paths.length > folders.length) toast(t('library.index_started'), 'ok');
   } catch (e) { errorToast(e); }
 }
 
@@ -357,6 +377,7 @@ function renderJobStrip() {
       <div class="mini">
         <div class="top"><span>${esc(jobTitle(j))}</span><span class="muted">${esc(t('library.job_progress', { done: processed, total: j.total, pct }))}</span></div>
         <div class="bar"><i class="fill" style="width:${pct}%"></i></div>
+        ${j.blocked ? `<div class="mini-blocked">${icon('warn')}${esc(tt(j.blocked.message))}</div>` : ''}
       </div>`);
     mini.style.cursor = 'pointer';
     mini.title = t('library.see_in_tasks');

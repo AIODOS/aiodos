@@ -6,5 +6,9 @@
   "child_unexpected": "Unexpected reply from the transcription program.",
   "whisper_missing": "Whisper model “{model}” is not on this machine: it only downloads by itself the model chosen in its own settings. To have it downloaded, choose “{model}” in its settings (Images, audio and video: Transcribe audio and video, Whisper model).",
   "transcription_failed": "Transcription failed: {error}",
-  "transcription_header": "[Transcription of {name} · language: {language}]"
+  "transcription_header": "[Transcription of {name} · language: {language}]",
+  "image_format_unread": "image format not read ({format}): convert it to JPEG or PNG",
+  "image_too_big": "image too large to be read",
+  "image_damaged": "damaged or incomplete image: unreadable",
+  "image_refused": "the vision model cannot read this image"
 }

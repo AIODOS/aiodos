@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -461,6 +461,34 @@ MIGRATIONS = {
     CREATE INDEX IF NOT EXISTS ix_public_sightings_seen ON public_sightings(last_seen);
     INSERT OR IGNORE INTO public_sightings(key, first_seen, last_seen)
         SELECT key, first_seen, last_seen FROM public_reputation;
+    """,
+    # Dossiers suivis des bibliothèques (knowledge/folders.py, 29/10/2026) : chaque dossier
+    # ajouté (chemin, préfixe de ses entrées, dernière lecture, en ligne ou non, fichiers non
+    # pris en charge), et chaque fichier lu (taille et date à sa lecture, état : en attente,
+    # indexé, sauté, en échec, annulé ; raison ; travail qui l'a en charge)
+    30: """
+    CREATE TABLE IF NOT EXISTS library_folders (
+        id            INTEGER PRIMARY KEY,
+        collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+        path          TEXT NOT NULL,
+        root          TEXT NOT NULL,
+        added         REAL NOT NULL,
+        scanned       REAL,
+        online        INTEGER NOT NULL DEFAULT 1,
+        ignored       INTEGER NOT NULL DEFAULT 0,
+        ignored_types TEXT,
+        UNIQUE (collection_id, path)
+    );
+    CREATE TABLE IF NOT EXISTS library_files (
+        folder_id INTEGER NOT NULL REFERENCES library_folders(id) ON DELETE CASCADE,
+        rel       TEXT NOT NULL,
+        size      INTEGER,
+        mtime_ns  INTEGER,
+        state     TEXT NOT NULL,
+        reason    TEXT,
+        job_id    INTEGER,
+        PRIMARY KEY (folder_id, rel)
+    );
     """,
 }
 

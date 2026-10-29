@@ -283,6 +283,8 @@ def embed(texts, model=None, timeout=180) -> list:
         if options:
             body["options"] = options
         r = requests.post(base() + "/api/embed", json=body, timeout=timeout)
+        if r.status_code == 404:             # « model "…" not found, try pulling it first »
+            raise integrated.ModelMissing(_error_text(r), model)
         if r.status_code >= 400:
             raise RuntimeError(_error_text(r))
         vectors.extend(r.json().get("embeddings") or [])
