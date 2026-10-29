@@ -22,5 +22,6 @@
   "closed_attachments": "Les pièces jointes ne partent jamais chez un inconnu du réseau public, et aucun modèle ici ni sur tes machines ne peut les lire : envoie ton message sans pièce jointe, ou installe un modèle.",
   "closed_conversation_attachments": "Cette conversation a des pièces jointes : elle ne part jamais chez un inconnu du réseau public, et aucun modèle ici ni sur tes machines ne peut y répondre. Commence une nouvelle conversation, ou installe un modèle.",
   "closed_own_models": "« Automatique · réseau public » ne sert que si ni cette machine ni tes machines n'ont de modèle de conversation : choisis un de tes modèles (en mode automatique, la conversation peut aussi passer par le réseau public).",
-  "error_no_reading": "La machine du réseau public ne sait pas lire un texte sous ce modèle."
+  "error_no_reading": "La machine du réseau public ne sait pas lire un texte sous ce modèle.",
+  "error_refused_content": "Le filtre du réseau public refuse cette description : ni le réseau public ni AIODOS ne créent ce genre d'image."
 }

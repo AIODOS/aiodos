@@ -1,0 +1,429 @@
+# Les termes du filtre des descriptions envoyées au réseau public (imaging/prompt_filter.py ;
+# décision de l'auteur du 29/10/2026). Lu une fois, au premier usage du filtre.
+#
+# Format : « [classe] », puis des termes séparés par des virgules, sur autant de lignes qu'on
+# veut ; « # » commence un commentaire. On écrit les termes naturellement : la casse, les
+# accents et les ligatures sont ramenés comme dans les descriptions, et un tréma vaut aussi
+# sa forme en « e » (« Mädchen » : « madchen » et « maedchen »). Un groupe entre parenthèses
+# est facultatif : « enfant(s) » vaut « enfant » et « enfants » ; « adolescent(e)(s) », quatre
+# formes. Un terme de plusieurs mots se reconnaît aussi collé (« petitefille ») ou coupé par
+# des signes (« petite-fille »). Un terme écrit sans espaces (chinois, japonais) se cherche
+# n'importe où dans le texte.
+#
+# La règle (le détail : imaging/prompt_filter.py, au début) :
+# - minor (ou un âge de moins de 18 ans, que le filtre lit lui-même), avec sexual :
+#   minor_sexual ; ambiguous avec youth vaut minor ;
+# - bridge compte comme minor à côté de sexual, et comme sexual à côté de minor ; seul, rien ;
+# - real, ou possessive suivi de relation (« ma voisine », « my ex »), avec sexual :
+#   real_person_intimate ;
+# - coercion avec sexual : sexual_violence ;
+# - forbidden_<code> : interdit seul, quel que soit le reste ;
+# - dans la consigne négative (ce que l'image doit éviter) : clothing, avec minor dans la
+#   description, ou adult, avec sexual dans la description, poussent vers un mineur dénudé :
+#   minor_sexual ;
+# - neutral : des expressions sans rapport (« pieds nus », « à l'œil nu »), ôtées d'abord ;
+# - glue, stopwords, numbers : pour lire les mots collés, les mots coupés et les âges.
+#
+# Langues : français, anglais, espagnol, allemand, italien, portugais ; quelques termes
+# chinois et japonais. Un mot à plusieurs sens (« kind » en anglais, « mineur » de la mine,
+# « sexe » au sens du genre, « pelada » le match de foot au Brésil) n'est pris que dans une
+# expression sans ambiguïté, ou pas du tout : avant d'ajouter un terme, cherche ses autres
+# sens, dans les six langues (un mot est cherché dans toutes). Les descriptions ordinaires
+# des essais (tests/test_prompt_filter.py) doivent toutes passer.
+
+[minor]
+# Ce qui désigne un mineur
+# fr
+enfant(s), fillette(s), petite(s) fille(s), petit(s) garçon(s), garçonnet(s), gamin(e)(s),
+gosse(s), môme(s), marmot(s), bambin(s), bébé(s), nourrisson(s), nouveau-né(e)(s),
+nouveaux-nés, ado(s), adolescent(e)(s), préado(s), préadolescent(e)(s), mineure(s), mineurs,
+jeune(s) fille(s), jeune(s) garçon(s), écolier(s), écolière(s), collégien(ne)(s),
+lycéen(ne)(s), petite sœur, petit frère, nymphette(s), corps d'enfant, moins de 18 ans
+# en
+child, children, childs, kid(s), kiddo(s), kiddie(s), kiddy, toddler(s), baby, babies,
+infant(s), infantile, newborn(s), little girl(s), little boy(s), young girl(s), young boy(s),
+small girl(s), small boy(s), preteen(s), pre-teen(s), tween(s), teen(s), teenage(d),
+teenager(s), teenie(s), adolescent(s), minors, minor girl(s), minor boy(s), minor child,
+underage(d), under-age, under 18, schoolgirl(s), school girl(s), schoolboy(s), school boy(s),
+schoolchild, schoolchildren, schoolkid(s), juvenile(s), youngster(s), pubescent,
+prepubescent, pre-pubescent, prepubertal, high schooler(s), middle schooler(s),
+grade schooler(s), kindergartner(s), kindergartener(s), kindergarten, elementary school,
+little sister, little brother, nymphet(s), loli(s), lolita(s), shota(s), childlike body,
+child-like body, childlike figure, childlike face, child body
+# es
+niño(s), niña(s), niñito(s), niñita(s), nene(s), nena(s), crío(s), chiquillo(s),
+chiquilla(s), chaval(es), chavala(s), chamaco(s), chamaca(s), escuincle(s), mocoso(s),
+mocosa(s), bebé(s), infantil(es), menor de edad, menores de edad, un menor, una menor,
+los menores, las menores, adolescente(s), preadolescente(s), púber(es), impúber(es),
+colegiala(s), colegial(es), jovencita(s), jovencito(s), hermanita, hermanito, ninfeta(s)
+# de
+Kinder, Kindern, Kindes, Kindchen, Kleinkind(er), ein Kind, das Kind, dem Kind, kleines Kind,
+junges Kind, nacktes Kind, Kinderkörper, Säugling(e), Mädchen, Göre(n), Knabe(n), Teenager,
+Teenie(s), Jugendliche(r)(n), Minderjährige(r)(n), minderjährig, Schulmädchen, Schuljunge(n),
+Schülerin(nen), Grundschüler(in)(nen), kleine Schwester, kleiner Bruder, kleines Mädchen,
+junges Mädchen, kleiner Junge, unter 18
+# it
+bambino, bambina, bambini, bambine, bimba, bimbi, bimbe, fanciullo, fanciulla, fanciulli,
+fanciulle, ragazzino, ragazzina, ragazzini, ragazzine, neonato, neonata, neonati, neonate,
+lattante, lattanti, adolescenti, preadolescenti, minorenne, minorenni, scolaretto,
+scolaretta, scolaretti, scolarette, sorellina, fratellino, ninfetta, ninfette, cinquenne,
+seienne, settenne, ottenne, novenne, decenne, undicenne, dodicenne, tredicenne,
+quattordicenne, quindicenne, sedicenne, diciassettenne
+# pt
+criança(s), menino(s), menina(s), menininho(s), menininha(s), garotinho(s), garotinha(s),
+bebê(s), neném, nenê(s), recém-nascido(s), recém-nascida(s), pré-adolescente(s),
+menor de idade, menores de idade, um menor, uma menor, novinha(s), novinho(s), pirralho(s),
+pirralha(s), moleque(s), infantis, irmãzinha, irmãozinho
+# zh, ja
+儿童, 兒童, 児童, 幼女, 幼児, 幼兒, 小女孩, 小男孩, 女童, 男童, 孩子, 萝莉, 蘿莉, ロリ, 正太,
+ショタ, 小学生, 中学生, 女子高生, 女子中学生, 子供, 子ども, こども, 未成年, 少女
+
+[ambiguous]
+# Fille, garçon… : un adulte aussi, souvent ; un mineur seulement avec un indice (youth)
+girl(s), boy(s), daughter(s), stepdaughter(s), stepson(s), fille(s), garçon(s), fils,
+belle-fille, chica(s), chico(s), muchacha(s), muchacho(s), hija(s), hijo(s), hijastra(s),
+hijastro(s), Junge(n), Jungs, Tochter, Töchter, Sohn, Söhne, Stieftochter, Stiefsohn,
+ragazza, ragazze, ragazzo, ragazzi, figlia, figlie, figlio, figli, figliastra, figliastro,
+garota(s), garoto(s), rapariga(s), rapaz, rapazes, filha(s), filho(s), enteada(s), enteado(s),
+女孩, 男孩, 女の子, 男の子
+
+[youth]
+# Indices d'âge : avec ambiguous, un mineur
+little, small, tiny, young, younger, petite(s), petit(s), jeune(s), klein, kleine(r)(s)(n),
+jung, junge(r)(s)(n), pequeña(s), pequeño(s), pequeñita, joven, jóvenes, jovencita, piccola,
+piccolo, piccole, piccoli, giovane, giovani, giovanissima, pequena(s), pequeno(s), pequenina,
+jovem, jovens, childlike, child-like, childish, enfantin(e)(s), kindlich(e)(n),
+flat chest, flat chested, flat-chested, poitrine plate, sans poitrine, pecho plano,
+flache Brust, petto piatto, peito liso, undeveloped, pigtails, twintails, twin tails,
+couettes, coletas, codini, maria-chiquinha, school uniform, uniforme scolaire,
+uniforme escolar, Schuluniform, uniforme scolastica, playground, aire de jeux,
+cour de récréation, parque infantil, Spielplatz, parco giochi, parquinho, teddy bear,
+doudou, nounours, osito de peluche, Teddybär, orsacchiotto, ursinho de pelúcia, ランドセル
+
+[sexual]
+# Sexuel, ou nudité
+# fr
+sexe(s), sexuel(le)(s), sexuellement, sexualisé(e)(s), sexy, porno(s), pornographique(s),
+pornographie, érotique(s), érotisme, érotisé(e)(s), nu(e)(s), nudité, nudiste(s),
+naturiste(s), naturisme, à poil, tout nu, toute nue, dénudé(e)(s), déshabillé(e)(s),
+dévêtu(e)(s), sans vêtements, sans habits, sans aucun vêtement, sans aucun habit, seins nus, fesses nues, topless,
+lingerie, sous-vêtement(s), petite(s) culotte(s), porte-jarretelles, nichons, nibards, tétons,
+zizi,
+masturbation, masturbe, masturber, fellation, cunnilingus, sodomie, coït, orgasme(s),
+orgie(s), éjaculation, éjacule, sperme, pénis, vagin, vulve, clitoris, testicules,
+parties intimes, parties génitales, organes génitaux, génital(e)(s), génitaux, lascif,
+lascifs, lascive(s), lubrique(s), obscène(s), aguicheur, aguicheuse(s), séductrice(s),
+pose suggestive, poses suggestives, pose provocante, poses provocantes, sensuel(le)(s),
+fétichisme, fétichiste(s), sadomaso, se déshabille, se déshabillent, enlève ses vêtements,
+prostitué(e)(s), prostitution, pute(s), salope(s), strip-tease, stripteaseuse(s), baise,
+baisent, niquer, branle, branler, branlette, classé x, film x, contenu adulte,
+contenu pour adultes
+# en
+sex, sexual, sexually, sexualized, sexualised, sexy, porn, porno, pornographic, pornography,
+erotic, erotica, eroticism, nsfw, xxx, x-rated, hentai, ecchi, ahegao, rule34, rule 34, r34,
+lewd, nude, nudes, nudity, nudist(s), naturist(s), naked, nakedness, unclothed, undressed,
+undressing, topless, bottomless, no clothes, without clothes, without clothing,
+wearing nothing, in the nude, without any clothes, without any clothing, wearing no clothes,
+not wearing any clothes, not wearing clothes, no clothes on, birthday suit, skinny dipping, skinny-dipping,
+takes off her clothes, takes off his clothes, taking off her clothes, taking off his clothes,
+strips naked, lingerie, underwear, panties, panty, thong(s), g-string(s), garter belt,
+nipple(s), areola(s), bare breasts, exposed breasts, naked breasts, boobs, titties,
+cleavage, genitals, genitalia, genital, penis, penises, vagina(s), vulva, clitoris,
+testicles, scrotum, private parts, intimate parts, aroused, arousal, horny,
+orgasm(s), orgy, orgies, masturbation, masturbating, masturbate(s), touching herself,
+touching himself, intercourse, making love, blowjob(s), blow job, handjob(s), fellatio,
+cunnilingus, sodomy, ejaculation, ejaculating, cumshot, creampie, semen, fetish, fetishes,
+bdsm, dominatrix, seductive, seductively, seduction, seducing, sensual,
+sensually, sultry, suggestive, suggestively, provocatively, provocative pose, pinup, pin-up,
+stripper(s), striptease, strip tease, strip club, lap dance, lapdance, twerk, twerking,
+humping, hip thrusting, thrusting hips, upskirt, downblouse, nip slip, cameltoe, camel toe,
+voyeur, wet t-shirt, see-through dress, see-through top, see-through shirt,
+see-through clothes, prostitute(s), prostitution, whore(s), slut(s), slutty,
+nympho, nymphomaniac, onlyfans, camgirl(s), camboy(s), adult content, adult video,
+adult film, sex tape, sextape, pornstar, porn star, fuck, fucked, fucks, pussy, cunt,
+seggs, secks, seks, nood(s)
+# es
+sexo, sexual(es), sexualmente, sexualizado(s), sexualizada(s), pornográfico(s),
+pornográfica(s), pornografía, erótico(s), erótica(s), erotismo, desnudo(s), desnuda(s),
+desnudez, desnudarse, se desnuda, desnudándose, nudista(s), naturista(s), sin ropa, sin nada de ropa,
+en pelotas, en bolas, en cueros, encuerado(s), encuerada(s), lencería, ropa interior,
+bragas, braguitas, tanga(s), pezón, pezones, tetas, pechos desnudos, pene(s), clítoris,
+testículos, genitales, partes íntimas, partes privadas, masturbación, masturbándose,
+masturbarse, se masturba, felación, mamada(s), sodomía, coito, orgasmo(s), orgía(s),
+eyaculación, eyacula, semen, follar, follando, follado, follada, hacer el amor,
+haciendo el amor, cachondo(s), cachonda(s), seductor(a)(es), seductoras, sensual(es),
+sensualmente, lascivo(s), lasciva(s), lujurioso(s), lujuriosa(s), lujuria, obsceno(s),
+obscena(s), pose provocativa, provocativamente, puta(s), prostituta(s), prostitución,
+ramera(s), desnudista(s), fetichismo, contenido adulto, contenido para adultos,
+se quita la ropa, quitándose la ropa
+# de
+Sex, sexuell(e)(n)(r)(s)(m), sexualisiert(e)(n), Porno(s), pornografisch(e)(n)(r)(s),
+Pornografie, Pornographie, erotisch(e)(n)(r)(s), Erotik, nackt, nackte(n)(r)(s)(m),
+Nacktheit, Nacktbild(er), Nacktfoto(s), Nacktaufnahme(n), entblößt(e)(n),
+unbekleidet(e)(n), entkleidet(e)(n), oben ohne, ohne Kleidung, ohne Kleider, ohne jegliche Kleidung, hat nichts an, FKK,
+Nudist(en), Unterwäsche, Reizwäsche, Höschen, Brustwarze(n), Titten, Penis, Vulva,
+Klitoris, Hoden, Genitalien, Geschlechtsteil(e), Geschlechtsorgane, Intimbereich,
+Schambereich, masturbiert, masturbieren, Selbstbefriedigung, Oralsex, Geschlechtsverkehr,
+Beischlaf, Orgasmus, Orgie(n), Ejakulation, Sperma, ficken, fickt, gefickt, bumsen,
+verführerisch(e)(n), lasziv(e)(n), aufreizend(e)(n), sinnlich(e)(n), lüstern(e)(n),
+obszön(e)(n), anzüglich(e)(n), Nutte(n), Hure(n), Prostituierte(n), Prostitution,
+Stripperin, zieht sich aus, Erwachseneninhalt
+# it
+sesso, sessuale, sessuali, sessualmente, sessualizzato, sessualizzata, sessualizzati,
+sessualizzate, pornografico, pornografica, pornografici, pornografiche, pornografia,
+erotico, erotica, erotici, erotiche, nudo, nuda, nudi, nudità, nudista, nudiste, nudisti,
+naturista, naturiste, naturisti, svestito, svestita, svestiti, svestite, si spoglia,
+spogliarsi, spogliandosi, senza vestiti, senza niente addosso, senza nulla addosso, biancheria intima, mutande, mutandine, perizoma,
+capezzolo, capezzoli, tette, pene, clitoride, testicoli, genitali, parti intime,
+masturbazione, masturbarsi, si masturba, pompino, pompini, sodomia, orgia, orgie,
+eiaculazione, sperma, fare l'amore, fanno l'amore, facendo l'amore, arrapato, arrapata,
+arrapati, arrapate, sensuale, sensuali, lascivo, lasciva, lascivi, lascive, libidinoso,
+libidinosa, osceno, oscena, osceni, oscene, provocante, provocanti, puttana, puttane,
+prostituta, prostitute, prostituzione, spogliarello, spogliarellista, spogliarelliste,
+feticismo, contenuto per adulti, contenuti per adulti
+# pt
+pornô, pornográfico(s), pornográfica(s), erótico(s), erótica(s), nua(s), nus, nudez,
+peladinho(s), peladinha(s), despido(s), despida(s), sem roupa(s), sem nenhuma roupa,
+roupa íntima, calcinha(s), mamilo(s), peitos, peitinhos, seios, pênis, clitóris, genitais,
+masturbação, masturbando, felação, ejaculação, sêmen, esperma, transar, transando, transa,
+foder, fodendo, fodida(s), fodido(s), fazer amor, fazendo amor, tesão, sedutor(a)(es),
+sedutoras, sensual, sensuais, lascivo(s), lasciva(s), obsceno(s), obscena(s), provocante(s),
+prostituição, conteúdo adulto, conteúdo para adultos, tira a roupa, tirando a roupa,
+se despe, se despindo
+# zh, ja
+裸, 全裸, 裸体, 裸體, 半裸, ヌード, 色情, エロ, エッチ, 性交, セックス, 做爱, 做愛, 性爱, 性愛,
+情色, 内裤, 內褲, 下着, 乳首, 性器, 阴茎, 陰茎, 阴道, 膣, 自慰, オナニー, 淫乱, 痴女, 卖淫,
+賣淫, 売春, 援交, 援助交際
+
+[bridge]
+# Pédophile… : avec un terme sexuel ou un mineur, interdit ; seul (une affiche de
+# prévention, un article), rien
+pédophile(s), pédophilie, pédophilique(s), pedophile(s), paedophile(s), pedophilia,
+paedophilia, pedophilic, pedobear, pedófilo(s), pedófila(s), pedofilia, pedofilo, pedofili,
+pedofila, Pädophile(r)(n), Pädophilie, pädophil, 恋童, 恋童癖, 戀童, ペドフィリア
+
+[real]
+# Une personne réelle
+deepfake(s), deep fake(s), faceswap(s), face swap(s), real person, real people,
+personne réelle, personnes réelles, vraie personne, vraies personnes, personne existante,
+existing person, persona real, personas reales, persona existente, echte Person,
+echten Person, reale Person, existierende Person, persona reale, persone reali,
+pessoa real, pessoas reais, celebrity, celebrities, célébrité(s), celebridad(es), Promi(s),
+Prominente(r)(n), celebrità, celebridade(s), influencer(s), influenceuse(s),
+influenciadora(s), youtuber(s), youtubeuse(s), streamer(s), streameuse(s), tiktoker(s),
+tiktokeuse(s), instagrammer(s), lookalike(s), look-alike, sosie(s), hidden camera,
+caméra cachée, cámara oculta, versteckte Kamera, telecamera nascosta, câmera escondida,
+spycam, spy cam, 明星, 芸能人
+
+[possessive]
+# Suivi (au plus un mot entre les deux, pas un petit mot) d'une relation : une personne réelle
+my, mon, ma, mes, mi, mis, mein, meine, meinen, meinem, meiner, mio, mia, miei, mie, meu,
+minha, meus, minhas, our, notre, nos, nuestra(s), nuestro(s), unsere, unser, unseren,
+nostra, nostro, nostre, nostri, nossa(s), nosso(s)
+
+[relation]
+# fr
+voisin(e)(s), ex, collègue(s), patron(ne)(s), cheffe, chef, prof(s), professeur(e)(s),
+maîtresse(s), institutrice, instituteur, camarade(s), camarade de classe, cousin(e)(s),
+sœur(s), frère(s), mère, maman, père, papa, femme, mari, copine, copain, petite amie,
+petit ami, fiancé(e), fille, fils, nièce, neveu, tante, oncle, belle-sœur, belle-mère,
+demi-sœur, belle-fille, nounou, baby-sitter, babysitter, coloc, colocataire, amie, ami,
+élève(s), étudiante(s), stagiaire, secrétaire, employée, cliente
+# en
+neighbor(s), neighbour(s), ex-wife, ex-girlfriend, ex-boyfriend, coworker(s), co-worker(s),
+colleague(s), boss, teacher, classmate(s), sister(s), brother(s), mother, mom, mum, mommy,
+father, dad, daddy, wife, husband, girlfriend, boyfriend, gf, bf, fiancee, fiance, daughter,
+son, niece, nephew, aunt, uncle, sister-in-law, mother-in-law, stepsister, step-sister,
+stepmom, stepmother, stepdaughter, stepbrother, stepson, nanny, roommate, flatmate,
+friend(s), bestie, best friend, crush, student(s), pupil(s), secretary, employee
+# es
+vecino(s), vecina(s), compañero(s), compañera(s), colega(s), jefe, jefa, profesor(a),
+profe, maestra, maestro, prima, primo, hermana(s), hermano(s), madre, mamá, padre, papá,
+esposa, esposo, mujer, marido, novia, novio, hija, hijo, sobrina, sobrino, tía, tío,
+cuñada, suegra, madrastra, hermanastra, hijastra, niñera, amiga(s), amigo(s), alumna(s),
+alumno(s), estudiante(s), secretaria, empleada
+# de
+Nachbar(in)(n), Nachbarinnen, Exfrau, Exfreundin, Kollege(n), Kollegin(nen), Chefin,
+Lehrer(in), Klassenkamerad(in), Cousine, Schwester, Bruder, Mutter, Mama, Vater, Frau,
+Mann, Freundin, Freund, Verlobte(r), Tochter, Sohn, Nichte, Neffe, Tante, Onkel,
+Schwägerin, Schwiegermutter, Stiefmutter, Stiefschwester, Stieftochter, Babysitterin,
+Mitbewohnerin, Schülerin, Studentin, Sekretärin, Mitarbeiterin
+# it
+vicina, vicino, vicine, vicini, collega, colleghe, colleghi, capo, professoressa,
+professore, insegnante, compagna di classe, compagno di classe, cugina, cugino, sorella,
+fratello, mamma, papà, moglie, marito, ragazza, ragazzo, fidanzata, fidanzato, figlia,
+figlio, nipote, zia, zio, cognata, suocera, matrigna, sorellastra, figliastra, coinquilina,
+amica, amico, amiche, amici, alunna, studentessa, segretaria
+# pt
+vizinho(s), vizinha(s), chefe, patroa, professora, cunhada, sogra, irmã, irmão, mãe,
+mamãe, pai, papai, namorada, namorado, noiva, noivo, filha, filho, sobrinha, madrasta,
+meia-irmã, enteada, babá, aluna, secretária, colega de quarto
+
+[coercion]
+# Contrainte : avec un terme sexuel, des violences sexuelles
+forced, forcé(e)(s), against her will, against his will, against their will,
+contre son gré, contre sa volonté, contra su voluntad, gegen ihren Willen,
+gegen seinen Willen, contro la sua volontà, contra a vontade, contra sua vontade,
+without consent, without her consent, without his consent, sans consentement,
+sans son consentement, sin consentimiento, sin su consentimiento, ohne Einwilligung,
+ohne Zustimmung, ohne ihre Zustimmung, senza consenso, senza il suo consenso,
+sem consentimento, sem o consentimento, non-consensual, nonconsensual, non consensual,
+non consensuel(le)(s), non consentito, non consentita, no consentido, no consentida,
+noncon, drugged, drogué(e)(s), drogada(s), drogado(s), betäubt(e), drogata, drogato,
+unconscious, inconsciente(s), évanoui(e)(s), bewusstlos(e)(n), svenuta, desmaiada,
+desmayada, victim(s), victime(s), víctima(s), Opfer, vittima, vittime, vítima(s)
+
+[clothing]
+# Dans la consigne négative seulement : des vêtements à éviter
+clothes, clothing, clothed, dressed, shirt, t-shirt, pants, trousers, vêtement(s),
+habillé(e)(s), habits, ropa, vestido(s), vestida(s), Kleidung, Kleider, bekleidet,
+angezogen, vestiti, vestito, vestita, abiti, abbigliamento, roupa(s), 衣服, 着衣
+
+[adult]
+# Dans la consigne négative seulement : l'âge adulte à éviter
+adult(s), adulte(s), adulto(s), adulta(s), erwachsen, erwachsene(r)(n), maggiorenne,
+mayor de edad, maior de idade, mature, grown-up, grown up, milf, 成人, 大人
+
+[forbidden_minor_sexual]
+lolicon, shotacon, toddlercon, child porn, child pornography, child abuse material,
+child sexual abuse, csam, csem, kiddie porn, kiddy porn, kiddieporn, pedoporn,
+pédopornographie, pédopornographique(s), pédoporno, pornographie infantile,
+pornographie enfantine, pornografía infantil, pornografia infantil, pedopornografía,
+pedopornografia, Kinderporno(s), Kinderpornografie, Kinderpornographie,
+kinderpornografisch(e), pornografia minorile, abuso sessuale su minori,
+abus sexuel sur mineur, jailbait, pthc, ptsc, hussyfan, raygold, underage porn,
+児童ポルノ, 儿童色情, 兒童色情, ロリコン, ショタコン, 幼女ポルノ
+
+[forbidden_real_person_intimate]
+deepnude, nudify, nudifier, nudification, nudifying, undressai, undress ai, undress app,
+clothoff, clothes remover, revenge porn, vengeance pornographique, porno de venganza,
+Rachepornografie, Rachepornos, pornografia di vendetta, pornô de vingança
+
+[forbidden_sexual_violence]
+rape(s), raped, raping, rapist(s), gang rape, gangrape, sexual assault, sexually assaulted,
+sexual abuse, sexually abused, molest, molested, molesting, molestation, molester,
+sex slave(s), sexual slavery, viol, viols, violer, violée(s), violeur(s),
+agression sexuelle, agressions sexuelles, abus sexuel(s), abusée sexuellement,
+abusé sexuellement, violence sexuelle, violences sexuelles, esclave(s) sexuelle(s),
+attouchement(s), violación, violaciones, violada(s), violado(s), violador(es), violar,
+agresión sexual, abuso sexual, abusos sexuales, violencia sexual, esclava sexual,
+Vergewaltigung(en), vergewaltigt(e)(n), vergewaltigen, Vergewaltiger,
+sexueller Missbrauch, sexuellen Missbrauch, sexuell missbraucht, sexuelle Gewalt,
+sexuelle Nötigung, Sexsklavin, Sexsklave, stupro, stupri, stuprata, stuprato, stuprate,
+stuprati, stupratore, violenza sessuale, abuso sessuale, abusi sessuali, schiava sessuale,
+estupro(s), estuprada(s), estuprado(s), estuprador(es), estuprar, violência sexual,
+escrava sexual, agressão sexual, 强奸, 強姦, 强暴, レイプ, 輪姦, 性侵, 性暴力
+
+[forbidden_other]
+# Le sexe avec un animal, avec un mort
+bestiality, zoophilia, zoophile(s), zoophilie, zoophilic, zoofilia, zoófilo(s),
+zoófila(s), Zoophilie, sex with an animal, sex with animals, sex with a dog,
+sex with a horse, sexe avec un animal, sexo con animales, sexo com animais,
+Sex mit Tieren, sesso con animali, necrophilia, nécrophilie, necrofilia, Nekrophilie,
+兽交, 獣姦
+
+[neutral]
+# Des expressions sans rapport, ôtées avant la recherche
+# fr
+pieds nus, pied nu, nu-pieds, nus-pieds, torse nu, torses nus, à mains nues, mains nues,
+main nue, à l'œil nu, œil nu, tête nue, nu-tête, bras nus, jambes nues, épaules nues,
+dos nu, murs nus, mur nu, arbre nu, arbres nus, branches nues, fil nu, fils nus,
+nue-propriété, nu-propriété, aux nues, des nues, deux sexes, sexe masculin,
+sexe féminin, même sexe, sexe opposé, l'autre sexe, éducation sexuelle,
+orientation sexuelle, santé sexuelle, sans nudité, pas de nudité, aucune nudité,
+entièrement habillé(e)(s), sourire forcé, attend un bébé, attendant un bébé,
+culotte(s) courte(s), branle-bas, violer la loi, violer les règles, empereur nu,
+l'empereur est nu, le roi est nu, roi nu
+# en
+naked eye, naked flame, naked mole rat, naked mole-rat, naked wire, naked truth,
+naked cake, nude color(s), nude colour(s), nude colored, nude coloured, nude tone(s),
+nude beige, nude pink, nude lipstick, nude lip(s), nude makeup, nude nails, nude heels,
+nude shoes, nude pumps, nude leotard(s), nude tights, naked emperor, the emperor is naked,
+the king is naked, sex education, sexual education, sex ed, sexual orientation,
+sexual health, same sex, same-sex, opposite sex, forced perspective,
+forced smile, no nudity, without nudity, not nude, non nude, non-nude, not naked, no nsfw,
+fully clothed, baby blue, baby pink, baby oil, baby bump, baby shower, baby doll, babydoll,
+sugar baby, expecting a baby, pussy cat, pussycat, pussy willow,
+rape of the sabine women, rape of the sabines, rape of proserpina, rape of persephone,
+rape of europa, rape of lucretia, rape of the lock, rape field(s), field(s) of rape,
+oilseed rape, rape seed, rape flower(s), rape blossom(s)
+# es
+a ojo desnudo, ojo desnudo, pies desnudos, torso desnudo, manos desnudas,
+a manos desnudas, paredes desnudas, árboles desnudos, ambos sexos, sexo masculino,
+sexo femenino, mismo sexo, sexo opuesto, educación sexual, orientación sexual,
+salud sexual, sin desnudez, sonrisa forzada, espera un bebé, emperador desnudo,
+el rey está desnudo, un nudo, el nudo, del nudo,
+al nudo, nudo de, nudo marinero, nudo corredizo, nudo en la garganta, violar la ley,
+violar las normas, violar los derechos, violación de la ley, violación de derechos,
+violación de los derechos, violación de la privacidad, violación de la intimidad,
+violación de datos, violación de seguridad, violación de las normas, violación del contrato,
+violación de la tregua
+# de
+nackte Füße, nackten Füßen, nackter Oberkörper, nacktem Oberkörper, nackten Oberkörper,
+nackte Wände, nackten Wänden, nackte Bäume, nackten Bäume, Sexualerziehung, Sexualkunde,
+sexuelle Orientierung, sexuelle Gesundheit, ohne Nacktheit,
+keine Nacktheit, gezwungenes Lächeln, erwartet ein Baby, nackte Kaiser, nackten Kaiser,
+der Kaiser ist nackt
+# it
+a occhio nudo, occhio nudo, a piedi nudi, piedi nudi, a torso nudo, torso nudo,
+a mani nude, mani nude, alberi nudi, pareti nude, muro nudo, nudo e crudo,
+entrambi i sessi, sesso maschile, sesso femminile, stesso sesso, sesso opposto,
+educazione sessuale, orientamento sessuale, salute sessuale, senza nudità, sorriso forzato,
+aspetta un bambino, imperatore nudo, il re è nudo, re nudo
+# pt
+a olho nu, olho nu, pés nus, torso nu, tronco nu, peito nu, de peito nu, mãos nuas,
+paredes nuas, árvores nuas, ambos os sexos, sexo masculino, sexo feminino,
+mesmo sexo, sexo oposto, educação sexual, orientação sexual, saúde sexual, sem nudez,
+sorriso forçado, espera um bebê, imperador nu, o rei está nu, rei nu
+# zh, ja
+裸足, 裸眼, 赤裸裸, 裸子植物, 裸麦, カロリー, エッチング
+
+[glue]
+# Des mots qu'on colle aux autres (« nacktfotos ») : ils aident à découper un mot collé
+photo(s), foto(s), pic(s), pix, picture(s), image(s), img, bild, bilder, video(s), vid(s),
+clip(s), film(s), selfie(s), cam, cams, show, shoot
+
+[stopwords]
+# Deux mots voisins se recollent (« lo li », « n ude ») si l'un fait une lettre, ou deux
+# sans être l'un de ces petits mots (« por no » reste « por no »)
+# fr
+le, la, les, l, un, une, des, de, du, d, et, ou, a, au, aux, en, dans, sur, sous, avec,
+pour, par, ce, cet, cette, ces, son, sa, ses, mon, ma, mes, ton, ta, tes, il, elle, ils,
+elles, je, j, tu, nous, vous, on, y, ne, n, pas, que, qu, qui, se, s, c, est, sont, tout,
+très, plus
+# en
+an, the, of, and, or, to, in, on, at, by, for, with, from, is, are, be, it, its, this,
+that, his, her, my, your, our, their, as, no, not, up, so, do, if, me, we, he, she, i, us,
+am, oh
+# es
+el, los, las, unos, unas, del, o, con, por, para, su, sus, mi, mis, tus, lo, les, es, al,
+ni, ya, muy, yo
+# de
+der, die, das, den, dem, ein, eine, einen, einem, einer, und, oder, im, mit, von, zu, zum,
+zur, auf, an, am, ist, nicht, er, sie, wir, ich, du
+# it
+il, lo, gli, uno, di, della, dei, e, per, da, che, non, ti, si, ma, ne, ci
+# pt
+os, as, um, uma, do, da, dos, das, em, no, na, nos, nas, com, seu, sua, meu, minha, não,
+ao
+
+[numbers]
+# Les âges écrits en lettres, de 0 à 17 : « nombre = mots »
+0 = zéro, zero, cero, null
+1 = un, une, one, uno, una, ein, eine, eins, um, uma
+2 = deux, two, dos, zwei, due, dois, duas
+3 = trois, three, tres, drei, tre, três
+4 = quatre, four, cuatro, vier, quattro, quatro
+5 = cinq, five, cinco, fünf, cinque
+6 = six, seis, sechs, sei
+7 = sept, seven, siete, sieben, sette, sete
+8 = huit, eight, ocho, acht, otto, oito
+9 = neuf, nine, nueve, neun, nove
+10 = dix, ten, diez, zehn, dieci, dez
+11 = onze, eleven, once, elf, undici
+12 = douze, twelve, doce, zwölf, dodici, doze
+13 = treize, thirteen, trece, dreizehn, tredici, treze
+14 = quatorze, fourteen, catorce, vierzehn, quattordici, catorze
+15 = quinze, fifteen, quince, fünfzehn, quindici
+16 = seize, sixteen, dieciséis, sechzehn, sedici, dezesseis, dezasseis
+17 = dix-sept, dix sept, seventeen, diecisiete, siebzehn, diciassette, dezessete, dezassete

@@ -32,6 +32,11 @@ log = logging.getLogger("aiodos.net")
 
 # Refus « avant calcul » qui contredisent un profil (place libre, prêt, modèle annoncés)
 SUSPECT = {"busy", "not_lending", "no_model", "too_big", "bad_request"}
+# Refus qui ne sont jamais une faute du prêteur, ni comptés ici, ni un échec qui l'écarte
+# (29/10/2026) : son filtre des descriptions (imaging/prompt_filter.py) juge la demande
+# interdite, il fait son travail. La création s'arrête là : elle ne part chez aucune autre
+# machine (jobs/kinds/public_images.py)
+INNOCENT = {"refused_content"}
 # Refus comptés avant l'écart : trois en dix minutes. Une machine qui prête n'a qu'une place
 # aujourd'hui (public.MAX_FREE) et redit son profil dès qu'elle la perd : la course entre ce
 # profil et mon choix se paie d'un refus, rarement de deux ; trois de suite, c'est un choix
@@ -79,7 +84,7 @@ def refused(key, code) -> bool:
     """Un refus de SUSPECT reçu de cette machine après l'envoi de la demande, alors qu'elle
     avait été proposée (promised) : compté ; LIMIT en WINDOW_S secondes, elle est écartée
     (reputation.bench). → vrai si elle vient de l'être."""
-    if code not in SUSPECT or not reputation.valid_key(key):
+    if code in INNOCENT or code not in SUSPECT or not reputation.valid_key(key):
         return False
     now = time.monotonic()
     with _lock:

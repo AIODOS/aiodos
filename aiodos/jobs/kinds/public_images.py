@@ -11,25 +11,28 @@ elle attend le réseau, pas la carte graphique d'ici. Avant chaque envoi, l'acco
 conversation de la création ; un accord retiré depuis la demande arrête l'image (en échec,
 sans rien envoyer).
 
-Puis les machines du réseau public qui prêtent ce modèle, la mieux placée d'abord
+Puis la base du filtre des descriptions (imaging/prompt_filter.py ; la conversation a déjà
+passé le filtre entier, chat/creations.py) : une description interdite échoue sans rien
+envoyer. Puis les machines du réseau public qui prêtent ce modèle, la mieux placée d'abord
 (public_image_ask.lenders) ; la première qui rend une image valide la donne, les autres
-attendent. Une clé jetable par création (public_chat.tag, un identifiant par lot). Pendant
-l'envoi, la machine compte dans ce que je lui envoie (placement._occupy) : deux images d'un
-même lot ne vont pas en même temps chez le même prêteur, qui n'a qu'une place. L'image est
-gardée comme une création d'ici (imaging/gallery.py), sa machine marquée « Créée par une
-machine du réseau public ». Un arrêt (travail annulé, AIODOS qui s'arrête) coupe l'envoi :
-l'unité est rendue (Interrupted).
+attendent. Le filtre d'un prêteur qui la refuse (« refused_content ») arrête l'image : elle
+ne part chez aucune autre machine. Une clé jetable par création (public_chat.tag, un
+identifiant par lot). Pendant l'envoi, la machine compte dans ce que je lui envoie
+(placement._occupy) : deux images d'un même lot ne vont pas en même temps chez le même
+prêteur, qui n'a qu'une place. L'image est gardée comme une création d'ici
+(imaging/gallery.py), sa machine marquée « Créée par une machine du réseau public ». Un arrêt
+(travail annulé, AIODOS qui s'arrête) coupe l'envoi : l'unité est rendue (Interrupted).
 """
 import logging
 
 from aiodos import settings
 from aiodos.chat import conversations, public_consent
 from aiodos.i18n import t
-from aiodos.imaging import gallery
+from aiodos.imaging import gallery, prompt_filter
 from aiodos.jobs import pacing
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.registry import Interrupted, register_local
-from aiodos.network import placement, public_chat, public_image_ask, reputation
+from aiodos.network import placement, public_chat, public_image_ask, public_refusals, reputation
 from aiodos.network.public_chat import PublicError
 
 log = logging.getLogger("aiodos.images")
@@ -54,6 +57,8 @@ def compute(payload, file, options, stop=None):
     params = kind.checked({k: v for k, v in payload.items()
                            if k not in ("public", "conversation_id", "init_path", "strength")})
     model = params["model"]
+    if prompt_filter.base(params["prompt"], params.get("negative") or "") is not None:
+        raise ValueError(t("public_images.refused_filter"))
     tried = public_image_ask.lenders(model)
     if not tried:
         raise ValueError(t("public_images.nobody_now"))
@@ -71,6 +76,8 @@ def compute(payload, file, options, stop=None):
             # i18n: tel quel (journal) ; la clé abrégée et le code seulement
             log.info("Image par le réseau public : %s n'a pas pu la créer (%s)",
                      reputation.short(key), exc.code)
+            if exc.code in public_refusals.INNOCENT:     # son filtre : aucune autre machine
+                raise ValueError(t("public_images.refused_remote")) from None
             continue
         if made is None:
             raise Interrupted()                  # arrêtée en route : l'unité est rendue

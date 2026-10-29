@@ -15,13 +15,18 @@ Quand ni cette machine ni mes machines ne peuvent calculer une image, une machin
 public peut la créer, avec l'accord demandé une fois (chat/public_creations.py, 29/10/2026) :
 le travail porte alors « public » (jobs/kinds/public_images.py), la réponse aussi (media), et
 l'image vient sans image de départ (ni retouche à partir de la précédente, ni image jointe).
+Avant, le filtre des descriptions (imaging/prompt_filter.py) : la base sur le message, avant
+de réécrire la description ; puis la base et le modèle de conversation de cette machine (celui
+qui l'a enrichie) sur la description qui partirait. Interdite : le message « ni le réseau
+public ni AIODOS ne créent ce genre d'image » dans la conversation (403), rien n'est envoyé.
+Une image créée ici ou par mes machines n'y passe pas.
 """
 import re
 
 from aiodos import db, settings
 from aiodos.chat import attachments, conversations, enrich, public_creations, retouches
 from aiodos.i18n import t
-from aiodos.imaging import catalog, gallery, lenders
+from aiodos.imaging import catalog, gallery, lenders, prompt_filter
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.models import URGENT
@@ -446,6 +451,9 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     public = model_id is None
     if public:                        # ni ici ni chez mes machines : peut-être le réseau public
         model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures)
+        for asked in (text, request.get("prompt")):    # la base, avant de rien réécrire
+            if asked and prompt_filter.base(asked) is not None:
+                raise refused_content()
         # Sans image de départ (retouche, variante d'une image d'ici) : sa description seule
         request = {k: v for k, v in request.items() if k not in ("init_path", "strength")}
     if pictures and media_kind == "video":
@@ -487,23 +495,37 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
     if public:
-        params = _for_public(params)
+        params = _for_public(params, chat_model)
     return {"text": text, "conv_id": conv_id, "chat_model": chat_model, "model_id": model_id,
             "params": params, "auto": bool(request.get("auto")),
             "attachments": [r["id"] for r in joined], "reference": bool(request.get("reference")),
             "mine_only": bool(mine_only)}
 
 
-def _for_public(params: dict) -> dict:
+def _for_public(params: dict, chat_model=None) -> dict:
     """Les réglages d'une image que le réseau public créera : dans les bornes de ses machines
     (network/public_imaging.py : pas au-delà de leur nombre de pas, une taille qu'elles
-    acceptent), marqués « public » (jobs/kinds/images.split_generate)."""
+    acceptent), sa description passée au filtre (la base et le modèle de conversation de
+    cette machine, s'il y en a un : celui qui l'a enrichie, chat/enrich.py), marqués
+    « public » (jobs/kinds/images.split_generate)."""
     from aiodos.network import public_imaging
     spec = catalog.model(params["model"])
     if not public_imaging.fits(spec, params["width"], params["height"]):
         raise CreationError(t("public_images.too_big"))
+    if prompt_filter.check(params["prompt"], params.get("negative") or "",
+                           retouches._rewriter(chat_model)) is not None:
+        raise refused_content()
     return {**params, "steps": min(params["steps"], public_imaging.max_steps(spec)),
             "public": True}
+
+
+def refused_content() -> CreationError:
+    """Une description que le filtre du réseau public refuse (imaging/prompt_filter.py) : rien
+    ne part, le message le dit dans la conversation."""
+    return CreationError(t("public_images.refused_content"), status=REFUSED_STATUS)
+
+
+REFUSED_STATUS = 403              # ni 409 (rien ne peut calculer), ni 412 (conversation changée)
 
 
 def accept(plan: dict, replace_from=None, replace_text=None) -> dict:

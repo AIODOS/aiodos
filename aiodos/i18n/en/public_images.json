@@ -14,5 +14,8 @@
   "model_public": "{label} · public network",
   "withdrawn": "your images no longer go through the public network (Settings, or “On my machines only”)",
   "nobody_now": "no machine on the public network can create this image right now",
-  "failed": "no machine on the public network could create it ({error})"
+  "failed": "no machine on the public network could create it ({error})",
+  "refused_content": "This image won't go to the public network: its filter refuses the description (a minor, a real person or violence, in a sexual or nude context). Neither the public network nor AIODOS creates this kind of image, and nothing was sent to a stranger. If your request had nothing of the sort, rephrase it: the filter relies on certain words.",
+  "refused_filter": "the public network's filter refuses this description: nothing was sent to a stranger",
+  "refused_remote": "the machine on the public network refuses this description: its filter judges it forbidden"
 }

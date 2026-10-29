@@ -22,5 +22,6 @@
   "closed_attachments": "Attachments never go to a stranger on the public network, and no model here or on your machines can read them: send your message without attachments, or install a model.",
   "closed_conversation_attachments": "This conversation has attachments: it never goes to a stranger on the public network, and no model here or on your machines can answer it. Start a new conversation, or install a model.",
   "closed_own_models": "“Automatic · public network” is only for when neither this machine nor your machines have a conversation model: choose one of your models (in automatic mode, the conversation can also go through the public network).",
-  "error_no_reading": "The public network machine can't read a text under this model."
+  "error_no_reading": "The public network machine can't read a text under this model.",
+  "error_refused_content": "The public network's filter refuses this description: neither the public network nor AIODOS creates this kind of image."
 }

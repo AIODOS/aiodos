@@ -22,7 +22,14 @@ avec sa réponse, avant tout calcul (admit) :
      multiple et dans les bornes du modèle, MAX_PIXELS pixels au plus, de 1 à max_steps pas, et
      rien d'autre (ni image de départ, ni force de retouche dans cette version) : sinon 413
      {"error": "too_big"} ; mal formée : 400 {"error": "bad_request"} ;
-  3. la place du public (public_lending._take_place : une seule pour tout le public,
+  3. le filtre des descriptions (imaging/prompt_filter.py ; décision de l'auteur du
+     29/10/2026 : le prêt reste activé par défaut, et une description interdite n'est jamais
+     calculée) : la base sans modèle, toujours ; le modèle de conversation de cette machine en
+     plus, s'il est déjà chargé (jamais un chargement, qui prendrait la carte au moteur
+     d'images) et que personne d'autre ne veut la machine. Description (ou consigne négative)
+     interdite : 403 {"error": "refused_content"}, sans rien prendre ni garder ; le journal
+     dit seulement « Image refusée par le filtre (<code>) » ;
+  4. la place du public (public_lending._take_place : une seule pour tout le public,
      conversation, lecture ou image ; personne d'autre ne veut la machine, l'utilisateur, mes
      machines ou mes amis ; la pause de la puissance prêtée ; la mémoire vive ; le seau de tout
      le public) : sinon 503 {"error": "busy"}.
@@ -71,7 +78,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from aiodos import __version__, settings
-from aiodos.imaging import catalog
+from aiodos.imaging import catalog, prompt_filter
 from aiodos.network import connections, public_lending
 from aiodos.network.public_lending import Refused
 
@@ -92,6 +99,7 @@ SEED_SPACE = 2 ** 31           # comme jobs/kinds/images.SEED_SPACE
 # 1 à 2 Mo
 MAX_IMAGE = 6 * 1024 ** 2
 PART = 192 * 1024              # octets du PNG par morceau (256 Kio de base64 par ligne)
+REFUSED = prompt_filter.REFUSED      # « refused_content » : une description interdite
 
 
 # ------------------------------------------------------------- prêter, ou non
@@ -170,12 +178,24 @@ def _request(raw: bytes) -> dict:
             "height": height, "steps": steps, "seed": seed, "cfg": spec["cfg"]}
 
 
+def _filtered(manager, params: dict):
+    """Le filtre des descriptions (cf. le début du module, 3) : Refused 403 « refused_content »
+    pour une description interdite. Rien n'est gardé : le journal ne dit que le code."""
+    model = prompt_filter.warm_model() if public_lending._room(manager) else None
+    code = prompt_filter.check(params["prompt"], params["negative"], model)
+    if code is not None:
+        # i18n: tel quel (journal) ; ni la description, ni la clé
+        log.info("Image refusée par le filtre (%s)", code)
+        raise Refused(403, REFUSED)
+
+
 def admit(manager, raw: bytes) -> dict:
     """Les vérifications, dans l'ordre (cf. le début du module) ; Refused au premier refus,
     avant tout calcul. → {"model", "params", "place"} : la place est prise."""
     if not lending_images(manager):
         raise Refused(503, "not_lending")
     params = _request(raw)                         # rien de pris pour une demande refusée
+    _filtered(manager, params)                     # ni pour une description interdite
     return {"model": params["model"], "params": params,
             "place": public_lending._take_place(manager)}
 

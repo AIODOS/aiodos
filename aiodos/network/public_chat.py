@@ -107,7 +107,7 @@ _KEY = re.compile(r"[0-9A-Za-z]{16,128}")
 # Codes des refus, chacun avec son message (public_chat.error_<code>)
 CODES = {"busy", "not_lending", "no_model", "too_big", "bad_request", "unreachable", "engine",
          "slow", "cut", "unreadable", "documents", "attachments", "companion", "refused",
-         "too_long", "no_reading"}
+         "too_long", "no_reading", "refused_content"}
 # Codes des compagnons (public_ask.rs chez moi, public_serve.rs chez le prêteur, relayés
 # tels quels) qui disent la même chose qu'un des nôtres. Le compagnon ne refait jamais
 # d'essai (le prêteur ne calcule pas deux fois) : sur « interrupted » ou « timeout », c'est

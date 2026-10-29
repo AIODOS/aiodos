@@ -19,7 +19,9 @@ seulement, public_chat.tag) : le prêteur ne sait pas qui demande, et ne peut pa
 créations. Ce qui part (body) : le modèle, la description (enrichie ici, jamais chez un
 inconnu : chat/enrich.py), la consigne négative, la taille, le nombre de pas, la graine ;
 jamais d'image de départ, ni rien de la conversation. Une demande hors des bornes du prêteur
-ne part pas : il la refuserait.
+ne part pas : il la refuserait. Une description que la base du filtre juge interdite
+(imaging/prompt_filter.py ; la conversation a déjà passé le filtre entier, modèle compris,
+chat/creations.py) ne part pas non plus : PublicError « refused_content », rien d'envoyé.
 
 Ce qui revient (le NDJSON de public_imaging.py) est borné et vérifié ici avant d'être gardé :
 « meta » au modèle demandé ; l'en-tête de l'image (PNG, MAX_IMAGE octets au plus, la taille
@@ -33,9 +35,11 @@ demande ; MAX_STREAM octets de flux en tout. Un type d'événement inconnu est i
 Un échec du prêteur (FAULTS : lent, coupé, illisible, trop gros, moteur arrêté, image
 invalide) l'écarte quelques minutes (reputation.bench), comme pour une conversation : il a pu
 lire la description sans rien rendre. Un refus « avant calcul » qui contredit son profil est
-compté (public_refusals). Une image reçue et valide compte comme une réponse servie
-(reputation.note_served, sans vitesse). Pas de contrôle au hasard des images dans cette
-version. Le journal ne dit que la clé abrégée et le code d'un refus, jamais la description.
+compté (public_refusals). Le refus de son filtre des descriptions (« refused_content »,
+public_refusals.INNOCENT) n'est ni l'un ni l'autre : il fait son travail. Une image reçue et
+valide compte comme une réponse servie (reputation.note_served, sans vitesse). Pas de
+contrôle au hasard des images dans cette version. Le journal ne dit que la clé abrégée et le
+code d'un refus, jamais la description.
 """
 import base64
 import binascii
@@ -48,7 +52,7 @@ import time
 
 import requests
 
-from aiodos.imaging import catalog
+from aiodos.imaging import catalog, prompt_filter
 from aiodos.network import (client, placement, public_chat, public_imaging, public_refusals,
                             reputation)
 from aiodos.network.client import PeerError
@@ -122,7 +126,8 @@ def lenders(model: str, offer: bool = True) -> list:
 def body(params: dict) -> bytes:
     """Le corps envoyé au prêteur ({"v": 1, "model", "prompt", "negative", "width", "height",
     "steps", "seed"}) ; PublicError « too_big » s'il dépasse ses bornes (public_imaging),
-    « bad_request » s'il est mal formé."""
+    « bad_request » s'il est mal formé, « refused_content » si la base du filtre juge la
+    description interdite (cf. le début du module)."""
     model = str(params.get("model") or "")
     if not public_imaging.lendable(model):
         raise PublicError("bad_request")
@@ -142,6 +147,8 @@ def body(params: dict) -> bytes:
             or not 1 <= asked["steps"] <= public_imaging.max_steps(spec) \
             or not public_imaging.fits(spec, asked["width"], asked["height"]):
         raise PublicError("too_big")
+    if prompt_filter.base(asked["prompt"], asked["negative"]) is not None:
+        raise PublicError(prompt_filter.REFUSED)
     data = json.dumps(asked, ensure_ascii=False).encode()
     if len(data) > public_chat.MAX_BODY:
         raise PublicError("too_big")
@@ -222,14 +229,16 @@ def image(key, params: dict, stop=None, conversation=None) -> dict | None:
     venu avant la fin. conversation : l'identifiant opaque de la création (public_chat.tag) ;
     sans lui, une clé jetable pour cette seule image. PublicError à tout refus ou échec ; un
     échec de FAULTS écarte le prêteur quelques minutes, un refus qui contredit son profil est
-    compté."""
+    compté ; le refus de son filtre (public_refusals.INNOCENT), ni l'un ni l'autre."""
     data = body(params)                         # nos bornes : ce qui part, elles l'acceptent
     model = params["model"]
     promised = public_refusals.promised(key, MARKER + model)    # proposée ? lu avant l'envoi
     try:
         made = _image(key, data, params, stop, conversation)
     except PublicError as exc:
-        if exc.code in FAULTS:
+        if exc.code in public_refusals.INNOCENT:
+            pass                                # son filtre a fait son travail
+        elif exc.code in FAULTS:
             reputation.bench(key, exc.code)
         elif promised and exc.code in public_refusals.SUSPECT:
             public_refusals.refused(key, exc.code)

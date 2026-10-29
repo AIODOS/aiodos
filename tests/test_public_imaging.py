@@ -29,13 +29,14 @@ from aiodos.api.server import create_app
 from aiodos.chat import conversations, public_creations
 from aiodos.gateway import limits
 from aiodos.i18n import t
-from aiodos.imaging import catalog, engine, gallery, generate
+from aiodos.imaging import catalog, engine, gallery, generate, prompt_filter
 from aiodos.jobs import queue
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.kinds import public_images
 from aiodos.jobs.registry import Interrupted
 from aiodos.network import (lend_queue, p2p_app, placement, public, public_chat,
-                            public_image_ask, public_imaging, public_lending, reputation, route)
+                            public_image_ask, public_imaging, public_lending, public_refusals,
+                            reputation, route)
 from aiodos.network.public_chat import PublicError
 from aiodos.services import ollama
 from tests.test_images import png as uniform_png
@@ -807,12 +808,15 @@ def test_the_description_is_enriched_here_never_by_a_stranger(ui, companion, mon
     asked = []
 
     def here(model, messages, **kw):
-        asked.append(model)
-        yield "content", "A detailed watercolor of a ginger cat sitting on a windowsill"
+        filtering = messages[0]["content"] == prompt_filter.SYSTEM
+        asked.append((model, "filter" if filtering else "enrich"))
+        yield "content", "NO" if filtering else \
+            "A detailed watercolor of a ginger cat sitting on a windowsill"
     monkeypatch.setattr(ollama, "chat_stream", here)
     made = create(ui).json()
     wait_for(lambda: queue.job_summary(made["job_id"])["status"] == "done")
-    assert asked == ["qwen3.5:0.8b"]                        # le modèle de cette machine
+    # Le modèle de cette machine : il enrichit, puis le filtre lui pose sa question
+    assert asked == [("qwen3.5:0.8b", "enrich"), ("qwen3.5:0.8b", "filter")]
     assert [r["tail"] for r in companion.requests] == ["public/v1/image"]
     assert companion.requests[0]["body"]["prompt"].startswith("A detailed watercolor")
 
@@ -842,3 +846,151 @@ def test_the_images_api_never_sends_to_the_public_network():
                                               "init_path": "/x.png", "strength": 0.5})
     assert {(u.task, u.resource) for u in units} == {(public_images.TASK, "net")}
     assert all("init_path" not in u.payload and u.payload["conversation_id"] == 3 for u in units)
+
+
+# ================================================== le filtre des descriptions
+# La demande interdite la plus neutre qui suffise (tests/test_prompt_filter.py : la règle)
+FORBIDDEN = "a naked child, " + SECRET
+
+
+def test_the_lender_refuses_a_forbidden_description_before_anything(lender, monkeypatch,
+                                                                     caplog, data_dir):
+    """Le filtre passe avant la place et le modèle : 403 « refused_content », aucun appel au
+    moteur, la place et le seau de tout le public libres, rien de gardé ; le journal ne dit
+    que le code."""
+    manager, here, lan, sd = lender
+    lend_images()
+    monkeypatch.setattr(limits, "PER_MINUTE", 1)        # un refus qui en prendrait : « busy »
+    with caplog.at_level(logging.DEBUG):
+        for body in (ask(prompt=FORBIDDEN), ask(prompt="un enfant nu, " + SECRET),
+                     ask(prompt="lolicon"), ask(prompt="ma voisine nue, " + SECRET)):
+            response = post(here, body)
+            assert (response.status_code, response.json()) == (403, {"error": "refused_content"})
+    assert sd.calls == [] and lend_queue.idle() and public_lending.serving() == []
+    said = [r.getMessage() for r in caplog.records]
+    assert "Image refusée par le filtre (minor_sexual)" in said
+    assert "Image refusée par le filtre (real_person_intimate)" in said
+    for message in said:
+        assert "Zébulon" not in message and "naked" not in message and KEY not in message
+    for row in db.query("SELECT name FROM sqlite_master WHERE type='table'"):
+        for stored in db.query(f'SELECT * FROM "{row["name"]}"'):
+            assert "Zébulon" not in repr(tuple(stored)), row["name"]
+    for path in data_dir.rglob("*"):
+        if path.is_file():
+            assert "Zébulon".encode() not in path.read_bytes(), path
+    assert post(here).status_code == 200 and len(sd.calls) == 1   # place et seau intacts
+
+
+def test_the_lender_asks_its_model_only_when_already_loaded_and_free(lender, monkeypatch):
+    manager, here, lan, sd = lender
+    lend_images()
+    asked = []
+
+    def model(name, messages, **kw):
+        asked.append(name)
+        yield "content", "YES"
+    monkeypatch.setattr(ollama, "chat_stream", model)
+    monkeypatch.setattr(prompt_filter, "warm_model", lambda: None)     # rien de chargé
+    assert post(here).status_code == 200 and asked == []
+    monkeypatch.setattr(prompt_filter, "warm_model", lambda: "qwen3.5:9b")
+    manager.executor.interactive = 1                    # l'utilisateur converse : pas de modèle
+    assert post(here).json() == {"error": "busy"} and asked == []
+    manager.executor.interactive = 0
+    response = post(here)                               # le modèle dit « YES » : refusée
+    assert (response.status_code, response.json()) == (403, {"error": "refused_content"})
+    assert asked == ["qwen3.5:9b"] and len(sd.calls) == 1 and lend_queue.idle()
+
+
+def test_the_asker_never_sends_a_forbidden_description(companion, opened):
+    directory(node(PC, "image:z-image-turbo"))
+    lend_images()
+    with pytest.raises(PublicError) as found:
+        public_image_ask.body(params(prompt=FORBIDDEN))
+    assert found.value.code == "refused_content"
+    assert public_image_ask.lenders(MODEL) == [(PC, MODEL)]
+    with pytest.raises(PublicError):
+        public_image_ask.image(PC, params(prompt=FORBIDDEN))
+    assert companion.requests == []
+    assert not reputation.benched(PC) and public_refusals.count(PC) == 0
+    # La consigne négative : ce modèle n'en a pas, elle ne part pas (sinon, filtrée avec la
+    # description : tests/test_prompt_filter.py)
+    sent = public_image_ask.body(params(prompt="a child at the beach", negative="clothes"))
+    assert json.loads(sent)["negative"] == ""
+
+
+def test_a_lender_filter_refusal_is_never_held_against_it(companion, opened):
+    """« refused_content » : ni un échec qui l'écarte, ni un refus suspect compté, même
+    proposée et répété ; la création s'arrête là, sans passer à une autre machine."""
+    directory(node(PC, "image:z-image-turbo", tps=90), node(OTHER, "image:z-image-turbo", tps=10))
+    companion.script[PC] = ("refuse", 403, "refused_content")
+    for _ in range(public_refusals.LIMIT + 1):
+        assert public_image_ask.lenders(MODEL)[0] == (PC, MODEL)       # proposée
+        with pytest.raises(PublicError) as found:
+            public_image_ask.image(PC, params())
+        assert found.value.code == "refused_content"
+        assert str(found.value) == t("public_chat.error_refused_content")
+    assert not reputation.benched(PC) and public_refusals.count(PC) == 0
+    assert public_refusals.refused(PC, "refused_content") is False
+    settings.set_value("public_images", True)
+    payload = {"model": MODEL, "prompt": "un phare", "negative": "", "width": SIDE,
+               "height": SIDE, "steps": 8, "cfg": 1.0, "batch": "lot000000002", "seed": 5,
+               "index": 0, "public": True, "conversation_id": None}
+    companion.requests.clear()
+    with pytest.raises(ValueError, match="filtre la juge interdite"):
+        public_images.compute(payload, None, {}, threading.Event())
+    assert [r["key"] for r in companion.requests] == [PC]        # pas chez OTHER ensuite
+
+
+def test_the_unit_filters_before_choosing_a_lender(companion, opened):
+    directory(node(PC, "image:z-image-turbo"))
+    settings.set_value("public_images", True)
+    payload = {"model": MODEL, "prompt": FORBIDDEN, "negative": "", "width": SIDE,
+               "height": SIDE, "steps": 8, "cfg": 1.0, "batch": "lot000000003", "seed": 5,
+               "index": 0, "public": True, "conversation_id": None}
+    with pytest.raises(ValueError, match="rien n'est parti"):
+        public_images.compute(payload, None, {}, threading.Event())
+    assert companion.requests == []
+
+
+def test_the_conversation_says_it_and_sends_nothing(ui, companion, monkeypatch):
+    directory(node(PC, "image:z-image-turbo"))
+    lend_images()
+    settings.set_value("public_images", True)
+    for text in ("Crée une image d'un enfant nu", "Crée une image d'une ado en lingerie"):
+        reply = create(ui, text)
+        assert reply.status_code == 403
+        assert reply.json()["detail"] == t("public_images.refused_content")
+        assert "ni AIODOS" in reply.json()["detail"]
+    # Le modèle de conversation de cette machine juge la description qui partirait (enrichie)
+    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": "qwen3.5:0.8b"}])
+    monkeypatch.setattr(ollama, "capabilities_many",
+                        lambda names: {n: ["completion"] for n in names})
+    verdict = ["YES"]
+
+    def here(model, messages, **kw):
+        if messages[0]["content"] == prompt_filter.SYSTEM:
+            yield "content", verdict[0]
+        else:
+            yield "content", "A detailed portrait of a famous singer, soft light"
+    monkeypatch.setattr(ollama, "chat_stream", here)
+    assert create(ui, "Crée une image d'une chanteuse célèbre").status_code == 403
+    assert conversations.list_tree()["conversations"] == [] and companion.requests == []
+    verdict[0] = "NO"
+    made = create(ui, "Crée une image d'une chanteuse célèbre").json()
+    wait_for(lambda: queue.job_summary(made["job_id"])["status"] == "done")
+    assert len(companion.requests) == 1
+
+
+def test_my_own_machines_are_not_filtered(monkeypatch):
+    """Une image créée ici ou par mes machines ne passe pas par le filtre (seul le réseau
+    public le demande)."""
+    from aiodos.chat import creations
+
+    def called(*args, **kwargs):
+        pytest.fail("filtre appelé pour mes machines")
+    monkeypatch.setattr(creations, "pick", lambda kind_, preferred=None: MODEL)
+    monkeypatch.setattr(prompt_filter, "check", called)
+    monkeypatch.setattr(prompt_filter, "base", called)
+    settings.set_value("images_enrich", False)
+    plan = creations.prepare("Crée une image d'un phare sous l'orage", {})
+    assert "public" not in plan["params"] and plan["params"]["prompt"] == "un phare sous l'orage"
