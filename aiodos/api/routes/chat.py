@@ -13,7 +13,10 @@ première fois, que l'interface montre dans la conversation. Sans aucun modèle 
 machines, « Automatique · réseau public » (placement.PUBLIC_BEST) : seules les machines du
 réseau public répondent, et un refus (pièces jointes…) se dit tel quel. Une réponse publique
 complète est notée, et parfois contrôlée en arrière-plan (network/public_controls.py) : par
-mes machines seules si elle porte mes documents.
+mes machines seules si elle porte mes documents. Celle d'une machine publique passée devant par
+la règle des petits réseaux (placement.py) est « non vérifiable pour l'instant » : l'événement
+« route » le dit (« unverified »), et la marque est gardée avec la réponse
+(conversations.UNVERIFIED_SOURCE), pour la montrer quand on rouvre la conversation.
 """
 import asyncio
 import contextvars
@@ -105,9 +108,12 @@ async def chat(body: ChatIn, request: Request):
         conv_id is not None and await asyncio.to_thread(conversations.mine_only, conv_id))
     # Le réseau public, si la conversation le permet (chat/public_consent.py)
     reach = await asyncio.to_thread(public_consent.reach, body.model, conv_id, mine_only, joined)
+    # Machines publiques passées devant par la règle des petits réseaux (placement.py) : leur
+    # réponse est marquée « non vérifiable pour l'instant »
+    unverified = set()
     try:                          # machines à essayer, la mieux placée d'abord
         plan = await asyncio.to_thread(placement.plan, body.model, executor, reach.public,
-                                       reach.bigger)
+                                       reach.bigger, unverified)
     except placement.NoMachine as exc:
         # « Automatique · réseau public » refusé à cette conversation : pourquoi (réglages,
         # « Sur mes machines seulement », pièces jointes), rien d'autre ne pouvant répondre
@@ -118,17 +124,19 @@ async def chat(body: ChatIn, request: Request):
     marker = pending.begin(conv_id) if conv_id is not None else None
     try:
         return await _answer(body, request, text, plan, conv_id, executor, bus, joined,
-                             mine_only, reach)
+                             mine_only, reach, unverified)
     finally:
         if marker is not None:
             pending.end(conv_id, marker)
 
 
 async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
-                  mine_only=False, reach=public_consent.Reach()):
+                  mine_only=False, reach=public_consent.Reach(), unverified=frozenset()):
     """La suite de chat(), une fois la conversation connue. joined : les pièces jointes de
     la question (attachments.pending) ; mine_only : « Sur mes machines seulement » ; reach :
-    ce que le réseau public peut faire pour ce message (chat/public_consent.py)."""
+    ce que le réseau public peut faire pour ce message (chat/public_consent.py) ; unverified :
+    les machines du plan dont la réponse est « non vérifiable pour l'instant » (dit par
+    l'événement « route », gardé avec la réponse : conversations.UNVERIFIED_SOURCE)."""
     # Ce que les autres machines m'ont ouvert ne va qu'aux modèles autorisés (ici, réparti,
     # ou prêté par une de mes machines) : ni les passages, ni les réponses qui s'en servent.
     # Jugé pour chaque machine du plan (mode automatique) ; si l'on cherche chez les autres,
@@ -240,7 +248,8 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
 
             for kind, piece in placement.run(plan, attempt, executor, stop):
                 if kind == "route":
-                    piece = {"model": piece, "machine": placement.machine_of(piece)}
+                    piece = {"model": piece, "machine": placement.machine_of(piece),
+                             **({"unverified": True} if piece in unverified else {})}
                 put((kind, piece))
             put(("end", None))
         except Exception as exc:
@@ -248,7 +257,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
             put(("error", str(exc)))
 
     state = {"content": "", "thinking": "", "sources": [], "error": None, "saved": None,
-             "model": plan[0], "shown": {}, "inherit": {}}
+             "model": plan[0], "shown": {}, "inherit": {}, "unverified": False}
     saving = threading.Lock()
 
     def save():
@@ -272,6 +281,8 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
                 sources.append({"type": "summary", "collection_ids": cited})
             if state["inherit"]:          # ce que lui imposent les réponses qu'elle a reçues
                 sources.append({"type": "inherited", **state["inherit"]})
+            if state["unverified"] and not failed:    # « non vérifiable pour l'instant »
+                sources.append(dict(conversations.UNVERIFIED_SOURCE))
             if failed:
                 sources.append(dict(conversations.ERROR_SOURCE))
             state["saved"] = conversations.add_message(
@@ -299,6 +310,7 @@ async def _answer(body, request, text, plan, conv_id, executor, bus, joined=(),
                 kind, data = await inbox.get()
                 if kind == "route":
                     state["model"] = data["model"]
+                    state["unverified"] = bool(data.get("unverified"))
                     yield sse({"type": "route", **data})
                 elif kind == "summary":   # gardé pour l'enregistrement, pas montré
                     state["shown"] = data

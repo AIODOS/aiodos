@@ -7,5 +7,7 @@
   "label_other": "{name} · autre machine",
   "label_public": "Répondu par {name}, sur une machine du réseau public",
   "public_auto": "Automatique · réseau public",
-  "public_auto_title": "Le meilleur modèle d'une machine du réseau public : {models}"
+  "public_auto_title": "Le meilleur modèle d'une machine du réseau public : {models}",
+  "unverified": "non vérifiable pour l'instant",
+  "unverified_title": "Aucune autre machine ne peut encore contrôler cette réponse : le réseau public est encore petit, et aucune machine qui a ce modèle n'y a encore fait ses preuves."
 }

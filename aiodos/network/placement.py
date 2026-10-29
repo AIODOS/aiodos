@@ -28,30 +28,57 @@ nombre de paramètres lu dans le nom, public_chat.params) et contrôlable (cf. p
 meilleur modèle libre ». Elles viennent en dernier, à vitesse comparable ; une machine publique
 passe devant cette machine seulement si elle est **établie ici** (reputation.established : vue
 depuis un jour, un contrôle réussi par une de mes machines ou deux machines indépendantes,
-aucun raté) et que sa vitesse **mesurée ici** (reputation.speed : au moins une réponse servie
-et mesurée, depuis l'envoi de la demande jusqu'au dernier mot) vaut au moins FASTER fois celle
-de cette machine (node/speed.py ; inconnue sur un téléphone : toute vitesse mesurée), si elle
-répond avec un modèle plus gros accepté, ou si cette machine est occupée (une conversation en
-cours ici : la machine publique, libre, répond sans attendre) ; jamais devant une de mes
-machines libres (cette machine, libre, passe alors après elles). Entre machines publiques, à
-modèle égal, les établies d'abord, puis la plus rapide, la plus récemment vue.
+aucun raté ; sur un petit réseau, cf. plus bas, même non établie) et que sa vitesse **mesurée
+ici** (reputation.speed : au moins une réponse servie et mesurée, depuis l'envoi de la demande
+jusqu'au dernier mot) vaut au moins FASTER fois celle de cette machine (node/speed.py ;
+inconnue sur un téléphone : toute vitesse mesurée), si elle répond avec un modèle plus gros
+accepté, ou si cette machine est occupée (une conversation en cours ici : la machine publique,
+libre, répond sans attendre) ; jamais devant une de mes machines libres (cette machine, libre,
+passe alors après elles). Entre machines publiques, à modèle égal, les établies d'abord, puis
+la plus rapide, la plus récemment vue.
 La vitesse qu'une machine annonce (« tps », jusqu'à 100 000 dans un profil) ne sert qu'à
 départager les machines publiques entre elles, jamais à passer devant cette machine ni devant
 mes machines (relecture du 28/10/2026 : en annonçant une vitesse énorme, un menteur récoltait
-des conversations). Une machine jamais mesurée, ou pas établie, sert donc d'abord quand cette
-machine n'a pas le modèle, est occupée, ou pour un modèle plus gros accepté. PUBLIC_TRIES au
-plus. Identifiant : « public:<clé>:<modèle> ».
+des conversations ; l'amorce d'un téléphone, plus bas, ne s'y fie pas davantage). Une machine
+jamais mesurée, ou pas établie, sert donc d'abord quand cette machine n'a pas le modèle, est
+occupée, ou pour un modèle plus gros accepté (sur un petit réseau : cf. plus bas).
+PUBLIC_TRIES au plus. Identifiant : « public:<clé>:<modèle> ».
 
 Pourquoi « établie » et non « connue depuis quelques minutes » (known_s, 29/10/2026 au soir) :
 passer devant cette machine, libre et qui a le modèle, c'est recevoir toutes ses conversations
 de ce modèle, ce qu'un menteur cherche (les lire, y répondre mal). Une vitesse mesurée suppose
 déjà une réponse servie ici ; quelques minutes d'attente de plus ne coûtent rien à une identité
 qui coûte ~2 s de calcul (la preuve de travail du compagnon). Être établie, c'est un jour au
-moins et un contrôle réussi qu'elle ne pouvait pas reconnaître. Ce que cela coûte : sur un
-réseau encore petit, sans aucune de mes machines, une machine publique honnête et rapide ne
-passe pas devant ce téléphone tant que deux machines indépendantes ne l'ont pas contrôlée ;
-il répond lui-même, plus lentement, et la machine publique sert toujours quand il est occupé,
-n'a pas le modèle, ou pour un modèle plus gros accepté.
+moins et un contrôle réussi qu'elle ne pouvait pas reconnaître.
+
+La règle des petits réseaux (décision de l'auteur du 29/10/2026) : sur un réseau encore petit
+(son PC et son téléphone), aucune machine n'est établie, et le PC ne répondait jamais aux
+conversations du téléphone, ce qui contredit la raison d'être d'AIODOS. Tant qu'**aucune machine
+publique établie ne prête ce modèle** (_held : celles qui prêtent, place libre ou non, même
+écartées quelques minutes après un échec, reputation.bench), une machine publique qui a ce
+modèle (nom exact, pas un modèle plus gros), mesurée ici FASTER fois plus rapide que cette
+machine (même règle que plus haut, téléphone compris), passe devant même non établie ; jamais
+une machine en faute (un contrôle raté, même passé : _blameless ; de côté ou écartée, elle n'est
+déjà plus candidate). Sa réponse est marquée « non vérifiable pour l'instant » (unverified :
+plan la dit à l'appelant, routes/chat.py la garde avec le message). Dès qu'une machine établie
+prête ce modèle, la règle stricte reprend : seules les établies passent devant.
+
+L'amorce de la mesure (_trial) : jamais servie ici, une machine n'est mesurée par rien, et ne
+passerait jamais devant. Sur un téléphone seulement (android.is_android : c'est lui la machine
+lente ; un PC garde la règle stricte), sur un petit réseau (ci-dessus), libre et premier de son
+plan, sans aucune machine déjà devant lui : une machine publique jamais mesurée ici, sans faute,
+avec ce modèle, est essayée avant lui, au plus une fois par TRIAL_S toutes machines confondues
+(en mémoire : un redémarrage la rouvre). La toute première conversation part ainsi vers le PC
+public. La vitesse annoncée (« tps ») n'y suffit jamais seule : c'est le téléphone qui décide
+d'essayer, une fois par heure, quel que soit le nombre d'identités d'un menteur ; elle ne sert
+qu'à écarter une machine qui se dit elle-même trop lente (moins de FASTER fois la vitesse de ce
+téléphone, si elle est connue) et à départager, après l'ancienneté (_seniority : une identité
+neuve passe après une machine connue depuis longtemps). Ensuite, seule sa vitesse mesurée
+compte (depuis l'envoi de la demande, donc chargement du modèle compris). Sa réponse est
+marquée de même. Ce que cela coûte : un menteur rapide (un tout petit modèle, du texte sans
+valeur) passe devant comme un honnête tant qu'aucune machine établie n'a ce modèle, et un
+menteur qui se dit rapide obtient au plus une conversation par heure de chaque téléphone ; la
+marque le dit à l'utilisateur.
 
 Ce que les contrôles au hasard ont appris (network/reputation.py, 28/10/2026) : une machine
 publique mise de côté (contrôle raté), ou écartée quelques minutes après un échec (lente,
@@ -129,6 +156,9 @@ CHECKABLE_GROUPS = 3
 # L'ancienneté d'une machine publique (_seniority), comptée à partir de 10 min, à un facteur
 # deux près : 10 min, 20 min, 40 min…
 SENIOR_S = 600
+# L'amorce de la mesure sur un petit réseau (_trial) : une machine publique jamais mesurée
+# essayée avant ce téléphone, au plus une fois par heure, toutes machines confondues
+TRIAL_S = 3600
 
 _lock = threading.Lock()
 _loads = {}                 # machine -> (instant monotonic, {"chats": n, "units": n})
@@ -136,6 +166,7 @@ _sent = {}                  # machine -> conversations que je lui ai envoyées, 
 # machine -> {identifiant concret : n} : le modèle exact de chacune (« Machines connectées »,
 # activity.public_live : un prêteur qui annonce plusieurs modèles)
 _sent_models = {}
+_trial = {"at": None}       # la dernière amorce (_try_one), instant monotonic ; None : jamais
 
 
 class NoMachine(Exception):
@@ -213,6 +244,7 @@ def forget():
         _loads.clear()
         _sent.clear()
         _sent_models.clear()
+        _trial["at"] = None
 
 
 def sending() -> dict:
@@ -236,13 +268,16 @@ class Candidate:
     gpu: int = 0                # occupation du GPU (%), si elle est connue
     # Machines publiques seulement : paramètres du modèle (milliards), vitesse annoncée,
     # depuis quand elle a été vue, si elle passe devant cette machine, si elle est établie ici
-    # (reputation.established) et depuis quand elle est connue (secondes, _known)
+    # (reputation.established), depuis quand elle est connue (secondes, _known), et si elle
+    # passe devant par la règle des petits réseaux (sa réponse : « non vérifiable pour
+    # l'instant », cf. le début du module)
     params: float | None = None
     tps: float | None = None
     seen: int = 0
     ahead: bool = False
     established: bool = False
     known: int = 0
+    unverified: bool = False
 
     @property
     def local(self) -> bool:
@@ -330,12 +365,12 @@ def _remote(name: str) -> list:
     return out
 
 
-def _lending() -> list:
+def _lending(everyone: bool = False) -> list:
     """Les nœuds du réseau public qui prêtent en ce moment, avec ou sans place, d'après le
     dernier état lu au compagnon (public.seen, relu s'il date de plus de public.FRESH_S
     secondes), une fois chacun, sans ceux qu'un contrôle a mis de côté ou qu'un échec écarte
-    (reputation.is_set_aside) ; aucun si le compagnon ne sait pas leur confier une
-    conversation."""
+    (reputation.is_set_aside), sauf si everyone (_held) ; aucun si le compagnon ne sait pas
+    leur confier une conversation."""
     if public_chat.ready() is None:
         return []
     mine, nodes = public.seen(fresh=True)
@@ -345,7 +380,7 @@ def _lending() -> list:
         if key == mine or key in keys or not public_chat.valid_key(key) \
                 or not node.get("lends") or node.get("seen_s", 0) > PUBLIC_SEEN_MAX:
             continue
-        if reputation.is_set_aside(key):         # en dernier : une lecture de la base
+        if not everyone and reputation.is_set_aside(key):    # en dernier : une lecture de la base
             continue
         keys.add(key)
         found.append(node)
@@ -407,13 +442,17 @@ def _measured(node) -> float | None:
     return round(min(measured, reputation.MAX_TPS), 1) if measured is not None else None
 
 
-def _speed(node) -> float | None:
-    """La vitesse d'une machine publique : mesurée ici si on la connaît, sinon celle qu'elle
-    annonce (« tps »), bornée à reputation.MAX_TPS ; celle-ci ne sert qu'à départager les
+def _speed(node, measured=None) -> float | None:
+    """La vitesse d'une machine publique : mesurée ici si on la connaît (measured : déjà lue
+    par _measured), sinon celle qu'elle annonce (_told) ; celle-ci ne sert qu'à départager les
     machines publiques entre elles."""
-    measured = _measured(node)
-    if measured is not None:
-        return measured
+    if measured is None:
+        measured = _measured(node)
+    return measured if measured is not None else _told(node)
+
+
+def _told(node) -> float | None:
+    """La vitesse qu'une machine publique annonce (« tps »), bornée à reputation.MAX_TPS."""
     told = node.get("tps")
     return min(told, reputation.MAX_TPS) if told is not None else None
 
@@ -447,13 +486,15 @@ def _larger(models, base, checkable) -> list:
     return found
 
 
-def _public(name: str, bigger: bool, busy: bool = False) -> list:
+def _public(name: str, bigger: bool, busy: bool = False, first: bool = False) -> list:
     """Machines du réseau public qui peuvent répondre (cf. le début du module) : chacune avec
     ce modèle (nom exact), ou, si bigger, avec son plus gros modèle de conversation plus gros
     que celui-ci et contrôlable ; celles qui passent devant cette machine d'abord (établie et
-    mesurée FASTER fois plus rapide, modèle plus gros, ou cette machine occupée : busy), puis
-    le plus gros modèle, les établies, la plus rapide, la plus récemment vue. PUBLIC_TRIES au
-    plus."""
+    mesurée FASTER fois plus rapide ; sur un petit réseau, même non établie, ou essayée pour
+    l'amorce de la mesure ; modèle plus gros ; ou cette machine occupée : busy), puis le plus
+    gros modèle, les établies, la plus rapide, la plus récemment vue. PUBLIC_TRIES au plus.
+    first : cette machine a le modèle, est libre et passe la première (candidates) ; seule
+    elle permet l'amorce (_try_one)."""
     base = public_chat.params(name)
     here = speed.median()
     phone = android.is_android()
@@ -461,7 +502,8 @@ def _public(name: str, bigger: bool, busy: bool = False) -> list:
     checkable = _controllable(lending) if bigger else set()
     room = _with_room(lending)
     trusted = reputation.established_among(node["key"] for node in room)
-    found = []
+    small = not _held(name)             # la règle des petits réseaux (cf. le début du module)
+    found, fresh = [], []
     for node in room:
         chosen = next((m for m in node["models"] if same_model(m, name) and not reserved(m)),
                       None)
@@ -470,19 +512,75 @@ def _public(name: str, bigger: bool, busy: bool = False) -> list:
             chosen = larger[1]
         if chosen is None:
             continue
-        established = node["key"] in trusted
-        measured = _measured(node) if established else None
+        key = node["key"]
+        established = key in trusted
+        measured = _measured(node)
         faster = measured is not None and (measured >= FASTER * here if here is not None
                                            else phone)
+        # Non établie : devant seulement sur un petit réseau, avec ce modèle, sans faute
+        unverified = (small and faster and not established and larger is None
+                      and _blameless(key))
         found.append(Candidate(
-            model=public_chat.model_id(node["key"], chosen),
-            node_id=public_chat.PREFIX + node["key"], machine=t("placement.public_machine"),
-            trust="public", params=public_chat.params(chosen), tps=_speed(node),
-            seen=int(node.get("seen_s") or 0), ahead=faster or larger is not None or busy,
-            established=established))
+            model=public_chat.model_id(key, chosen),
+            node_id=public_chat.PREFIX + key, machine=t("placement.public_machine"),
+            trust="public", params=public_chat.params(chosen), tps=_speed(node, measured),
+            seen=int(node.get("seen_s") or 0),
+            ahead=(faster and established) or unverified or larger is not None or busy,
+            established=established, unverified=unverified))
+        if small and measured is None and not established and larger is None:
+            fresh.append((found[-1], node))         # jamais mesurée : l'amorce, peut-être
+    if first and phone and small and not any(c.ahead for c in found):
+        _try_one(fresh, here)
     found.sort(key=lambda c: (not c.ahead, -(c.params or 0), not c.established, -(c.tps or 0),
                               c.seen))
     return _offer(found[:PUBLIC_TRIES])
+
+
+def _held(name: str) -> bool:
+    """Une machine publique établie ici (reputation.established) prête-t-elle ce modèle (nom
+    exact) ? Celles qui prêtent, place libre ou non, même écartées quelques minutes après un
+    échec (reputation.bench : établie le reste, et un menteur qui ferait refuser une machine
+    établie, ou échouer, ne rouvrirait pas ainsi la règle des petits réseaux)."""
+    holders = [node["key"] for node in _lending(everyone=True)
+               if any(same_model(m, name) and not reserved(m) for m in node["models"])]
+    return bool(holders) and bool(reputation.established_among(holders))
+
+
+def _blameless(key) -> bool:
+    """Cette machine publique n'a-t-elle jamais été prise en faute ici (aucun contrôle raté,
+    même passé, ni mise de côté pour de bon) ? Seule une telle machine profite de la règle des
+    petits réseaux."""
+    row = reputation.get(key)
+    return row is None or not (row["checks_failed"] or row["forever"])
+
+
+def _try_one(fresh: list, here) -> None:
+    """L'amorce de la mesure (cf. le début du module) : parmi ces machines publiques jamais
+    mesurées ici ([(candidate, nœud)]), une seule, sans faute, qui ne se dit pas elle-même trop
+    lente (sa vitesse annoncée, si celle de ce téléphone est connue : au moins FASTER fois
+    celle-ci), passe devant, la plus ancienne (_seniority) d'abord, puis celle qui se dit la plus
+    rapide, la plus récemment vue ; au plus une fois par TRIAL_S. Sa réponse est marquée."""
+    fit = [(c, node) for c, node in fresh
+           if here is None or (_told(node) or 0) >= FASTER * here]
+    if not fit:
+        return
+    with _lock:
+        if _trial["at"] is not None and time.monotonic() - _trial["at"] < TRIAL_S:
+            return
+    known = _known([node for _c, node in fit])
+    fit = [(c, node) for c, node in fit if _blameless(node["key"])]
+    if not fit:
+        return
+    c, node = min(fit, key=lambda pair: (-_seniority(known[pair[1]["key"]]),
+                                         -(_told(pair[1]) or 0), pair[0].seen))
+    with _lock:
+        if _trial["at"] is not None and time.monotonic() - _trial["at"] < TRIAL_S:
+            return                                  # une autre conversation l'a prise
+        _trial["at"] = time.monotonic()
+    c.ahead = c.unverified = True
+    # i18n: tel quel (journal) ; la clé abrégée
+    log.info("Réseau public : %s jamais mesurée, essayée avant cette machine (petit réseau)",
+             reputation.short(node["key"]))
 
 
 def _offer(found: list) -> list:
@@ -591,7 +689,12 @@ def candidates(name: str, executor=None, public=False, bigger=False) -> list:
         found.append(here)
     ranked = sorted(found, key=Candidate.key)
     if public:
-        publics = _public(name, bigger, busy=here is not None and here.chats > 0)
+        # first : cette machine, libre, serait la première servie (aucune autre de mes machines
+        # libre : une machine publique ne passe jamais devant elles) ; une machine publique
+        # essayée avant elle (l'amorce) serait donc bien servie
+        alone = here is not None and here.chats == 0 \
+            and not any(c.chats == 0 for c in ranked if c is not here)
+        publics = _public(name, bigger, busy=here is not None and here.chats > 0, first=alone)
         ahead = [c for c in publics if c.ahead]
         if ahead and here is not None:
             # Devant cette machine, jamais devant une de mes machines libres (mes machines
@@ -608,12 +711,14 @@ def candidates(name: str, executor=None, public=False, bigger=False) -> list:
     return ranked
 
 
-def plan(model, executor=None, public=False, bigger=False) -> list:
+def plan(model, executor=None, public=False, bigger=False, unverified=None) -> list:
     """Identifiants concrets à essayer, dans l'ordre. Un modèle précis (cette machine,
     une machine appairée) passe tel quel ; « auto:<modèle> » est réparti. public, bigger :
     cf. candidates (la conversation le permet, chat/public_consent.py) ; jamais pour un
     modèle précis. « Automatique · réseau public » (PUBLIC_BEST) : les machines du réseau
-    public seules (best_public), si public.
+    public seules (best_public), si public. unverified : un ensemble, s'il est donné, qui
+    reçoit les identifiants des machines publiques passées devant par la règle des petits
+    réseaux (cf. le début du module) : leur réponse est « non vérifiable pour l'instant ».
 
     Une machine du réseau public (« public:<clé>:<modèle> ») ne se désigne jamais à la main :
     seul ce choix la propose, quand la conversation le permet (relecture du 28/10/2026 : passé
@@ -632,10 +737,13 @@ def plan(model, executor=None, public=False, bigger=False) -> list:
         ranked = candidates(name, executor, public, bigger)
         if not ranked:
             raise NoMachine(t("placement.no_machine", model=name))
+    if unverified is not None:
+        unverified.update(c.model for c in ranked if c.unverified)
     log.info("Mode automatique, « %s » : %s", name,
              # i18n: tel quel (journal)
              ", ".join(f"{c.machine} ({c.chats} conv., {c.units} unités)" if c.trust != "public"
-                       else f"{c.machine} ({public_chat.parse(c.model)[1]}, {c.tps} j/s)"
+                       else f"{c.machine} ({public_chat.parse(c.model)[1]}, {c.tps} j/s"
+                            f"{', non vérifiable' if c.unverified else ''})"  # i18n: tel quel
                        for c in ranked))
     return [c.model for c in ranked]
 

@@ -280,9 +280,11 @@ def test_an_announced_speed_never_puts_a_stranger_ahead(monkeypatch, companion, 
     devant cette machine, qui récoltait les conversations. Seule la vitesse mesurée ici (une
     réponse servie au moins) fait passer une machine publique devant cette machine ;
     l'annoncée ne départage que les machines publiques entre elles. Jamais mesurée, une
-    machine publique sert quand cette machine est occupée ou n'a pas le modèle."""
+    machine publique sert quand cette machine est occupée ou n'a pas le modèle. Ici la règle
+    stricte : une machine établie prête ce modèle (la règle des petits réseaux, et l'amorce d'un
+    téléphone qui ne se fie pas davantage à l'annonce : test_public_small.py)."""
     local_models(monkeypatch, SMALL)
-    directory(node(PC, SMALL, tps=99_999), node(OTHER, SMALL, tps=10))
+    directory(node(PC, SMALL, tps=99_999), node(OTHER, SMALL, tps=10), checkable(SMALL))
     plan = lambda busy=0: placement.plan(AUTO, Executor(busy), public=True)  # noqa: E731
     speed.note(100, 10)                                   # 10 jetons/s ici
     assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]

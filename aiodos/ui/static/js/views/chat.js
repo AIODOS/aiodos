@@ -7,7 +7,7 @@ import { icon } from '../icons.js';
 import { state, emit, on, prefs, session } from '../state.js';
 import { modal, ask, toast, errorToast } from '../ui.js';
 import { AUTO, PUBLIC_AUTO, asDefault, byPower, catalog, defaultChoice, modelLabel, modelName,
-  publicChoice } from './models.js';
+  publicChoice, unverifiedTag } from './models.js';
 import { mountSidebar, refresh as refreshTree } from './sidebar.js';
 import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated } from './model-install.js';
 import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
@@ -351,6 +351,7 @@ async function openConversation(id, { settled = false } = {}) {
     if (m.media) { appendMedia(el.list, m.media, m.id); continue; }    // image ou vidéo créée
     const view = appendAssistant(m.model, auto);
     view.node.dataset.id = m.id;
+    view.unverified(!!m.unverified);   // « non vérifiable pour l'instant », gardé avec la réponse
     if (m.thinking) view.restoreThinking(m.thinking);
     view.sources(m.sources);
     view.done(m.html);
@@ -480,7 +481,7 @@ function appendAssistant(model, here = false) {
         </details>
         <div class="md content"><div class="typing"><i></i><i></i><i></i></div></div>
         <div class="meta">
-          <span class="model-tag${isPublic(model) ? ' public' : ''}">${esc(label)}</span>
+          <span class="model-tag${isPublic(model) ? ' public' : ''}">${esc(label)}</span>${unverifiedTag()}
           <span class="sources"></span>
           <span class="actions"><button class="icon-btn" data-act="copy" title="${esc(t('chat.copy_answer'))}">${icon('copy')}</button><button class="icon-btn turn-only" data-act="regenerate" title="${esc(t('chat.regenerate'))}">${icon('retry')}</button></span>
         </div>
@@ -515,9 +516,13 @@ function appendAssistant(model, here = false) {
     clearInterval(thinkTimer);
     thinkTimer = null;
   };
+  // Une machine du réseau public passée devant par la règle des petits réseaux (placement.py)
+  const unverified = on => { node.querySelector('.unverified-tag').hidden = !on; };
   return {
     node,
+    unverified,
     route(ev) {                       // mode automatique : la machine choisie, ou qui prend le relais
+      unverified(!!ev.unverified);    // celle qui prend le relais ne l'est peut-être pas
       if (!model?.startsWith(AUTO)) return;
       const tag = node.querySelector('.model-tag');
       // Une machine du réseau public : « Répondu par qwen3.5:9b, sur une machine du réseau public »
@@ -560,7 +565,8 @@ function appendAssistant(model, here = false) {
       const box = node.querySelector('.sources');
       box.innerHTML = '';
       for (const s of list || []) {
-        if (['summary', 'inherited', 'error'].includes(s.type)) continue;   // marques internes
+        // Marques internes (« unverified » : montrée à côté du modèle, unverifiedTag)
+        if (['summary', 'inherited', 'error', 'unverified'].includes(s.type)) continue;
         if (s.type === 'web' && linkKind(s.url) === 'web') {
           // Un nouvel onglet hors de la fenêtre native : l'interface reste où elle est
           box.append(h(`<a class="source" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"
@@ -617,6 +623,9 @@ function onMessageClick(e) {
   }
   const again = e.target.closest('[data-act="regenerate"]');
   if (again) { regenerate(again.closest('.msg')); return; }
+  // « Non vérifiable pour l'instant » : pourquoi, aussi sur un écran tactile (sans infobulle)
+  const mark = e.target.closest('.unverified-tag');
+  if (mark) { toast(mark.title, 'info', 8000); return; }
   const change = e.target.closest('[data-act="edit"]');
   if (change) { startEditing(change.closest('.msg')); return; }
   onReplyLink(e);

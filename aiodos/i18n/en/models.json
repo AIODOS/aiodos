@@ -7,5 +7,7 @@
   "label_other": "{name} · another machine",
   "label_public": "Answered by {name}, on a machine on the public network",
   "public_auto": "Automatic · public network",
-  "public_auto_title": "The best model of a machine on the public network: {models}"
+  "public_auto_title": "The best model of a machine on the public network: {models}",
+  "unverified": "not verifiable yet",
+  "unverified_title": "No other machine can check this answer yet: the public network is still small, and no machine with this model has proven itself on it yet."
 }

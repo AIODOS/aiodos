@@ -35,8 +35,9 @@ depuis ESTABLISHED_S au moins (sa première vue, network/sightings.py), au moins
 réussi compté ainsi, aucun raté. Elle est préférée comme machine de contrôle, et seule elle
 peut, sans seconde machine, faire compter une faute flagrante ou peser contre des machines
 sans passé (spot_check). Depuis le 29/10/2026 au soir, elle est aussi préférée pour répondre,
-seule elle passe devant cette machine, et un modèle qu'elle a devient contrôlable
-(network/placement.py ; established_among, pour tout l'annuaire d'un coup).
+seule elle passe devant cette machine (sauf sur un petit réseau, quand aucune machine établie
+ne prête ce modèle : réponse « non vérifiable pour l'instant »), et un modèle qu'elle a devient
+contrôlable (network/placement.py ; established_among, pour tout l'annuaire d'un coup).
 """
 import logging
 import re

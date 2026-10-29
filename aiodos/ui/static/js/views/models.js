@@ -1,6 +1,7 @@
 // Modèles de conversation vus par l'interface : chaque modèle une fois, avec le mode
 // automatique (« auto:<modèle> » : la machine qui répond se choisit au moment d'envoyer,
 // cf. network/placement.py) et les machines qui l'ont, pour en désigner une.
+import { esc } from '../dom.js';
 import { locale, t } from '../i18n.js';
 import { state } from '../state.js';
 
@@ -83,6 +84,15 @@ export function modelLabel(id, here = false) {
   if (id?.startsWith('peer:')) return t('models.label_other', { name: modelName(id) });
   if (id?.startsWith(CLUSTER)) return t('models.label_split', { name: modelName(id) });
   return here && id ? t('models.label_here', { name: id }) : (id || '');
+}
+
+/** La marque d'une réponse « non vérifiable pour l'instant » (une machine du réseau public
+ *  passée devant par la règle des petits réseaux, network/placement.py), à côté de « Répondu
+ *  par … » : cachée sauf si on (chat.js la montre selon l'événement « route », ou la réponse
+ *  gardée) ; son infobulle dit pourquoi (un clic aussi, sur un écran tactile). */
+export function unverifiedTag(on = false) {
+  return `<span class="unverified-tag"${on ? '' : ' hidden'} title="${esc(t('models.unverified_title'))}">`
+    + `${esc(t('models.unverified'))}</span>`;
 }
 
 /** Identifiant à utiliser pour ce modèle quand on ne désigne pas de machine. */

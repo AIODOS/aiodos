@@ -8,6 +8,10 @@ from aiodos.knowledge import store
 
 ERROR_MARK = "⚠ "                 # début d'une réponse qui n'est qu'une erreur (affichée)
 ERROR_SOURCE = {"type": "error"}  # sa marque : montrée, jamais réutilisée (is_error)
+# La réponse d'une machine du réseau public passée devant par la règle des petits réseaux
+# (network/placement.py) : « non vérifiable pour l'instant », montrée avec elle (get :
+# « unverified ») ; rien d'autre ne la lit
+UNVERIFIED_SOURCE = {"type": "unverified"}
 
 
 def default_title() -> str:
@@ -83,6 +87,8 @@ def get(conv_id) -> dict | None:
     joined = attachments.of_messages([m["id"] for m in conv["messages"]])
     for m in conv["messages"]:
         m["attachments"] = [attachments.public(r) for r in joined.get(m["id"], [])]
+        m["unverified"] = any(s.get("type") == UNVERIFIED_SOURCE["type"]
+                              for s in _sources(m["sources"]))
     return conv
 
 
