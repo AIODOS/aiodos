@@ -5,7 +5,8 @@
 // ce moment), puis les modèles, du plus puissant au plus modeste, avec où ils peuvent tourner
 // (ici, mes machines, mes amis, le réseau public) et ⚠ pour une licence restrictive ; ceux qui ne
 // sont nulle part, « à télécharger », mènent à Réglages → Modèles (jamais un téléchargement
-// direct). L'onglet Audio attend ses modèles (« bientôt ») : il se remplira comme les autres.
+// direct). L'onglet Audio a trois parties, Voix, Musique et Effets sonores (audio/ranking.py,
+// « genres ») : chacune son « Automatique » et ses modèles ; un choix y dit son genre.
 // Les données : GET /models/menu (chat/model_menu.py), lues à l'ouverture et gardées pour tous
 // les panneaux. Le même panneau sert sous la saisie (chat.js : le texte et le mode « Créer » de
 // chat-create.js) et dans Réglages → Modèles pour les choix par défaut (settings-models.js).
@@ -101,9 +102,9 @@ function warn(m) {
   return ` <span class="mm-warn" title="${esc(text)}">⚠</span>`;
 }
 
-function radio({ id = '', label, small = '', checked, extra = '', title = '' }) {
+function radio({ id = '', label, small = '', checked, extra = '', title = '', genre = '' }) {
   return `<button type="button" class="mm-item${id ? '' : ' mm-auto'}" role="radio" aria-checked="${checked}"
-      data-id="${esc(id)}"${title ? ` title="${esc(title)}"` : ''}>
+      data-id="${esc(id)}"${genre ? ` data-genre="${esc(genre)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>
       <span class="mm-mark" aria-hidden="true"></span>
       <span class="mm-txt"><b>${label}</b>${small ? `<small>${esc(small)}</small>` : ''}</span>${extra}</button>`;
 }
@@ -133,8 +134,11 @@ function suggestRow(s) {
  * Un bouton « Modèle » et son panneau. options :
  * - kindNow() : le genre en cours ('text', 'image', 'video', 'audio') : le bouton le dit, le
  *   panneau s'ouvre sur son onglet ;
- * - chosen(kind) : l'identifiant choisi pour ce genre, null pour « Automatique » ;
- * - pick(kind, id, model) : un choix (id null : « Automatique ») ;
+ * - chosen(kind, genre) : l'identifiant choisi pour ce genre, null pour « Automatique » (l'audio :
+ *   genre, 'voice', 'music' ou 'sound') ;
+ * - genre() : le genre d'audio en cours (le bouton le dit : « Voix · Automatique ») ;
+ * - pick(kind, id, model) : un choix (id null : « Automatique » ; l'audio : model.genre dit le
+ *   genre, { genre } pour son « Automatique ») ;
  * - mineOnly() : « Sur mes machines seulement » (rien du réseau public) ;
  * - name(kind, id) : le nom d'un identifiant que le menu ne connaît pas (encore) ;
  * - same(kind, a, b) : deux identifiants désignent-ils le même modèle ? (texte : la machine
@@ -144,6 +148,7 @@ function suggestRow(s) {
  */
 export function modelMenu(options = {}) {
   const o = { kindNow: () => 'text', chosen: () => null, pick: () => {}, mineOnly: () => false,
+    genre: () => 'voice',
     name: (kind, id) => id || '', same: (kind, a, b) => a === b, prefix: true, drop: 'up',
     kinds: KINDS, ...options };
   const uid = `mm${++made}`;
@@ -173,10 +178,34 @@ export function modelMenu(options = {}) {
 
   const part = () => menuData(o.mineOnly())?.[tab] || null;
 
+  /** L'onglet Audio : une partie par genre (voix, musique, effets), chacune avec son
+   *  « Automatique » et ses modèles prêts ; ceux à télécharger, ensemble, en bas. */
+  function audioHtml(found) {
+    const later = (found.models || []).filter(m => !m.ready);
+    const genres = found.genres || [{ genre: 'voice', auto: found.auto, suggest: found.suggest }];
+    return genres.map(g => {
+      const current = o.chosen('audio', g.genre);
+      const ready = (found.models || []).filter(m => m.ready && (m.genre || 'voice') === g.genre);
+      const auto = radio({ label: esc(t('model_menu.automatic')), small: autoText(g.auto), genre: g.genre,
+        checked: !current, title: t('model_menu.auto_title_audio'),
+        extra: `<span class="pill ok mm-pill">${esc(t('model_menu.recommended'))}</span>` });
+      const models = ready.map(m => radio({ id: m.id, label: esc(m.label) + warn(m), small: whereText(m),
+        checked: !!current && o.same('audio', m.id, current) }));
+      const suggest = g.suggest && later.some(m => m.id === g.suggest.model) ? suggestRow(g.suggest) : '';
+      // model_menu.genre_voice, model_menu.genre_music, model_menu.genre_sound
+      const name = t(`model_menu.genre_${g.genre}`);
+      return `<div class="mm-sub">${esc(name)}</div>
+        <div class="mm-list" role="radiogroup" aria-label="${esc(t('model_menu.list_label', { kind: name }))}">
+        ${auto}${models.join('')}</div>${suggest}`;
+    }).join('') + (later.length
+      ? `<div class="mm-sub">${esc(t('model_menu.to_download'))}</div>${later.map(downloadRow).join('')}` : '');
+  }
+
   function listHtml(kind, found) {
     if (kind === 'audio' && !found.models?.length) {
-      return `<div class="mm-empty">${icon('audio')}<span>${esc(t('model_menu.soon_audio'))}</span></div>`;
+      return `<div class="mm-empty">${icon('audio')}<span>${esc(t('model_menu.no_audio'))}</span></div>`;
     }
+    if (kind === 'audio') return audioHtml(found);
     const current = o.chosen(kind);
     const ready = (found.models || []).filter(m => m.ready);
     const later = (found.models || []).filter(m => !m.ready);
@@ -251,13 +280,16 @@ export function modelMenu(options = {}) {
   /** Le libellé du bouton : le genre en cours et son choix. */
   function refresh() {
     const kind = o.kindNow();
-    const id = o.chosen(kind);
+    const genre = kind === 'audio' ? o.genre() : null;
+    const id = o.chosen(kind, genre);
     const found = id ? menuData(o.mineOnly())?.[kind]?.models?.find(m => o.same(kind, m.id, id)) : null;
     const choice = !id ? t('model_menu.automatic')
       : found ? [found.label, found.split ? t('model_menu.split') : ''].filter(Boolean).join(' · ')
       : o.name(kind, id);
     root.querySelector('.mm-ico').innerHTML = icon(ICONS[kind] || 'chat');
-    root.querySelector('.mm-label').textContent = o.prefix ? `${t(`model_menu.kind_${kind}`)} · ${choice}` : choice;
+    // L'audio dit son genre : « Voix · Automatique »
+    const what = genre ? t(`model_menu.genre_${genre}`) : t(`model_menu.kind_${kind}`);
+    root.querySelector('.mm-label').textContent = o.prefix ? `${what} · ${choice}` : choice;
     if (active === api) repaint();
   }
 
@@ -306,7 +338,8 @@ export function modelMenu(options = {}) {
       return;
     }
     const id = item.dataset.id || null;
-    const model = id ? (part()?.models || []).find(m => m.id === id) || null : null;
+    const model = id ? (part()?.models || []).find(m => m.id === id) || null
+      : item.dataset.genre ? { genre: item.dataset.genre } : null;
     const kind = tab;
     close(true);
     accepted(model).then(ok => {
@@ -324,7 +357,8 @@ export function modelMenu(options = {}) {
       text: model.notice || t('model_menu.restricted', { license: model.license || '' }),
       iconName: 'warn', confirm: t('model_menu.license_confirm'), cancel: t('ui.cancel') });
     if (!ok) return false;
-    try { await post(`/images/models/${encodeURIComponent(model.id)}/license`, {}); }
+    const where = model.kind === 'audio' ? 'audio' : 'images';
+    try { await post(`/${where}/models/${encodeURIComponent(model.id)}/license`, {}); }
     catch (err) { errorToast(err); return false; }
     model.accepted = true;
     return true;

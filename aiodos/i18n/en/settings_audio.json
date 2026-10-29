@@ -1,0 +1,10 @@
+{
+  "title": "Voice, music, sound effects",
+  "genre_voice": "Voice",
+  "genre_music": "Music",
+  "genre_sound": "Sound effects",
+  "engine_missing": "audio.cpp is not installed on this machine: it comes with AIODOS versions (or in the data/engines/audio.cpp folder).",
+  "experimental": "experimental",
+  "vram_fits": "It needs {size} of graphics memory: this PC can run it.",
+  "vram_heavy": "It needs {size} of graphics memory: too heavy for this PC's card."
+}

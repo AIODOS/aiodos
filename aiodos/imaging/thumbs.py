@@ -39,8 +39,8 @@ def _name(row: dict, size: int) -> str:
 
 def thumbnail(row: dict, wanted: int) -> Path | None:
     """Le fichier de la vignette (fait au besoin) ; None pour une vidéo, ou si l'image ne
-    se lit pas (le fichier entier sert alors)."""
-    if row.get("media") == "video":
+    se lit pas (le fichier entier sert alors). None aussi pour un son (audio/)."""
+    if row.get("media") in ("video", "audio"):
         return None
     size = size_for(wanted)
     target = folder() / _name(row, size)

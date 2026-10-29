@@ -164,9 +164,18 @@ async def list_images(limit: int = 60, before: int | None = None, batch: str | N
     def listed():
         rows = gallery.batch(batch) if batch else gallery.list_images(limit, before)
         talks = conversations.by_batch(row["batch"] for row in rows)
-        return [dict(row, path=str(gallery.path_of(row)),
+        return [dict(row, path=str(gallery.path_of(row)), label=_sound_label(row),
                      conversation_id=talks.get(row["batch"])) for row in rows]
     return await asyncio.to_thread(listed)
+
+
+def _sound_label(row: dict) -> str | None:
+    """Le nom du modèle d'un son de la galerie (audio/catalog.py), pour la visionneuse."""
+    if row.get("media") != "audio":
+        return None
+    from aiodos.audio import catalog as audio_catalog
+    found = audio_catalog.MODELS.get(row["model"])
+    return found["label"] if found else row["model"]
 
 
 @router.get("/{image_id}/file")

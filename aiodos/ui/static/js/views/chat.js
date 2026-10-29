@@ -13,6 +13,7 @@ import { chooseModel, progressBar, cancelInstall, finished, isPhone, integrated 
 import { mountAttach, pendingItems, attaching, clearAttachments, attachmentsHtml } from './chat-attach.js';
 import { mountCreate, creationRequest, autoRequest, appendMedia, appendNotice, appendWaiting,
   resetMedia, setMode, createKind, createChoice, createLabel, pickCreate } from './chat-create.js';
+import { isAudioKind } from './chat-audio.js';
 import { mountPermissions } from './chat-permissions.js';
 import { isPublic, mineOnly, showNotice } from './chat-public.js';
 import { menuData, modelMenu } from './model-menu.js';
@@ -117,10 +118,13 @@ export function mountChat(container) {
   mountAttach(chat, el.input);              // trombone, fichier glissé, image collée
   mountPermissions(chat.querySelector('.composer-tools'));   // sous la saisie, avant le modèle
   // Le modèle : le texte de la conversation, ou celui du mode « Créer » ouvert (chat-create.js)
+  // L'audio : un onglet, trois genres (voix, musique, effets sonores), chacun son choix
+  const audioNow = () => (isAudioKind(createKind()) ? createKind() : 'voice');
   menu = modelMenu({
-    kindNow: () => createKind() || 'text',
-    chosen: kind => (kind === 'text' ? (textChoice && textChoice !== BEST_AUTO ? textChoice : null)
-      : kind === 'audio' ? null : createChoice(kind)),
+    kindNow: () => (isAudioKind(createKind()) ? 'audio' : createKind() || 'text'),
+    chosen: (kind, genre) => (kind === 'text' ? (textChoice && textChoice !== BEST_AUTO ? textChoice : null)
+      : kind === 'audio' ? createChoice(genre || audioNow()) : createChoice(kind)),
+    genre: audioNow,
     pick: pickModel,
     mineOnly,
     name: (kind, id) => (kind === 'text' ? modelName(id) : createLabel(id)),
@@ -254,10 +258,11 @@ function fillMachines(wanted) {
 }
 
 /** Un choix du menu des modèles : un modèle de conversation (le mode « Créer » se ferme), ou
- *  un modèle d'images ou de vidéos (le mode « Créer » de ce genre s'ouvre, chat-create.js).
- *  Il vaut pour cette conversation ; le choix par défaut se règle dans Réglages → Modèles. */
-function pickModel(kind, id) {
-  if (kind === 'audio') return;                   // bientôt (docs/conception/modeles-auto.md)
+ *  un modèle d'images, de vidéos ou d'audio (le mode « Créer » de ce genre s'ouvre,
+ *  chat-create.js ; l'audio : le genre de la partie de l'onglet, model.genre). Il vaut pour
+ *  cette conversation ; le choix par défaut se règle dans Réglages → Modèles. */
+function pickModel(kind, id, model) {
+  if (kind === 'audio') { pickCreate(model?.genre || 'voice', id); return; }
   if (kind !== 'text') { pickCreate(kind, id); return; }
   if (createKind()) setMode(null);
   textChoice = id || BEST_AUTO;

@@ -1,0 +1,14 @@
+{
+  "nothing_ready_voice": "Aucun modèle de voix ne peut lire en ce moment, ni ici ni chez tes machines en ligne : télécharges-en un dans Réglages → Modèles.",
+  "nothing_ready_music": "Aucun modèle de musique ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : télécharges-en un dans Réglages → Modèles.",
+  "nothing_ready_sound": "Aucun modèle d'effets sonores ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : télécharges-en un dans Réglages → Modèles.",
+  "nothing_ready_friends": {
+    "one": "Aucun modèle d'audio n'est prêt ici ni chez tes machines, mais {who} peut le calculer pour toi : ton texte et le son passeront chez lui le temps du calcul, sans y être gardés.",
+    "other": "Aucun modèle d'audio n'est prêt ici ni chez tes machines, mais {who} peuvent le calculer pour toi : ton texte et le son passeront chez eux le temps du calcul, sans y être gardés."
+  },
+  "no_attachment": "Une création audio ne part pas d'un fichier joint.",
+  "voice": "Voix",
+  "lyrics": "Paroles",
+  "coming": "Le son arrive…",
+  "computed_in": "calculé en {time}"
+}

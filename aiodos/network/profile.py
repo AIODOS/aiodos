@@ -203,6 +203,8 @@ SCHEMA = _object({
                         "device": _optional(_text(200)), "free_mib": _integer(0, 1 << 40)}),
     "images": _object({"engine": _optional(_text(80)), "models": _items(_text(100), 200),
                        "shares": _flag}),
+    "audio": _object({"engine": _optional(_text(80)), "models": _items(_text(100), 200),
+                      "shares": _flag}),
     "updates": _object({"offer": _optional(_text(40)),
                         "files": _mapping(_text(40), _items(_text(60), 32), 64)}),
     "consult": _object({"open": _integer(0, 10_000)}),          # remote_search.MAX_OPEN

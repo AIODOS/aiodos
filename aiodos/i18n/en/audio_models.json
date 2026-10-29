@@ -1,0 +1,18 @@
+{
+  "voice_female": "Female voice",
+  "voice_male": "Male voice",
+  "voice_cheerful": "Cheerful voice",
+  "voice_deep": "Deep voice",
+  "about_voxtral": "Mistral (03/2026), 4 billion parameters: the best-ranked open voice model that speaks French (Artificial Analysis, October 2026), nine languages, built-in voices. An 8 GB graphics card.",
+  "notice_voxtral": "Voxtral 4B TTS is published under the Creative Commons BY-NC 4.0 license (that of its reference voices): non-commercial use only; credit Mistral AI. Text: https://creativecommons.org/licenses/by-nc/4.0/. AIODOS does not distribute this model: it downloads it from Hugging Face at your request. Installing and using it is your sole responsibility.",
+  "about_qwen3_tts": "Alibaba (01/2026), 1.7 billion parameters: ten languages including French, four voices offered. A 6 GB graphics card.",
+  "about_pocket_tts": "Kyutai, 100 million parameters, one language per model: very light, it also runs without a graphics card (CC BY 4.0 license: credit Kyutai).",
+  "about_music3": "MiniMax (08/2026): the best open music model (Artificial Analysis), songs with lyrics. Heavy: 8 GB to download, a 10 GB graphics card; experimental in audio.cpp.",
+  "notice_music3": "MiniMax Music 3 is published under the “MiniMax-Music3 Community License”: the name “MiniMax-Music3” must be shown by the product that uses it; above 20 million dollars of annual revenue, written permission from MiniMax; published content must be disclosed as AI-generated. Text: https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE. AIODOS does not distribute this model: it downloads it from Hugging Face at your request. Installing and using it is your sole responsibility.",
+  "about_ace_step": "ACE-Step (01/2026), songs with lyrics in about fifty languages, in a few seconds on a good card. 10 GB to download, a 12 GB graphics card.",
+  "notice_stable_audio": "Stable Audio 3 is published under the “Stability AI Community License”: free, commercial use included, as long as you and your affiliates make less than one million dollars of annual revenue (above that, a paid license; commercial use must be registered with Stability AI and display “Powered by Stability AI”); its text encoder follows the Gemma terms of use. Text: https://huggingface.co/stabilityai/stable-audio-3-small-sfx/blob/main/LICENSE.md. AIODOS does not distribute this model: it downloads it from Hugging Face at your request. Installing and using it is your sole responsibility.",
+  "about_sa3_medium": "Stability AI (05/2026), 1.4 billion parameters: instrumental music up to 6 minutes. A 6 GB graphics card.",
+  "about_sa3_small": "Stability AI (05/2026), 0.5 billion parameters: instrumental music up to 2 minutes, light. A 4 GB graphics card.",
+  "about_sa3_sfx": "Stability AI (05/2026), 0.5 billion parameters, made for sound effects (noises, ambiences), designed for laptops. A 4 GB graphics card.",
+  "about_midasheng": "mispeech, a sound described in layers (speech, music, effects, ambience): it serves for music as well as sound effects. Apache-2.0 license; experimental in audio.cpp. A 6 GB graphics card."
+}

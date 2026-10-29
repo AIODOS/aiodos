@@ -14,5 +14,7 @@
   "saved": "Saved: {where}",
   "delete_image": "Delete this image?",
   "delete_video": "Delete this video?",
-  "delete_text": "The file will be deleted from this machine."
+  "delete_text": "The file will be deleted from this machine.",
+  "sound_length": "{n} s of sound",
+  "delete_audio": "Delete this sound?"
 }

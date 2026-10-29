@@ -1,0 +1,18 @@
+{
+  "voice_female": "Voix de femme",
+  "voice_male": "Voix d'homme",
+  "voice_cheerful": "Voix enjouée",
+  "voice_deep": "Voix grave",
+  "about_voxtral": "Mistral (03/2026), 4 milliards de paramètres : la voix ouverte la mieux classée qui parle français (Artificial Analysis, octobre 2026), neuf langues, des voix intégrées. Une carte de 8 Go.",
+  "notice_voxtral": "Voxtral 4B TTS est publié sous la licence Creative Commons BY-NC 4.0 (celle de ses voix de référence) : usage non commercial seulement ; citer Mistral AI. Texte : https://creativecommons.org/licenses/by-nc/4.0/. AIODOS ne distribue pas ce modèle : il le télécharge à ta demande, depuis Hugging Face. L'installer et l'utiliser relève de ta seule responsabilité.",
+  "about_qwen3_tts": "Alibaba (01/2026), 1,7 milliard de paramètres : dix langues dont le français, quatre voix proposées. Une carte de 6 Go.",
+  "about_pocket_tts": "Kyutai, 100 millions de paramètres, une langue par modèle : très léger, il tourne aussi sans carte graphique (licence CC BY 4.0 : citer Kyutai).",
+  "about_music3": "MiniMax (08/2026) : le meilleur modèle de musique ouvert (Artificial Analysis), des chansons avec paroles. Lourd : 8 Go à télécharger, une carte de 10 Go ; expérimental dans audio.cpp.",
+  "notice_music3": "MiniMax Music 3 est publié sous la « MiniMax-Music3 Community License » : le nom « MiniMax-Music3 » doit être affiché par le produit qui s'en sert ; au-delà de 20 millions de dollars de chiffre d'affaires annuel, une autorisation écrite de MiniMax ; un contenu publié doit être signalé comme créé par une IA. Texte : https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE. AIODOS ne distribue pas ce modèle : il le télécharge à ta demande, depuis Hugging Face. L'installer et l'utiliser relève de ta seule responsabilité.",
+  "about_ace_step": "ACE-Step (01/2026), des chansons avec paroles dans une cinquantaine de langues, en quelques secondes sur une bonne carte. 10 Go à télécharger, une carte de 12 Go.",
+  "notice_stable_audio": "Stable Audio 3 est publié sous la « Stability AI Community License » : gratuit, usage commercial compris, tant que toi et tes sociétés affiliées faites moins d'un million de dollars de chiffre d'affaires annuel (au-delà, une licence payante ; un usage commercial se déclare à Stability AI et affiche « Powered by Stability AI ») ; son encodeur de texte suit les conditions d'utilisation de Gemma. Texte : https://huggingface.co/stabilityai/stable-audio-3-small-sfx/blob/main/LICENSE.md. AIODOS ne distribue pas ce modèle : il le télécharge à ta demande, depuis Hugging Face. L'installer et l'utiliser relève de ta seule responsabilité.",
+  "about_sa3_medium": "Stability AI (05/2026), 1,4 milliard de paramètres : musique instrumentale jusqu'à 6 minutes. Une carte de 6 Go.",
+  "about_sa3_small": "Stability AI (05/2026), 0,5 milliard de paramètres : musique instrumentale jusqu'à 2 minutes, léger. Une carte de 4 Go.",
+  "about_sa3_sfx": "Stability AI (05/2026), 0,5 milliard de paramètres, fait pour les effets sonores (bruits, ambiances), pensé pour les portables. Une carte de 4 Go.",
+  "about_midasheng": "mispeech, un son décrit par couches (parole, musique, effets, ambiance) : il sert pour la musique comme pour les effets sonores. Licence Apache-2.0 ; expérimental dans audio.cpp. Une carte de 6 Go."
+}

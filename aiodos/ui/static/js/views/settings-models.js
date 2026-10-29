@@ -3,6 +3,7 @@
 // des vidéos, du plus puissant au moins puissant, ceux à télécharger en bas. Le téléchargement
 // (Hugging Face, ou copie depuis mes machines, fichiers déjà sur ce PC repris d'abord) se fait
 // ici ; l'onglet Images (images.js) n'en montre qu'un résumé, avec un lien vers cette section.
+// L'audio a sa section (settings-audio.js) et trois choix par défaut : voix, musique, effets.
 import { get, post, put, del } from '../api.js';
 import { bytes, esc, h } from '../dom.js';
 import { t } from '../i18n.js';
@@ -12,9 +13,12 @@ import { errorToast, modal, toast } from '../ui.js';
 import { BEST_AUTO, asDefault, byPower, catalog, modelName } from './models.js';
 import { chooseModel, progressBar, cancelInstall, isPhone } from './model-install.js';
 import { loadMenu, menuData, modelMenu } from './model-menu.js';
+import { audioDownloading, audioModelsHtml, bindAudio, loadAudioModels } from './settings-audio.js';
 
-// Le réglage du choix par défaut de chaque genre (settings.py) ; l'audio viendra
-const DEFAULTS = { text: 'default_model', image: 'default_image_model', video: 'default_video_model' };
+// Le réglage du choix par défaut de chaque genre (settings.py) ; l'audio, un par genre
+const DEFAULTS = { text: 'default_model', image: 'default_image_model', video: 'default_video_model',
+  voice: 'default_voice_model', music: 'default_music_model', sound: 'default_sound_model' };
+const AUDIO = ['voice', 'music', 'sound'];
 
 let info = null;                 // modèles d'images et de vidéos (GET /images/models)
 let installing = null;           // installation d'un modèle de discussion en cours
@@ -26,21 +30,25 @@ export function mountModels() {
   });
   setInterval(() => {            // avancement d'un téléchargement
     if (state.view === 'settings' && info?.download?.running) loadImageModels();
+    if (state.view === 'settings' && audioDownloading()) loadAudioModels();
   }, 1500);
 }
 
 export async function loadImageModels() {
+  loadAudioModels();
   try { info = await get('/images/models'); } catch (err) { errorToast(err); return; }
   emit('image-models:loaded');
 }
 
 export function modelsCard() {
   return `<h3 class="settings-sub">${icon('chat')}${esc(t('nav.chat'))}</h3>${chatModels()}
-    <h3 class="settings-sub">${icon('image')}${esc(t('images.title'))}</h3>${imageModels()}`;
+    <h3 class="settings-sub">${icon('image')}${esc(t('images.title'))}</h3>${imageModels()}
+    <h3 class="settings-sub">${icon('audio')}${esc(t('settings_audio.title'))}</h3>${audioModelsHtml()}`;
 }
 
 export function bindModels(box) {
   if (!box) return;
+  bindAudio(box);
   box.querySelectorAll('[data-install]').forEach(b => { b.onclick = chooseModel; });
   box.querySelectorAll('[data-install-cancel]').forEach(b => { b.onclick = cancelInstall; });
   box.querySelectorAll('[data-download]').forEach(b => {
@@ -89,19 +97,22 @@ export function mountDefaults(box) {
 }
 
 function buildDefaults() {
+  // model_menu.tab_text… ; l'audio, un par genre : model_menu.genre_voice, genre_music, genre_sound
+  const name = kind => t(AUDIO.includes(kind) ? `model_menu.genre_${kind}` : `model_menu.tab_${kind}`);
   const box = h(`<div><h3 class="settings-sub">${icon('check')}${esc(t('model_menu.defaults'))}</h3>
     <p class="hint">${esc(t('model_menu.defaults_help'))}</p>
-    <div class="mm-defaults">${['text', 'image', 'video', 'audio'].map(kind => `
-      <div class="mm-default" data-kind="${kind}"><span class="mm-default-name">${esc(t(`model_menu.tab_${kind}`))}</span></div>`).join('')}</div></div>`);
+    <div class="mm-defaults">${['text', 'image', 'video', ...AUDIO].map(kind => `
+      <div class="mm-default" data-kind="${kind}"><span class="mm-default-name">${esc(name(kind))}</span></div>`).join('')}</div></div>`);
   const menus = [];
   for (const row of box.querySelectorAll('.mm-default')) {
     const kind = row.dataset.kind;
-    if (!DEFAULTS[kind]) {                       // l'audio : bientôt
-      row.insertAdjacentHTML('beforeend', `<span class="faint">${esc(t('model_menu.soon'))}</span>`);
-      continue;
-    }
+    // Une ligne de l'audio ouvre l'onglet Audio ; un choix y vaut pour le genre de sa partie
+    const audio = AUDIO.includes(kind);
     const menu = modelMenu({
-      kindNow: () => kind, chosen: defaultOf, pick: saveDefault, prefix: false, drop: 'down',
+      kindNow: () => (audio ? 'audio' : kind), genre: () => kind,
+      chosen: (k, genre) => defaultOf(k === 'audio' ? genre || kind : k),
+      pick: (k, id, model) => saveDefault(k === 'audio' ? model?.genre || kind : k, id),
+      prefix: false, drop: 'down',
       name: (k, id) => (k === 'text' ? modelName(id) : info?.models.find(m => m.id === id)?.label || id),
       same: (k, a, b) => a === b || (k === 'text' && modelName(a) === modelName(b)
         && !/^reparti:/.test(a) && !/^reparti:/.test(b)),

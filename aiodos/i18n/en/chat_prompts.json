@@ -25,5 +25,19 @@
   "capability_both": "AIODOS, the application you are answering in, can also create images and videos: the user asks for them in the conversation (for example “Create an image of a lighthouse in a storm”) and AIODOS creates them itself.",
   "capability_more": "If you are asked whether you can create them, answer yes and invite the user to describe what to create. You do not see the created images: you only know their description.",
   "rewrite_system": "You rewrite descriptions of images and videos for a model that creates them. You are given the current description and a requested change: write the complete new description, keeping everything that is not changed. Answer only with the description, in one to three sentences, in the language of the current description, without quotation marks or comments.",
-  "rewrite_request": "Current description: {prompt}\nRequested change: {change}"
+  "rewrite_request": "Current description: {prompt}\nRequested change: {change}",
+  "creation_voice": {
+    "one": "(Read aloud with {model}, the text: “{prompt}”.)",
+    "other": "({n} readings aloud with {model}, the text: “{prompt}”.)"
+  },
+  "creation_music": {
+    "one": "(Music created with {model} from the description: “{prompt}”.)",
+    "other": "({n} tracks created with {model} from the description: “{prompt}”.)"
+  },
+  "creation_sound": {
+    "one": "(Sound effect created with {model} from the description: “{prompt}”.)",
+    "other": "({n} sound effects created with {model} from the description: “{prompt}”.)"
+  },
+  "capability_audio": "It can also create audio: read a text aloud (“Read this text: …”), music (“Create some calm music”), a sound effect (“Make the sound of a creaking door”).",
+  "capability_audio_only": "AIODOS, the application you are answering in, can also create audio: read a text aloud (“Read this text: …”), music (“Create some calm music”), a sound effect (“Make the sound of a creaking door”). If you are asked whether you can create them, answer yes and invite the user to say what to create. You do not hear the created sounds: you only know their description."
 }

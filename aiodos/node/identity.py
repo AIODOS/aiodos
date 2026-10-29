@@ -232,6 +232,15 @@ def _images() -> dict:
             "shares": bool(settings.get("share_enabled"))}
 
 
+def _audio() -> dict:
+    """Audio (audio/) : version d'audio.cpp, modèles complets ici, comme _images."""
+    from aiodos.audio import engine as audio_engine, files as audio_files
+    found = audio_engine.info()
+    return {"engine": found["version"] if found else None,
+            "models": audio_files.available() if found else [],
+            "shares": bool(settings.get("share_enabled"))}
+
+
 def _updates() -> dict:
     """offer : la version la plus récente que cette machine transmet (une machine 2.0.x
     ne lit que cette clé) ; files : les fichiers qu'elle a de chaque paquet, compagnons
@@ -276,6 +285,7 @@ def profile(max_age=5.0) -> dict:
         "stream_alive": True,
         "cluster": _cluster(),                   # gros modèles répartis (cluster/)
         "images": _images(),                     # images réparties (imaging/)
+        "audio": _audio(),                       # voix, musique, effets (audio/)
         "updates": _updates(),                   # versions transmissibles (updates/p2p.py)
         # ComfyUI accordé de ce PC : version, modèles (engines/lending.py) ; jamais vu
         # d'un ami (network/sharing.FRIEND_PROFILE)

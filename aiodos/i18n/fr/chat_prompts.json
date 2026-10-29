@@ -25,5 +25,19 @@
   "capability_both": "AIODOS, l'application où tu réponds, sait aussi créer des images et des vidéos : l'utilisateur les demande dans la conversation (par exemple « Crée une image d'un phare sous l'orage ») et AIODOS les crée lui-même.",
   "capability_more": "Si on te demande si tu sais en créer, réponds que oui et invite à décrire ce qu'il faut créer. Tu ne vois pas les images créées : tu n'en connais que la description.",
   "rewrite_system": "Tu réécris des descriptions d'images et de vidéos pour un modèle qui les crée. On te donne la description actuelle et une modification demandée : écris la nouvelle description complète, qui garde tout ce qui n'est pas modifié. Réponds uniquement par la description, en une à trois phrases, dans la langue de la description actuelle, sans guillemets ni commentaire.",
-  "rewrite_request": "Description actuelle : {prompt}\nModification demandée : {change}"
+  "rewrite_request": "Description actuelle : {prompt}\nModification demandée : {change}",
+  "creation_voice": {
+    "one": "(Lecture à voix haute avec {model} du texte : « {prompt} ».)",
+    "other": "({n} lectures à voix haute avec {model} du texte : « {prompt} ».)"
+  },
+  "creation_music": {
+    "one": "(Création d'une musique avec {model}, d'après la description : « {prompt} ».)",
+    "other": "(Création de {n} musiques avec {model}, d'après la description : « {prompt} ».)"
+  },
+  "creation_sound": {
+    "one": "(Création d'un effet sonore avec {model}, d'après la description : « {prompt} ».)",
+    "other": "(Création de {n} effets sonores avec {model}, d'après la description : « {prompt} ».)"
+  },
+  "capability_audio": "Il sait aussi créer de l'audio : lire un texte à voix haute (« Lis ce texte : … »), une musique (« Crée une musique calme »), un effet sonore (« Fais le bruit d'une porte qui grince »).",
+  "capability_audio_only": "AIODOS, l'application où tu réponds, sait aussi créer de l'audio : lire un texte à voix haute (« Lis ce texte : … »), une musique (« Crée une musique calme »), un effet sonore (« Fais le bruit d'une porte qui grince »). Si on te demande si tu sais en créer, réponds que oui et invite à dire ce qu'il faut créer. Tu n'entends pas les sons créés : tu n'en connais que la description."
 }

@@ -10,6 +10,8 @@
 // créée par une machine du réseau public, avec l'accord demandé une fois, le même pour les deux
 // (chat/public_creations.py). Les recettes de ComfyUI et mes workflows prêts ici ou chez mes
 // machines s'ajoutent aux modèles (GET /chat/create/comfyui, chat/comfy_creations.py).
+// L'audio aussi (chat-audio.js) : « Une voix », « Une musique », « Un effet sonore », leurs
+// modèles (GET /audio/models), leur durée ou leur voix dans la barre, un lecteur par son.
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { t } from '../i18n.js';
@@ -19,6 +21,7 @@ import { state, on, emit, prefs } from '../state.js';
 import { menu, toast, errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
 import { mineOnly } from './chat-public.js';
+import { AUDIO_KINDS, isAudioKind, secondsFor, defaultSeconds, audioHtml, soundLength } from './chat-audio.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const COUNTS = [1, 2, 4, 8];
@@ -28,12 +31,13 @@ const SECONDS = [1, 2, 3, 5];
 const SHAPE = { image: 'square', video: 'landscape' };
 // Les textes de chaque genre : chat_create.kind_image, create_image, placeholder_image,
 // no_model_image, count_image… (et _video)
-const KINDS = { image: { icon: 'image' }, video: { icon: 'video' } };
+const KINDS = { image: { icon: 'image' }, video: { icon: 'video' }, ...AUDIO_KINDS };
 const kindOf = media => (KINDS[media.kind] ? media.kind : 'image');
 
 let info = null;              // modèles d'images et de vidéos (GET /images/models)
 let comfy = [];               // recettes de ComfyUI et mes workflows prêts (GET /chat/create/comfyui)
-let mode = null;              // null, 'image' ou 'video' : le mode « Créer » du message
+let audio = null;             // modèles d'audio (GET /audio/models)
+let mode = null;              // null, 'image', 'video', 'voice', 'music' ou 'sound' : le mode « Créer »
 // Le modèle choisi dans le menu pour chaque genre (null : « Automatique ») ; absent : celui des
 // Réglages (default_image_model, default_video_model). Une nouvelle conversation les reprend
 let picked = {};
@@ -56,6 +60,7 @@ export function mountCreate(footer, input, grow) {
       <button class="create-kind" data-c="close" title="${esc(t('chat_create.close'))}"></button>
       <select class="select" data-c="format" title="${esc(t('chat_create.format'))}"></select>
       <select class="select" data-c="frames" title="${esc(t('chat_create.duration'))}" hidden></select>
+      <select class="select" data-c="voice" title="${esc(t('chat_audio.voice'))}" hidden></select>
       <select class="select" data-c="count" title="${esc(t('chat_create.count'))}"></select>
       <span class="chip on create-seed" hidden title="${esc(t('chat_create.seed_title'))}"></span>
       <span class="create-note"></span>
@@ -72,8 +77,9 @@ export function mountCreate(footer, input, grow) {
   // Le format et la durée gardés pour ce modèle, ou pour « Automatique » de ce genre
   field('format').onchange = () => prefs.set(shown ? `images.format.${shown.id}` : `images.shape.${mode}`,
     field('format').value);
-  field('frames').onchange = () => prefs.set(shown ? `images.frames.${shown.id}` : `images.seconds.${mode}`,
-    Number(field('frames').value));
+  field('frames').onchange = () => prefs.set(isAudioKind(mode) ? `audio.seconds.${shown?.id || mode}`
+    : shown ? `images.frames.${shown.id}` : `images.seconds.${mode}`, Number(field('frames').value));
+  field('voice').onchange = () => { if (shown) prefs.set(`audio.voice.${shown.id}`, field('voice').value); };
   field('count').onchange = () => prefs.set(`create.count.${mode}`, Number(field('count').value));
   ui.bar.querySelector('.create-seed').onclick = () => { delete preset.seed; fill(); };
   input.addEventListener('keydown', e => {      // Échap : retour à la conversation
@@ -133,22 +139,28 @@ export function pickCreate(kind, id) {
   ui.input.focus();
 }
 
-/** Le nom d'un modèle d'images ou de vidéos (ou d'une recette), d'après les modèles lus. */
+/** Le nom d'un modèle d'images, de vidéos ou d'audio (ou d'une recette), d'après les modèles lus. */
 export function createLabel(id) {
-  return [...(info?.models || []), ...comfy].find(m => m.id === id)?.label || id;
+  return [...(info?.models || []), ...comfy, ...(audio?.models || [])].find(m => m.id === id)?.label || id;
 }
 
 async function load() {
   // ComfyUI fermé ou absent : seulement les modèles d'AIODOS
   const recipes = get('/chat/create/comfyui').then(r => r.models || [], () => []);
+  // L'audio : un nœud d'avant (sans /audio/models) n'en a pas
+  const sounds = get('/audio/models').catch(() => null);
   try { info = await get('/images/models'); } catch (err) { errorToast(err); return; }
   comfy = await recipes;
+  audio = await sounds;
   if (mode) fill();
   emit('create:changed');             // les noms des modèles sont connus
 }
 
-// Une recette de ComfyUI : prête ici (« here ») ou chez mes machines (helpers)
-const here = m => (m.engine === 'comfyui' ? m.here : m.state === 'ready' && info?.engine.found)
+// Une recette de ComfyUI : prête ici (« here ») ou chez mes machines (helpers) ; un modèle
+// d'audio : audio.cpp et le modèle ici, ou chez mes machines
+const here = m => (m.engine === 'comfyui' ? m.here
+  : m.kind === 'audio' ? m.state === 'ready' && audio?.engine.found
+    : m.state === 'ready' && info?.engine.found)
   || m.helpers.length > 0;
 // Ni ici ni chez mes machines : une machine du réseau public le prête, et la conversation peut
 // partir chez un inconnu (le nœud redit tout à l'envoi, avec la carte d'accord s'il le faut)
@@ -167,6 +179,8 @@ function fill() {
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
   const k = KINDS[mode];
   ui.bar.querySelector('.create-kind').innerHTML = `${icon(k.icon)}${esc(t(`chat_create.kind_${mode}`))}${icon('x')}`;
+  field('voice').hidden = true;
+  if (isAudioKind(mode)) { fillAudio(field); return; }
   const models = [...(info?.models || []).filter(m => (m.kind || 'image') === mode).sort(byPower),
     ...comfy.filter(m => m.kind === mode)];
   const ready = models.filter(usable);
@@ -216,12 +230,56 @@ function fill() {
   seed.innerHTML = preset.seed == null ? '' : `${esc(t('chat_create.seed', { seed: preset.seed }))} ${icon('x')}`;
 }
 
+/** La barre d'une voix, d'une musique ou d'un effet sonore : la voix du modèle choisi, ou la
+ *  durée (celles du modèle, sinon celles du genre avec « Automatique ») ; un son à la fois. */
+function fillAudio(field) {
+  const models = (audio?.models || []).filter(m => m.genre === mode).sort((a, b) => a.rank - b.rank);
+  const ready = models.filter(usable);
+  const wanted = createChoice(mode);
+  shown = ready.find(m => m.id === wanted) || null;
+  if (info && wanted && !shown) picked[mode] = null;
+  const note = ui.bar.querySelector('.create-note');
+  note.innerHTML = !info ? `<span class="faint">${esc(t('chat.loading_models'))}</span>` : ready.length ? ''
+    : `<span class="faint">${esc(t(`chat_create.no_model_${mode}`))}</span>
+       <button class="btn sm" data-go-models>${icon('download')}${esc(t('chat_create.choose_model'))}</button>`;
+  note.querySelector('[data-go-models]')?.addEventListener('click', showModels);
+  field('format').hidden = true;
+  field('count').hidden = true;
+  const seed = ui.bar.querySelector('.create-seed');
+  seed.hidden = preset.seed == null;
+  seed.innerHTML = preset.seed == null ? '' : `${esc(t('chat_create.seed', { seed: preset.seed }))} ${icon('x')}`;
+  emit('create:changed');
+  const frames = field('frames');
+  frames.hidden = !ready.length || mode === 'voice';
+  if (!frames.hidden) {
+    const options = secondsFor(mode, shown);
+    frames.innerHTML = options.map(([n, l]) => `<option value="${n}">${esc(l)}</option>`).join('');
+    const kept = String(prefs.get(`audio.seconds.${shown?.id || mode}`, defaultSeconds(mode, shown)));
+    frames.value = options.some(([n]) => String(n) === kept) ? kept : String(options[0]?.[0] || '');
+  }
+  const voice = field('voice');
+  voice.hidden = !shown || mode !== 'voice' || !(shown.voices || []).length;
+  if (!voice.hidden) {
+    voice.innerHTML = shown.voices.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+    const kept = prefs.get(`audio.voice.${shown.id}`, '');
+    voice.value = shown.voices.some(([v]) => v === kept) ? kept : shown.voices[0][0];
+  }
+}
+
 /** La demande du mode « Créer », s'il est ouvert : la description est le message. Avec
  *  « Automatique », sans modèle (le nœud prend le plus puissant disponible), la forme et la
  *  durée en secondes. */
 export function creationRequest(text) {
   if (!mode) return null;
   const field = name => ui.bar.querySelector(`[data-c="${name}"]`);
+  if (isAudioKind(mode)) {          // le texte à lire, ou la description (et « paroles : … »)
+    const request = { kind: mode, prompt: text, model: shown?.id || null, count: 1,
+      voice: mode === 'voice' && shown && !field('voice').hidden ? field('voice').value || null : null,
+      seconds: mode !== 'voice' ? Number(field('frames').value) || null : null, seed: preset.seed ?? null };
+    delete preset.seed;
+    fill();
+    return request;
+  }
   const video = mode === 'video';
   const [width, height] = (field('format').value || '').split('x').map(Number);
   const chosen = shown
@@ -241,6 +299,12 @@ export function creationRequest(text) {
 export function autoRequest(found) {
   if (found.followup) {           // retouche ou variante : les réglages de la dernière création
     return { kind: found.kind, followup: found.followup, count: found.count };
+  }
+  if (isAudioKind(found.kind)) {   // une voix, une musique, un effet sonore
+    const model = createChoice(found.kind);
+    return { kind: found.kind, model, prompt: found.prompt, lyrics: found.lyrics || null,
+      seconds: found.seconds, count: found.count,
+      voice: model && found.kind === 'voice' ? prefs.get(`audio.voice.${model}`, null) : null };
   }
   const model = createChoice(found.kind);
   const [width, height] = model ? String(prefs.get(`images.format.${model}`, '')).split('x').map(Number) : [];
@@ -352,7 +416,8 @@ export function appendWaiting(list, label = '') {
  *  message, pour « Répondre en texte » quand elle a été reconnue au vol). */
 export function appendMedia(list, media, messageId = null) {
   list.querySelector('.welcome')?.remove();
-  const orientation = media.width > media.height ? 'wide' : media.width < media.height ? 'tall' : 'square';
+  const orientation = isAudioKind(media.kind) ? 'sounds'
+    : media.width > media.height ? 'wide' : media.width < media.height ? 'tall' : 'square';
   const node = h(`
     <div class="msg assistant creation">
       <img class="avatar" src="/logo.png?v=serpents" alt="">
@@ -395,7 +460,7 @@ export function appendMedia(list, media, messageId = null) {
  *  sont repris par les suivants (le serveur fait la même vérification). */
 const sameJob = (job, media) => !!job && (job.kind === 'comfy_create'
   ? job.params?.creation?.batch === media.batch
-  : job.kind === 'generate_images' && job.params?.batch === media.batch);
+  : ['generate_images', 'generate_audio'].includes(job.kind) && job.params?.batch === media.batch);
 
 const active = view => !!view.job && ACTIVE.includes(view.job.status);
 
@@ -419,6 +484,7 @@ function paintGrid(view) {
   const { media, images } = view;
   const grid = view.node.querySelector('.creation-grid');
   const waiting = active(view) ? Math.max(0, media.count - images.length) : 0;
+  if (isAudioKind(media.kind)) { paintSounds(view, grid, waiting); return; }
   const ratio = `aspect-ratio:${media.width}/${media.height}`;
   watchVideos(grid, false);
   grid.innerHTML = images.map(img => `
@@ -444,6 +510,19 @@ function paintGrid(view) {
     media.retouch ? t('chat_create.retouch') : '', machines.join(', '),
     !seconds ? '' : images.length > 1 ? t(`chat_create.seconds_each_${kindOf(media)}`, { seconds })
       : t('format.seconds', { n: seconds })]
+    .filter(Boolean).join(' · ');
+  onGrow();
+}
+
+/** Les sons d'une création : un lecteur par son (chat-audio.js), et sous eux le modèle, la
+ *  machine, le temps de calcul. */
+function paintSounds(view, grid, waiting) {
+  const { media, images } = view;
+  grid.innerHTML = audioHtml(media, images, waiting);
+  const machines = [...new Set(images.map(i => i.machine || t('chat.this_machine')))];
+  const seconds = images.length ? Math.round(images.reduce((n, i) => n + (i.seconds || 0), 0) / images.length) : 0;
+  view.node.querySelector('.model-tag').textContent = [media.label, machines.join(', '),
+    !seconds ? '' : t('chat_audio.computed_in', { time: soundLength(seconds) })]
     .filter(Boolean).join(' · ');
   onGrow();
 }

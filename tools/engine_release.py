@@ -1,5 +1,6 @@
 """Les moteurs joints à une version (tools/publish.py) : llama.cpp pour les gros modèles
-répartis, stable-diffusion.cpp pour les images. Chaque fois l'archive officielle, d'une
+répartis, stable-diffusion.cpp pour les images, audio.cpp pour l'audio (voix, musique, effets
+sonores). Chaque fois l'archive officielle, d'une
 version épinglée ici. Elle est téléchargée une fois, gardée dans ~/.aiodos/moteurs/, et sa
 taille et son empreinte sont revérifiées à chaque publication.
 
@@ -26,6 +27,7 @@ from pathlib import Path
 
 LLAMA = "llama.cpp"
 IMAGES = "stable-diffusion.cpp"
+AUDIO = "audio.cpp"
 ENGINES = {
     LLAMA: {
         "build": "b11707",        # 17/10/2026 : celle des mesures de docs/gros-modeles.md
@@ -51,6 +53,23 @@ ENGINES = {
                 "name": "sd-master-e7b7ec6-bin-win-vulkan-x64.zip",
                 "size": 29745686,
                 "sha256": "2d0d65f51f059588740a82fc983b9d4afdf28839729ab0db4af2701c4f17a701",
+            },
+        },
+    },
+    AUDIO: {
+        # 26/10/2026 : la dernière publiée (voix, musique, effets sonores ;
+        # docs/conception/audio.md). Licence Apache-2.0. Des archives existent aussi pour
+        # Linux (Vulkan) et macOS (Metal), pas encore jointes : rien ne les a essayées
+        "build": "v0.9.3",
+        "url": "https://github.com/0xShug0/audio.cpp/releases/download/{build}/{name}",
+        "assets": {
+            # Version Vulkan « portable » : toutes les cartes graphiques, 82 Mo, et un code
+            # processeur sans AVX-512 (essai du 29/10/2026 : la version Vulkan ordinaire
+            # s'arrête sur « Illegal instruction » sur un Core i9-14900HX, sans AVX-512)
+            "windows-x86_64": {
+                "name": "audio-v0.9.3-bin-windows-x64-vulkan-portable.zip",
+                "size": 82088153,
+                "sha256": "51f8d8ce6cc7789bc9dc3d15f35e05f143aaf2ce1cbecc525a4104bcdde82a42",
             },
         },
     },

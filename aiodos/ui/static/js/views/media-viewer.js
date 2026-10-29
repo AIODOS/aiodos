@@ -1,6 +1,7 @@
 // Une image ou une vidéo créée, en grand : sa description, ses réglages, où est le fichier, et
 // de quoi l'enregistrer, la reprendre ou la supprimer. Ouverte depuis une conversation comme
-// depuis la galerie (vue Images et vidéos).
+// depuis la galerie (vue Images et vidéos). Un son (voix, musique, effet : audio/) aussi : son
+// lecteur, le texte lu ou la description, les paroles, la durée.
 import { del, fileUrl } from '../api.js';
 import { h, esc, ago } from '../dom.js';
 import { decimal, t } from '../i18n.js';
@@ -14,6 +15,7 @@ export const fileOf = img => `${fileUrl(`/images/${img.id}/file`)}&v=${encodeURI
 // qu'en grand et pour l'enregistrer
 export const thumbOf = (img, size = 768) => (img.media === 'video' ? fileOf(img) : `${fileOf(img)}&size=${size}`);
 export const isVideo = img => img.media === 'video';
+export const isAudio = img => img.media === 'audio';
 export const length = img => (img.frames && img.fps
   ? t('format.seconds', { n: decimal((img.frames / img.fps).toFixed(1)) }) : '');
 // La fenêtre native d'AIODOS (pywebview) : « Enregistrer sous… » et « Ouvrir le dossier »
@@ -25,18 +27,26 @@ export function openMedia(img, { onReuse, onDeleted, onConversation } = {}) {
   if (!img) return;
   // L'extension du fichier gardé : une création de ComfyUI peut être un MP4, un WebP…
   const ext = /\.([a-z0-9]{2,5})$/i.exec(img.file || '')?.[1] || (isVideo(img) ? 'webm' : 'png');
-  const media = isVideo(img)
-    ? `<video src="${fileOf(img)}" controls autoplay loop playsinline></video>`
-    : `<img src="${fileOf(img)}" alt="${esc(img.prompt)}">`;
+  const media = isAudio(img)
+    ? `<div class="audio-view">${icon('audio')}<audio src="${fileOf(img)}" controls autoplay></audio></div>`
+    : isVideo(img)
+      ? `<video src="${fileOf(img)}" controls autoplay loop playsinline></video>`
+      : `<img src="${fileOf(img)}" alt="${esc(img.prompt)}">`;
   const frames = isVideo(img) && img.frames
     ? ` · ${esc(t('media_viewer.frames', { frames: img.frames, fps: img.fps, length: length(img) }))}` : '';
+  // Un son : sa durée et son modèle à la place de la taille, de la graine et des pas
+  const details = isAudio(img)
+    ? `${esc(t('media_viewer.sound_length', { n: decimal(Number(img.duration || 0).toFixed(1)) }))} · ${esc(img.label || img.model)}`
+    : `${img.width} × ${img.height}${frames} · ${esc(t('media_viewer.seed', { seed: img.seed }))} · ${esc(t('media_viewer.steps', { n: img.steps }))}`;
+  const lyrics = isAudio(img) && img.lyrics ? `<details class="audio-lyrics"><summary>${esc(t('chat_audio.lyrics'))}</summary>
+    <div>${esc(img.lyrics)}</div></details>` : '';
   const back = h(`
     <div class="modal-back img-view" role="dialog" aria-modal="true">
       <div class="img-view-box">
         ${media}
         <div class="img-view-side">
-          <div class="img-view-prompt">${esc(img.prompt)}</div>
-          <div class="faint">${img.width} × ${img.height}${frames} · ${esc(t('media_viewer.seed', { seed: img.seed }))} · ${esc(t('media_viewer.steps', { n: img.steps }))}<br>
+          <div class="img-view-prompt">${esc(img.prompt)}</div>${lyrics}
+          <div class="faint">${details}<br>
             ${esc(img.machine || t('chat.this_machine'))}${img.seconds ? ` · ${esc(t('format.seconds', { n: Math.round(img.seconds) }))}` : ''} · ${ago(img.created)}</div>
           ${desktop() && img.path ? `<div class="faint img-path" title="${esc(img.path)}">${esc(img.path)}</div>` : ''}
           <div class="img-view-actions">
@@ -67,7 +77,8 @@ export function openMedia(img, { onReuse, onDeleted, onConversation } = {}) {
   back.querySelector('[data-act="reuse"]')?.addEventListener('click', () => { close(); onReuse(img); });
   back.querySelector('[data-act="talk"]')?.addEventListener('click', () => { close(); onConversation(img); });
   back.querySelector('[data-act="delete"]').onclick = async () => {
-    const title = t(isVideo(img) ? 'media_viewer.delete_video' : 'media_viewer.delete_image');
+    const title = t(isAudio(img) ? 'media_viewer.delete_audio'
+      : isVideo(img) ? 'media_viewer.delete_video' : 'media_viewer.delete_image');
     if (!await confirmDanger(title, t('media_viewer.delete_text'))) return;
     try { await del(`/images/${img.id}`); } catch (err) { errorToast(err); return; }
     close();

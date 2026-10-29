@@ -243,8 +243,9 @@ class UpdateService:
 
     def _obtain_engine(self):
         """Moteurs de cette plateforme (llama.cpp pour les gros modèles répartis,
-        stable-diffusion.cpp pour les images), s'ils manquent. Ils restent les mêmes d'une
-        version à l'autre : déjà reçus, ils sont copiés (store.reuse)."""
+        stable-diffusion.cpp pour les images, audio.cpp pour l'audio), s'ils manquent. Ils
+        restent les mêmes d'une version à l'autre : déjà reçus, ils sont copiés
+        (store.reuse)."""
         for engine in manifests.ENGINES:
             self._step("updates.step_engine",
                        lambda engine=engine: self._obtain_program(engine, f"moteur {engine}"),

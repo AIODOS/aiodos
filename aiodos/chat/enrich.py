@@ -24,6 +24,8 @@ log = logging.getLogger("aiodos.chat")
 ENRICH_S = 45                  # au-delà, la demande part telle quelle
 MAX_PROMPT = 1500
 DETAILED_WORDS = 60            # une description déjà détaillée part telle quelle
+# Les consignes (enrich_prompts.json) : une image, une vidéo, une musique, un effet sonore
+PROMPTS = ("image", "video", "music", "sound")
 
 
 def wanted(prompt: str) -> bool:
@@ -41,7 +43,8 @@ def enrich(prompt: str, kind: str = "image", conversation_model: str | None = No
         return prompt
     # La consigne (enrich_prompts.json) suit la langue de la requête ; la description qu'elle
     # demande est en anglais dans toutes les langues
-    system = t("enrich_prompts.video") if kind == "video" else t("enrich_prompts.image")
+    # Une musique ou un effet sonore (chat/audio_creations.py) : leur propre consigne
+    system = t(f"enrich_prompts.{kind}") if kind in PROMPTS else t("enrich_prompts.image")
     stop = threading.Event()
     timer = threading.Timer(ENRICH_S, stop.set)
     timer.start()

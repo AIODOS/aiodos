@@ -80,6 +80,9 @@ HunyuanVideo 1.5 : même exclusion de l'UE, écarté.
 
 ### Audio (moteurs nouveaux)
 
+*Fait le 29/10/2026 avec un seul moteur, audio.cpp : le catalogue retenu, ses rangs et les
+essais sont dans [audio.md](audio.md).*
+
 | Genre | Modèle | Licence | Moteur | Note |
 |---|---|---|---|---|
 | Voix | Qwen3-TTS 1.7B (01/2026) | Apache-2.0 | qwentts.cpp (C++) | français, clonage d'une voix en 3 s |

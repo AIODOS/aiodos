@@ -103,6 +103,8 @@ def profile_for(node_id, profile: dict) -> dict:
     reduced["ollama"] = {"models": models if profile.get("lends_models") else []}
     if settings.get("lend_images_friends") and profile.get("images"):
         reduced["images"] = profile["images"]     # ma carte graphique, prêtée pour leurs images
+    if settings.get("lend_images_friends") and profile.get("audio"):
+        reduced["audio"] = profile["audio"]       # ... et pour leurs créations audio
     return reduced
 
 

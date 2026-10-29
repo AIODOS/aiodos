@@ -1,0 +1,14 @@
+{
+  "nothing_ready_voice": "No voice model can read right now, neither here nor on your online machines: download one in Settings → Models.",
+  "nothing_ready_music": "No music model can compute right now, neither here nor on your online machines: download one in Settings → Models.",
+  "nothing_ready_sound": "No sound effect model can compute right now, neither here nor on your online machines: download one in Settings → Models.",
+  "nothing_ready_friends": {
+    "one": "No audio model is ready here or on your machines, but {who} can compute it for you: your text and the sound will pass through their machine during the computation, without being kept there.",
+    "other": "No audio model is ready here or on your machines, but {who} can compute it for you: your text and the sound will pass through their machines during the computation, without being kept there."
+  },
+  "no_attachment": "An audio creation does not start from an attached file.",
+  "voice": "Voice",
+  "lyrics": "Lyrics",
+  "coming": "The sound is coming…",
+  "computed_in": "computed in {time}"
+}

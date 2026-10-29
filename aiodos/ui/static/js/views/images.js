@@ -9,12 +9,13 @@ import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { errorToast } from '../ui.js';
-import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
+import { openMedia, fileOf, thumbOf, isVideo, isAudio, length } from './media-viewer.js';
+import { soundLength } from './chat-audio.js';
 import { byPower } from './models.js';
 import { mountComfy, refreshComfy } from './images-comfy.js';
 
-// Les créations : celles de sd.cpp, et celles de ComfyUI (images-comfy.js)
-const KINDS = ['generate_images', 'comfy_create'];
+// Les créations : celles de sd.cpp, celles de ComfyUI (images-comfy.js), et l'audio (audio/)
+const KINDS = ['generate_images', 'comfy_create', 'generate_audio'];
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PAGE = 60;
@@ -135,7 +136,7 @@ function onJobs() {
       title="${esc(t('images.open_conversation'))}">${icon('chat')}</button>` : '';
     return `<div class="card img-job">
       <div class="img-job-head"><span class="pill run">${j.done}/${j.total}</span>
-        <span class="img-job-text">${esc(t('images.prompt', { prompt: p.prompt || '' }))}</span>${open}
+        <span class="img-job-text">${esc(t('images.prompt', { prompt: p.prompt || p.text || '' }))}</span>${open}
         <button class="icon-btn danger" data-stop="${j.id}" title="${esc(t('images.cancel'))}">${icon('x')}</button></div>
       <div class="bar"><i class="fill" style="width:${pct}%"></i></div>
       <div class="faint">${esc(waiting(j, p, away))}${where}</div></div>`;
@@ -153,12 +154,24 @@ function onJobs() {
 function waiting(job, params, away) {
   if (job.status !== 'queued' || away.length) return t('images.running');
   if (job.kind === 'comfy_create') return t('images_comfy.waiting');
+  if (job.kind === 'generate_audio') return t('images.waiting_gpu');
   const model = info?.models.find(m => m.id === params.model);
   const here = info?.engine.found && model?.state === 'ready';
   return t(here ? 'images.waiting_gpu' : 'images.waiting_machine');
 }
 
 // ----------------------------------------------------------------- galerie
+/** Un son de la galerie (voix, musique, effet : audio/) : son texte ou sa description, sa
+ *  durée ; il s'écoute en grand (media-viewer.js). */
+function audioTile(img) {
+  return `
+    <button class="img-tile audio-tile" data-id="${img.id}" title="${esc(img.prompt)}">
+      <span class="audio-tile-head">${icon('audio')}<b>${esc(soundLength(img.duration))}</b></span>
+      <span class="audio-tile-text">${esc(img.prompt)}</span>
+      <span class="img-tag">${esc(img.machine || t('images.this_machine'))}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
+    </button>`;
+}
+
 function renderGrid() {
   const grid = $('#img-grid', root);
   $('#img-more', root).hidden = complete;
@@ -166,7 +179,7 @@ function renderGrid() {
     grid.innerHTML = `<div class="card empty img-empty">${icon('image')}<div>${esc(t('images.empty'))}</div></div>`;
     return;
   }
-  grid.innerHTML = images.map(img => `
+  grid.innerHTML = images.map(img => (isAudio(img) ? audioTile(img) : `
     <button class="img-tile" data-id="${img.id}" title="${esc(img.prompt)}">
       ${isVideo(img)
         ? `<video muted loop playsinline preload="metadata" src="${fileOf(img)}"
@@ -174,13 +187,13 @@ function renderGrid() {
         : `<img loading="lazy" src="${thumbOf(img)}" alt="${esc(img.prompt)}"
              style="aspect-ratio:${img.width}/${img.height}">`}
       <span class="img-tag">${isVideo(img) ? `${esc(t('images.video_length', { length: length(img) }))} · ` : ''}${esc(img.machine || t('images.this_machine'))}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
-    </button>`).join('');
+    </button>`)).join('');
   grid.querySelectorAll('.img-tile').forEach(tile => {
     const shown = images.find(i => i.id === Number(tile.dataset.id));
     tile.onclick = () => openMedia(shown, {
       // « Reprendre » : la description revient dans une discussion, en mode « Créer » (un modèle
       // de sd.cpp seulement : une création de ComfyUI se refait depuis sa recette, ci-dessus)
-      onReuse: String(shown?.model || '').startsWith('comfyui/') ? undefined
+      onReuse: String(shown?.model || '').startsWith('comfyui/') || isAudio(shown) ? undefined
         : img => emit('chat:create', { kind: isVideo(img) ? 'video' : 'image', model: img.model,
           prompt: img.prompt, width: img.width, height: img.height, frames: img.frames, seed: img.seed }),
       onDeleted: img => { images = images.filter(i => i.id !== img.id); renderGrid(); },

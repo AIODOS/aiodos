@@ -16,6 +16,7 @@ from aiodos.api.routes import (attachments, autostart, chat, cluster, comfy_crea
                                system, updates)
 from aiodos.api.routes import lent                       # le travail fait pour d'autres
 from aiodos.api.routes import model_menu                 # le menu des modèles
+from aiodos.api.routes import audio as audio_routes      # modèles d'audio, téléchargement
 from aiodos.chat import attachments as chat_attachments
 from aiodos.engines import comfy_instance
 from aiodos.gateway import access_flow, apps, retention
@@ -120,6 +121,7 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
     app.include_router(library_folders.router)
     app.include_router(lent.router)
     app.include_router(model_menu.router)
+    app.include_router(audio_routes.router)
 
     css = render.pygments_css()
 

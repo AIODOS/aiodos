@@ -30,11 +30,12 @@ rien n'est envoyé. Une création faite ici ou par mes machines n'y passe pas.
 import re
 
 from aiodos import db, settings
-from aiodos.chat import (attachments, comfy_creations, conversations, enrich, public_creations,
-                         retouches)
+from aiodos.chat import (attachments, audio_creations, comfy_creations, conversations, enrich,
+                         public_creations, retouches)
 from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, lenders, prompt_filter, ranking
 from aiodos.jobs import queue
+from aiodos.jobs.kinds import audio as audio_kind
 from aiodos.jobs.kinds import comfy_create
 from aiodos.jobs.kinds import images as kind
 from aiodos.jobs.models import URGENT
@@ -302,6 +303,8 @@ def frames_for(model_id: str, seconds: float | None) -> int | None:
 def describe(media: dict) -> str:
     """Ce que le modèle de conversation lit de cette réponse (historique, mémoire), dans la
     langue de la demande (le texte est gardé avec la réponse)."""
+    if audio_creations.is_audio(media.get("kind")):
+        return audio_creations.describe(media)
     n, video = int(media.get("count") or 1), media.get("kind") == "video"
     return t("chat_prompts.creation_video" if video else "chat_prompts.creation_image", n=n,
              model=media.get("label") or media.get("model"), prompt=media.get("prompt"))
@@ -312,14 +315,16 @@ def capability_note() -> str | None:
     un modèle peut les calculer ; sinon rien."""
     kinds = {catalog.MODELS[m].get("kind", "image") for m in usable()}
     if not kinds:
-        return None
+        # Sans images ni vidéos : peut-être de l'audio (audio/, chat/audio_creations.py)
+        return t("chat_prompts.capability_audio_only") if audio_creations.usable() else None
     if kinds == {"image", "video"}:
         what = t("chat_prompts.capability_both")
     elif kinds == {"video"}:
         what = t("chat_prompts.capability_videos")
     else:
         what = t("chat_prompts.capability_images")
-    return f"{what} {t('chat_prompts.capability_more')}"
+    sounds = t("chat_prompts.capability_audio") if audio_creations.usable() else ""
+    return " ".join(part for part in (what, sounds, t("chat_prompts.capability_more")) if part)
 
 
 def preflight(text: str, conversation_id=None, before=None) -> dict | None:
@@ -327,10 +332,16 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
     ne le peut en ce moment). Après une création, une retouche (« Fais-la de nuit ») ou
     une variante (« Encore une ») de celle-ci : followup, d'après chat/retouches.py.
     before : le message remplacé (« Modifier ») ; la création d'avant lui compte."""
+    heard = audio_creations.intent(text)          # une voix, une musique, un effet sonore
+    if heard is not None:
+        return audio_creations.preflight(heard)
     found = intent(text)
     if found is None and conversation_id is not None:
         last = conversations.last_media(conversation_id, before)
-        followup = retouches.detect(text) if last else None
+        # Après un son, ni retouche ni variante (« Encore une ») : elles sont faites pour les
+        # images et les vidéos
+        sound = last is not None and audio_creations.is_audio(last.get("kind"))
+        followup = retouches.detect(text) if last and not sound else None
         if followup:
             count = last.get("count") or 1
             if followup == retouches.VARIATION:      # « Encore une » après quatre : une
@@ -463,17 +474,21 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     if request.get("followup") and not request.get("prompt"):
         request = _followed(request, text, conv_id, chat_model, replace_from)
     found = intent(text) or {}
-    media_kind = request.get("kind") or found.get("kind") or "image"
-    if media_kind not in ("image", "video"):
-        raise CreationError(t("chat_create.unknown_kind"))
-    # Une image jointe : l'image de départ, recadrée au format du modèle (une référence)
-    joined = attachments.pending(request.get("attachments"))
-    pictures = [r for r in joined if r["kind"] == "image"]
+    heard = None if request.get("kind") in ("image", "video") else audio_creations.intent(text)
+    media_kind = request.get("kind") or (heard or {}).get("kind") or found.get("kind") or "image"
     # « Sur mes machines seulement » : celui de la demande (une conversation pas encore créée),
     # sinon celui que garde la conversation
     mine_only = request.get("mine_only")
     if mine_only is None:
         mine_only = conv_id is not None and conversations.mine_only(conv_id)
+    if audio_creations.is_audio(media_kind):      # une voix, une musique, un effet sonore
+        return audio_creations.prepare(text, request, heard or {}, conv_id, chat_model,
+                                       mine_only)
+    if media_kind not in ("image", "video"):
+        raise CreationError(t("chat_create.unknown_kind"))
+    # Une image jointe : l'image de départ, recadrée au format du modèle (une référence)
+    joined = attachments.pending(request.get("attachments"))
+    pictures = [r for r in joined if r["kind"] == "image"]
     if comfy_creations.is_comfy(request.get("model")):     # une recette de ComfyUI choisie
         plan = _comfy_plan(text, request, found, media_kind, conv_id, chat_model, joined,
                            mine_only)
@@ -628,6 +643,10 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
             job_id = queue.create_job(comfy_create.KIND, {**params, "conversation_id": conv_id},
                                       URGENT, reach=",".join(comfy_create.WHERE))
             media = comfy_creations.media(params, job_id)
+        elif plan.get("engine") == "audiocpp":   # une voix, une musique, un effet sonore
+            job_id = queue.create_job(audio_kind.KIND, {**params, "conversation_id": conv_id},
+                                      URGENT)
+            media = audio_creations.media(params, job_id)
         else:
             job_id = queue.create_job("generate_images", {**params, "conversation_id": conv_id},
                                       URGENT)
@@ -710,6 +729,8 @@ def same_job(job: dict | None, media: dict) -> bool:
     params = job.get("params") or {}
     if job.get("kind") == comfy_create.KIND:       # une recette de ComfyUI : son lot à part
         return (params.get("creation") or {}).get("batch") == media.get("batch")
+    if job.get("kind") == audio_kind.KIND:          # un son (chat/audio_creations.py)
+        return params.get("batch") == media.get("batch")
     return job.get("kind") == "generate_images" and params.get("batch") == media.get("batch")
 
 

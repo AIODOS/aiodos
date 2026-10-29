@@ -29,7 +29,6 @@
   "restricted": "Licence restrictive ({license}) : à lire et à accepter avant le téléchargement",
   "suggest_pc": "Ce PC peut faire tourner {model} ({size}) : le télécharger ?",
   "suggest_phone": "Ce téléphone peut faire tourner {model} ({size}) : le télécharger ?",
-  "soon_audio": "Bientôt : voix, musique, effets sonores.",
   "loading": "Lecture des modèles…",
   "unreadable": "Les modèles n'ont pas pu être lus : {error}",
   "shape_square": "Carré",
@@ -37,8 +36,12 @@
   "shape_portrait": "Portrait",
   "defaults": "Par défaut",
   "defaults_help": "Le modèle de chaque genre dans une nouvelle conversation. « Automatique » prend le plus puissant disponible au moment d'envoyer.",
-  "soon": "bientôt",
   "saved": "Modèle par défaut enregistré.",
   "license_title": "Licence de {name}",
-  "license_confirm": "J'ai lu et j'accepte cette licence"
+  "license_confirm": "J'ai lu et j'accepte cette licence",
+  "genre_voice": "Voix",
+  "genre_music": "Musique",
+  "genre_sound": "Effets sonores",
+  "no_audio": "Aucun modèle d'audio connu de ce nœud.",
+  "auto_title_audio": "Le mieux classé disponible au moment d'envoyer : ici, sur tes machines, ou chez tes amis si tu l'acceptes."
 }

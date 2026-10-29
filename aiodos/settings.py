@@ -41,6 +41,11 @@ DEFAULTS = {
     # « Automatique » (le serveur prend le plus puissant disponible), ou un modèle du catalogue
     "default_image_model": "",
     "default_video_model": "",
+    # Ceux de l'audio (chat/audio_creations.py) : une voix, une musique, un effet sonore ;
+    # vide : « Automatique »
+    "default_voice_model": "",
+    "default_music_model": "",
+    "default_sound_model": "",
     "think": True,                    # laisser les modèles « réfléchir » (Qwen3…)
     # Vide : les consignes par défaut, dans la langue en cours (i18n/*/settings.json)
     "system_prompt": "",
@@ -144,6 +149,11 @@ DEFAULTS = {
     "images_device": "",              # carte qui calcule (« Vulkan1 », « CUDA0 »…) ; vide : la meilleure
     "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
     "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
+    # --- Audio : voix, musique, effets sonores (audio/, docs/conception/audio.md) ---
+    "audiocpp_dir": "",               # dossier d'audio.cpp ; vide : celui livré avec les versions
+    "audio_models_dir": "",           # dossier des modèles d'audio ; vide : data/audio/models
+    # L'appareil qui calcule l'audio (« vulkan:1 », « cpu:0 ») ; vide : le meilleur
+    "audio_device": "",
     "lend_images_friends": True,      # calculer les images de mes amis (jobs/kinds/images.py)
     # « Prêter ma carte graphique aux images et vidéos d'inconnus » (network/public_imaging.py,
     # network/public_video.py, 29/10/2026) : en plus de lend_public, mêmes conditions ;

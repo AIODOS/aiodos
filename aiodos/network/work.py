@@ -99,6 +99,7 @@ FRIEND_RETRY_OTHERS = 300
 FRIEND_LEASE_MAX = 3600        # s de calcul chez un ami, au plus, pour une unité (bail compris)
 FRIEND_LEASE_MAX_IMAGE = 1800  # ... pour une image
 FRIEND_LEASE_MAX_VIDEO = 7200  # ... pour une vidéo
+AUDIO_TASK = "generate_audio"  # une création audio (jobs/kinds/audio.py), comme une image
 # Index d'un document (passages et vecteurs) rendu par une de mes machines, au plus : plus
 # de 16 Mio dès un livre d'un millier de pages (network/body_limit.py, result_limit)
 MINE_RESULT = 1024 ** 3
@@ -158,6 +159,9 @@ def _unit_result(task, model, mine: bool) -> int:
     if task == "generate_image":
         from aiodos.jobs.kinds import images as kind
         return _wire_size(kind.MAX_WEBM if _is_video(model) else kind.MAX_PNG)
+    if task == AUDIO_TASK:            # un son (jobs/kinds/audio.py)
+        from aiodos.jobs.kinds import audio as audio_kind
+        return _wire_size(audio_kind.MAX_WAV)
     return MINE_RESULT if mine else 0
 
 
@@ -197,21 +201,25 @@ def _friend_lease_max(unit) -> int:
     if unit["task"] == "generate_image":
         return FRIEND_LEASE_MAX_VIDEO if _is_video(unit["payload"].get("model")) \
             else FRIEND_LEASE_MAX_IMAGE
+    if unit["task"] == AUDIO_TASK:
+        return FRIEND_LEASE_MAX_VIDEO     # une musique peut prendre plusieurs minutes
     return FRIEND_LEASE_MAX
 
 
 class _Mine:
-    """Modèles d'images que mes machines en ligne savent calculer, lus une fois par demande
-    (imaging/lenders.py)."""
+    """Modèles d'images et d'audio que mes machines en ligne savent calculer, lus une fois par
+    demande (imaging/lenders.py, audio/lenders.py)."""
 
     def __init__(self):
         self._models = None
 
     def models(self) -> set:
         if self._models is None:
+            from aiodos.audio import lenders as audio_lenders
             from aiodos.imaging import lenders
             try:
-                self._models = set(lenders.helpers(friends=False))
+                self._models = set(lenders.helpers(friends=False)) \
+                    | set(audio_lenders.helpers(friends=False))
             except Exception as exc:  # noqa: BLE001 — profils illisibles : aucune
                 log.debug("Machines capables de calculer les images inconnues : %s", exc)
                 self._models = set()
@@ -286,6 +294,14 @@ def can_serve(need: dict, caps: dict, mine: dict) -> bool:
         if (not theirs_images.get("engine")
                 or not set(images["files"]) <= set(theirs_images.get("files") or [])):
             return False
+    audio = need.get("audio")
+    if audio:
+        # Un son : audio.cpp là-bas, et tous les fichiers du modèle aux mêmes empreintes
+        # (jobs/kinds/audio.py)
+        theirs_audio = caps.get("audio") or {}
+        if (not theirs_audio.get("engine")
+                or not set(audio["files"]) <= set(theirs_audio.get("files") or [])):
+            return False
     engine = need.get("engine")
     if engine and not lending.can_serve(engine, caps):
         return False              # un travail ComfyUI : le moteur, ses classes, ses modèles
@@ -337,6 +353,7 @@ def lease(manager, sender, payload):
     now = time.monotonic()
     mine = _Mine()
     offers = friend and _offers_images(sender)
+    offers_audio = friend and _offers_images(sender, "audio")
     shareable = store.shareable_ids() if friend else set()
     local_only = store.local_only_ids()
     max_blob = _max_blob(sender)
@@ -354,7 +371,7 @@ def lease(manager, sender, payload):
         if friend and not registry.friends_may_take(spec):
             return False                  # images : chez un ami seulement si je l'accepte
         if friend and spec.mine_only:
-            if not offers:
+            if not (offers_audio if unit["task"] == AUDIO_TASK else offers):
                 return False              # ... et s'il les propose (son profil le dit)
             if spec.here is not None and spec.here(unit["payload"].get("model")):
                 return False              # ... pour ce que cette machine ne calcule pas
@@ -426,15 +443,16 @@ def lease(manager, sender, payload):
     return order
 
 
-def _offers_images(node_id) -> bool:
-    """Cet ami prête-t-il sa carte pour les images ? Son profil, tel qu'il me le montre, ne
-    contient « images » qu'alors (sharing.profile_for, chez lui)."""
+def _offers_images(node_id, key: str = "images") -> bool:
+    """Cet ami prête-t-il sa carte pour les images (key : « audio », pour l'audio) ? Son
+    profil, tel qu'il me le montre, ne contient « images » (« audio ») qu'alors
+    (sharing.profile_for, chez lui)."""
     peer = peers.get(node_id) or {}
     try:
         profile = json.loads(peer.get("profile") or "null") or {}
     except ValueError:
         return False
-    images = profile.get("images") if isinstance(profile, dict) else None
+    images = profile.get(key) if isinstance(profile, dict) else None
     return isinstance(images, dict) and bool(images.get("engine")) and bool(images.get("shares"))
 
 

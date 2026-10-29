@@ -4,6 +4,10 @@ des créations : celui du réglage images_out_dir, sinon Images/AIODOS
 pour AIODOS installé sous Windows (là où on cherche ses images), data/images/out sinon.
 Un fichier créé avant un changement de dossier reste trouvé là où il a été écrit.
 
+Les créations audio (voix, musique, effets sonores : audio/, jobs/kinds/audio.py) s'y rangent
+aussi (add_audio) : genre « audio », un WAV, sa durée (duration), le texte lu ou la
+description (prompt) et les paroles d'une chanson (lyrics) ; ni largeur ni hauteur.
+
 Une demande de plusieurs images forme un lot (« batch ») : même consigne, graines qui se
 suivent. Chaque ligne dit aussi quelle machine l'a calculée, et en combien de temps : une
 durée finie, entre 0 et MAX_SECONDS, ou rien (elle peut venir d'une autre machine, et un
@@ -115,7 +119,36 @@ def add(payload: dict, data: bytes, machine: str = "", seconds: float | None = N
 MEDIA = {"image/png": "image", "image/jpeg": "image", "image/webp": "image", "image/gif": "image",
          "video/mp4": "video", "video/webm": "video"}
 MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
-               ".gif": "image/gif", ".mp4": "video/mp4", ".webm": "video/webm"}
+               ".gif": "image/gif", ".mp4": "video/mp4", ".webm": "video/webm",
+               ".wav": "audio/wav"}
+
+
+def add_audio(payload: dict, data: bytes, duration: float, machine: str = "",
+              seconds: float | None = None) -> dict:
+    """Garde le WAV d'une création audio (jobs/kinds/audio.py) : fichier, puis ligne en base.
+    duration : la durée du son (audio/wav.py) ; seconds : le temps de calcul."""
+    batch = _SAFE.sub("", str(payload.get("batch") or "lot").lower())[:32] or "lot"
+    name = f"{batch}-{int(payload.get('index') or 0):02d}-{int(payload['seed'])}.wav"
+    if seconds is not None and not (math.isfinite(seconds) and 0 <= seconds <= MAX_SECONDS):
+        seconds = None
+    folder = out_dir()
+    target = folder / name
+    part = target.with_name(target.name + ".part")
+    part.write_bytes(data)
+    os.replace(part, target)
+    paths.for_user(target)
+    text = payload.get("text") or payload.get("prompt") or ""
+    with db.transaction() as c:
+        image_id = c.execute(
+            "INSERT INTO images(batch, model, prompt, negative, seed, width, height, steps, "
+            "cfg, file, machine, seconds, created, media, frames, fps, folder, duration, "
+            "lyrics) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (batch, str(payload["model"])[:120], str(text), "", int(payload["seed"]), 0, 0, 0,
+             0.0, name, machine or None, round(seconds, 2) if seconds is not None else None,
+             db.now(), "audio", None, None, str(folder),
+             round(float(duration), 2) if math.isfinite(float(duration)) else None,
+             str(payload.get("lyrics") or "") or None)).lastrowid
+    return get(image_id)
 
 
 def _picture_size(path: Path, kind: str) -> tuple | None:

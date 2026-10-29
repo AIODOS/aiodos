@@ -19,7 +19,9 @@ router = APIRouter(prefix="/api/chat")
 
 class CreateIn(BaseModel):
     text: str                           # le message, tel qu'écrit
-    kind: str | None = None             # « image » ou « video » ; vide : d'après le message
+    # « image », « video », ou l'audio : « voice », « music », « sound » ; vide : d'après le
+    # message
+    kind: str | None = None
     model: str | None = None            # modèle préféré ; vide (ou indisponible) : le premier prêt
     prompt: str | None = None           # la description ; vide : tirée du message
     conversation_id: int | None = None
@@ -32,6 +34,9 @@ class CreateIn(BaseModel):
     seconds: float | None = None
     seed: int | None = None
     negative: str | None = None
+    lyrics: str | None = None           # les paroles d'une chanson (audio, « music »)
+    voice: str | None = None            # la voix d'un modèle de voix (audio, « voice »)
+    language: str | None = None         # la langue du texte à lire ; vide : celle de l'interface
     followup: str | None = None         # « edit » ou « variation » de la dernière création
     auto: bool = False                  # reconnue dans le message (et non demandée au bouton)
     replace_from: int | None = None     # « Modifier » : ce message et la suite sont remplacés

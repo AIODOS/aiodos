@@ -4,7 +4,7 @@
   "placeholder_image": "Describe the image to create…",
   "placeholder_video": "Describe the video to create…",
   "hint": "Enter to create · Shift+Enter for a new line · Esc to go back to the conversation",
-  "button": "Create an image or a video",
+  "button": "Create an image, a video or a sound",
   "close": "Back to the conversation",
   "model": "Model",
   "format": "Format",
@@ -76,7 +76,46 @@
   },
   "nothing_ready_images": "No image model can compute right now, here or on your online machines: install one in “Images and videos”.",
   "nothing_ready_videos": "No video model can compute right now, here or on your online machines: install one in “Images and videos”.",
-  "unknown_kind": "Unknown kind: image or video.",
+  "unknown_kind": "Unknown kind: image, video, voice, music or sound effect.",
   "not_found": "Creation not found.",
-  "continued": "The conversation has continued since: only the last creation can give way to a text answer."
+  "continued": "The conversation has continued since: only the last creation can give way to a text answer.",
+  "kind_voice": "Voice",
+  "kind_music": "Music",
+  "kind_sound": "Sound effect",
+  "placeholder_voice": "Write the text to read…",
+  "placeholder_music": "Describe the music to create (and “lyrics: …” for a song)…",
+  "placeholder_sound": "Describe the sound to create (a creaking door, rain…)…",
+  "create_voice": "A voice reading a text",
+  "create_music": "Some music",
+  "create_sound": "A sound effect",
+  "no_model_voice": "No voice model ready.",
+  "no_model_music": "No music model ready.",
+  "no_model_sound": "No sound effect model ready.",
+  "usual_each_voice": "usually {time} per sound",
+  "usual_each_music": "usually {time} per track",
+  "usual_each_sound": "usually {time} per sound",
+  "failed_voice": {
+    "one": "{n} reading out of {total} could not be created: {error}.",
+    "other": "{n} readings out of {total} could not be created: {error}."
+  },
+  "failed_voice_tasks": {
+    "one": "{n} reading out of {total} could not be created (details in Tasks).",
+    "other": "{n} readings out of {total} could not be created (details in Tasks)."
+  },
+  "failed_music": {
+    "one": "{n} track out of {total} could not be created: {error}.",
+    "other": "{n} tracks out of {total} could not be created: {error}."
+  },
+  "failed_music_tasks": {
+    "one": "{n} track out of {total} could not be created (details in Tasks).",
+    "other": "{n} tracks out of {total} could not be created (details in Tasks)."
+  },
+  "failed_sound": {
+    "one": "{n} sound effect out of {total} could not be created: {error}.",
+    "other": "{n} sound effects out of {total} could not be created: {error}."
+  },
+  "failed_sound_tasks": {
+    "one": "{n} sound effect out of {total} could not be created (details in Tasks).",
+    "other": "{n} sound effects out of {total} could not be created (details in Tasks)."
+  }
 }

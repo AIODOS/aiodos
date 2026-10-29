@@ -57,6 +57,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aiodos import __version__, i18n, paths, settings
+from aiodos.audio import engine as audio_engine
 from aiodos.engines import lending as engine_lending
 from aiodos.i18n import t
 from aiodos.imaging import engine as images_engine
@@ -470,6 +471,7 @@ class Worker:
                     "whisper": importlib.util.find_spec("faster_whisper") is not None,
                     "readers": extract.readable_documents(),
                     "images": images_engine.capabilities(),
+                    "audio": audio_engine.capabilities(),
                     # Le ComfyUI accordé de ce PC (travaux des applis de mes machines)
                     "engines": engine_lending.capabilities()}
             self._caps = (time.monotonic(), caps)
@@ -481,9 +483,10 @@ class Worker:
         if not full:
             return None
         caps = self.capabilities()
-        if sharing.level(peer["node_id"]) != sharing.MINE and caps.get("images") \
+        if sharing.level(peer["node_id"]) != sharing.MINE \
                 and not settings.get("lend_images_friends"):
-            caps = {k: v for k, v in caps.items() if k != "images"}   # pas sans mon accord
+            # pas sans mon accord : ni les images, ni l'audio
+            caps = {k: v for k, v in caps.items() if k not in ("images", "audio")}
         if sharing.level(peer["node_id"]) != sharing.MINE:
             # ComfyUI : à mes machines seulement (L2b). Ses nœuds ajoutés et ses modèles
             # diraient trop de cette machine à un ami (conception, § 3.5)

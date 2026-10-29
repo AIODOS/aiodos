@@ -1,0 +1,44 @@
+{
+  "unknown_model": "Modèle d'audio inconnu : {model}.",
+  "unknown_model_short": "Modèle d'audio inconnu.",
+  "model_incomplete": "{name} n'est pas complet sur cette machine.",
+  "download_busy": "Un autre modèle d'audio se télécharge déjà.",
+  "download_stopped": "Téléchargement arrêté.",
+  "download_cut": "Téléchargement de {file} interrompu : {error}",
+  "download_mismatch": "{file} reçu ne correspond pas à celui attendu (taille ou empreinte) : effacé.",
+  "server_status": "Hugging Face refuse {file} (code {status}).",
+  "incomplete_reply": "Réponse incomplète.",
+  "engine_missing": "audio.cpp n'est pas installé sur cette machine.",
+  "engine_failed": "audio.cpp a échoué : {error}",
+  "stopped": "Création audio arrêtée.",
+  "too_long": "audio.cpp n'a pas fini en {minutes} min : arrêté.",
+  "no_output": "audio.cpp n'a écrit aucun son.",
+  "wav_not_wav": "Le son reçu n'est pas un fichier WAV.",
+  "wav_no_audio": "Le fichier WAV ne contient pas de son.",
+  "wav_format": "Format de son inconnu.",
+  "wav_too_short": "Le son créé est trop court.",
+  "wav_silent": "Le son créé n'est que du silence.",
+  "wav_too_heavy": "Le son reçu est trop lourd.",
+  "wav_too_long": "Le son reçu est bien plus long que demandé.",
+  "bad_settings": "Réglages invalides.",
+  "bad_count": "De 1 à {max} sons à la fois.",
+  "text_missing": "Écris le texte à lire.",
+  "text_too_long": "{max} caractères au plus.",
+  "unknown_voice": "Voix inconnue pour ce modèle.",
+  "describe_music": "Décris la musique à créer.",
+  "describe_sound": "Décris le son à créer.",
+  "bad_duration": "Durée : de 1 à {max} secondes.",
+  "order_mismatch": "Ordre de création audio incohérent.",
+  "job_voice": {
+    "one": "Voix : « {prompt} »",
+    "other": "Voix : « {prompt} » ×{n}"
+  },
+  "job_music": {
+    "one": "Musique : « {prompt} »",
+    "other": "Musique : « {prompt} » ×{n}"
+  },
+  "job_sound": {
+    "one": "Effet sonore : « {prompt} »",
+    "other": "Effet sonore : « {prompt} » ×{n}"
+  }
+}

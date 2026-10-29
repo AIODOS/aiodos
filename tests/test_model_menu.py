@@ -11,7 +11,7 @@ choix par défaut d'une nouvelle conversation ; les autres identifiants ne chang
 
 Le menu : pour chaque genre, ce que prendrait « Automatique », les modèles du plus puissant au
 plus modeste avec où ils tournent, ceux à télécharger ; images et vidéos par imaging/ranking.py
-s'il est là, sinon d'après le catalogue, les recettes de ComfyUI ajoutées ; l'audio vide.
+s'il est là, sinon d'après le catalogue, les recettes de ComfyUI ajoutées ; l'audio, son catalogue.
 
 Le compagnon simulé et l'annuaire public sont ceux de test_public_chat.py ; cette machine et mes
 machines sont simulées comme dans test_placement.py."""
@@ -223,7 +223,7 @@ def test_the_menu_of_text_models(monkeypatch, companion, opened):
     plus puissant au plus modeste, avec où il tourne et l'identifiant à envoyer (un modèle
     qu'un ami seul prête : sa machine), ceux du réseau public qu'une autre machine peut
     contrôler, puis ceux à télécharger ; « Sur mes machines seulement » : rien du réseau
-    public. L'audio : rien encore."""
+    public. L'audio : son catalogue, rien de prêt ici."""
     here(monkeypatch, SMALL)
     machine("fixe", "PC fixe", BIG)
     machine("ami", "Léa", HUGE, trust="friend")
@@ -231,8 +231,11 @@ def test_the_menu_of_text_models(monkeypatch, companion, opened):
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         found = menu(ui)
         assert set(found) == {"text", "image", "video", "audio"}
-        assert found["audio"] == {"auto": {"model": None, "label": None, "where": None,
-                                           "machine": None}, "suggest": None, "models": []}
+        # L'audio (audio/ranking.py) : son catalogue, rien de prêt sans audio.cpp ni modèle
+        audio = found["audio"]
+        assert audio["auto"] == {"model": None, "label": None, "where": None, "machine": None}
+        assert [g["genre"] for g in audio["genres"]] == ["voice", "music", "sound"]
+        assert audio["models"] and not any(m["ready"] for m in audio["models"])
         text = found["text"]
         assert text["auto"] == {"model": BIG, "label": BIG, "where": "mine", "machine": "PC fixe"}
         ready = [m for m in text["models"] if m["ready"]]

@@ -32,7 +32,9 @@ pour les images et les vidéos, celui du catalogue (ou d'une recette de ComfyUI,
   l'ordre où le nœud choisissait (chat/creations.usable : les licences restrictives en dernier),
   les recettes prêtes (comfy_creations.choices) ensuite : le menu remplace la liste du mode
   « Créer ».
-- Audio : rien encore (« bientôt : voix, musique, effets sonores »).
+- Audio : audio/ranking.py (menu), la même forme, chaque modèle avec son genre (voix, musique,
+  effets sonores) ; en plus, « genres » : pour chacun, ce que prendrait « Automatique » et la
+  suggestion (docs/conception/audio.md).
 
 « Sur mes machines seulement » (mine_only) : rien du réseau public. Rien n'est téléchargé, essayé
 ni noté ici (placement.best_public sans note) ; un genre illisible (moteur arrêté…) reste vide
@@ -66,7 +68,7 @@ def menu(executor=None, mine_only: bool = False) -> dict:
     for kind, build in (("text", lambda: text(executor, mine_only)),
                         ("image", lambda: media("image", mine_only)),
                         ("video", lambda: media("video", mine_only)),
-                        ("audio", audio)):
+                        ("audio", lambda: audio(mine_only))):
         try:
             found[kind] = build()
         except Exception as exc:              # un genre illisible n'empêche pas les autres
@@ -75,9 +77,11 @@ def menu(executor=None, mine_only: bool = False) -> dict:
     return found
 
 
-def audio() -> dict:
-    """L'audio (voix, musique, effets sonores) : rien encore, un autre travail le remplira."""
-    return empty()
+def audio(mine_only: bool = False) -> dict:
+    """L'audio (voix, musique, effets sonores) : audio/ranking.menu, chaque modèle avec son
+    genre, et « Automatique » pour chacun des trois genres (« genres »)."""
+    from aiodos.audio import ranking as audio_ranking
+    return audio_ranking.menu(mine_only)
 
 
 def _here() -> str:

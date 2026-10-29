@@ -4,7 +4,7 @@
   "placeholder_image": "Décris l'image à créer…",
   "placeholder_video": "Décris la vidéo à créer…",
   "hint": "Entrée pour créer · Maj+Entrée pour aller à la ligne · Échap pour revenir à la conversation",
-  "button": "Créer une image ou une vidéo",
+  "button": "Créer une image, une vidéo ou un son",
   "close": "Revenir à la conversation",
   "model": "Modèle",
   "format": "Format",
@@ -76,7 +76,46 @@
   },
   "nothing_ready_images": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : installe-en un dans « Images et vidéos ».",
   "nothing_ready_videos": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne : installe-en un dans « Images et vidéos ».",
-  "unknown_kind": "Genre inconnu : image ou vidéo.",
+  "unknown_kind": "Genre inconnu : image, vidéo, voix, musique ou effet sonore.",
   "not_found": "Création introuvable.",
-  "continued": "La conversation a continué depuis : seule la dernière création peut céder la place à une réponse en texte."
+  "continued": "La conversation a continué depuis : seule la dernière création peut céder la place à une réponse en texte.",
+  "kind_voice": "Voix",
+  "kind_music": "Musique",
+  "kind_sound": "Effet sonore",
+  "placeholder_voice": "Écris le texte à lire…",
+  "placeholder_music": "Décris la musique à créer (et « paroles : … » pour une chanson)…",
+  "placeholder_sound": "Décris le son à créer (une porte qui grince, la pluie…)…",
+  "create_voice": "Une voix qui lit un texte",
+  "create_music": "Une musique",
+  "create_sound": "Un effet sonore",
+  "no_model_voice": "Aucun modèle de voix prêt.",
+  "no_model_music": "Aucun modèle de musique prêt.",
+  "no_model_sound": "Aucun modèle d'effets sonores prêt.",
+  "usual_each_voice": "d'habitude {time} par son",
+  "usual_each_music": "d'habitude {time} par morceau",
+  "usual_each_sound": "d'habitude {time} par son",
+  "failed_voice": {
+    "one": "{n} lecture sur {total} n'a pas pu être créée : {error}.",
+    "other": "{n} lectures sur {total} n'ont pas pu être créées : {error}."
+  },
+  "failed_voice_tasks": {
+    "one": "{n} lecture sur {total} n'a pas pu être créée (le détail est dans Tâches).",
+    "other": "{n} lectures sur {total} n'ont pas pu être créées (le détail est dans Tâches)."
+  },
+  "failed_music": {
+    "one": "{n} musique sur {total} n'a pas pu être créée : {error}.",
+    "other": "{n} musiques sur {total} n'ont pas pu être créées : {error}."
+  },
+  "failed_music_tasks": {
+    "one": "{n} musique sur {total} n'a pas pu être créée (le détail est dans Tâches).",
+    "other": "{n} musiques sur {total} n'ont pas pu être créées (le détail est dans Tâches)."
+  },
+  "failed_sound": {
+    "one": "{n} effet sonore sur {total} n'a pas pu être créé : {error}.",
+    "other": "{n} effets sonores sur {total} n'ont pas pu être créés : {error}."
+  },
+  "failed_sound_tasks": {
+    "one": "{n} effet sonore sur {total} n'a pas pu être créé (le détail est dans Tâches).",
+    "other": "{n} effets sonores sur {total} n'ont pas pu être créés (le détail est dans Tâches)."
+  }
 }

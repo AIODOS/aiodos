@@ -29,7 +29,6 @@
   "restricted": "Restrictive license ({license}): to read and accept before downloading",
   "suggest_pc": "This PC can run {model} ({size}): download it?",
   "suggest_phone": "This phone can run {model} ({size}): download it?",
-  "soon_audio": "Coming soon: voice, music, sound effects.",
   "loading": "Reading the models…",
   "unreadable": "The models could not be read: {error}",
   "shape_square": "Square",
@@ -37,8 +36,12 @@
   "shape_portrait": "Portrait",
   "defaults": "Defaults",
   "defaults_help": "The model of each kind in a new conversation. “Automatic” takes the most powerful one available when sending.",
-  "soon": "coming soon",
   "saved": "Default model saved.",
   "license_title": "License of {name}",
-  "license_confirm": "I have read and accept this license"
+  "license_confirm": "I have read and accept this license",
+  "genre_voice": "Voice",
+  "genre_music": "Music",
+  "genre_sound": "Sound effects",
+  "no_audio": "No audio model known to this node.",
+  "auto_title_audio": "The best-ranked one available when sending: here, on your machines, or at your friends' if you accept it."
 }

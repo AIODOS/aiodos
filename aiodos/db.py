@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -522,6 +522,12 @@ MIGRATIONS = {
     # désormais dans Réglages → Modèles
     32: """
     DELETE FROM settings WHERE key = 'default_model';
+    """,
+    # L'audio dans la même galerie (audio/, docs/conception/audio.md) : genre « audio », la
+    # durée du son (secondes) et les paroles d'une chanson
+    33: """
+    ALTER TABLE images ADD COLUMN duration REAL;
+    ALTER TABLE images ADD COLUMN lyrics TEXT;
     """,
 }
 

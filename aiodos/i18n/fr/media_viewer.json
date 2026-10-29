@@ -11,5 +11,7 @@
   "saved": "Enregistrée : {where}",
   "delete_image": "Supprimer cette image ?",
   "delete_video": "Supprimer cette vidéo ?",
-  "delete_text": "Le fichier est effacé de cette machine."
+  "delete_text": "Le fichier est effacé de cette machine.",
+  "sound_length": "{n} s de son",
+  "delete_audio": "Supprimer ce son ?"
 }

@@ -1,5 +1,6 @@
-"""Moteurs livrés avec les versions signées : llama.cpp (gros modèles répartis) et
-stable-diffusion.cpp (images). Personne n'a à les installer à la main.
+"""Moteurs livrés avec les versions signées : llama.cpp (gros modèles répartis),
+stable-diffusion.cpp (images) et audio.cpp (voix, musique, effets sonores). Personne n'a à les
+installer à la main.
 
 L'outil de publication joint l'archive officielle de chaque moteur, d'une version épinglée
 (tools/engine_release.py), comme fichier de type « <moteur>-<plateforme> » du manifeste,
@@ -29,8 +30,10 @@ log = logging.getLogger("aiodos.updates")
 
 LLAMA = "llama.cpp"
 IMAGES = "stable-diffusion.cpp"
+AUDIO = "audio.cpp"                # i18n: tel quel (nom du moteur, pas une clé de texte)
 # Les programmes dont AIODOS se sert : une archive sans eux est inutilisable
-PROGRAMS = {LLAMA: ("llama-server", "ggml-rpc-server"), IMAGES: ("sd-server",)}
+PROGRAMS = {LLAMA: ("llama-server", "ggml-rpc-server"), IMAGES: ("sd-server",),
+            AUDIO: ("audiocpp_cli",)}
 FIND_TTL = 60                     # un moteur arrivé avec une nouvelle version est vu en 1 min
 PACKAGED_ENV = "AIODOS_ENGINES_DIR"   # appli Android : ses propres programmes (node/android_app.py)
 _FOLDER = re.compile(r"[0-9a-f]{16}")
