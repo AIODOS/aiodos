@@ -34,7 +34,9 @@ conclusion (une seule machine publique d'accord, des machines en désaccord) est
 depuis ESTABLISHED_S au moins (sa première vue, network/sightings.py), au moins un contrôle
 réussi compté ainsi, aucun raté. Elle est préférée comme machine de contrôle, et seule elle
 peut, sans seconde machine, faire compter une faute flagrante ou peser contre des machines
-sans passé (spot_check).
+sans passé (spot_check). Depuis le 29/10/2026 au soir, elle est aussi préférée pour répondre,
+seule elle passe devant cette machine, et un modèle qu'elle a devient contrôlable
+(network/placement.py ; established_among, pour tout l'annuaire d'un coup).
 """
 import logging
 import re
@@ -66,6 +68,7 @@ MAX_BENCHED = 10_000           # machines écartées gardées en mémoire, au pl
 # ne peut pas reconnaître (5 % des réponses, tirées au hasard), mené par une de mes machines
 # ou par deux machines indépendantes : il lui faut répondre honnêtement presque toujours
 ESTABLISHED_S = 86400
+BATCH = 500                    # clés lues par requête (established_among), au plus
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")      # comme network/public_chat.py
 
 _COLUMNS = ("key", "served", "tps", "checks_ok", "checks_failed", "aside_until", "forever",
@@ -282,10 +285,7 @@ def established(key) -> bool:
     """Cette machine publique est-elle établie ici : vue depuis ESTABLISHED_S au moins
     (first_seen), au moins un contrôle réussi par une de mes machines ou par deux machines de
     contrôle indépendantes (checks_sure), aucun contrôle raté, pas de côté ? (Un écart de
-    quelques minutes après un échec, bench, n'y change rien : il dit l'instant, pas le passé.)
-
-    Pour network/placement.py, plus tard : préférer, parmi les machines publiques, celles qui
-    sont établies (cf. la conception, § 8)."""
+    quelques minutes après un échec, bench, n'y change rien : il dit l'instant, pas le passé.)"""
     row = get(key)
     if row is None or row["checks_sure"] < 1 or row["checks_failed"] or row["forever"]:
         return False
@@ -294,6 +294,23 @@ def established(key) -> bool:
         return False
     first = first_seen(key)
     return first is not None and first <= now - ESTABLISHED_S
+
+
+def established_among(keys) -> set:
+    """Celles de ces clés qui sont établies (established), pour tout l'annuaire à la fois
+    (network/placement.py) : une lecture par lot de BATCH clés ne garde que les lignes qui
+    peuvent l'être (un contrôle sûr, aucun raté, pas de côté), rares, relues ensuite une à une
+    par established."""
+    keys = [key for key in dict.fromkeys(keys or []) if valid_key(key)]
+    now = db.now()
+    maybe = []
+    for at in range(0, len(keys), BATCH):
+        chunk = keys[at:at + BATCH]
+        maybe += [row["key"] for row in db.query(
+            f"SELECT key FROM public_reputation WHERE key IN ({', '.join('?' * len(chunk))}) "
+            "AND checks_sure >= 1 AND checks_failed = 0 AND forever = 0 "
+            "AND COALESCE(aside_until, 0) <= ?", (*chunk, now))]
+    return {key for key in maybe if established(key)}
 
 
 def speed(key) -> float | None:

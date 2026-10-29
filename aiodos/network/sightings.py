@@ -12,10 +12,12 @@ qui seul compte vraiment.
 Ce qu'on garde (table public_sightings, migration 29) : par clé de nœud de l'annuaire, la
 première fois qu'on l'a vue (first_seen), la dernière (last_seen, redite au plus une fois par
 REFRESH_S), et l'empreinte de sa liste de modèles à la première vue (models, fingerprint :
-une empreinte, pas les noms). Les nœuds sont notés chaque fois que network/public_controls.py
-relit l'annuaire (après chaque réponse publique complète, au choix des machines de
-contrôle), et toute clé que la réputation note pour la première fois (reputation._ensure).
-Rien du contenu des conversations ; rien n'est partagé avec d'autres machines.
+une empreinte, pas les noms). Les nœuds sont notés à chaque lecture de l'annuaire au
+compagnon (network/public.py : la synchronisation toutes les 15 s, et la relecture du choix
+des machines), aussi quand network/public_controls.py relit l'annuaire gardé (sans coût :
+une clé déjà notée ne l'est pas deux fois avant REFRESH_S), et toute clé que la réputation
+note pour la première fois (reputation._ensure). Rien du contenu des conversations ; rien
+n'est partagé avec d'autres machines.
 
 Ce qu'on en tire :
 - together(a, b) : « apparues ensemble », premières vues à moins de TOGETHER_S l'une de
@@ -23,6 +25,9 @@ Ce qu'on en tire :
   indépendante de rien de récent).
 - alike(a, b) : « se ressemblent », apparues ensemble et la même empreinte de modèles (connue
   des deux).
+- groups(clés) : ces machines en groupes d'apparues ensemble, de proche en proche ; deux
+  machines de groupes différents ne sont jamais apparues ensemble (network/placement.py : un
+  modèle n'est contrôlable par le seul réseau public que chez trois groupes au moins).
 
 Bornes : une clé plus vue depuis KEEP_DAYS jours est oubliée ; MAX_ROWS lignes au plus, et la
 table pleine ne prend plus de clé nouvelle (une inondation de clés neuves n'efface pas la
@@ -48,6 +53,7 @@ DAY_S = 86400
 KEEP_DAYS = 180                # plus vue depuis : oubliée (comme reputation.KEEP_DAYS)
 MAX_ROWS = 20_000              # lignes gardées, au plus (l'annuaire en garde 2 000 à la fois)
 MAX_NOTED = 20_000             # clés retenues en mémoire (REFRESH_S), au plus
+BATCH = 500                    # clés lues par requête (firsts), au plus
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")      # comme reputation.valid_key
 
 _lock = threading.Lock()
@@ -149,6 +155,41 @@ def alike(a, b, now=None) -> bool:
         return False
     models = _models(a)
     return models is not None and models == _models(b)
+
+
+def firsts(keys) -> dict:
+    """{clé : première vue} de ces clés, lues par lots de BATCH ; une clé jamais vue (ou mal
+    formée) n'y est pas."""
+    keys = [key for key in dict.fromkeys(keys or []) if _valid(key)]
+    found = {}
+    for at in range(0, len(keys), BATCH):
+        chunk = keys[at:at + BATCH]
+        found.update((row["key"], row["first_seen"]) for row in db.query(
+            f"SELECT key, first_seen FROM public_sightings WHERE key IN "
+            f"({', '.join('?' * len(chunk))})", chunk))
+    return found
+
+
+def groups(keys, now=None, known=None) -> list:
+    """Ces machines publiques en groupes d'« apparues ensemble », de proche en proche : rangées
+    par première vue (une jamais vue : à l'instant, comme pour together), un nouveau groupe
+    commence quand la suivante est apparue TOGETHER_S ou plus après la précédente. Deux
+    machines de groupes différents ne sont donc jamais apparues ensemble (together), ni ne se
+    ressemblent (alike le suppose) : trois groupes, ce sont, quelle que soit celle qui répond,
+    deux machines de contrôle indépendantes d'elle et l'une de l'autre (spot_check, « Qui
+    conclut »). Prudent : A, B, C apparues à 4 h d'écart chacune forment un seul groupe, même
+    si A et C ne sont pas apparues ensemble. known : {clé : première vue} déjà lu (firsts).
+    → [[clé…]…], le groupe le plus ancien d'abord."""
+    now = db.now() if now is None else now
+    keys = list(dict.fromkeys(keys or []))
+    known = firsts(keys) if known is None else known
+    found, last = [], None
+    for at, key in sorted((known.get(key, now), key) for key in keys):
+        if last is None or at - last >= TOGETHER_S:
+            found.append([])
+        found[-1].append(key)
+        last = at
+    return found
 
 
 def forget():

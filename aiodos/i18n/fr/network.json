@@ -56,6 +56,7 @@
   "public_directory": "annuaire : {error}",
   "public_needs_internet": "Active d'abord « Internet », juste en dessous : le réseau public passe par lui.",
   "public_connecting": "Connexion au réseau public…",
+  "public_preparing": "Préparation de l'identité publique… (une seule fois)",
   "public_key": "Clé publique de cette machine :",
   "public_none": "Aucun autre nœud public en ligne pour l'instant.",
   "public_show": "Les voir dans « Machines connectées »",

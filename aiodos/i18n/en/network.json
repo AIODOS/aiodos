@@ -59,6 +59,7 @@
   "public_directory": "directory: {error}",
   "public_needs_internet": "First turn on “Internet”, just below: the public network goes through it.",
   "public_connecting": "Connecting to the public network…",
+  "public_preparing": "Preparing the public identity… (only once)",
   "public_key": "This machine's public key:",
   "public_none": "No other public node online for now.",
   "public_show": "See them in “Connected machines”",

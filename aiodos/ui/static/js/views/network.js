@@ -172,11 +172,15 @@ async function addByAddress() {
 // --------------------------------------------------------- réseau public (essai)
 const shortKey = key => (key ? `${key.slice(0, 6)}…${key.slice(-4)}` : '');
 
+// La première fois, le compagnon cherche la clé du nœud public (une preuve de travail : une
+// dizaine de secondes sur un téléphone) : « preparing », dit au lieu de « connexion… »
+const publicJoining = pub => t(pub.preparing ? 'network.public_preparing' : 'network.sub_connecting');
+
 function publicSummary(pub) {
   const status = !pub.wanted ? esc(t('network.sub_off'))
     : !pub.internet ? warn(t('network.public_sub_needs_internet'))
       : pub.error ? warn(pub.error)
-        : !pub.joined ? esc(t('network.sub_connecting'))
+        : !pub.joined ? esc(publicJoining(pub))
           : esc(t('network.public_count', { n: finite(pub.count) ?? 0 }));
   return `<span class="pill">${esc(t('network.public_trial'))}</span> ${status}`;
 }
@@ -194,7 +198,8 @@ function renderPublic(box, pub) {
   const detail = !pub.wanted ? ''
     : !pub.internet ? `<div class="hint">${esc(t('network.public_needs_internet'))}</div>`
       : pub.error ? `<div class="banner warn net-banner">${icon('warn')}<div>${esc(pub.error)}</div></div>`
-        : !pub.joined ? `<div class="faint">${esc(t('network.public_connecting'))}</div>`
+        : !pub.joined ? `<div class="faint">${esc(t(pub.preparing ? 'network.public_preparing'
+          : 'network.public_connecting'))}</div>`
           : `<div class="peer-facts net-key">${esc(t('network.public_key'))}
               <code title="${esc(pub.key)}">${esc(shortKey(String(pub.key || '')))}</code> · ${esc(publicCounts(pub))}</div>
             ${finite(pub.count) ? `<button type="button" class="btn sm" data-show-public>${icon('globe')}${

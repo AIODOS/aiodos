@@ -23,7 +23,7 @@ from aiodos.knowledge import store
 from aiodos.network import (peers, placement, public_chat, public_controls, public_lending,
                             remote_models, reputation, sightings, spot_check)
 from aiodos.node import speed
-from tests.test_collusion import never, seen
+from tests.test_collusion import establish, never, seen
 from tests.test_public_chat import (AUTH, BIG, OTHER, PC, SMALL, THIRD, TOKEN, Executor,
                                     _library, ask, at, checkable, directory, local_models, node,
                                     routes)
@@ -170,7 +170,7 @@ def test_with_my_documents_only_my_machines_check(monkeypatch, companion, opened
     (il attend une prochaine fois)."""
     bigger_here(monkeypatch)
     settings.set_many({"rag_min_score": 0.1, "public_documents": True})
-    directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20))
+    directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20), checkable(BIG))
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         store.ensure_defaults()
         _library("maison", "fusée lunaire notes maison", fake_embed)
@@ -245,12 +245,17 @@ def test_two_fresh_nodes_of_one_liar_do_not_vouch_for_each_other(
     rien) annoncent le même modèle, qui devient « contrôlable » (deux machines publiques).
     L'un répond, l'autre, seule machine de contrôle, lui donne raison : autrefois le contrôle
     était réussi ; désormais sans conclusion, rien n'est compté, et la réponse suivante du
-    prêteur est encore « la première »."""
+    prêteur est encore « la première ». Et, depuis le 29/10/2026 au soir, deux nœuds vus
+    ensemble ne rendent plus leur modèle contrôlable (placement._controllable) : le 9b n'est
+    plus proposé comme modèle plus gros ; demandé par son nom (rien ici), il l'est encore."""
     bigger_here(monkeypatch)
     directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20))
+    assert placement.bigger_public(SMALL) is None
+    assert placement.plan(AUTO, Executor(), public=True, bigger=True) == [SMALL]
+    local_models(monkeypatch)                               # rien ici : le 9b par son nom
     companion.script = {PC: ("answer", [HONEST_A]), OTHER: ("answer", [HONEST_A])}
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
-        events = ask(ui, QUESTION)
+        events = ask(ui, QUESTION, model=placement.auto_id(BIG))
         assert routes(events) == [at(PC, BIG)] and events[-1]["error"] is None
         (thread,) = checks
         thread.join(10)
@@ -323,6 +328,8 @@ def test_placement_skips_set_aside_machines_and_prefers_the_speed_measured_here(
     assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]    # annoncée : derrière
     reputation.note_served(PC, 200, 10.0)                  # mesurée ici : 20, pas 100
     reputation.note_served(OTHER, 1000, 10.0)              # 100, pas 10
+    assert plan() == [SMALL, at(OTHER, SMALL), at(PC, SMALL)]    # pas établie : derrière
+    establish(OTHER)
     assert plan() == [at(OTHER, SMALL), SMALL, at(PC, SMALL)]
     reputation.set_aside(OTHER)                             # contrôle raté : plus candidate
     assert plan() == [SMALL, at(PC, SMALL)]

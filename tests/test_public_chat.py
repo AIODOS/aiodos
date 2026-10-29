@@ -25,6 +25,7 @@ from aiodos.knowledge import chunking, store
 from aiodos.network import placement, public, public_chat, public_refusals, reputation, route
 from aiodos.node import speed
 from aiodos.services import ollama
+from tests.test_collusion import establish
 
 SMALL, BIG = "qwen3.5:0.8b", "qwen3.5:9b"
 AUTO = placement.auto_id(SMALL)
@@ -179,14 +180,20 @@ def directory(*nodes):
 
 
 def checkable(*models, key="9f" * 32):
-    """Une autre machine du réseau public qui prête ces modèles, sans place libre : elle n'est
-    jamais choisie, mais ils deviennent contrôlables (placement._controllable)."""
+    """Une autre machine du réseau public, établie ici, qui prête ces modèles, sans place
+    libre : elle n'est jamais choisie, mais ils deviennent contrôlables (placement._controllable :
+    une machine établie les a ; deux machines vues ensemble ne suffisent plus, 29/10/2026)."""
+    establish(key)
     return node(key, *models, free=0)
 
 
-def measured(key, tps):
-    """La vitesse de cette machine publique mesurée ici (une réponse servie de 10 s)."""
+def measured(key, tps, established=True):
+    """La vitesse de cette machine publique mesurée ici (une réponse servie de 10 s) ; et, sauf
+    established=False, la machine établie ici (reputation.established) : seule une machine
+    établie et mesurée passe devant cette machine (placement, 29/10/2026)."""
     reputation.note_served(key, int(tps * 10), 10.0)
+    if established:
+        establish(key)
 
 
 def at(key, model):
@@ -283,10 +290,13 @@ def test_an_announced_speed_never_puts_a_stranger_ahead(monkeypatch, companion, 
     monkeypatch.setattr(placement.android, "is_android", lambda: True)   # un téléphone non plus
     assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]
     assert placement.candidates(SMALL, Executor(), public=True)[1].tps == 1000   # borné
-    measured(OTHER, 30)                                   # mesurée ici : devant le téléphone
+    measured(OTHER, 30, established=False)                # mesurée ici, pas établie : derrière
+    assert plan() == [SMALL, at(PC, SMALL), at(OTHER, SMALL)]
+    measured(OTHER, 30)                                   # établie, mesurée : devant le téléphone
     assert plan() == [at(OTHER, SMALL), SMALL, at(PC, SMALL)]
-    # Cette machine occupée : les machines publiques libres d'abord, mesurées ou non
-    assert plan(busy=1) == [at(PC, SMALL), at(OTHER, SMALL), SMALL]
+    # Cette machine occupée : les machines publiques libres d'abord, mesurées ou non ; à
+    # modèle égal, l'établie d'abord, même moins rapide que ce que l'autre annonce
+    assert plan(busy=1) == [at(OTHER, SMALL), at(PC, SMALL), SMALL]
     local_models(monkeypatch)                             # le modèle n'est pas ici
     assert plan() == [at(OTHER, SMALL), at(PC, SMALL)]
 
@@ -345,16 +355,22 @@ def test_a_bigger_model_is_offered_once_then_used_or_not(monkeypatch, companion,
 def test_only_a_model_another_machine_can_check_is_bigger(monkeypatch, companion, opened):
     """Relecture du 28/10/2026 : un nœud seul à annoncer « qwen3.5:999b » passait pour le plus
     gros modèle et n'avait jamais de machine de contrôle. Un modèle plus gros n'est pris que
-    contrôlable : chez deux machines publiques qui prêtent (place libre ou non), ou chez une de
+    contrôlable : chez des machines publiques qui prêtent (place libre ou non) de trois groupes
+    indépendants (29/10/2026 : deux machines vues ensemble ne suffisent plus), ou chez une de
     mes machines ; une taille invraisemblable ne compte pas."""
     from aiodos.network import peers
+    from tests.test_collusion import seen
     liar, huge = "qwen3.5:999b", "qwen3.5:2000b"
     local_models(monkeypatch, SMALL)
     settings.set_value("public_bigger_model", True)
     plan = lambda: placement.plan(AUTO, Executor(), public=True, bigger=True)  # noqa: E731
     directory(node(PC, liar), node(OTHER, BIG))
     assert placement.bigger_public(SMALL) is None and plan() == [SMALL]
-    directory(node(PC, liar, BIG), node(OTHER, BIG, free=0))     # le 9b chez deux machines
+    directory(node(PC, liar, BIG), node(OTHER, BIG, free=0))     # deux machines vues ensemble
+    assert placement.bigger_public(SMALL) is None and plan() == [SMALL]
+    seen(OTHER, 7)                                                # trois groupes indépendants
+    seen(THIRD, 14)
+    directory(node(PC, liar, BIG), node(OTHER, BIG, free=0), node(THIRD, BIG, free=0))
     assert placement.bigger_public(SMALL) == BIG and plan() == [at(PC, BIG), SMALL]
     directory(node(PC, liar), node(OTHER, liar, lends=False))     # l'autre ne prête pas
     assert placement.bigger_public(SMALL) is None
@@ -366,6 +382,58 @@ def test_only_a_model_another_machine_can_check_is_bigger(monkeypatch, companion
     peers.set_profile("fixe", {"lends_models": True, "ollama": {"models": [
         {"name": BIG, "caps": ["completion"], "fits_vram": True, "loaded": False}]}})
     assert placement.bigger_public(SMALL) == BIG and plan() == [at(PC, BIG), SMALL]
+
+
+def test_a_model_is_checkable_only_by_independent_groups(monkeypatch, companion, opened):
+    """Contre la collusion (29/10/2026 au soir) : deux nœuds neufs d'un même menteur rendaient
+    leur modèle « contrôlable » (deux machines distinctes suffisaient). Il faut désormais des
+    machines qui prêtent (place libre ou non) de trois groupes indépendants (sightings.groups :
+    celles apparues ensemble, de proche en proche, font un seul groupe), ou une machine établie
+    qui le prête (de côté : plus rien), ou une de mes machines (cf. plus haut)."""
+    from tests.test_collusion import seen
+    fourth, fifth, mid = "d4" * 32, "e5" * 32, "qwen3.5:4b"
+    checkable_now = lambda: placement._controllable(placement._lending())  # noqa: E731
+    directory(node(PC, BIG), node(OTHER, BIG))                  # deux nœuds neufs, ensemble
+    assert _tagged(BIG) not in checkable_now()
+    directory(node(PC, BIG), node(OTHER, BIG), node(THIRD, BIG))
+    assert _tagged(BIG) not in checkable_now()                  # trois, vus ensemble
+    seen(PC, 0)
+    seen(OTHER, 4)
+    seen(THIRD, 8)                                              # 4 h, puis 4 h : un seul groupe
+    assert _tagged(BIG) not in checkable_now()
+    seen(THIRD, 12)                                             # 8 h avant OTHER : deux groupes
+    assert _tagged(BIG) not in checkable_now()
+    seen(fourth, 24)
+    directory(node(PC, BIG), node(OTHER, BIG), node(THIRD, BIG), node(fourth, BIG, lends=False))
+    assert _tagged(BIG) not in checkable_now()                  # ne prête pas : ne compte pas
+    directory(node(PC, BIG), node(OTHER, BIG), node(THIRD, BIG), node(fourth, BIG, free=0))
+    assert _tagged(BIG) in checkable_now()                      # trois groupes
+    # Une seule machine établie qui le prête suffit ; mise de côté, plus rien
+    directory(node(PC, mid), node(fifth, mid, free=0))
+    assert _tagged(mid) not in checkable_now()
+    establish(fifth)
+    assert _tagged(mid) in checkable_now()
+    reputation.set_aside(fifth)
+    assert _tagged(mid) not in checkable_now()
+
+
+def _tagged(name):
+    return placement._tagged(name)
+
+
+def test_established_machines_first_at_a_comparable_rank(monkeypatch, companion, opened):
+    """À modèle égal, les machines publiques établies d'abord, même moins rapides ; jamais
+    devant un modèle plus gros (« Automatique · réseau public » : le meilleur modèle d'abord)."""
+    local_models(monkeypatch)                                   # le modèle n'est pas ici
+    directory(node(PC, SMALL, tps=90), node(OTHER, SMALL, tps=10))
+    plan = lambda: placement.plan(AUTO, Executor(), public=True)  # noqa: E731
+    assert plan() == [at(PC, SMALL), at(OTHER, SMALL)]
+    establish(OTHER)
+    assert plan() == [at(OTHER, SMALL), at(PC, SMALL)]
+    candidates = placement.candidates(SMALL, Executor(), public=True)
+    assert [c.established for c in candidates] == [True, False]
+    directory(node(PC, BIG, tps=90), node(OTHER, SMALL, tps=10), checkable(BIG, SMALL))
+    assert [c.model for c in placement.best_public()] == [at(PC, BIG), at(OTHER, SMALL)]
 
 
 def test_the_first_time_a_note_then_never_again(monkeypatch, companion, opened):

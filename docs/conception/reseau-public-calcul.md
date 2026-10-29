@@ -45,6 +45,14 @@ Décisions de l'auteur (27/10) :
    machine publique devant cette machine ; celle qu'elle annonce (« tps ») ne sert qu'à
    départager les machines publiques entre elles. Une machine jamais mesurée sert quand cette
    machine n'a pas le modèle, est occupée, ou pour un modèle plus gros accepté.
+   **Contre la collusion (29/10 au soir)** : il faut en plus qu'elle soit **établie** ici
+   (§ 8) ; à modèle égal, les machines établies passent devant les autres. « Connue depuis
+   quelques minutes » (`known_s`) ne suffit pas : une identité coûte ~2 s de calcul (§ 10),
+   et quelques minutes d'attente rien ; passer devant cette machine, libre et qui a le modèle,
+   c'est recevoir toutes ses conversations de ce modèle. Coût accepté : sur un réseau encore
+   petit, sans aucune de mes machines, ce téléphone répond lui-même, plus lentement, tant que
+   la machine publique rapide n'est pas établie (elle sert toujours quand il est occupé, n'a
+   pas le modèle, ou pour un modèle plus gros accepté).
 2. **Se cacher.** Pour chaque conversation, le compagnon du demandeur crée une **clé
    jetable** et un point de terminaison Iroh **en relais seulement** : le prêteur voit la
    clé jetable et l'adresse du relais, jamais l'adresse ni la clé du demandeur. La clé
@@ -115,6 +123,21 @@ plafonds pour tout le public.
 - **Jamais** sur batterie ; un téléphone seulement en charge et en Wi-Fi (comme pour un
   ami) ; une conversation de l'utilisateur sur cette machine passe devant et arrête le prêt
   en cours, comme aujourd'hui.
+- **Cadences du compagnon** (29/10, f1a0119, `public_serve.rs`, `cadence.rs`) : un flot de
+  connexions ou de flux ne rend pas la machine indisponible à peu de frais.
+  - **Nouvelles connexions** qui demandent `aiodos/public/1` : 20 d'un coup puis 10 par
+    seconde, pour tous ; au-delà, **refusées avant la poignée de main** (le protocole est lu
+    dans le premier paquet ; le groupe de discussion de l'annuaire ne compte pas). 32
+    connexions au plus : une nouvelle prend la place d'une connexion jamais servie, puis de
+    la plus anciennement servie, jamais d'une dont une requête avance.
+  - **Flux cadencés** : ceux des connexions jamais servies, 40 d'un coup puis 20 par seconde,
+    pour tous ; au-delà, 503 `busy` aussitôt, réponse toute faite, sans rien lire.
+  - **Une conversation en cours est protégée** (une connexion déjà servie) : ses flux ont
+    leur propre cadence (10 d'un coup puis 2 par seconde), jamais prise sur celle de tous ;
+    une des requêtes à la fois et une part des relais de la minute lui restent (les
+    connexions jamais servies, toutes ensemble, n'en ont qu'une, et 480 relayées par
+    minute) ; le corps qu'elle envoie garde sa place de lecture face aux nouveaux venus ; elle
+    ne cède sa place de connexion qu'après toutes celles qui n'ont jamais été servies.
 
 ## 6. Le modèle demandé
 
@@ -135,9 +158,22 @@ plafonds pour tout le public.
     Un nœud qui annonçait « qwen3.5:999b » passait toujours premier et, seul à porter ce nom,
     n'était jamais contrôlé. Une taille lue dans un nom au-delà de 1 000 milliards de
     paramètres est ignorée (aucune machine d'aujourd'hui n'en fait tourner davantage).
+    **Depuis le 29/10 au soir** (collusion, § 8) : deux machines ne suffisent plus, deux nœuds
+    neufs d'un même menteur rendaient leur modèle « contrôlable » l'un par l'autre. Il faut des
+    machines qui prêtent de **trois groupes indépendants** au moins (`sightings.groups` : les
+    machines apparues ensemble, de proche en proche, font un seul groupe ; trois groupes, c'est
+    le prêteur et deux machines de contrôle indépendantes de lui et l'une de l'autre, quel que
+    soit le prêteur), ou **une machine établie** qui l'a, ou une de mes machines.
   - **« Automatique · réseau public »** (`auto:*`, un téléphone sans modèle) : refusé, avec
     un message, si cette machine ou mes machines ont un modèle de conversation (une autre
-    application pouvait l'envoyer et prendre le plus gros modèle public sans l'accord).
+    application pouvait l'envoyer et prendre le plus gros modèle public sans l'accord). Le
+    meilleur modèle contrôlable d'abord, puis, à modèle égal, les machines établies. **Repli**
+    quand rien n'est contrôlable (un réseau encore minuscule ; décision du 28/10, revue le
+    29/10 au soir) : n'importe quel modèle, une machine **établie** d'abord, puis une qui a
+    déjà répondu ici sans faute, puis la **plus ancienne** (connue depuis le plus longtemps :
+    `known_s` du compagnon ou la première vue gardée ici, à un facteur deux près à partir de
+    10 min : une identité neuve passe après), puis le plus gros modèle. Avant, la taille venait
+    juste après « a déjà répondu » : un nœud neuf qui annonçait un gros modèle passait premier.
 
 ## 7. Ce qui part, ou non, chez un inconnu
 
@@ -224,11 +260,15 @@ plafonds pour tout le public.
   « contrôlable », l'un répondait, l'autre lui donnait raison : le contrôle passait
   toujours). Plus largement, une machine de contrôle publique peut mentir dans le sens du
   prêteur, ou contre lui. Ce qui change :
-  - **Premières vues** : chaque clé de l'annuaire est notée la première fois qu'on la voit
-    (après chaque réponse publique complète, à chaque choix des machines de contrôle),
-    avec l'empreinte de sa liste de modèles. Deux machines **apparues ensemble** : premières
-    vues à moins de 6 h ; elles **se ressemblent** si, en plus, leurs listes de modèles sont
-    identiques. Une clé jamais vue passe pour vue à l'instant.
+  - **Premières vues** : chaque clé de l'annuaire est notée la première fois qu'on la voit,
+    avec l'empreinte de sa liste de modèles : depuis le 29/10 au soir à **chaque lecture de
+    l'annuaire** au compagnon (`public.py` : la synchronisation toutes les 15 s, la
+    relecture du choix des machines), à 15 s près ; avant, seulement après une réponse
+    publique complète et au choix des machines de contrôle (une machine là depuis des jours
+    paraissait neuve à la première réponse). Le compagnon dit aussi depuis quand il connaît
+    chaque nœud (`known_s`, gardé par `public.py`). Deux machines **apparues ensemble** :
+    premières vues à moins de 6 h ; elles **se ressemblent** si, en plus, leurs listes de
+    modèles sont identiques. Une clé jamais vue passe pour vue à l'instant.
   - **Établie** (`reputation.established`) : vue depuis un jour au moins, au moins un
     contrôle réussi compté par les règles d'aujourd'hui (une de mes machines, ou deux machines
     indépendantes), aucun raté, pas de côté. Les contrôles réussis d'avant le 29/10 (une seule
@@ -266,10 +306,14 @@ plafonds pour tout le public.
     mes machines (un téléphone seul), rien ne devient établi par le seul réseau public tant
     que deux machines indépendantes n'ont pas été d'accord. L'annuaire noyé de clés neuves
     remplit aussi la table des premières vues (20 000 lignes ; pleine, elle n'efface pas les
-    anciennes). La parade de fond est ailleurs : le **compagnon** rend en parallèle les
-    identités publiques coûteuses (preuve de travail sur la clé), et `placement` devra
-    préférer les machines établies et ne compter un modèle « contrôlable » que chez des
-    machines indépendantes (à faire, `placement.py` n'est pas touché).
+    anciennes). La parade de fond est ailleurs : le **compagnon** rend les identités publiques
+    coûteuses (preuve de travail sur la clé, faite le 29/10 : § 10), et le choix des machines
+    s'en sert (ci-dessous).
+  - **Le choix des machines** (29/10 au soir, `placement.py`) : un modèle n'est
+    « contrôlable » que chez trois groupes indépendants, une machine établie ou une de mes
+    machines (§ 6) ; à modèle égal, les machines établies d'abord ; seule une machine établie
+    passe devant cette machine (§ 3) ; le repli « rien de contrôlable » prend une machine
+    établie, puis une qui a bien servi, puis la plus ancienne, avant la taille (§ 6).
 
 ## 9. Ce qu'on ajoute, fichier par fichier
 
@@ -312,9 +356,31 @@ forcé.
 
 ## 10. Hors de cette version
 
-Vidéos pour les inconnus (les images : § 11) ; pièces jointes ; réputation partagée ; preuve
-de travail contre les fausses identités (à mesurer si le plafond global ne suffit pas) ;
+Vidéos pour les inconnus (les images : § 11) ; pièces jointes ; réputation partagée ;
 paiement ou crédit (phase3-incitation.md).
+
+**Fait le 29/10 : la preuve de travail sur la clé du nœud public** (compagnon,
+`public_identity.rs`, f1a0119). SHA-256(« aiodos/public/pow » ‖ clé publique) doit commencer
+par **19 bits nuls** ; le compagnon la cherche une fois, sur tous les cœurs : ~2 s sur un PC
+(300 000 à 360 000 essais par seconde mesurés), **7 à 15 s estimées sur un téléphone** (1 fois
+sur 20, de 20 à 45 s), une seule fois (la clé est gardée ; une clé gardée sans preuve est
+remplacée). Pendant ce temps, l'état dit `preparing` et la vue Réseau « Préparation de
+l'identité publique… (une seule fois) » ; le nœud rejoint le réseau de lui-même ensuite. Une
+clé sans preuve n'entre ni dans l'annuaire ni parmi les voisins ; l'annuaire admet 30 nouveaux
+venus par minute et ne chasse personne. **1 000 identités coûtent ~26 min d'un PC** à pleine
+charge : un flot d'identités devient coûteux, pas impossible.
+
+**Ce qui reste** :
+- **Une carte graphique** génère et hache des clés bien plus vite qu'un processeur
+  (probablement des centaines de fois, comme les générateurs d'adresses personnalisées : à
+  mesurer) ; la difficulté ne peut pas monter beaucoup sans pénaliser les téléphones. La
+  preuve borne le flot, elle ne le rend pas impossible.
+- **La collusion d'un menteur patient** n'est pas résolue (§ 8, « Ce que cela ne règle
+  pas ») : des nœuds créés à plus de 6 h d'écart, avec des listes de modèles différentes,
+  paraissent indépendants ; ils peuvent rendre un modèle contrôlable (trois groupes) et se
+  donner raison dans un vote. Pour être établi, chacun doit encore réussir un contrôle qu'il
+  ne reconnaît pas, donc répondre honnêtement presque toujours ; et seule une machine établie
+  passe devant cette machine.
 
 ## 11. Images (29/10/2026)
 

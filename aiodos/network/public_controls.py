@@ -40,8 +40,10 @@ qui ont réussi le plus de contrôles et sont vues depuis le plus de jours d'abo
 apparues en même temps que le prêteur (network/sightings.together) en dernier ; la plus
 rapide à égalité. Ce qui conclut (deux machines indépendantes, ou une des miennes), et la
 diversité des machines qui votent : spot_check, « Qui conclut ». Pour savoir qui est apparu
-quand, l'annuaire gardé (public.seen) est noté (sightings.sighted) après chaque réponse
-publique complète (jamais avant le premier mot) et à chaque choix des machines de contrôle.
+quand, l'annuaire est noté (sightings.sighted) à chaque lecture au compagnon (network/public.py,
+depuis le 29/10/2026 au soir) ; et ici encore, sans coût, l'annuaire gardé (public.seen) après
+chaque réponse publique complète (jamais avant le premier mot) et à chaque choix des machines
+de contrôle.
 
 La lecture (read, depuis le 28/10/2026) : après sa réponse B, la machine de contrôle lit A et
 B sous le même modèle (llm/reading.py chez elle), et spot_check.compare reçoit les deux

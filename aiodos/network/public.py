@@ -27,6 +27,15 @@ ou rejoint sans qu'aucun nœud n'ait encore été vu, et depuis moins de SEARCH_
 démarrage, ou l'arrivée sur le réseau), on cherche encore (searching) : l'interface d'une
 machine sans modèle dit « Recherche des machines du réseau public… » plutôt qu'« aucune ne
 peut répondre » (chat/public_consent.py, entry).
+
+Depuis le 29/10/2026 au soir (contre la collusion, network/sightings.py) : chaque lecture de
+l'annuaire au compagnon (la synchronisation toutes les 15 s, la relecture du choix des
+machines) note la première vue de chaque nœud (_sight, sightings.sighted), à 15 s près, au
+lieu d'attendre une réponse publique ; le compagnon dit aussi depuis quand il connaît chaque
+nœud (« known_s », gardé ici : placement._known). Et, la première fois, pendant que le
+compagnon cherche la clé du nœud public (une preuve de travail : une dizaine de secondes sur un
+téléphone), l'état le dit (« preparing ») : la vue Réseau affiche « Préparation de l'identité
+publique… » au lieu de « connexion… ».
 """
 import asyncio
 import json
@@ -37,7 +46,7 @@ import time
 
 from aiodos import __version__, settings
 from aiodos.i18n import t
-from aiodos.network import public_imaging, public_lending, route
+from aiodos.network import public_imaging, public_lending, route, sightings
 from aiodos.network.companion import CompanionError
 from aiodos.services import ollama
 
@@ -81,7 +90,9 @@ def _number(value) -> bool:
 def _node(raw) -> dict | None:
     """Un nœud vu, tel que le compagnon le dit, typé : sa clé, sa version, ses modèles, s'il
     prête, depuis quand il a été vu, et, s'il les publie, « free » (places libres) et
-    « tps » (jetons par seconde)."""
+    « tps » (jetons par seconde) ; « known_s », si le compagnon le dit (depuis le 29/10/2026) :
+    depuis combien de secondes il connaît ce nœud (ce que lui-même a vu, pas ce que le nœud
+    annonce)."""
     if not isinstance(raw, dict) or not isinstance(raw.get("key"), str) or not raw["key"]:
         return None
     models = raw.get("models") if isinstance(raw.get("models"), list) else []
@@ -94,6 +105,8 @@ def _node(raw) -> dict | None:
         node["free"] = max(0, min(MAX_FREE, round(raw["free"])))
     if _number(raw.get("tps")) and 0 < raw["tps"] < MAX_TPS:
         node["tps"] = round(float(raw["tps"]), 1)
+    if _number(raw.get("known_s")):
+        node["known_s"] = max(0, int(raw["known_s"]))
     return node
 
 
@@ -121,6 +134,21 @@ def _remember(status):
         _latest.update(key=key, nodes=nodes, at=now, found=_latest["found"] or bool(nodes))
 
 
+def _sight(status):
+    """La première vue de chaque nœud de cet état lu au compagnon (sightings.sighted : une clé
+    déjà notée ne l'est de nouveau qu'une fois par jour, sans écrire en base), à chaque lecture
+    de l'annuaire (cf. le début du module). Une écriture en base : hors de la boucle du
+    gestionnaire. Jamais d'échec : une machine non notée passe pour vue à l'instant, ce qui ne
+    lui donne rien."""
+    nodes = status.get("nodes") if isinstance(status, dict) and status.get("enabled") else None
+    if not nodes:
+        return
+    try:
+        sightings.sighted(nodes)
+    except Exception:  # noqa: BLE001 — base occupée… : à la lecture suivante
+        log.debug("Réseau public : premières vues non notées", exc_info=True)  # i18n: tel quel
+
+
 def _refresh():
     """L'annuaire relu au compagnon s'il date de plus de FRESH_S secondes, et seulement si le
     réseau public est rejoint (dernière synchronisation, Public.sync) ; sinon, ou si le
@@ -137,13 +165,14 @@ def _refresh():
     except Exception:  # noqa: BLE001 — compagnon arrêté, lent ou ancien : l'état gardé
         return
     _remember(status)
+    _sight(status)
 
 
 def seen(fresh: bool = False) -> tuple:
     """(clé de cette machine sur le réseau public, nœuds vus) d'après le dernier état lu au
-    compagnon ; « seen_s » de chaque nœud y compte le temps écoulé depuis. Rien si le
-    réseau public n'est pas rejoint. fresh : relu d'abord au compagnon s'il date de plus de
-    FRESH_S secondes (_refresh)."""
+    compagnon ; « seen_s » et « known_s » de chaque nœud y comptent le temps écoulé depuis.
+    Rien si le réseau public n'est pas rejoint. fresh : relu d'abord au compagnon s'il date de
+    plus de FRESH_S secondes (_refresh)."""
     if fresh:
         _refresh()
     with _lock:
@@ -151,7 +180,9 @@ def seen(fresh: bool = False) -> tuple:
     if not nodes:
         return key, []
     age = int(max(0.0, time.monotonic() - at))
-    return key, [dict(node, seen_s=node["seen_s"] + age) for node in nodes]
+    return key, [dict(node, seen_s=node["seen_s"] + age,
+                      **({"known_s": node["known_s"] + age} if "known_s" in node else {}))
+                 for node in nodes]
 
 
 def searching() -> bool:
@@ -236,10 +267,14 @@ class Public:
             elif self.wanted:
                 self._status = _typed(await asyncio.to_thread(companion.api, "GET",
                                                               "/net/v1/public"))
-                if not self._status.get("enabled"):
-                    self._sent = None      # le compagnon n'y est plus : redit au prochain tour
+                # Le compagnon n'y est plus : redit au prochain tour ; sauf s'il cherche encore
+                # la clé du nœud public (« preparing ») : il rejoindra le réseau de lui-même
+                if not self._status.get("enabled") and not self._status.get("preparing"):
+                    self._sent = None
             self._error = None
             _remember(self._status if self.wanted else None)
+            if self.wanted:
+                await asyncio.to_thread(_sight, self._status)
         except CompanionError as exc:
             if "Chemin inconnu" in str(exc):   # i18n: tel quel (réponse du compagnon, en Rust)
                 self._error = t("net.public_unsupported")
@@ -250,10 +285,13 @@ class Public:
     def snapshot(self) -> dict:
         status = self._status or {}
         nodes = status.get("nodes") or []
+        joined = bool(status.get("enabled"))
         return {
             "wanted": self.wanted,
             "internet": self.m.internet.enabled,
-            "joined": bool(status.get("enabled")),
+            "joined": joined,
+            # La clé du nœud public se cherche (la première fois, cf. le début du module)
+            "preparing": self.wanted and not joined and status.get("preparing") is True,
             "key": status.get("key"),
             "neighbors": status.get("neighbors") or 0,
             "count": len(nodes),

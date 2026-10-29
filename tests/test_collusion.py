@@ -99,6 +99,51 @@ def test_the_sightings_stay_bounded_and_keep_the_old_ones(monkeypatch):
     assert kept == {THIRD}
 
 
+def test_groups_of_machines_that_appeared_together(monkeypatch):
+    """sightings.groups (network/placement.py : un modèle contrôlable chez trois groupes) :
+    rangées par première vue, un nouveau groupe à 6 h ou plus de la précédente ; de proche en
+    proche (4 h, puis 4 h : un seul groupe, même à 8 h d'un bout à l'autre) ; une clé jamais
+    vue l'est à l'instant ; deux machines de groupes différents ne sont jamais apparues
+    ensemble."""
+    now = db.now()
+    monkeypatch.setattr(db, "now", lambda: now)
+    seen(LENDER, 0)
+    seen(OTHER, 7)
+    seen(THIRD, 14)
+    keys = [LENDER, OTHER, THIRD]
+    assert sightings.groups(keys) == [[THIRD], [OTHER], [LENDER]]
+    assert sightings.groups(keys + [FOURTH]) == [[THIRD], [OTHER], [LENDER, FOURTH]]  # jamais vue
+    seen(FOURTH, 10.5)                                   # 3 h 30 après THIRD, avant OTHER
+    assert sightings.groups(keys + [FOURTH]) == [[THIRD, FOURTH, OTHER], [LENDER]]
+    seen(FOURTH, 6)                                      # tout juste 6 h après LENDER : à part
+    assert len(sightings.groups([LENDER, FOURTH])) == 2 and not sightings.together(LENDER, FOURTH)
+    found = sightings.groups(keys + [FOURTH])
+    assert found == [[THIRD], [OTHER, FOURTH], [LENDER]]
+    for i, group in enumerate(found):                    # d'un groupe à l'autre : jamais ensemble
+        for other in found[i + 1:]:
+            assert not any(sightings.together(a, b) for a in group for b in other)
+    # firsts : par lots, sans les clés jamais vues ni mal formées ; known évite de relire
+    monkeypatch.setattr(sightings, "BATCH", 2)
+    assert sightings.firsts(keys + ["trop-court", FIFTH, LENDER]) == {
+        LENDER: now, OTHER: now - 7 * HOUR, THIRD: now - 14 * HOUR}
+    assert sightings.groups(keys, known={}) == [keys]    # rien de connu : tout à l'instant
+    assert sightings.groups([]) == []
+
+
+def test_established_among_reads_the_whole_directory_at_once(monkeypatch):
+    establish(OTHER)
+    establish(THIRD)
+    reputation.note_served(LENDER, 100, 2.0)            # a servi, jamais contrôlée
+    seen(FOURTH, 1)
+    reputation.note_check(FOURTH, True)                  # contrôlée, mais vue il y a une heure
+    reputation.set_aside(THIRD)
+    monkeypatch.setattr(reputation, "BATCH", 2)
+    keys = [LENDER, OTHER, THIRD, FOURTH, FIFTH, "trop-court", OTHER]
+    assert reputation.established_among(keys) == {OTHER}
+    assert reputation.established_among(keys) == {k for k in set(keys) if reputation.established(k)}
+    assert reputation.established_among([]) == set()
+
+
 def test_a_key_the_reputation_notes_is_seen_at_the_latest_then():
     reputation.note_served(LENDER, 100, 2.0)
     assert sightings.first_seen(LENDER) == reputation.get(LENDER)["first_seen"]

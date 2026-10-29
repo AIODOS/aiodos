@@ -137,7 +137,8 @@ def test_no_model_here_the_best_public_model_first(monkeypatch, companion, opene
     called = nothing_here(monkeypatch)
     directory(node(PC, SMALL, tps=90), node(OTHER, BIG, "embeddinggemma:latest", tps=20),
               node(THIRD, "mistral:latest", MID, tps=50), node(FOURTH, "bge-m3:latest"),
-              node(FIFTH, BIG, free=0), node(SIXTH, BIG, lends=False), checkable(SMALL, MID))
+              node(FIFTH, BIG, free=0), node(SIXTH, BIG, lends=False),
+              checkable(SMALL, MID, BIG))
     assert placement.plan(BEST, Executor(), public=True) == [
         at(OTHER, BIG), at(THIRD, MID), at(PC, SMALL)]
     assert settings.get("public_bigger_model") is None
@@ -173,16 +174,20 @@ def test_no_model_here_the_best_public_model_first(monkeypatch, companion, opene
 def test_a_name_alone_never_makes_the_best_model(monkeypatch, companion, opened):
     """Relecture du 28/10/2026 : « Automatique · réseau public » triait par la taille lue dans
     le nom ; un nœud qui annonçait « qwen3.5:999b » passait toujours premier et, seul à porter
-    ce nom, n'avait jamais de machine de contrôle. Seul un modèle présent chez deux machines
-    publiques qui prêtent (place libre ou non) est pris ; une taille invraisemblable ne compte
-    pas."""
+    ce nom, n'avait jamais de machine de contrôle. Seul un modèle contrôlable est pris : chez
+    une machine établie qui prête (place libre ou non), ou chez trois groupes indépendants
+    (29/10/2026 : deux machines vues ensemble ne suffisent plus) ; une taille invraisemblable
+    ne compte pas."""
+    from tests.test_collusion import establish
     nothing_here(monkeypatch)
     liar, huge = "qwen3.5:999b", "qwen3.5:2000b"
     plan = lambda: placement.plan(BEST, Executor(), public=True)  # noqa: E731
     directory(node(PC, liar, SMALL), node(OTHER, BIG), checkable(SMALL))
     assert plan() == [at(PC, SMALL)]                    # ni « 999b », ni le 9b, seuls à les avoir
     directory(node(PC, liar, SMALL), node(OTHER, BIG), node(THIRD, BIG, free=0), checkable(SMALL))
-    assert plan() == [at(OTHER, BIG), at(PC, SMALL)]   # le 9b chez deux machines : choisi
+    assert plan() == [at(PC, SMALL)]                    # le 9b chez deux machines vues ensemble
+    establish(THIRD)
+    assert plan() == [at(OTHER, BIG), at(PC, SMALL)]   # chez une machine établie : choisi
     directory(node(PC, huge), node(OTHER, huge), node(THIRD, SMALL), checkable(SMALL))
     assert plan()[0] == at(THIRD, SMALL)                # contrôlable, mais 2 000 milliards : non
     assert companion.requests == []
@@ -203,6 +208,43 @@ def test_with_nothing_checkable_a_phone_still_gets_an_answer(monkeypatch, compan
     assert plan() == [at(OTHER, BIG), at(PC, "qwen3.5:999b")]
     with TestClient(create_app(TOKEN, {"testserver"})) as ui:
         assert ui.get("/api/models", headers=AUTH).json()[0]["ready"] is True
+    assert companion.requests == []
+
+
+def test_the_fallback_prefers_a_past_here_then_seniority_then_size(monkeypatch, companion, opened):
+    """Repli « rien de contrôlable », revu le 29/10/2026 au soir : un nœud neuf qui annonçait un
+    gros modèle passait premier (la taille venait juste après « a déjà répondu »). Désormais :
+    une machine établie d'abord, puis une qui a déjà répondu ici sans faute, puis la plus
+    ancienne (connue du compagnon, known_s, ou vue ici depuis longtemps, sightings ; à un
+    facteur deux près dès 10 min), puis le plus gros modèle."""
+    from aiodos.network import reputation
+    from tests.test_collusion import establish, seen
+    nothing_here(monkeypatch)
+    liar = "qwen3.5:999b"
+    plan = lambda: placement.plan(BEST, Executor(), public=True)  # noqa: E731
+
+    def known(third_s):
+        directory(node(PC, liar), node(OTHER, BIG), dict(node(THIRD, SMALL), known_s=third_s))
+    known(0)
+    assert plan() == [at(PC, liar), at(OTHER, BIG), at(THIRD, SMALL)]    # tous neufs : la taille
+    known(500)
+    assert plan()[0] == at(PC, liar)                    # moins de 10 min : pas plus ancienne
+    known(1300)                                          # connue du compagnon depuis 20 min
+    assert plan() == [at(THIRD, SMALL), at(PC, liar), at(OTHER, BIG)]
+    seen(OTHER, 30)                                      # vues ici il y a 30 h et 40 h : à un
+    seen(PC, 40)                                         # facteur deux près, la taille
+    assert plan() == [at(PC, liar), at(OTHER, BIG), at(THIRD, SMALL)]
+    seen(OTHER, 100)                                     # deux fois plus ancienne : devant
+    assert plan() == [at(OTHER, BIG), at(PC, liar), at(THIRD, SMALL)]
+    reputation.note_served(THIRD, 200, 5.0)              # a déjà répondu ici sans faute : devant
+    assert plan()[0] == at(THIRD, SMALL)
+    assert [c.known for c in placement.best_public()][0] >= 1300
+    # Une machine établie rend son modèle contrôlable : elle répond, sans repli
+    establish(PC, models=(liar,))
+    assert plan() == [at(PC, liar)]
+    # Le repli lui-même la range d'abord (défense en profondeur, si rien n'était contrôlable)
+    monkeypatch.setattr(placement, "_controllable", lambda nodes: set())
+    assert plan() == [at(PC, liar), at(THIRD, SMALL), at(OTHER, BIG)]
     assert companion.requests == []
 
 
