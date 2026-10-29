@@ -116,5 +116,10 @@
   "public_bigger_model_help": "In automatic mode, a machine on the public network that has a bigger model than the chosen one (qwen3.5:9b rather than 0.8b) answers instead.",
   "public_documents": "Send passages from my documents to the public network",
   "public_documents_help": "When an answer relies on your libraries, the useful passages go with the conversation to the stranger's machine; never the conversation memory, nor the libraries kept on this machine. Without consent, such a conversation stays on your machines.",
-  "not_asked": "Not asked yet: the question will come up in a conversation, the first time."
+  "not_asked": "Not asked yet: the question will come up in a conversation, the first time.",
+  "lend_images_public": "Lend my graphics card to strangers' images",
+  "lend_images_public_help": "People on the public network, who don't say who they are, can have their images created by {device}, one at a time, under the same rules as their conversations: after your machines and your friends, never on battery, and whatever you do comes first. Their description and the image pass through here while it computes, without being saved.",
+  "lend_images_public_help_phone": "People on the public network, who don't say who they are, can have their images created by this phone, one at a time, after your machines and your friends: only while charging and on Wi-Fi. Their description and the image pass through here while it computes, without being saved.",
+  "public_images": "Create my images through the public network",
+  "public_images_help": "When neither this machine nor your machines can create an image, a stranger's machine on the public network creates it: it reads your description and sees the image, without knowing who you are. Never an attached image; “On my machines only” keeps a conversation with you."
 }

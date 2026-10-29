@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from aiodos import settings
-from aiodos.chat import conversations
+from aiodos.chat import conversations, public_creations
 from aiodos.i18n import t
 from aiodos.imaging import catalog, download, gallery, lenders, local_copies, share, thumbs
 from aiodos.imaging import engine as images_engine
@@ -43,6 +43,7 @@ def _models() -> dict:
     found = images_engine.info()
     others = lenders.helpers()
     offered = lenders.helpers(friends=True)              # amis prêts à calculer, si je l'accepte
+    public = public_creations.offerable()                 # le réseau public, pour une conversation
     models = []
     for model_id, spec in catalog.MODELS.items():
         # Description, licence, formats et durées : dans la langue de la requête
@@ -54,6 +55,7 @@ def _models() -> dict:
                        "notice": catalog.notice(model_id),
                        "negative": spec["negative"], **catalog.state(model_id),
                        "helpers": others.get(model_id, []),
+                       "public": model_id in public,
                        "friends": [name for name in offered.get(model_id, [])
                                    if name not in others.get(model_id, [])],
                        "sources": share.sources(model_id),

@@ -59,15 +59,19 @@ def test_my_machines_compute_together_from_the_first_launch(monkeypatch):
     """Décision de l'auteur (20/10) : réseau local, Internet, calcul et prêt entre mes
     machines activés dès la première ouverture ; le 27/10, le réseau public, le prêt d'images
     aux amis et l'accès des applications de ce PC aussi ; le 28/10, le prêt aux conversations
-    d'inconnus, et les miennes calculées par eux. Faire calculer les miennes par mes amis reste
-    sur autorisation ; un modèle plus gros du réseau public et mes documents chez un inconnu,
+    d'inconnus, et les miennes calculées par eux ; le 29/10, le prêt de ma carte aux images
+    d'inconnus. Faire calculer les miennes par mes amis reste sur autorisation ; un modèle plus
+    gros du réseau public, mes documents chez un inconnu et mes images par le réseau public,
     sur accord demandé une fois (None : pas encore demandé). Les essais automatiques
     (AIODOS_QUIET=1) les gardent éteints."""
     monkeypatch.delenv("AIODOS_QUIET", raising=False)
     for key in settings.FOR_MY_MACHINES + settings.OPEN_FROM_THE_START:
         assert settings.get(key) is True and settings.get_all()[key] is True
     assert set(settings.OPEN_FROM_THE_START) == {"public_network", "lend_images_friends",
-                                                 "gateway_apps", "lend_public", "use_public"}
+                                                 "gateway_apps", "lend_public", "use_public",
+                                                 "lend_images_public"}
+    assert set(settings.ASKED_ONCE) == {"public_bigger_model", "public_documents",
+                                        "public_images"}
     for key in ("images_from_friends", "auto_route_friends", "public_warned"):
         assert settings.get(key) is False
     for key in settings.ASKED_ONCE:

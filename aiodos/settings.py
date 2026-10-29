@@ -99,6 +99,10 @@ DEFAULTS = {
     "public_bigger_model": None,
     "public_documents": None,
     "public_warned": False,           # la note « ta conversation part chez un inconnu » vue
+    # Mes images créées par une machine du réseau public quand ni cette machine ni mes machines
+    # ne le peuvent (chat/public_creations.py, 29/10/2026) : accord demandé une fois, comme
+    # ceux du dessus (None : pas encore demandé)
+    "public_images": None,
     # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
     # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
     # en priorité basse, jamais sur batterie (network/worker.py, docs/arriere-plan.md)
@@ -135,6 +139,9 @@ DEFAULTS = {
     "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
     "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
     "lend_images_friends": True,      # calculer les images de mes amis (jobs/kinds/images.py)
+    # « Prêter ma carte graphique aux images d'inconnus » (network/public_imaging.py,
+    # 29/10/2026) : en plus de lend_public, mêmes conditions ; activé par défaut
+    "lend_images_public": True,
     "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
@@ -200,12 +207,13 @@ def rag_threshold(model) -> float:
 FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend_models",
                    "lend_gpu")
 # Activés par défaut depuis le 27/10/2026 (décision de l'auteur), éteints de même en essai ;
-# le prêt aux conversations d'inconnus, et les miennes calculées par eux, depuis le 28/10/2026
+# le prêt aux conversations d'inconnus, et les miennes calculées par eux, depuis le 28/10/2026 ;
+# le prêt de ma carte aux images d'inconnus depuis le 29/10/2026
 OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps", "lend_public",
-                       "use_public")
+                       "use_public", "lend_images_public")
 # Réglages à trois états : None (pas encore demandé), vrai ou faux ; toute autre valeur est
 # ignorée à l'enregistrement
-ASKED_ONCE = ("public_bigger_model", "public_documents")
+ASKED_ONCE = ("public_bigger_model", "public_documents", "public_images")
 
 
 def default(key):

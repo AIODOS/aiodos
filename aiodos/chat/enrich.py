@@ -6,7 +6,9 @@ précisé (apparence, tenue, posture, ce qu'il fait), avec la composition, le d�
 et un style quand la demande n'en donne pas ; rien de ce qu'elle dit n'est changé.
 
 Réglage « images_enrich » (activé par défaut). Sans modèle de conversation à temps, la demande
-part telle quelle. La description utilisée est gardée avec la création : on la relit sous
+part telle quelle. Seul un modèle installé ici réécrit (retouches._rewriter), jamais celui d'un
+inconnu du réseau public, même quand c'est une de ses machines qui créera l'image
+(chat/public_creations.py) : sans modèle ici, la description part telle quelle. La description utilisée est gardée avec la création : on la relit sous
 l'image, « Reprendre » et les retouches partent d'elle (chat/retouches.py la réécrit dans sa
 langue)."""
 import logging

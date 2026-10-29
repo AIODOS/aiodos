@@ -53,7 +53,9 @@ et l'heure du début, pour « Machines connectées » (serving, activity.public_
 
 La lecture de textes pour le contrôle d'un demandeur (POST /public/v1/read,
 network/lend_reading.py) passe par la même admission (admit) et la même tenue de compte du
-calcul (begin, watching, end : en cours, veille, pause, place, profil).
+calcul (begin, watching, end : en cours, veille, pause, place, profil). Une image pour un
+inconnu (POST /public/v1/image, network/public_imaging.py, 29/10/2026) prend la même place
+(une seule pour tout le public : conversation, lecture ou image), avec ses propres bornes.
 
 Le profil public (« free ») est redit au compagnon, en fond, au début et à la fin de chaque
 conversation publique, et à la fin de la pause qui suit (_announce, Public.push) : les
@@ -98,6 +100,10 @@ WATCH_S = 0.25                 # s entre deux regards : quelqu'un d'autre veut-i
 CHECK_S = 5                    # s entre deux lectures du partage (alimentation, Wi-Fi…)
 WAIT_S = 5                     # s entre deux signes de vie, avant le premier morceau
 STAGE_TIMEOUT = 2              # s pour savoir si le modèle est chargé (sinon : « loading »)
+LOADING = "loading"            # étape d'un signe de vie : le moteur charge le modèle
+# Le premier morceau de la réponse : plus de signe de vie ensuite (un mot ; l'en-tête d'une
+# image, network/public_imaging.py)
+CONTENT = {"delta", "image"}
 _ASCII_TEXT = re.compile(r"[A-Za-z \t\r\n]+")
 
 _lock = threading.Lock()
@@ -517,15 +523,19 @@ def _line(event) -> bytes:
 
 class _Stream(StreamingResponse):
     """La réponse en NDJSON ; le calcul (bloquant) tourne dans un thread. Tant qu'aucun
-    morceau n'est parti, un signe de vie toutes les WAIT_S secondes ({"type": "wait",
-    "stage"} : cf. le début du module). Quoi qu'il arrive à la réponse (fin, appelant parti,
-    erreur d'envoi), le calcul s'arrête (stop), et la place est rendue : par le calcul quand
-    il finit, ou ici s'il n'a jamais commencé. Chaque lecture de l'étape qui dit le modèle en
-    chargement avance le début du calcul compté pour la pause (_Clock)."""
+    morceau n'est parti (CONTENT), un signe de vie toutes les WAIT_S secondes ({"type":
+    "wait", "stage"} : cf. le début du module). Quoi qu'il arrive à la réponse (fin, appelant
+    parti, erreur d'envoi), le calcul s'arrête (stop), et la place est rendue : par le calcul
+    quand il finit, ou ici s'il n'a jamais commencé. Chaque lecture de l'étape qui dit le
+    modèle en chargement (LOADING) avance le début du calcul compté pour la pause (_Clock).
+    stage(modèle) → (étape, instant monotonic de la fin de sa lecture) : _stage_seen pour une
+    conversation, une autre pour une image (network/public_imaging.py)."""
 
-    def __init__(self, events, place: _Place, stop, model: str, clock: _Clock | None = None):
+    def __init__(self, events, place: _Place, stop, model: str, clock: _Clock | None = None,
+                 stage=None):
         self._events, self._place, self._stop, self._model = events, place, stop, model
         self._clock = clock if clock is not None else _Clock()
+        self._stage_of = stage if stage is not None else _stage_seen
         self._probe = None                 # lecture de l'étape en cours (_now), une à la fois
         super().__init__(self._lines(), media_type="application/x-ndjson")
 
@@ -534,28 +544,28 @@ class _Stream(StreamingResponse):
         if probe.cancelled() or probe.exception() is not None:
             return None
         found, at = probe.result()
-        if found == "loading":
+        if found == LOADING:
             self._clock.loading(at)
         return found
 
     async def _now(self, stage: str) -> str:
-        """L'étape du moteur : « reading » une fois vue, on n'y revient pas ; sinon relue, une
-        lecture à la fois (le moteur intégré peut tenir son verrou tout un chargement : elles
-        s'empileraient dans les fils d'asyncio), STAGE_TIMEOUT s au plus ; plus lente,
-        « loading », et elle continue pour le signe suivant."""
-        if stage == "reading":
+        """L'étape du moteur : une autre que LOADING (« reading », « computing ») une fois
+        vue, on n'y revient pas ; sinon relue, une lecture à la fois (le moteur intégré peut
+        tenir son verrou tout un chargement : elles s'empileraient dans les fils d'asyncio),
+        STAGE_TIMEOUT s au plus ; plus lente, LOADING, et elle continue pour le signe suivant."""
+        if stage != LOADING:
             return stage
         if self._probe is None:
-            self._probe = asyncio.ensure_future(asyncio.to_thread(_stage_seen, self._model))
+            self._probe = asyncio.ensure_future(asyncio.to_thread(self._stage_of, self._model))
         try:
             await asyncio.wait_for(asyncio.shield(self._probe), STAGE_TIMEOUT)
         except Exception:  # noqa: BLE001 — lente (ou en échec) : on dit qu'il charge
             if self._probe.done():
                 self._seen(self._probe)
                 self._probe = None
-            return "loading"
+            return LOADING
         probe, self._probe = self._probe, None
-        return self._seen(probe) or "loading"
+        return self._seen(probe) or LOADING
 
     async def _wait_line(self, stage: str) -> tuple:
         """(étape, ligne) d'un signe de vie."""
@@ -580,7 +590,7 @@ class _Stream(StreamingResponse):
 
         self._place.started = True
         threading.Thread(target=pump, daemon=True, name="aiodos-public").start()
-        first, stage = False, "loading"
+        first, stage = False, LOADING
         try:
             while True:
                 try:
@@ -592,7 +602,7 @@ class _Stream(StreamingResponse):
                     continue
                 if event is None:
                     break
-                first = first or event.get("type") == "delta"
+                first = first or event.get("type") in CONTENT
                 yield _line(event)
         finally:
             self._stop.set()              # fin, ou appelant parti : le calcul s'arrête

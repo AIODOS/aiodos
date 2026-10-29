@@ -1,6 +1,8 @@
 """Images et vidéos créées dans la conversation (chat/creations.py) : le message de
 l'utilisateur et la réponse qui montrera les images s'ajoutent à la conversation, et le
-travail part dans la file, calculé ici ou par mes machines qui ont le modèle."""
+travail part dans la file, calculé ici ou par mes machines qui ont le modèle ; une image que
+rien de cela ne peut calculer, par une machine du réseau public, avec l'accord demandé une fois
+(chat/public_creations.py : un refus 409 qui porte « public »: « ask » montre la carte)."""
 import asyncio
 
 from fastapi import APIRouter, Request
@@ -33,6 +35,9 @@ class CreateIn(BaseModel):
     replace_from: int | None = None     # « Modifier » : ce message et la suite sont remplacés
     replace_text: str | None = None     # son texte, tel que l'interface le croit
     attachments: list[str] = []         # une image jointe : l'image de départ (référence)
+    # « Sur mes machines seulement » (rien ne part chez un inconnu du réseau public) ; None : ce
+    # que garde la conversation (désactivé pour une nouvelle)
+    mine_only: bool | None = None
 
 
 @router.post("/create/{message_id}/undo")
@@ -69,7 +74,8 @@ async def create(body: CreateIn, request: Request):
             if marker is not None:
                 pending.end(conv_id, marker)
     except creations.CreationError as exc:     # avec les amis qui pourraient calculer
-        return JSONResponse({"detail": str(exc), "friends": exc.friends}, status_code=exc.status)
+        return JSONResponse({"detail": str(exc), "friends": exc.friends, "public": exc.public},
+                            status_code=exc.status)
     executor = request.app.state.executor
     executor.wake()
     for job_id in [made["job_id"], *made.pop("stopped", [])]:

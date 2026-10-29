@@ -18,6 +18,10 @@ nœuds vus sont gardés typés (_node), « free » et « tps » compris : le cô
 choisit ses machines (seen, network/placement.py). Une conversation publique qui commence ou
 finit chez moi redit le profil sans attendre la synchronisation suivante (Public.push).
 
+Depuis le 29/10/2026, « models » dit aussi les modèles d'images que cette machine prête aux
+inconnus, marqués « image: » (network/public_imaging.py) : le profil signé du compagnon n'a pas
+d'autre champ pour eux.
+
 La première minute (essai réel du 28/10/2026) : tant que le réseau public n'est pas rejoint,
 ou rejoint sans qu'aucun nœud n'ait encore été vu, et depuis moins de SEARCH_S secondes (le
 démarrage, ou l'arrivée sur le réseau), on cherche encore (searching) : l'interface d'une
@@ -33,7 +37,7 @@ import time
 
 from aiodos import __version__, settings
 from aiodos.i18n import t
-from aiodos.network import public_lending, route
+from aiodos.network import public_imaging, public_lending, route
 from aiodos.network.companion import CompanionError
 from aiodos.services import ollama
 
@@ -56,11 +60,17 @@ SEARCH_S = 90
 
 
 def _models() -> list:
+    """Les modèles du profil : ceux de conversation, puis les modèles d'images prêtés aux
+    inconnus, marqués (public_imaging.offered : « image:z-image-turbo »), en dernier, et
+    toujours là (MAX_MODELS au plus en tout). Un nom d'Ollama qui commencerait par la marque
+    n'est pas annoncé : il passerait pour un modèle d'images."""
+    images = public_imaging.offered()[:MAX_MODELS]
     try:
-        names = sorted({m["name"] for m in ollama.list_models()})
+        names = sorted({m["name"] for m in ollama.list_models()
+                        if not str(m["name"]).startswith(public_imaging.MARKER)})
     except Exception:                  # Ollama arrêté : on dira « aucun modèle »
-        return []
-    return names[:MAX_MODELS]
+        names = []
+    return names[:MAX_MODELS - len(images)] + images
 
 
 def _number(value) -> bool:

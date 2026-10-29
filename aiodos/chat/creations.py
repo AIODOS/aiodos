@@ -10,11 +10,16 @@ ou un sujet de code n'en est pas une ; l'interface a aussi son bouton « Créer 
 La réponse de l'assistant garde la demande (colonne media : lot, travail, modèle,
 description) ; son texte la résume pour le modèle de conversation (historique, mémoire),
 qui sait ainsi ce qui a été créé, sans voir les images.
+
+Quand ni cette machine ni mes machines ne peuvent calculer une image, une machine du réseau
+public peut la créer, avec l'accord demandé une fois (chat/public_creations.py, 29/10/2026) :
+le travail porte alors « public » (jobs/kinds/public_images.py), la réponse aussi (media), et
+l'image vient sans image de départ (ni retouche à partir de la précédente, ni image jointe).
 """
 import re
 
 from aiodos import db, settings
-from aiodos.chat import attachments, conversations, enrich, retouches
+from aiodos.chat import attachments, conversations, enrich, public_creations, retouches
 from aiodos.i18n import t
 from aiodos.imaging import catalog, gallery, lenders
 from aiodos.jobs import queue
@@ -25,12 +30,15 @@ MAX_VIDEOS = 4                    # vidéos demandées d'une phrase, au plus (pl
 
 
 class CreationError(Exception):
-    """status : code HTTP ; friends : amis qui pourraient calculer, si on les y autorise."""
+    """status : code HTTP ; friends : amis qui pourraient calculer, si on les y autorise ;
+    public : « ask » si une machine du réseau public le pourrait, avec l'accord pas encore
+    demandé (la carte, chat/public_creations.py)."""
 
-    def __init__(self, message, status=400, friends=None):
+    def __init__(self, message, status=400, friends=None, public=None):
         super().__init__(message)
         self.status = status
         self.friends = friends or []
+        self.public = public
 
 
 # ------------------------------------------------------------- la demande, dans le texte
@@ -326,9 +334,10 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
 
 
 # ------------------------------------------------------------------- dans la conversation
-def _nothing_can(media_kind: str) -> CreationError:
+def _nothing_can(media_kind: str, public=None) -> CreationError:
     """Aucun modèle de ce genre ne peut calculer : la façon d'en avoir un. Des amis qui
-    le proposeraient, si on les y autorise, sont nommés (friends)."""
+    le proposeraient, si on les y autorise, sont nommés (friends) ; sinon, pour une image, ce
+    que dit le réseau public (public : public_creations.Choice), s'il dit quelque chose."""
     what = "videos" if media_kind == "video" else "images"
     offered = sorted({name for model_id, names in lenders.helpers(friends=True).items()
                       if catalog.MODELS.get(model_id, {}).get("kind", "image") == media_kind
@@ -337,8 +346,24 @@ def _nothing_can(media_kind: str) -> CreationError:
         # chat_create.nothing_ready_friends_images, chat_create.nothing_ready_friends_videos
         return CreationError(t(f"chat_create.nothing_ready_friends_{what}", n=len(offered),
                                who=", ".join(offered)), status=409, friends=offered)
+    if public is not None and public.message:
+        return CreationError(public.message, status=409,
+                             public=public_creations.ASK if public.ask else None)
     # chat_create.nothing_ready_images, chat_create.nothing_ready_videos
     return CreationError(t(f"chat_create.nothing_ready_{what}"), status=409)
+
+
+def _public_model(media_kind: str, preferred, mine_only, pictures) -> str:
+    """Une image que rien ici ni chez mes machines ne peut calculer : le modèle qu'une machine
+    du réseau public créerait (public_creations.choose), ou CreationError. Des amis qui le
+    pourraient, si je les y autorise, passent d'abord, sauf si j'ai déjà accepté le réseau
+    public."""
+    if media_kind != "image":
+        raise _nothing_can(media_kind)               # les vidéos : hors de cette version
+    choice = public_creations.choose(preferred, mine_only, pictures)
+    if choice.model is None:
+        raise _nothing_can(media_kind, choice)
+    return choice.model
 
 
 def _followed(request: dict, text: str, conv_id, chat_model, before=None) -> dict:
@@ -409,12 +434,20 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
     media_kind = request.get("kind") or found.get("kind") or "image"
     if media_kind not in ("image", "video"):
         raise CreationError(t("chat_create.unknown_kind"))
-    model_id = pick(media_kind, request.get("model"))
-    if model_id is None:
-        raise _nothing_can(media_kind)
     # Une image jointe : l'image de départ, recadrée au format du modèle (une référence)
     joined = attachments.pending(request.get("attachments"))
     pictures = [r for r in joined if r["kind"] == "image"]
+    # « Sur mes machines seulement » : celui de la demande (une conversation pas encore créée),
+    # sinon celui que garde la conversation
+    mine_only = request.get("mine_only")
+    if mine_only is None:
+        mine_only = conv_id is not None and conversations.mine_only(conv_id)
+    model_id = pick(media_kind, request.get("model"))
+    public = model_id is None
+    if public:                        # ni ici ni chez mes machines : peut-être le réseau public
+        model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures)
+        # Sans image de départ (retouche, variante d'une image d'ici) : sa description seule
+        request = {k: v for k, v in request.items() if k not in ("init_path", "strength")}
     if pictures and media_kind == "video":
         raise CreationError(t("attachments.video_from_image"))
     if pictures:
@@ -453,9 +486,24 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
             "strength": request.get("strength") if same else None})
     except ValueError as exc:
         raise CreationError(str(exc)) from exc
+    if public:
+        params = _for_public(params)
     return {"text": text, "conv_id": conv_id, "chat_model": chat_model, "model_id": model_id,
             "params": params, "auto": bool(request.get("auto")),
-            "attachments": [r["id"] for r in joined], "reference": bool(request.get("reference"))}
+            "attachments": [r["id"] for r in joined], "reference": bool(request.get("reference")),
+            "mine_only": bool(mine_only)}
+
+
+def _for_public(params: dict) -> dict:
+    """Les réglages d'une image que le réseau public créera : dans les bornes de ses machines
+    (network/public_imaging.py : pas au-delà de leur nombre de pas, une taille qu'elles
+    acceptent), marqués « public » (jobs/kinds/images.split_generate)."""
+    from aiodos.network import public_imaging
+    spec = catalog.model(params["model"])
+    if not public_imaging.fits(spec, params["width"], params["height"]):
+        raise CreationError(t("public_images.too_big"))
+    return {**params, "steps": min(params["steps"], public_imaging.max_steps(spec)),
+            "public": True}
 
 
 def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
@@ -468,7 +516,8 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
             raise CreationError(changed(), status=CHANGED_STATUS)
         stopped = replace(conv_id, replace_from, replace_text) if replace_from is not None else []
         if conv_id is None:
-            conv_id = conversations.create(model=plan["chat_model"] or None)
+            conv_id = conversations.create(model=plan["chat_model"] or None,
+                                           mine_only=bool(plan.get("mine_only")))
         user_message_id = conversations.add_message(conv_id, "user", text)
         attachments.link(attachments.pending(plan.get("attachments")), user_message_id)
         title = conversations.auto_title(conv_id, text)
@@ -486,6 +535,8 @@ def accept(plan: dict, replace_from=None, replace_text=None) -> dict:
             media["reference"] = True     # partie de l'image jointe (dit sous l'image)
         elif params.get("init_path"):
             media["retouch"] = True   # partie de l'image précédente (dit sous l'image)
+        if params.get("public"):
+            media["public"] = True    # créée par une machine du réseau public (dit sous l'image)
         message_id = conversations.add_message(conv_id, "assistant", describe(media),
                                                media=media)
     return {"conversation_id": conv_id, "title": title, "user_message_id": user_message_id,

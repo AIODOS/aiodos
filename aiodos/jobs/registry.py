@@ -103,6 +103,12 @@ def task(name):
     return decorator
 
 
+def register_local(name, compute):
+    """Tâche simple qui reçoit son arrêt : compute(payload, fichier, options, stop) -> dict,
+    sur ce nœud seulement (jamais confiée à une autre machine : local_only)."""
+    TASKS[name] = TaskSpec(name, compute)
+
+
 def register_portable(name, compute, assimilate, file_key=None, options=None,
                       requires=None, validate=None, shared_keys=(), sample=None, here=None,
                       mine_only=False, friends_out=None, friends_in=None, file_optional=None,

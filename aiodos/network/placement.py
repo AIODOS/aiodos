@@ -127,8 +127,9 @@ def parse(model) -> str | None:
 
 
 # Préfixes qui ont un sens pour AIODOS : un modèle d'Ollama qui en porterait un n'est jamais
-# choisi d'office.
-RESERVED = ("auto:", "peer:", "reparti:", "local:", "public:")
+# choisi d'office. « image: » marque, dans le profil d'une machine du réseau public, un modèle
+# d'images qu'elle prête (network/public_imaging.MARKER) : jamais un modèle de conversation.
+RESERVED = ("auto:", "peer:", "reparti:", "local:", "public:", "image:")
 
 
 def reserved(name) -> bool:

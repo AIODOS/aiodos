@@ -157,9 +157,9 @@ plafonds pour tout le public.
 
 - **Au hasard** (5 % des réponses publiques, et toujours la première fois qu'une machine
   sert ce demandeur), le demandeur envoie en arrière-plan la même demande à une autre
-  machine (une des miennes si elle a le modèle, sinon une autre machine publique), avec la
-  même graine et une température de 0 pour les deux. Le prêteur ne peut pas savoir quelles
-  demandes sont contrôlées.
+  machine (une des miennes si elle a le modèle, sinon d'autres machines publiques, qui
+  votent : cf. « Collusion » plus bas), avec la même graine et une température de 0 pour
+  les deux. Le prêteur ne peut pas savoir quelles demandes sont contrôlées.
 - **Comparer** : les mêmes modèle, graine et réglages donnent presque le même texte, mais
   des cartes différentes (CUDA, Vulkan, processeur) divergent après quelques dizaines de
   jetons. On compare donc le début (les premiers jetons identiques) et le sens (similarité
@@ -187,19 +187,20 @@ plafonds pour tout le public.
   celui de la conversation contrôlée), chez la même machine de contrôle (donc jamais chez
   un inconnu si la demande porte mes documents). Seul le moteur intégré sait lire : une
   machine sur Ollama refuse (`no_reading`), une version d'avant répond 404 ; le contrôle
-  compare alors les textes seuls. Quand une seconde machine tranche, elle lit A, sa réponse
-  et celle de la première.
-- **Réputation** : une table locale par clé de prêteur (vitesse mesurée, contrôles réussis
-  ou non). Un contrôle raté met la machine de côté 7 jours ; deux, pour de bon. Rien n'est
-  partagé avec les autres dans cette version (pas de liste noire commune, qu'un menteur
-  pourrait remplir).
+  compare alors les textes seuls. Quand des machines de contrôle sont en désaccord, la
+  suivante lit A, sa réponse et celles des machines d'avant.
+- **Réputation** : une table locale par clé de prêteur (vitesse mesurée, contrôles réussis,
+  ratés ou sans conclusion). Un contrôle raté met la machine de côté 7 jours ; deux, pour de
+  bon. Rien n'est partagé avec les autres dans cette version (pas de liste noire commune,
+  qu'un menteur pourrait remplir).
 - **Branché** (28/10, `network/public_controls.py`) : chaque demande publique porte une
   graine tirée au hasard et la longueur maximale du prêteur (2 048 jetons), gardées pour
   le contrôle ; la température reste celle de la demande (aucune n'est imposée : les
   seuils ont été mesurés aussi sur des paires d'autres graines). À la fin d'une réponse
   complète et affichée : vitesse notée, puis contrôle en arrière-plan, chez mes machines
   d'abord (pas celles de mes amis, ni celle-ci, où l'utilisateur converse), puis chez les
-  machines publiques qui ont le modèle, quatre au plus ; une demande qui porte mes
+  machines publiques qui ont le modèle (rangées depuis le 29/10 : « Collusion »), quatre
+  demandées au plus ; une demande qui porte mes
   documents n'est contrôlée que par mes machines. Sans machine de contrôle, rien n'est
   lancé : la prochaine réponse de ce prêteur est encore « la première ». Une machine mise
   de côté n'est plus choisie ; la vitesse mesurée ici passe avant celle qu'elle annonce.
@@ -217,6 +218,58 @@ plafonds pour tout le public.
   acceptaient la demande). Trois en 10 min : écartée 10 min comme après un échec. Un refus
   isolé (la place vient d'être prise) n'écarte rien ; la conversation passe toujours à la
   machine suivante.
+- **Collusion** (29/10, `network/sightings.py`, `spot_check.py`, `reputation.py`,
+  `public_controls.py`, migration 29) : une clé de nœud ne coûte rien ; un menteur qui tenait
+  **deux nœuds** annonçant le même modèle se contrôlait lui-même (le modèle devenait
+  « contrôlable », l'un répondait, l'autre lui donnait raison : le contrôle passait
+  toujours). Plus largement, une machine de contrôle publique peut mentir dans le sens du
+  prêteur, ou contre lui. Ce qui change :
+  - **Premières vues** : chaque clé de l'annuaire est notée la première fois qu'on la voit
+    (après chaque réponse publique complète, à chaque choix des machines de contrôle),
+    avec l'empreinte de sa liste de modèles. Deux machines **apparues ensemble** : premières
+    vues à moins de 6 h ; elles **se ressemblent** si, en plus, leurs listes de modèles sont
+    identiques. Une clé jamais vue passe pour vue à l'instant.
+  - **Établie** (`reputation.established`) : vue depuis un jour au moins, au moins un
+    contrôle réussi compté par les règles d'aujourd'hui (une de mes machines, ou deux machines
+    indépendantes), aucun raté, pas de côté. Les contrôles réussis d'avant le 29/10 (une seule
+    machine publique suffisait) ne comptent pas.
+  - **Choix des machines de contrôle** : mes machines d'abord ; puis les machines publiques
+    établies ; puis celles qui ont réussi le plus de contrôles et sont vues depuis le plus de
+    jours ; celles apparues en même temps que le prêteur en dernier ; la plus rapide à
+    égalité. Une machine qui ressemble à une machine qui a déjà répondu passe après les
+    autres (diversité).
+  - **Qui conclut** : une de mes machines, crue seule (comme avant). Sinon les machines
+    publiques votent (quatre demandées au plus) : **réussi** si deux machines d'accord avec
+    le prêteur sont indépendantes de lui (pas apparues avec lui) et l'une de l'autre (elles
+    ne se ressemblent pas), et plus nombreuses que celles qui le contredisent ; **raté** si
+    deux machines qui ne se ressemblent pas lui donnent tort, plus nombreuses que celles qui
+    lui donnent raison. Une seule machine d'accord : **sans conclusion** (ni réussi, ni
+    raté). Une **faute flagrante** (sans rapport, lien ajouté, tronquée, un autre modèle à la
+    lecture) compte sur l'avis d'une seule machine, à condition qu'elle soit établie et pas
+    apparue avec le prêteur, et qu'aucune machine établie ne lui donne raison : une machine
+    sans passé pourrait accuser un honnête. Une machine établie n'est jamais mise en minorité
+    par des machines sans passé. Une machine de contrôle **seule contre deux** (la minorité,
+    quand une majorité conclut) est prise en défaut si sa propre réponse ne ressemble à
+    aucune des leurs (lue par la dernière machine, qui lit en cas de désaccord A, sa réponse
+    et celles d'avant) ; deux machines en désaccord sans troisième : sans conclusion,
+    personne n'est accusé (avant, la seconde tranchait seule : c'était justement la place
+    d'un jumeau du prêteur).
+  - « La première fois » dure jusqu'à un contrôle conclu, trois contrôles sans conclusion au
+    plus (sans machine qui puisse conclure, chaque réponse serait refaite ailleurs pour rien).
+  - **Ce que cela ne règle pas** : la collusion n'est **pas résolue** par ces mesures seules.
+    Un menteur patient qui espace la création de ses nœuds (au-delà de 6 h, des listes de
+    modèles différentes) les fait paraître indépendants ; pour être établi, il lui faut
+    encore réussir un contrôle qu'il ne peut pas reconnaître, ce qui l'oblige à répondre
+    honnêtement presque toujours. À la première observation d'ici (l'installation), toutes
+    les machines déjà là paraissent apparues ensemble : elles ne se blanchissent pas entre
+    elles ; seules mes machines, ou des machines arrivées ensuite, le peuvent. Sans aucune de
+    mes machines (un téléphone seul), rien ne devient établi par le seul réseau public tant
+    que deux machines indépendantes n'ont pas été d'accord. L'annuaire noyé de clés neuves
+    remplit aussi la table des premières vues (20 000 lignes ; pleine, elle n'efface pas les
+    anciennes). La parade de fond est ailleurs : le **compagnon** rend en parallèle les
+    identités publiques coûteuses (preuve de travail sur la clé), et `placement` devra
+    préférer les machines établies et ne compter un modèle « contrôlable » que chez des
+    machines indépendantes (à faire, `placement.py` n'est pas touché).
 
 ## 9. Ce qu'on ajoute, fichier par fichier
 
@@ -259,6 +312,105 @@ forcé.
 
 ## 10. Hors de cette version
 
-Images et vidéos pour les inconnus ; pièces jointes ; réputation partagée ; preuve de
-travail contre les fausses identités (à mesurer si le plafond global ne suffit pas) ;
+Vidéos pour les inconnus (les images : § 11) ; pièces jointes ; réputation partagée ; preuve
+de travail contre les fausses identités (à mesurer si le plafond global ne suffit pas) ;
 paiement ou crédit (phase3-incitation.md).
+
+## 11. Images (29/10/2026)
+
+**Pourquoi.** L'auteur a installé AIODOS sur son PC (Z-Image Turbo) et sur son téléphone
+(aucun modèle d'images), sans les appairer : ils ne se voient que par le réseau public. Le
+téléphone répondait « Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes
+machines en ligne ». **Décision de l'auteur** : les images passent aussi par le réseau public,
+comme les conversations, avec un **accord demandé une fois** ; « Sur mes machines seulement »
+vaut aussi pour elles. C'est la phase 3, § 4 (demandeur anonyme, la machine qui calcule lit la
+description et voit l'image), sauf l'accord : une fois, et non à chaque création.
+
+**Côté prêteur** (`network/public_imaging.py`) : `POST /public/v1/image`, relayée par le
+compagnon comme une conversation (aucun changement du compagnon). Réglage à part,
+`lend_images_public` (« Prêter ma carte graphique aux images d'inconnus », **activé** par
+défaut), en plus de `lend_public`, mêmes conditions : partage actif, jamais sur batterie, un
+téléphone seulement en charge et en Wi-Fi ; **une seule place pour tout le public**
+(conversation, lecture ou image) ; après l'utilisateur, mes machines et mes amis (qui
+arrêtent le prêt en cours) ; pause de la puissance prêtée (le chargement du modèle ne compte
+pas). Bornes : un modèle d'images du catalogue (pas une vidéo, pas de licence restrictive),
+complet ici ; description de 2 000 caractères au plus ; côtés au multiple et dans les bornes
+du modèle, **1 024 × 1 024 pixels au plus** ; de 1 à deux fois les pas du modèle (16 pour
+Z-Image Turbo) ; graine entière ; **pas d'image de départ** dans cette version ; le guidage est
+celui du modèle. Refus avant tout calcul, sans rien prendre : `not_lending` (503), `no_model`
+(404), `too_big` (413), `bad_request` (400), `busy` (503). Réponse en NDJSON : `meta`, signes de
+vie toutes les 5 s (`"stage": "loading"` puis `"computing"`), puis `{"type": "image",
+"format": "png", "bytes", "width", "height", "seconds"}`, le PNG en morceaux base64 de
+192 Kio (`part`), et `done` ; ou `error` (`busy`, `not_lending`, `engine`). PNG plutôt que
+WebP : la galerie, les vignettes et les retouches attendent un PNG, et Pillow n'est pas
+toujours là chez le demandeur (1 à 2 Mo par image, 6 Mio au plus).
+
+**Rien de gardé** : sd-server rend l'image en mémoire (base64) ; rien n'est écrit sur le
+disque par AIODOS ; ni la description, ni l'image, ni la clé ne restent après la réponse ; le
+journal dit le modèle, la taille, les pas et les durées. Hors d'AIODOS : sd-server garde sa
+tâche finie en mémoire jusqu'à son arrêt (1 min 30 après la dernière image), et son journal
+(`data/logs/sd-server.log`, niveau « info ») dit la taille et la graine, pas la description
+(vérifié sur le journal de ce PC).
+
+**Le profil public** : le profil signé du compagnon n'a que `version`, `models`, `lends`,
+`free`, `tps` (un champ inconnu ne passerait pas) : les modèles d'images prêtés vont dans
+`models`, marqués `image:` (`image:z-image-turbo`), en dernier, seulement si
+`lend_images_public` est permis (un modèle annoncé puis refusé compterait comme un refus
+suspect). `image:` rejoint les préfixes réservés (`placement.RESERVED`) : jamais pris pour un
+modèle de conversation. Un nœud d'avant le 29/10 pourrait, en « Automatique · réseau public »,
+en choisir un s'il n'en voit pas d'autre chez cette machine (refus `no_model`).
+
+**Côté demandeur** : quand ni cette machine ni mes machines (ni mes amis, si je les y
+autorise) ne peuvent calculer l'image (`chat/creations.py`), `chat/public_creations.py`
+regarde le réseau public : les règles de `public_consent.closed` (« Faire calculer mes
+conversations par des inconnus », réseau public rejoint, pas « Sur mes machines seulement »,
+pas d'image jointe), une machine qui prête ce modèle avec une place, et l'accord
+`public_images` (non demandé, oui, non). **Non demandé** : la création s'arrête sur une carte
+dans la conversation (« La description de ton image part chez la machine d'un inconnu, qui
+voit aussi l'image créée, sans savoir qui tu es. Créer tes images par le réseau public ? »
+[Oui] [Non]) ; Oui la relance ; la réponse est gardée et se change dans Réglages → Cette
+machine → Partage de puissance. Contrairement aux cartes des conversations, elle précède la
+création : rien d'autre ne pourrait la faire en attendant. Des amis qui le proposeraient,
+sans mon autorisation, passent d'abord (le message d'avant, avec son bouton), sauf si j'ai déjà
+dit oui au réseau public. Sinon, le message « Aucun modèle d'images… » dit ce qui l'en empêche
+quand une machine du réseau public pourrait la créer (réglage, accord refusé, « Sur mes
+machines seulement », image jointe), ou qu'il n'y en a pas non plus.
+
+La création devient un travail de la file comme les autres, marqué `public` : une unité
+`generate_image_public` par image (`jobs/kinds/public_images.py`), **de cette machine
+seulement** (jamais confiée à une de mes machines, qui n'a ni l'accord ni ce compagnon), sur
+la ressource « net ». Avant chaque envoi, l'accord est relu (réglages, « Sur mes machines
+seulement » de la conversation). Les machines candidates (`network/public_image_ask.py`) :
+celles qui prêtent, ont une place (moins ce que je viens de leur envoyer) et ce modèle, pas
+mises de côté ni écartées ; celles qui ont déjà servi ici sans contrôle raté d'abord, puis
+la plus rapide qu'elles annoncent, la plus récemment vue ; trois au plus, la suivante si la
+première échoue. **Une clé jetable par création** (un identifiant tiré au hasard pour le
+lot). Ce qui part : modèle, description, consigne négative, taille, pas, graine ; jamais
+d'image de départ (une retouche se refait depuis sa description), ni rien de la conversation.
+La description est **enrichie ici** (`chat/enrich.py` : le modèle de conversation de cette
+machine), jamais chez un inconnu ; sans modèle ici, elle part telle quelle.
+
+**Vérifier ce qui revient** : le modèle de `meta`, l'en-tête (PNG, 6 Mio au plus, la taille
+demandée), les morceaux (jamais plus que les octets annoncés), `done` avec exactement ces
+octets, puis le PNG (signature, en-tête, taille, fin `IEND` ; avec Pillow, décodé en entier,
+**pas d'une seule couleur**, réécrit sans ses métadonnées). Délais : 60 s pour le premier
+événement, chaque signe de vie repousse l'échéance de 20 s, 10 min en tout. **Pas de
+contrôle au hasard des images dans cette version** (la phase 3, § 5 le prévoit : refaire une
+image ailleurs et comparer, SSIM ≥ 0,60) : une image autre que celle demandée, sur le bon
+sujet, n'est donc pas vue. Mais un prêteur qui renvoie autre chose qu'une image valide, trop
+grosse, lente, coupée, ou dont le moteur s'arrête, est écarté 10 min (`reputation.bench`),
+comme pour une conversation ; ses refus « avant calcul » répétés après avoir annoncé une place
+l'écartent de même (`public_refusals`) ; une image valide compte comme une réponse servie.
+
+**Dans la conversation** : l'image est gardée comme une création d'ici, sa machine marquée
+« Créée par une machine du réseau public » (galerie, visionneuse, sous l'image) ; pendant le
+calcul, « Création par une machine du réseau public ». Le mode « Créer » propose le modèle
+« · réseau public » quand une machine le prête (sauf « Sur mes machines seulement », ou
+l'accord refusé).
+
+**Hors de cette version** : les vidéos ; une image de départ (retouche, image jointe) ; le
+contrôle au hasard des images ; un modèle à licence restrictive.
+
+**Essais** : `tests/test_public_imaging.py` (le prêteur derrière le vrai serveur entre
+machines avec un faux moteur d'images ; le demandeur par un faux compagnon qui relaie au
+prêteur ou répond ce qu'on lui dicte ; l'accord, la création et son unité de bout en bout).

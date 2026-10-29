@@ -862,6 +862,7 @@ async function create(text, request, again = false, replace = null, askedNode = 
     made = await post('/chat/create', {
       ...request, text, conversation_id: state.currentConversation?.id ?? null,
       chat_model: selectedModel() || null,
+      mine_only: mineOnly(),       // « Sur mes machines seulement » : le réseau public en dépend
     });
   } catch (e) {
     done();
@@ -873,11 +874,13 @@ async function create(text, request, again = false, replace = null, askedNode = 
       keepEdit(text, replace, id);
       return;
     }
-    // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être. Reconnue
+    // 409 : aucun modèle ne peut la calculer ; des amis le pourraient peut-être, ou une
+    // machine du réseau public, avec l'accord demandé une fois (public : « ask »). Reconnue
     // au vol, la demande n'en était peut-être pas une : « Répondre en texte » (si le
     // message ne part pas, il revient dans la zone de saisie)
     const notice = appendNotice(el.list, e.message, {
       images: e.status === 409, friends: e.data?.friends || [],
+      publicAsk: e.status === 409 && e.data?.public === 'ask',
       retry: () => create(text, request, true, replace, asked),
       asText: request.auto ? async () => {
         asked?.remove();

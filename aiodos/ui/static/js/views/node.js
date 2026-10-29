@@ -312,9 +312,12 @@ function renderShare() {
       : t('node.lend_public_help', { device }))}
     ${shareRow('use_public', t('node.use_public'), t('node.use_public_help', { device }))}
     ${s.use_public ? askedRow('public_bigger_model', t('node.public_bigger_model'), t('node.public_bigger_model_help'))
-      + askedRow('public_documents', t('node.public_documents'), t('node.public_documents_help')) : ''}
+      + askedRow('public_documents', t('node.public_documents'), t('node.public_documents_help'))
+      + askedRow('public_images', t('node.public_images'), t('node.public_images_help')) : ''}
     ${mobile ? '' : shareRow('lend_gpu', t('node.lend_gpu'), t('node.lend_gpu_help'))}
     ${mobile ? '' : shareRow('lend_images_friends', t('node.lend_images'), t('node.lend_images_help'))}
+    ${shareRow('lend_images_public', t('node.lend_images_public'), mobile
+      ? t('node.lend_images_public_help_phone') : t('node.lend_images_public_help', { device }))}
     ${mobile ? '' : idleRows}
     ${shareRow('share_on_ac_only', t(mobile ? 'node.ac_only_phone' : 'node.ac_only_pc'),
       t(mobile ? 'node.ac_only_phone_help' : 'node.ac_only_pc_help'))}

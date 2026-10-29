@@ -1,0 +1,18 @@
+{
+  "ask": "Your image's description goes to a stranger's machine, which also sees the image it creates, without knowing who you are. Create your images through the public network?",
+  "ask_note": "Neither this machine nor your machines can create it right now. Your choice applies from now on; you can change it in Settings, This machine, Sharing computing power.",
+  "saved_yes": "Noted: when your machines can't create an image, the public network creates it.",
+  "saved_no": "Noted: your images don't go to strangers. You can change your choice in Settings, This machine, Sharing computing power.",
+  "closed_off": "No image model can compute right now, here or on your online machines. A machine on the public network could create it if your creations could go to strangers (“Have my conversations computed by strangers”, in Settings, This machine, Sharing computing power); or install a model in “Images and videos”.",
+  "closed_mine_only": "No image model can compute right now, here or on your online machines. A machine on the public network could create it, but this conversation stays on your machines (“On my machines only”, in Permissions under the message box).",
+  "closed_attachments": "No image model can compute right now, here or on your online machines. A machine on the public network could create it, but an attached image never goes to a stranger: ask for it without an attached image.",
+  "closed_refused": "No image model can compute right now, here or on your online machines. A machine on the public network could create it, with your consent (“Create my images through the public network”, in Settings, This machine, Sharing computing power); or install a model in “Images and videos”.",
+  "nobody": "No image model can compute right now, here, on your online machines, or on the public network: install one in “Images and videos”, or try again in a moment.",
+  "too_big": "This format is too large for a machine on the public network (one million pixels at most, 1,024 × 1,024): choose a smaller one.",
+  "machine": "Created by a machine on the public network",
+  "computing": "Being created by a machine on the public network",
+  "model_public": "{label} · public network",
+  "withdrawn": "your images no longer go through the public network (Settings, or “On my machines only”)",
+  "nobody_now": "no machine on the public network can create this image right now",
+  "failed": "no machine on the public network could create it ({error})"
+}

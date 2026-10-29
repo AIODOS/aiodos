@@ -1,0 +1,18 @@
+{
+  "ask": "La description de ton image part chez la machine d'un inconnu, qui voit aussi l'image créée, sans savoir qui tu es. Créer tes images par le réseau public ?",
+  "ask_note": "Ni cette machine ni tes machines ne peuvent la créer en ce moment. Ton choix vaut pour la suite ; il se change dans Réglages, Cette machine, Partage de puissance.",
+  "saved_yes": "C'est noté : quand tes machines ne peuvent pas créer une image, le réseau public la crée.",
+  "saved_no": "C'est noté : tes images ne partent pas chez des inconnus. Ton choix se change dans Réglages, Cette machine, Partage de puissance.",
+  "closed_off": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer si tes créations pouvaient partir chez des inconnus (« Faire calculer mes conversations par des inconnus », dans Réglages, Cette machine, Partage de puissance) ; ou installe un modèle dans « Images et vidéos ».",
+  "closed_mine_only": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, mais cette conversation reste sur tes machines (« Sur mes machines seulement », dans les Autorisations sous la zone de saisie).",
+  "closed_attachments": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, mais une image jointe ne part jamais chez un inconnu : demande-la sans image jointe.",
+  "closed_refused": "Aucun modèle d'images ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, avec ton accord (« Créer mes images par le réseau public », dans Réglages, Cette machine, Partage de puissance) ; ou installe un modèle dans « Images et vidéos ».",
+  "nobody": "Aucun modèle d'images ne peut calculer en ce moment, ni ici, ni chez tes machines en ligne, ni sur le réseau public : installe-en un dans « Images et vidéos », ou réessaie dans un moment.",
+  "too_big": "Ce format est trop grand pour une machine du réseau public (un million de pixels au plus, 1 024 × 1 024) : choisis-en un plus petit.",
+  "machine": "Créée par une machine du réseau public",
+  "computing": "Création par une machine du réseau public",
+  "model_public": "{label} · réseau public",
+  "withdrawn": "tes images ne partent plus par le réseau public (Réglages, ou « Sur mes machines seulement »)",
+  "nobody_now": "aucune machine du réseau public ne peut créer cette image en ce moment",
+  "failed": "aucune machine du réseau public n'a pu la créer ({error})"
+}

@@ -2,7 +2,8 @@
 // (chat/creations.py). Le bouton à côté du message ouvre le mode « Créer » : modèle, format,
 // durée, nombre ; sans lui, une demande écrite (« Crée une image d'un phare… ») est reconnue
 // avant l'envoi. La réponse de l'assistant montre les images à mesure qu'elles arrivent,
-// calculées ici ou par tes machines qui ont le modèle.
+// calculées ici ou par tes machines qui ont le modèle ; sinon, une image peut être créée par
+// une machine du réseau public, avec l'accord demandé une fois (chat/public_creations.py).
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { t } from '../i18n.js';
@@ -11,6 +12,7 @@ import { byPower } from './models.js';
 import { state, on, emit, prefs } from '../state.js';
 import { menu, toast, errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
+import { mineOnly } from './chat-public.js';
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const COUNTS = [1, 2, 4, 8];
@@ -62,6 +64,7 @@ export function mountCreate(footer, input, grow) {
     if (e.key === 'Escape' && mode) { e.preventDefault(); setMode(null); }
   });
   on('images:changed', () => { if (mode) load(); });
+  on('chat:mine-only', () => { if (mode) fill(); });   // le réseau public, ou non (viaPublic)
   on('chat:create', p => { emit('view:show', 'chat'); setMode(p?.kind || 'image', p || {}); });
   on('jobs:changed', follow);
   setInterval(() => {                 // le temps qui passe, pour les créations en cours
@@ -99,7 +102,11 @@ async function load() {
   if (mode) fill();
 }
 
-const usable = m => (m.state === 'ready' && info?.engine.found) || m.helpers.length > 0;
+const here = m => (m.state === 'ready' && info?.engine.found) || m.helpers.length > 0;
+// Ni ici ni chez mes machines : une machine du réseau public le prête, et la conversation peut
+// partir chez un inconnu (le nœud redit tout à l'envoi, avec la carte d'accord s'il le faut)
+const viaPublic = m => !here(m) && !!m.public && !mineOnly();
+const usable = m => here(m) || viaPublic(m);
 
 /** Réglages → Modèles : les modèles d'images et de vidéos s'y téléchargent. */
 function showModels() {
@@ -117,6 +124,7 @@ function fill() {
   const wanted = prefs.get(`create.model.${mode}`, '') || select.value;
   select.innerHTML = models.map(m => {
     const text = !usable(m) ? t('chat_create.model_to_install', { label: m.label })
+      : viaPublic(m) ? t('public_images.model_public', { label: m.label })
       : m.state === 'ready' && info.engine.found ? m.label
       : t('chat_create.model_on', { label: m.label, names: m.helpers.join(', ') });
     return `<option value="${esc(m.id)}"${usable(m) ? '' : ' disabled'}>${esc(text)}</option>`;
@@ -187,10 +195,13 @@ export function resetMedia() {
 }
 
 /** Une réponse qui ne vient pas d'un modèle (« aucun modèle d'images prêt »…), non gardée.
- *  friends : amis qui pourraient calculer, et retry() pour recommencer une fois autorisés. */
+ *  friends : amis qui pourraient calculer, et retry() pour recommencer une fois autorisés ;
+ *  publicAsk : une machine du réseau public le pourrait, l'accord pas encore demandé (la carte :
+ *  Oui, gardé, et retry() ; Non, gardé). */
 export function appendNotice(list, message, { images = false, friends = [], retry = null,
-  asText = null } = {}) {
+  asText = null, publicAsk = false } = {}) {
   list.querySelector('.welcome')?.remove();
+  if (publicAsk && retry) return appendPublicAsk(list, message, retry, asText);
   const node = h(`
     <div class="msg assistant notice">
       <img class="avatar" src="/logo.png?v=serpents" alt="">
@@ -214,6 +225,50 @@ export function appendNotice(list, message, { images = false, friends = [], retr
       return;
     }
     node.remove();
+  });
+  list.append(node);
+  return node;
+}
+
+/** La carte d'accord des images par le réseau public, dans la conversation : Oui (gardé dans
+ *  les Réglages, puis la création recommence : retry) ou Non (gardé ; la carte dit où le
+ *  changer). Reconnue au vol, la demande peut aussi partir en texte (asText). */
+function appendPublicAsk(list, message, retry, asText) {
+  const node = h(`
+    <div class="msg assistant notice side-note public-card">
+      <img class="avatar" src="/logo.png?v=serpents" alt="">
+      <div class="body"><div class="banner info wrap">${icon('globe')}
+        <div class="banner-text"><b>${esc(message)}</b><small>${esc(t('public_images.ask_note'))}</small></div>
+        <div class="banner-actions">
+          <button class="btn sm primary" type="button" data-answer="yes">${esc(t('chat.public_yes'))}</button>
+          <button class="btn sm" type="button" data-answer="no">${esc(t('chat.public_no'))}</button>
+          ${asText ? `<button class="btn sm ghost" type="button" data-as-text>${icon('chat')}${esc(t('chat_create.as_text'))}</button>` : ''}</div>
+      </div></div>
+    </div>`);
+  node.querySelector('[data-as-text]')?.addEventListener('click', () => asText());
+  node.querySelectorAll('[data-answer]').forEach(button => {
+    button.onclick = async () => {
+      const yes = button.dataset.answer === 'yes';
+      const buttons = node.querySelectorAll('button');
+      buttons.forEach(b => { b.disabled = true; });          // cliqué deux fois : une seule fois
+      try { state.settings = await put('/settings', { public_images: yes }); }
+      catch (err) { errorToast(err); buttons.forEach(b => { b.disabled = false; }); return; }
+      emit('settings:loaded');
+      if (!yes) {
+        node.classList.add('answered');
+        node.querySelector('.banner').innerHTML = `${icon('check')}<div class="banner-text">${esc(t('public_images.saved_no'))}</div>`;
+        return;
+      }
+      node.hidden = true;
+      if (await retry() === false) {                       // une autre création en route : plus tard
+        node.hidden = false;
+        buttons.forEach(b => { b.disabled = false; });
+        toast(t('chat_create.busy'));
+        return;
+      }
+      node.remove();
+      toast(t('public_images.saved_yes'), 'ok', 5000);
+    };
   });
   list.append(node);
   return node;
@@ -342,6 +397,7 @@ function paintState(view) {
     const names = new Map((state.network?.peers || []).map(p => [p.node_id, p.name]));
     const away = Object.keys(job.remote || {}).map(id => names.get(id) || t('jobs.another_machine'));
     const doing = job.status === 'paused' ? t('chat_create.paused')
+      : media.public && job.status === 'running' ? t('public_images.computing')
       : away.length ? t('chat_create.computing_on', { names: away.join(', ') })
       : t(job.status === 'running' ? 'chat_create.running' : 'chat_create.queued');
     const count = media.count > 1 ? t('chat_create.progress', { done: images.length, n: media.count }) : '';
