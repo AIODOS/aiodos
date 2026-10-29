@@ -1,6 +1,6 @@
 {
   "title": "Network",
-  "intro": "AIODOS connects everyone's machines over the Internet, strangers on the public network included, to pool their computing power. For now, the public network is a directory: only your friends and your paired machines (pairing confirmed on both sides) compute for each other.",
+  "intro": "AIODOS connects everyone's machines over the Internet, strangers on the public network included, to pool their computing power: machines on the public network answer your conversations and create your images without knowing who you are, and yours does the same for others, within the power lent. Your paired machines and friends also share your background work.",
   "invitation_received": "Invitation from “{name}” accepted {ago}: pairing will start once your friend has pasted your reply.",
   "invitation_answered": "Reply from “{name}” received: pairing in progress.",
   "invitation_sent": "Invitation created {ago}, waiting for your friend's reply (valid until {until}).",
@@ -66,7 +66,7 @@
   "public_fold": "Public network",
   "public_sub_needs_internet": "turn on Internet first",
   "public_trial": "trial",
-  "public_help": "A directory with no owner (the BitTorrent DHT), where AIODOS nodes find each other without an invitation. This machine joins it with a separate key, which doesn't link it to your paired machines, and through the relays: your IP address isn't given to strangers, but a stranger running their own relay could see it (a known limit of this trial). It only tells its AIODOS version and the models it can compute. Nothing is entrusted to strangers, and nothing is computed for them: that will come later, with your consent.",
+  "public_help": "A directory with no owner, where AIODOS nodes find each other without an invitation. This machine joins it with a separate key, which doesn't link it to your paired machines, and through the relays: your IP address isn't given to strangers. It tells its AIODOS version, its models, whether it lends and whether it has a free place. A machine on the public network can answer your conversations and create your images: it reads them, without knowing who you are (a throwaway key each time), and keeps nothing; random checks verify its answers. Your machine does the same for strangers, within the power lent, never on battery. Everything can be turned off here and in \"This machine\".",
   "local_off_internet": "No more discovery or direct path on your network: your paired machines are still reached over the Internet.",
   "local_off_nothing": "Nothing leaves this machine. Turn on the local network or the Internet to pair it with your other machines.",
   "local_visible_discovery": "This machine (“{name}”) is visible on your network, port {port}, automatic discovery on.",

@@ -1,6 +1,6 @@
 {
   "title": "Réseau",
-  "intro": "AIODOS relie par Internet les machines de chacun, inconnus du réseau public compris, pour mettre leur puissance de calcul en commun. Aujourd'hui, le réseau public est un annuaire : seuls tes amis et tes machines appairées (appairage confirmé des deux côtés) calculent les uns pour les autres.",
+  "intro": "AIODOS relie par Internet les machines de chacun, inconnus du réseau public compris, pour mettre leur puissance de calcul en commun : des machines du réseau public répondent à tes conversations et créent tes images, sans savoir qui tu es, et la tienne fait de même pour d'autres, dans la limite de la puissance prêtée. Tes machines et tes amis, appairés, partagent aussi tes travaux de fond.",
   "invitation_received": "Invitation de « {name} » acceptée {ago} : l'appairage commencera quand ton ami aura collé ta réponse.",
   "invitation_answered": "Réponse de « {name} » reçue : appairage en cours.",
   "invitation_sent": "Invitation créée {ago}, en attente de la réponse de ton ami (valable jusqu'à {until}).",
@@ -63,7 +63,7 @@
   "public_fold": "Réseau public",
   "public_sub_needs_internet": "Internet à activer d'abord",
   "public_trial": "essai",
-  "public_help": "Un annuaire sans propriétaire (la DHT de BitTorrent), où les nœuds AIODOS se trouvent sans invitation. Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais : ton adresse IP n'est pas donnée aux inconnus, mais un inconnu qui fait tourner son propre relais pourrait la voir (limite connue de cet essai). Elle dit seulement sa version d'AIODOS et les modèles qu'elle sait calculer. Rien n'est confié aux inconnus, et rien n'est calculé pour eux : cela viendra plus tard, avec ton accord.",
+  "public_help": "Un annuaire sans propriétaire, où les nœuds AIODOS se trouvent sans invitation. Cette machine y entre avec une clé à part, qui ne la relie pas à tes machines appairées, et par les relais : ton adresse IP n'est pas donnée aux inconnus. Elle y dit sa version d'AIODOS, ses modèles, si elle prête et si elle a une place. Une machine du réseau public peut répondre à tes conversations et créer tes images : elle les lit, sans savoir qui tu es (une clé jetable à chaque fois), et ne garde rien ; des contrôles au hasard vérifient ses réponses. Ta machine fait de même pour des inconnus, dans la limite de la puissance prêtée, jamais sur batterie. Tout se coupe ici et dans « Cette machine ».",
   "local_off_internet": "Plus de découverte ni de chemin direct sur ton réseau : tes machines appairées restent jointes par Internet.",
   "local_off_nothing": "Rien ne sort de cette machine. Active le réseau local ou Internet pour l'appairer avec tes autres machines.",
   "local_visible_discovery": "Cette machine (« {name} ») est visible sur ton réseau, port {port}, découverte automatique active.",
