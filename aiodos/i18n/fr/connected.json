@@ -39,7 +39,7 @@
   "col_lends": "Prête",
   "col_now": "En ce moment",
   "title": "Machines connectées",
-  "title_count": "Machines connectées · {n}",
+  "title_count": "Machines connectées · {n} en ligne",
   "hint": "En direct, toutes les machines que voit celle-ci : le réseau public, tes machines, tes amis, ton réseau local. Qui est en ligne, qui prête, et ce que chacune fait pour l'autre. Nouvelles toutes les 15 secondes environ.",
   "empty": "Aucune machine pour l'instant : rejoins le réseau public, invite un ami ou appaire tes machines, plus bas.",
   "network_off": "Réseau coupé : active Internet ou le réseau local, plus bas, pour retrouver les autres machines.",

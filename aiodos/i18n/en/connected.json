@@ -39,7 +39,7 @@
   "col_lends": "Lends",
   "col_now": "Right now",
   "title": "Connected machines",
-  "title_count": "Connected machines · {n}",
+  "title_count": "Connected machines · {n} online",
   "hint": "Live, every machine this one sees: the public network, your machines, your friends, your local network. Who is online, who lends, and what each one does for the other. Updated about every 15 seconds.",
   "empty": "No machines yet: join the public network, invite a friend or pair your machines, below.",
   "network_off": "Network off: turn on the Internet or the local network below to reach the other machines.",
