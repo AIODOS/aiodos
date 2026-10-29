@@ -126,13 +126,19 @@ Réglages → Moteurs montre chacun : présent ou non, version, ce qu'il sait fa
 4. **L'audio** : moteurs, catalogue, création dans la conversation (« Crée une musique… »,
    « Lis ce texte avec une voix… »).
 
-## 7. Décisions à prendre par l'auteur
+## 7. Décisions de l'auteur (29/10/2026, soir)
 
-- Quelles licences entrent au catalogue (libres seulement ; aussi les communautaires gratuites
-  sous un seuil de chiffre d'affaires ; aussi les non commerciales).
-- MiniMax H3 : retiré, ou gardé avec l'avertissement (jamais prêté à des tiers).
-- L'audio : voix, musique, effets ; dans quel ordre.
-- La forme du menu.
+- **Licences** : « Étant donné qu'il n'y a pas de chiffre d'affaires sous AIODOS, qui est
+  gratuit, on peut utiliser les meilleurs modèles. […] Cette décision est à prendre par les
+  utilisateurs eux-mêmes. Chacun est responsable de ses actes. » Le catalogue prend les
+  meilleurs modèles, non commerciaux compris (Qwen-Image-2.1…) ; chaque licence restrictive est
+  affichée et acceptée par l'utilisateur avant le téléchargement (comme MiniMax H3 aujourd'hui).
+  Restent écartés les modèles qui ne tournent pas sur une machine d'utilisateur (64 à 80
+  milliards de paramètres) ou qui dépendent d'un service en ligne (Fibo 2.0 : Gemini).
+- **MiniMax H3** : gardé, avec un avertissement (pays exclus par sa licence, service à des tiers
+  interdit) ; il peut être prêté à des tiers, avec un avertissement à celui qui prête.
+- **Audio** : voix, musique et effets sonores.
+- **Menu** : un seul bouton, quatre onglets (§ 4).
 
 ## 8. Ce qui reste incertain
 
