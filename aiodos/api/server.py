@@ -10,10 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from aiodos import instance, paths, render
 from aiodos.api.events import EventBus
 from aiodos.api.security import Guard
-from aiodos.api.routes import (attachments, autostart, chat, cluster, conversations,
-                               creations, engines, gateway, gateway_apps, i18n, images, jobs,
-                               knowledge, legal, model_install, network, node, system,
-                               updates)
+from aiodos.api.routes import (attachments, autostart, chat, cluster, comfy_creations,
+                               conversations, creations, engines, gateway, gateway_apps, i18n,
+                               images, jobs, knowledge, legal, model_install, network, node,
+                               system, updates)
 from aiodos.chat import attachments as chat_attachments
 from aiodos.engines import comfy_instance
 from aiodos.gateway import access_flow, apps, retention
@@ -94,9 +94,9 @@ def create_app(token: str, hosts: set, network_options: dict | None = None,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.bus = bus
     app.state.show_key = show_key
-    for module in (attachments, autostart, chat, cluster, conversations, creations, engines,
-                   gateway, gateway_apps, i18n, images, knowledge, jobs, legal, model_install,
-                   network, node, system, updates):
+    for module in (attachments, autostart, chat, cluster, comfy_creations, conversations,
+                   creations, engines, gateway, gateway_apps, i18n, images, knowledge, jobs,
+                   legal, model_install, network, node, system, updates):
         app.include_router(module.router)
     app.include_router(system.window_router)
 

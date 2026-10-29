@@ -88,14 +88,16 @@ function onJob(job) {
     toast(t('app.reindex_started'), 'info', 6000);
   }
   const finished = before && ACTIVE.includes(before) && !ACTIVE.includes(job.status);
-  if (finished && job.kind === 'generate_images') {
+  // Une création : de sd.cpp, ou de ComfyUI (vue Images et vidéos, images-comfy.js)
+  if (finished && (job.kind === 'generate_images' || job.kind === 'comfy_create')) {
     const n = job.result?.images ?? job.done;
+    const video = job.params?.frames || job.params?.creation?.kind === 'video';
     // Demandée dans une conversation : rien à dire si elle est sous les yeux
     const conv = job.params?.conversation_id;
     const seen = conv ? state.view === 'chat' && state.currentConversation?.id === conv
       : state.view === 'images';
     if (!seen && job.status !== 'cancelled') {
-      toast(t(job.params?.frames ? 'app.videos_ready' : 'app.images_ready', {
+      toast(t(video ? 'app.videos_ready' : 'app.images_ready', {
         title: jobTitle(job), n, where: t(conv ? 'app.ready_in_conversation' : 'app.ready_in_images'),
       }), job.status === 'done' && !job.failed ? 'ok' : 'err', 6000);
     }

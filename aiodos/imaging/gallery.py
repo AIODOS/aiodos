@@ -1,5 +1,6 @@
 """Images et vidéos gardées : une ligne par image ou vidéo (table images), le PNG ou le
-WebM dans le dossier des créations : celui du réglage images_out_dir, sinon Images/AIODOS
+WebM (ou, pour une création de ComfyUI, add_media : PNG, JPEG, WebP, GIF, MP4) dans le dossier
+des créations : celui du réglage images_out_dir, sinon Images/AIODOS
 pour AIODOS installé sous Windows (là où on cherche ses images), data/images/out sinon.
 Un fichier créé avant un changement de dossier reste trouvé là où il a été écrit.
 
@@ -11,6 +12,7 @@ infini gardé en base ferait tomber toute réponse JSON qui le contient).
 import math
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -105,6 +107,69 @@ def add(payload: dict, data: bytes, machine: str = "", seconds: float | None = N
              round(seconds, 2) if seconds is not None else None, db.now(),
              "video" if video else "image", frames if video else None,
              fps if video else None, str(folder))).lastrowid
+    return get(image_id)
+
+
+# Les genres qu'une création de ComfyUI peut garder (reconnus par leurs premiers octets,
+# engines/media.py), et ce qu'en dit la galerie
+MEDIA = {"image/png": "image", "image/jpeg": "image", "image/webp": "image", "image/gif": "image",
+         "video/mp4": "video", "video/webm": "video"}
+MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
+               ".gif": "image/gif", ".mp4": "video/mp4", ".webm": "video/webm"}
+
+
+def _picture_size(path: Path, kind: str) -> tuple | None:
+    try:
+        if kind == "image/png":
+            with open(path, "rb") as f:
+                return png_size(f.read(64))
+        from PIL import Image
+        with Image.open(path) as picture:
+            return picture.size
+    except Exception:                 # illisible, ou sans Pillow : la taille demandée
+        return None
+
+
+def add_media(meta: dict, source, kind: str, machine: str = "",
+              seconds: float | None = None, n: int = 1) -> dict:
+    """Garde une création de ComfyUI (jobs/kinds/comfy_create.py) : son fichier (un chemin, ou
+    les octets venus d'une de mes machines), d'un genre de MEDIA ; meta : batch, index, model,
+    prompt, negative, seed, width, height, steps, cfg, frames, fps. n : son rang parmi les
+    sorties de la même unité (un workflow peut en donner plusieurs). ValueError pour un autre
+    genre."""
+    from aiodos.engines import media as engine_media
+    media = MEDIA.get(kind)
+    if media is None:
+        raise ValueError(kind)
+    batch = _SAFE.sub("", str(meta.get("batch") or "lot").lower())[:32] or "lot"
+    suffix = f"-{n}" if n > 1 else ""
+    name = (f"{batch}-{int(meta.get('index') or 0):02d}-{int(meta.get('seed') or 0)}{suffix}"
+            f"{engine_media.extension(kind)}")
+    if seconds is not None and not (math.isfinite(seconds) and 0 <= seconds <= MAX_SECONDS):
+        seconds = None
+    folder = out_dir()
+    target = folder / name
+    part = target.with_name(target.name + ".part")
+    if isinstance(source, (bytes, bytearray)):
+        part.write_bytes(bytes(source))
+    else:
+        shutil.copyfile(source, part)
+    os.replace(part, target)
+    paths.for_user(target)
+    size = _picture_size(target, kind) if media == "image" else None
+    width, height = size or (int(meta.get("width") or 0), int(meta.get("height") or 0))
+    frames, fps = meta.get("frames"), meta.get("fps")
+    with db.transaction() as c:
+        image_id = c.execute(
+            "INSERT INTO images(batch, model, prompt, negative, seed, width, height, steps, "
+            "cfg, file, machine, seconds, created, media, frames, fps, folder) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (batch, str(meta["model"])[:120], str(meta.get("prompt") or ""),
+             str(meta.get("negative") or ""), int(meta.get("seed") or 0), int(width),
+             int(height), int(meta.get("steps") or 0), float(meta.get("cfg") or 0), name,
+             machine or None, round(seconds, 2) if seconds is not None else None, db.now(),
+             media, int(frames) if media == "video" and frames else None,
+             round(float(fps)) if media == "video" and fps else None, str(folder))).lastrowid
     return get(image_id)
 
 

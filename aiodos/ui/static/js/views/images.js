@@ -1,7 +1,8 @@
 // Images et vidéos : les créations en cours et la galerie. Elles se demandent dans une
 // discussion, comme dans les autres assistants (chat-create.js) ; chacune est une unité de la
 // file, calculée ici ou par mes machines qui ont le modèle (docs/generation-repartie.md). Les
-// modèles se gèrent dans Réglages → Modèles (settings-models.js) : ici, un résumé en bas.
+// modèles se gèrent dans Réglages → Modèles (settings-models.js) : ici, un résumé en bas. Au-dessus
+// de la galerie, ComfyUI : ses recettes, mes workflows, et « Créer » (images-comfy.js).
 import { get, post } from '../api.js';
 import { $, h, esc, debounce } from '../dom.js';
 import { t } from '../i18n.js';
@@ -10,6 +11,10 @@ import { state, on, emit } from '../state.js';
 import { errorToast } from '../ui.js';
 import { openMedia, fileOf, thumbOf, isVideo, length } from './media-viewer.js';
 import { byPower } from './models.js';
+import { mountComfy, refreshComfy } from './images-comfy.js';
+
+// Les créations : celles de sd.cpp, et celles de ComfyUI (images-comfy.js)
+const KINDS = ['generate_images', 'comfy_create'];
 
 const ACTIVE = ['queued', 'running', 'paused'];
 const PAGE = 60;
@@ -35,11 +40,13 @@ export function mountImages(container) {
       </div>
       <div id="img-banner"></div>
       <div id="img-pending"></div>
+      <div id="img-comfy-box"></div>
       <div class="img-grid" id="img-grid"></div>
       <div class="img-more"><button class="btn ghost" id="img-more" hidden>${esc(t('images.older'))}</button></div>
       <div class="img-summary" id="img-summary"></div>
     </div></div>`);
   container.append(root);
+  mountComfy($('#img-comfy-box', root));
   root.querySelectorAll('[data-create]').forEach(b => {
     b.onclick = () => emit('chat:create', { kind: b.dataset.create });
   });
@@ -53,7 +60,7 @@ export function mountImages(container) {
 }
 
 async function refresh() {
-  await Promise.all([loadModels(), loadImages(false)]);
+  await Promise.all([loadModels(), loadImages(false), refreshComfy()]);
   onJobs();
 }
 
@@ -108,7 +115,7 @@ function renderModels() {
 
 // --------------------------------------------------------- créations en cours
 function onJobs() {
-  const jobs = [...state.jobs.values()].filter(j => j.kind === 'generate_images');
+  const jobs = [...state.jobs.values()].filter(j => KINDS.includes(j.kind));
   let fresh = false;
   for (const j of jobs) {
     const before = shownDone.get(j.id);
@@ -119,7 +126,8 @@ function onJobs() {
   const pending = jobs.filter(j => ACTIVE.includes(j.status)).sort((a, b) => a.created - b.created);
   const names = new Map((state.network?.peers || []).map(p => [p.node_id, p.name]));
   $('#img-pending', root).innerHTML = pending.map(j => {
-    const p = j.params || {};
+    // Une création de ComfyUI garde sa description dans « creation » (jobs/kinds/comfy_create.py)
+    const p = (j.kind === 'comfy_create' ? j.params?.creation : j.params) || {};
     const away = Object.entries(j.remote || {}).map(([id, n]) => `${names.get(id) || t('images.another_machine')} (${n})`);
     const where = away.length ? ` · ${esc(t('images.computing_at', { machines: away.join(', ') }))}` : '';
     const pct = j.total ? Math.floor(100 * (j.done + j.failed) / j.total) : 0;
@@ -144,6 +152,7 @@ function onJobs() {
 
 function waiting(job, params, away) {
   if (job.status !== 'queued' || away.length) return t('images.running');
+  if (job.kind === 'comfy_create') return t('images_comfy.waiting');
   const model = info?.models.find(m => m.id === params.model);
   const here = info?.engine.found && model?.state === 'ready';
   return t(here ? 'images.waiting_gpu' : 'images.waiting_machine');
@@ -167,10 +176,13 @@ function renderGrid() {
       <span class="img-tag">${isVideo(img) ? `${esc(t('images.video_length', { length: length(img) }))} · ` : ''}${esc(img.machine || t('images.this_machine'))}${img.seconds ? ` · ${Math.round(img.seconds)} s` : ''}</span>
     </button>`).join('');
   grid.querySelectorAll('.img-tile').forEach(tile => {
-    tile.onclick = () => openMedia(images.find(i => i.id === Number(tile.dataset.id)), {
-      // « Reprendre » : la description revient dans une discussion, en mode « Créer »
-      onReuse: img => emit('chat:create', { kind: isVideo(img) ? 'video' : 'image', model: img.model,
-        prompt: img.prompt, width: img.width, height: img.height, frames: img.frames, seed: img.seed }),
+    const shown = images.find(i => i.id === Number(tile.dataset.id));
+    tile.onclick = () => openMedia(shown, {
+      // « Reprendre » : la description revient dans une discussion, en mode « Créer » (un modèle
+      // de sd.cpp seulement : une création de ComfyUI se refait depuis sa recette, ci-dessus)
+      onReuse: String(shown?.model || '').startsWith('comfyui/') ? undefined
+        : img => emit('chat:create', { kind: isVideo(img) ? 'video' : 'image', model: img.model,
+          prompt: img.prompt, width: img.width, height: img.height, frames: img.frames, seed: img.seed }),
       onDeleted: img => { images = images.filter(i => i.id !== img.id); renderGrid(); },
       onConversation: img => { emit('view:show', 'chat'); emit('chat:open', img.conversation_id); },
     });

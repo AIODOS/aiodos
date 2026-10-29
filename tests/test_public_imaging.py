@@ -399,7 +399,8 @@ def test_the_public_profile_announces_the_lent_image_models(monkeypatch):
         raise RuntimeError("Ollama arrêté")
     monkeypatch.setattr(ollama, "list_models", down)
     assert public._models() == ["image:z-image-turbo"]
-    # Une vidéo, ou un modèle à licence restrictive, n'est jamais prêté aux inconnus
+    # Ni une vidéo (les siennes : public_video.offered, tests/test_public_videos.py), ni un
+    # modèle à licence restrictive, n'est prêté comme modèle d'images
     monkeypatch.setattr(public_imaging, "_ready", lambda model: True)
     assert public._models() == ["image:z-image-turbo"]
     assert all(len(public_imaging.MARKER + m) <= public.MAX_TEXT for m in catalog.MODELS)
@@ -743,9 +744,10 @@ def test_mine_only_and_the_settings_keep_images_off_the_public_network(ui, compa
     settings.set_value("use_public", True)
     choice = public_creations.choose(MODEL, False, [{"kind": "image", "id": "x"}])
     assert choice == public_creations.Choice(message=t("public_images.closed_attachments"))
-    # Une vidéo ne passe pas par le réseau public dans cette version
+    # Une vidéo, sans machine du réseau public qui prête un modèle de vidéos (l'accord donné) :
+    # le réseau public ne peut pas non plus (le reste : tests/test_public_videos.py)
     reply = create(ui, "Crée une vidéo d'un chat roux")
-    assert reply.json()["detail"] == t("chat_create.nothing_ready_videos")
+    assert reply.json()["detail"] == t("public_videos.nobody")
     assert companion.requests == []
 
 

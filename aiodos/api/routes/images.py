@@ -130,9 +130,10 @@ def image_file(image_id: int, size: int | None = None):
     small = thumbs.thumbnail(row, size) if size and size > 0 else None
     if small is not None:
         return FileResponse(small, media_type="image/webp", headers=cache)
-    video = gallery.path_of(row).suffix == ".webm"
-    return FileResponse(gallery.path_of(row), media_type="video/webm" if video else "image/png",
-                        headers=cache)
+    # Le genre d'après l'extension que la galerie a donnée (une création de ComfyUI peut être
+    # un MP4, un WebP…)
+    kind = gallery.MEDIA_TYPES.get(gallery.path_of(row).suffix.lower(), "image/png")
+    return FileResponse(gallery.path_of(row), media_type=kind, headers=cache)
 
 
 @router.delete("/{image_id}")

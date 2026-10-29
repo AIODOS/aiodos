@@ -11,15 +11,16 @@ La réponse de l'assistant garde la demande (colonne media : lot, travail, modè
 description) ; son texte la résume pour le modèle de conversation (historique, mémoire),
 qui sait ainsi ce qui a été créé, sans voir les images.
 
-Quand ni cette machine ni mes machines ne peuvent calculer une image, une machine du réseau
-public peut la créer, avec l'accord demandé une fois (chat/public_creations.py, 29/10/2026) :
-le travail porte alors « public » (jobs/kinds/public_images.py), la réponse aussi (media), et
+Quand ni cette machine ni mes machines ne peuvent calculer une image ou une vidéo, une machine
+du réseau public peut la créer, avec l'accord demandé une fois (chat/public_creations.py,
+29/10/2026 ; le même pour les deux) : le travail porte alors « public »
+(jobs/kinds/public_images.py, jobs/kinds/public_videos.py), la réponse aussi (media), et
 l'image vient sans image de départ (ni retouche à partir de la précédente, ni image jointe).
 Avant, le filtre des descriptions (imaging/prompt_filter.py) : la base sur le message, avant
 de réécrire la description ; puis la base et le modèle de conversation de cette machine (celui
 qui l'a enrichie) sur la description qui partirait. Interdite : le message « ni le réseau
-public ni AIODOS ne créent ce genre d'image » dans la conversation (403), rien n'est envoyé.
-Une image créée ici ou par mes machines n'y passe pas.
+public ni AIODOS ne créent ce genre d'image » (ou « de vidéo ») dans la conversation (403),
+rien n'est envoyé. Une création faite ici ou par mes machines n'y passe pas.
 """
 import re
 
@@ -341,8 +342,8 @@ def preflight(text: str, conversation_id=None, before=None) -> dict | None:
 # ------------------------------------------------------------------- dans la conversation
 def _nothing_can(media_kind: str, public=None) -> CreationError:
     """Aucun modèle de ce genre ne peut calculer : la façon d'en avoir un. Des amis qui
-    le proposeraient, si on les y autorise, sont nommés (friends) ; sinon, pour une image, ce
-    que dit le réseau public (public : public_creations.Choice), s'il dit quelque chose."""
+    le proposeraient, si on les y autorise, sont nommés (friends) ; sinon, ce que dit le
+    réseau public (public : public_creations.Choice), s'il dit quelque chose."""
     what = "videos" if media_kind == "video" else "images"
     offered = sorted({name for model_id, names in lenders.helpers(friends=True).items()
                       if catalog.MODELS.get(model_id, {}).get("kind", "image") == media_kind
@@ -359,13 +360,11 @@ def _nothing_can(media_kind: str, public=None) -> CreationError:
 
 
 def _public_model(media_kind: str, preferred, mine_only, pictures) -> str:
-    """Une image que rien ici ni chez mes machines ne peut calculer : le modèle qu'une machine
-    du réseau public créerait (public_creations.choose), ou CreationError. Des amis qui le
-    pourraient, si je les y autorise, passent d'abord, sauf si j'ai déjà accepté le réseau
-    public."""
-    if media_kind != "image":
-        raise _nothing_can(media_kind)               # les vidéos : hors de cette version
-    choice = public_creations.choose(preferred, mine_only, pictures)
+    """Une image ou une vidéo que rien ici ni chez mes machines ne peut calculer : le modèle
+    qu'une machine du réseau public créerait (public_creations.choose), ou CreationError. Des
+    amis qui le pourraient, si je les y autorise, passent d'abord, sauf si j'ai déjà accepté le
+    réseau public."""
+    choice = public_creations.choose(preferred, mine_only, pictures, media_kind)
     if choice.model is None:
         raise _nothing_can(media_kind, choice)
     return choice.model
@@ -453,7 +452,7 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
         model_id = _public_model(media_kind, request.get("model"), bool(mine_only), pictures)
         for asked in (text, request.get("prompt")):    # la base, avant de rien réécrire
             if asked and prompt_filter.base(asked) is not None:
-                raise refused_content()
+                raise refused_content(media_kind)
         # Sans image de départ (retouche, variante d'une image d'ici) : sa description seule
         request = {k: v for k, v in request.items() if k not in ("init_path", "strength")}
     if pictures and media_kind == "video":
@@ -503,26 +502,36 @@ def prepare(text: str, request: dict, conversation_id=None, chat_model=None,
 
 
 def _for_public(params: dict, chat_model=None) -> dict:
-    """Les réglages d'une image que le réseau public créera : dans les bornes de ses machines
-    (network/public_imaging.py : pas au-delà de leur nombre de pas, une taille qu'elles
-    acceptent), sa description passée au filtre (la base et le modèle de conversation de
-    cette machine, s'il y en a un : celui qui l'a enrichie, chat/enrich.py), marqués
-    « public » (jobs/kinds/images.split_generate)."""
-    from aiodos.network import public_imaging
+    """Les réglages d'une image ou d'une vidéo que le réseau public créera : dans les bornes
+    de ses machines (network/public_imaging.py, network/public_video.py : pas au-delà de leur
+    nombre de pas, une taille et, pour une vidéo, un nombre d'images qu'elles acceptent), sa
+    description passée au filtre (la base et le modèle de conversation de cette machine, s'il
+    y en a un : celui qui l'a enrichie, chat/enrich.py), marqués « public »
+    (jobs/kinds/images.split_generate)."""
+    from aiodos.network import public_imaging, public_video
     spec = catalog.model(params["model"])
-    if not public_imaging.fits(spec, params["width"], params["height"]):
-        raise CreationError(t("public_images.too_big"))
+    video = catalog.is_video(params["model"])
+    if video:
+        if not public_video.fits(spec, params["width"], params["height"]) \
+                or not public_video.frames_allowed(spec, params["frames"]):
+            raise CreationError(t("public_videos.too_big"))
+        steps = public_video.max_steps(spec)
+    else:
+        if not public_imaging.fits(spec, params["width"], params["height"]):
+            raise CreationError(t("public_images.too_big"))
+        steps = public_imaging.max_steps(spec)
     if prompt_filter.check(params["prompt"], params.get("negative") or "",
                            retouches._rewriter(chat_model)) is not None:
-        raise refused_content()
-    return {**params, "steps": min(params["steps"], public_imaging.max_steps(spec)),
-            "public": True}
+        raise refused_content("video" if video else "image")
+    return {**params, "steps": min(params["steps"], steps), "public": True}
 
 
-def refused_content() -> CreationError:
+def refused_content(media_kind: str = "image") -> CreationError:
     """Une description que le filtre du réseau public refuse (imaging/prompt_filter.py) : rien
     ne part, le message le dit dans la conversation."""
-    return CreationError(t("public_images.refused_content"), status=REFUSED_STATUS)
+    # public_images.refused_content, public_videos.refused_content
+    texts = public_creations.TEXTS.get(media_kind, public_creations.TEXTS["image"])
+    return CreationError(t(f"{texts}.refused_content"), status=REFUSED_STATUS)
 
 
 REFUSED_STATUS = 403              # ni 409 (rien ne peut calculer), ni 412 (conversation changée)

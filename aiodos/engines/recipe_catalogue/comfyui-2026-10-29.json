@@ -1,0 +1,531 @@
+{
+ "kind": "aiodos-comfyui-recipes",
+ "format": 1,
+ "date": "2026-10-29",
+ "templates": {
+  "package": "comfyui-workflow-templates",
+  "version": "0.11.59",
+  "license": "MIT",
+  "url": "https://github.com/Comfy-Org/workflow_templates"
+ },
+ "recipes": [
+  {
+   "id": "comfy-templates/image_sdxl_simple",
+   "version": "0.11.59-1",
+   "kind": "image",
+   "title": {
+    "fr": "SDXL 1.0 · image",
+    "en": "SDXL 1.0 · image"
+   },
+   "about": {
+    "fr": "Le gabarit « SDXL1.0: Text to Image (Simple) » de ComfyUI : une image d'après sa description, en 25 pas. Un seul fichier de modèle ; une carte de 8 Go suffit.",
+    "en": "ComfyUI's \"SDXL1.0: Text to Image (Simple)\" template: an image from its description, in 25 steps. A single model file; an 8 GB graphics card is enough."
+   },
+   "source": {
+    "template": "image_sdxl_simple",
+    "package": "comfyui-workflow-templates",
+    "version": "0.11.59",
+    "json_version": "0.1.74",
+    "sha256": "a9856bb0dcf02f0a677497eeebbf664d810ad4a6d74ddd1b4ed0d84a22a5d28a",
+    "license": "MIT",
+    "url": "https://github.com/Comfy-Org/workflow_templates"
+   },
+   "graph": {
+    "7": {
+     "class_type": "SaveImage",
+     "inputs": {
+      "filename_prefix": "sdxl_simple",
+      "images": [
+       "14",
+       0
+      ]
+     }
+    },
+    "10": {
+     "class_type": "CLIPTextEncode",
+     "inputs": {
+      "text": "a giant classical marble statue standing alone in a pure white empty void, soft diffused lighting, subtle shadows, surreal, minimalist, fine art photography, quiet atmosphere, sense of scale",
+      "clip": [
+       "15",
+       1
+      ]
+     }
+    },
+    "11": {
+     "class_type": "CLIPTextEncode",
+     "inputs": {
+      "text": "color, colored, lowres, blurry, out of focus, deformed, bad anatomy, extra limbs, mutated, watermark, text, logo, signature\n",
+      "clip": [
+       "15",
+       1
+      ]
+     }
+    },
+    "12": {
+     "class_type": "KSampler",
+     "inputs": {
+      "seed": "@seed",
+      "steps": 25,
+      "cfg": 7,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": [
+       "15",
+       0
+      ],
+      "positive": [
+       "10",
+       0
+      ],
+      "negative": [
+       "11",
+       0
+      ],
+      "latent_image": [
+       "13",
+       0
+      ]
+     }
+    },
+    "13": {
+     "class_type": "EmptyLatentImage",
+     "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+     }
+    },
+    "14": {
+     "class_type": "VAEDecode",
+     "inputs": {
+      "samples": [
+       "12",
+       0
+      ],
+      "vae": [
+       "15",
+       2
+      ]
+     }
+    },
+    "15": {
+     "class_type": "CheckpointLoaderSimple",
+     "inputs": {
+      "ckpt_name": "@model:checkpoint"
+     }
+    }
+   },
+   "params": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "targets": [
+      "10.text"
+     ],
+     "default": "a giant classical marble statue standing alone in a pure white empty void, soft diffused lighting, subtle shadows, surreal, minimalist, fine art photography, quiet atmosphere, sense of scale",
+     "max_length": 2000
+    },
+    {
+     "name": "negative",
+     "type": "text",
+     "targets": [
+      "11.text"
+     ],
+     "default": "color, colored, lowres, blurry, out of focus, deformed, bad anatomy, extra limbs, mutated, watermark, text, logo, signature\n",
+     "max_length": 2000
+    },
+    {
+     "name": "seed",
+     "type": "seed",
+     "targets": [
+      "12.seed"
+     ]
+    },
+    {
+     "name": "width",
+     "type": "int",
+     "min": 512,
+     "max": 1536,
+     "step": 64,
+     "targets": [
+      "13.width"
+     ],
+     "default": 1024
+    },
+    {
+     "name": "height",
+     "type": "int",
+     "min": 512,
+     "max": 1536,
+     "step": 64,
+     "targets": [
+      "13.height"
+     ],
+     "default": 1024
+    },
+    {
+     "name": "steps",
+     "type": "int",
+     "min": 1,
+     "max": 60,
+     "targets": [
+      "12.steps"
+     ],
+     "default": 25
+    },
+    {
+     "name": "cfg",
+     "type": "float",
+     "min": 1.0,
+     "max": 15.0,
+     "step": 0.5,
+     "targets": [
+      "12.cfg"
+     ],
+     "default": 7.0
+    }
+   ],
+   "models": [
+    {
+     "key": "checkpoint",
+     "folder": "checkpoints",
+     "name": "sd_xl_base_1.0.safetensors",
+     "sha256": "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b",
+     "size": 6938078334,
+     "license": "CreativeML Open RAIL++-M",
+     "license_url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md",
+     "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
+    }
+   ],
+   "contract": {
+    "comfyui": null,
+    "core": null,
+    "classes": {
+     "CLIPTextEncode": null,
+     "CheckpointLoaderSimple": null,
+     "EmptyLatentImage": null,
+     "KSampler": null,
+     "SaveImage": null,
+     "VAEDecode": null
+    }
+   },
+   "outputs": [
+    {
+     "node": "7",
+     "kind": "image"
+    }
+   ],
+   "inputs": [],
+   "vram_mib": 8192,
+   "typical_seconds": {
+    "8": 15
+   },
+   "verify": {
+    "ssim": null,
+    "content": "prompt_filter"
+   }
+  },
+  {
+   "id": "comfy-templates/text_to_video_wan",
+   "version": "0.11.59-1",
+   "kind": "video",
+   "title": {
+    "fr": "Wan 2.1 1.3B · vidéo",
+    "en": "Wan 2.1 1.3B · video"
+   },
+   "about": {
+    "fr": "Le gabarit « Wan 2.1 Text to Video » de ComfyUI : une courte vidéo (2 s à 16 images par seconde par défaut) d'après sa description. Trois fichiers de modèle ; une carte de 8 Go suffit.",
+    "en": "ComfyUI's \"Wan 2.1 Text to Video\" template: a short video (2 s at 16 frames per second by default) from its description. Three model files; an 8 GB graphics card is enough."
+   },
+   "source": {
+    "template": "text_to_video_wan",
+    "package": "comfyui-workflow-templates",
+    "version": "0.11.59",
+    "json_version": "0.1.74",
+    "sha256": "6cfcb2bcc842926d462667f1858651a7a73d698591013e4d0370bdc2984a6fea",
+    "license": "MIT",
+    "url": "https://github.com/Comfy-Org/workflow_templates"
+   },
+   "graph": {
+    "3": {
+     "class_type": "KSampler",
+     "inputs": {
+      "seed": "@seed",
+      "steps": 30,
+      "cfg": 6,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+       "48",
+       0
+      ],
+      "positive": [
+       "6",
+       0
+      ],
+      "negative": [
+       "7",
+       0
+      ],
+      "latent_image": [
+       "40",
+       0
+      ]
+     }
+    },
+    "6": {
+     "class_type": "CLIPTextEncode",
+     "inputs": {
+      "text": "a fox moving quickly in a beautiful winter scenery nature trees mountains daytime tracking camera",
+      "clip": [
+       "38",
+       0
+      ]
+     }
+    },
+    "7": {
+     "class_type": "CLIPTextEncode",
+     "inputs": {
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "clip": [
+       "38",
+       0
+      ]
+     }
+    },
+    "8": {
+     "class_type": "VAEDecode",
+     "inputs": {
+      "samples": [
+       "3",
+       0
+      ],
+      "vae": [
+       "39",
+       0
+      ]
+     }
+    },
+    "37": {
+     "class_type": "UNETLoader",
+     "inputs": {
+      "unet_name": "@model:diffusion",
+      "weight_dtype": "default"
+     }
+    },
+    "38": {
+     "class_type": "CLIPLoader",
+     "inputs": {
+      "clip_name": "@model:text_encoder",
+      "type": "wan",
+      "device": "default"
+     }
+    },
+    "39": {
+     "class_type": "VAELoader",
+     "inputs": {
+      "vae_name": "@model:vae"
+     }
+    },
+    "40": {
+     "class_type": "EmptyHunyuanLatentVideo",
+     "inputs": {
+      "width": 832,
+      "height": 480,
+      "length": 33,
+      "batch_size": 1
+     }
+    },
+    "48": {
+     "class_type": "ModelSamplingSD3",
+     "inputs": {
+      "shift": 8,
+      "model": [
+       "37",
+       0
+      ]
+     }
+    },
+    "49": {
+     "class_type": "CreateVideo",
+     "inputs": {
+      "fps": 16,
+      "images": [
+       "8",
+       0
+      ]
+     }
+    },
+    "50": {
+     "class_type": "SaveVideo",
+     "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+       "49",
+       0
+      ]
+     }
+    }
+   },
+   "params": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "targets": [
+      "6.text"
+     ],
+     "default": "a fox moving quickly in a beautiful winter scenery nature trees mountains daytime tracking camera",
+     "max_length": 2000
+    },
+    {
+     "name": "negative",
+     "type": "text",
+     "targets": [
+      "7.text"
+     ],
+     "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+     "max_length": 2000
+    },
+    {
+     "name": "seed",
+     "type": "seed",
+     "targets": [
+      "3.seed"
+     ]
+    },
+    {
+     "name": "width",
+     "type": "int",
+     "min": 256,
+     "max": 1024,
+     "step": 16,
+     "targets": [
+      "40.width"
+     ],
+     "default": 832
+    },
+    {
+     "name": "height",
+     "type": "int",
+     "min": 256,
+     "max": 1024,
+     "step": 16,
+     "targets": [
+      "40.height"
+     ],
+     "default": 480
+    },
+    {
+     "name": "frames",
+     "type": "int",
+     "min": 5,
+     "max": 81,
+     "step": 4,
+     "targets": [
+      "40.length"
+     ],
+     "default": 33
+    },
+    {
+     "name": "fps",
+     "type": "float",
+     "min": 8.0,
+     "max": 30.0,
+     "step": 1.0,
+     "targets": [
+      "49.fps"
+     ],
+     "default": 16.0
+    },
+    {
+     "name": "steps",
+     "type": "int",
+     "min": 4,
+     "max": 50,
+     "targets": [
+      "3.steps"
+     ],
+     "default": 30
+    },
+    {
+     "name": "cfg",
+     "type": "float",
+     "min": 1.0,
+     "max": 12.0,
+     "step": 0.5,
+     "targets": [
+      "3.cfg"
+     ],
+     "default": 6.0
+    }
+   ],
+   "models": [
+    {
+     "key": "diffusion",
+     "folder": "diffusion_models",
+     "name": "wan2.1_t2v_1.3B_fp16.safetensors",
+     "sha256": "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5",
+     "size": 2838303560,
+     "license": "Apache-2.0",
+     "license_url": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/main/LICENSE.txt",
+     "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/123acf1cc74bccbb9bfff8ac1ee72edc08c2341d/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors"
+    },
+    {
+     "key": "text_encoder",
+     "folder": "text_encoders",
+     "name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+     "sha256": null,
+     "size": null,
+     "license": "Apache-2.0",
+     "license_url": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/main/LICENSE.txt",
+     "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    },
+    {
+     "key": "vae",
+     "folder": "vae",
+     "name": "wan_2.1_vae.safetensors",
+     "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b",
+     "size": 253815318,
+     "license": "Apache-2.0",
+     "license_url": "https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/blob/main/LICENSE.txt",
+     "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/123acf1cc74bccbb9bfff8ac1ee72edc08c2341d/split_files/vae/wan_2.1_vae.safetensors"
+    }
+   ],
+   "contract": {
+    "comfyui": null,
+    "core": null,
+    "classes": {
+     "CLIPLoader": null,
+     "CLIPTextEncode": null,
+     "CreateVideo": null,
+     "EmptyHunyuanLatentVideo": null,
+     "KSampler": null,
+     "ModelSamplingSD3": null,
+     "SaveVideo": null,
+     "UNETLoader": null,
+     "VAEDecode": null,
+     "VAELoader": null
+    }
+   },
+   "outputs": [
+    {
+     "node": "50",
+     "kind": "video"
+    }
+   ],
+   "inputs": [],
+   "vram_mib": 8192,
+   "typical_seconds": {
+    "8": 240
+   },
+   "verify": {
+    "ssim": null,
+    "content": "prompt_filter"
+   }
+  }
+ ]
+}

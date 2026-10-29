@@ -957,6 +957,34 @@ details.mx[open] .mx-chev { transform: rotate(90deg); }
 .img-view-prompt { white-space: pre-wrap; overflow-y: auto; max-height: 40vh; }
 .img-view-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .img-view-actions a.btn { text-decoration: none; }
+/* ComfyUI dans Images et vidéos (images-comfy.js) : un bloc repliable au-dessus de la galerie,
+   son état, les recettes et leurs modèles, mes workflows, le formulaire « Créer » */
+.comfy { margin: 0 0 16px; padding: 12px 16px; }
+.comfy-summary { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.comfy-summary::-webkit-details-marker { display: none; }
+.comfy-summary > .icon { width: 16px; height: 16px; }
+.comfy-summary-text { flex: 1 1 200px; font-size: 13px; }
+.comfy-body { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: 13.5px; }
+.comfy-title { font-size: 14px; font-weight: 600; margin: 10px 0 0; }
+.comfy-state { display: flex; flex-direction: column; gap: 6px; }
+.comfy-actions { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.comfy-actions > .faint { flex: 1 1 240px; }
+.comfy-item { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.comfy-item-head { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.comfy-item-head .grow { flex: 1; }
+.comfy-model { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.comfy-model-text { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.comfy-model-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.comfy-form { display: flex; flex-direction: column; gap: 10px; padding: 4px 12px 12px; border-radius: 10px; background: var(--panel-2); }
+.comfy-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0 12px; }
+.comfy-fields .field { margin-top: 8px; min-width: 0; }
+.comfy-fields .comfy-wide { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .comfy { padding: 12px; }
+  .comfy-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .comfy-item-head .grow { display: none; }
+  .comfy-item-head > .btn { flex: 1 1 auto; }
+}
 
 @media (max-width: 1180px) {
   .grid-2 { grid-template-columns: 1fr; }

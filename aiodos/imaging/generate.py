@@ -96,6 +96,10 @@ def video_body(params: dict) -> dict:
         "seed": int(params["seed"]),
         "video_frames": int(params["frames"]), "fps": int(spec.get("fps") or 16),
         "sample_params": sample,
+        # Comme une image : sans cela, le WebM dit la description entière et les réglages
+        # dans son étiquette COMMENT (vu le 29/10/2026 avec sd-cli, même code ;
+        # --disable-image-metadata l'en retire)
+        "embed_image_metadata": False,
         "preview": "none",
         "output_format": "webm",
     }

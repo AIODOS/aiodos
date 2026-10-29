@@ -1,0 +1,15 @@
+{
+  "ask": "Your video's description goes to a stranger's machine, which also sees the video it creates, without knowing who you are. Create your images and videos through the public network?",
+  "closed_off": "No video model can compute right now, here or on your online machines. A machine on the public network could create it if your creations could go to strangers (“Have my conversations computed by strangers”, in Settings, This machine, Sharing computing power); or install a model in “Images and videos”.",
+  "closed_mine_only": "No video model can compute right now, here or on your online machines. A machine on the public network could create it, but this conversation stays on your machines (“On my machines only”, in Permissions under the message box).",
+  "closed_attachments": "No video model can compute right now, here or on your online machines. A machine on the public network could create it, but an attached image never goes to a stranger (and a video can't start from an image yet): ask for it without an attached image.",
+  "closed_refused": "No video model can compute right now, here or on your online machines. A machine on the public network could create it, with your consent (“Create my images and videos through the public network”, in Settings, This machine, Sharing computing power); or install a model in “Images and videos”.",
+  "nobody": "No video model can compute right now, here, on your online machines, or on the public network: install one in “Images and videos”, or try again in a moment.",
+  "too_big": "This video is too large for a machine on the public network (832 × 480 pixels and 5 seconds at most): choose a smaller format or a shorter length.",
+  "withdrawn": "your videos no longer go through the public network (Settings, or “On my machines only”)",
+  "nobody_now": "no machine on the public network can create this video right now",
+  "failed": "no machine on the public network could create it ({error})",
+  "refused_content": "This video won't go to the public network: its filter refuses the description (a minor, a real person or violence, in a sexual or nude context). Neither the public network nor AIODOS creates this kind of video, and nothing was sent to a stranger. If your request had nothing of the sort, rephrase it: the filter relies on certain words.",
+  "refused_filter": "the public network's filter refuses this description: nothing was sent to a stranger",
+  "refused_remote": "the machine on the public network refuses this description: its filter judges it forbidden"
+}

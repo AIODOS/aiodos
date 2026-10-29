@@ -54,11 +54,13 @@ function modelsLine(m) {
   return `${found.slice(0, LINE_MODELS).join(', ')}${rest > 0 ? ` +${rest}` : ''}`;
 }
 
-/** Les modèles d'images qu'un nœud public prête aux inconnus (« images : z-image-turbo »). */
-function imagesLine(m) {
-  const found = names(m.public?.images);
+/** Les modèles d'images (ou de vidéos : what) qu'un nœud public prête aux inconnus
+ *  (« images : z-image-turbo », « vidéos : wan2.1-t2v-1.3b »). */
+function lentLine(m, what) {
+  const found = names(m.public?.[what]);
   if (!found.length) return '';
-  return t('connected.images_line', { list: `${found[0]}${found.length > 1 ? ` +${found.length - 1}` : ''}` });
+  // connected.images_line, connected.videos_line
+  return t(`connected.${what}_line`, { list: `${found[0]}${found.length > 1 ? ` +${found.length - 1}` : ''}` });
 }
 
 /** La charge d'un téléphone (« en charge · batterie 84 % »), un PC sur batterie. */
@@ -99,7 +101,7 @@ function lineHtml(m) {
   const [stateHtml, dot] = stateOf(m);
   const facts = [stateHtml,
     ...doing(m).map(d => `<span class="live-${d.dir}">${esc(d.text)}</span>`),
-    ...[modelsLine(m), imagesLine(m), powerLine(m)].filter(Boolean).map(esc)];
+    ...[modelsLine(m), lentLine(m, 'images'), lentLine(m, 'videos'), powerLine(m)].filter(Boolean).map(esc)];
   const kind = KINDS[m.kind] ? `<span class="mx-kind"${m.kind === 'friend' ? ` title="${esc(t('network.friend_title'))}"`
     : ''}>${esc(t(KINDS[m.kind]))}</span>` : '';
   return `<summary>
@@ -134,6 +136,7 @@ function publicDetails(m) {
     : t('connected.public_lends_no');
   const models = names(m.models);
   const images = names(facts.images);
+  const videos = names(facts.videos);
   const live = doing(m);
   const head = [t('connected.public_key_short', { key: shortKey(m) })];
   if (m.version) head.push(`AIODOS ${text(m.version, 40)}`);
@@ -141,9 +144,10 @@ function publicDetails(m) {
   return `<p class="hint mx-hint">${esc(t('connected.public_stranger'))}</p>
     <div class="peer-facts">${esc(head.join(' · '))}</div>
     <div class="peer-facts">${esc(tps ? `${lending} · ${t('connected.public_speed', { n: Math.round(tps) })}` : lending)}</div>
-    <div class="peer-facts">${esc(models.length || images.length
+    <div class="peer-facts">${esc(models.length || images.length || videos.length
       ? [models.length ? t('connected.models_list', { list: models.join(', ') }) : '',
-        images.length ? t('connected.images_list', { list: images.join(', ') }) : ''].filter(Boolean).join(' · ')
+        images.length ? t('connected.images_list', { list: images.join(', ') }) : '',
+        videos.length ? t('connected.videos_list', { list: videos.join(', ') }) : ''].filter(Boolean).join(' · ')
       : t('network.public_no_models'))}</div>
     ${live.length ? `<div class="peer-facts">${live.map(d => `<span class="live-${d.dir}">${esc(d.text)}</span>`)
       .join(' · ')}</div>` : ''}`;

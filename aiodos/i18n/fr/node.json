@@ -117,9 +117,9 @@
   "public_documents": "Envoyer les passages de mes documents au réseau public",
   "public_documents_help": "Quand une réponse s'appuie sur tes bibliothèques, les passages utiles partent avec la conversation chez la machine de l'inconnu ; jamais la mémoire des conversations, ni les bibliothèques gardées sur cette machine. Sans accord, une telle conversation reste sur tes machines.",
   "not_asked": "Pas encore demandé : la question viendra dans une conversation, la première fois.",
-  "lend_images_public": "Prêter ma carte graphique aux images d'inconnus",
-  "lend_images_public_help": "Des personnes du réseau public, qui ne disent pas qui elles sont, pourront faire créer leurs images par {device}, une à la fois, avec les mêmes règles que leurs conversations : après tes machines et tes amis, jamais sur batterie, et ce que tu fais passe devant. Leur description et l'image passent ici le temps du calcul, sans être enregistrées.",
-  "lend_images_public_help_phone": "Des personnes du réseau public, qui ne disent pas qui elles sont, pourront faire créer leurs images par ce téléphone, une à la fois, après tes machines et tes amis : seulement en charge et en Wi-Fi. Leur description et l'image passent ici le temps du calcul, sans être enregistrées.",
-  "public_images": "Créer mes images par le réseau public",
-  "public_images_help": "Quand ni cette machine ni tes machines ne peuvent créer une image, la machine d'un inconnu du réseau public la crée : elle lit ta description et voit l'image, sans savoir qui tu es. Jamais une image jointe ; « Sur mes machines seulement » garde une conversation chez toi."
+  "lend_images_public": "Prêter ma carte graphique aux images et vidéos d'inconnus",
+  "lend_images_public_help": "Des personnes du réseau public, qui ne disent pas qui elles sont, pourront faire créer leurs images et leurs vidéos par {device}, une à la fois, avec les mêmes règles que leurs conversations : après tes machines et tes amis, jamais sur batterie, et ce que tu fais passe devant. Une vidéo occupe la carte plusieurs minutes, suivies de la pause de la puissance prêtée. Leur description et ce qui est créé passent ici le temps du calcul, sans être enregistrés.",
+  "lend_images_public_help_phone": "Des personnes du réseau public, qui ne disent pas qui elles sont, pourront faire créer leurs images et leurs vidéos par ce téléphone, une à la fois, après tes machines et tes amis : seulement en charge et en Wi-Fi. Leur description et ce qui est créé passent ici le temps du calcul, sans être enregistrés.",
+  "public_images": "Créer mes images et vidéos par le réseau public",
+  "public_images_help": "Quand ni cette machine ni tes machines ne peuvent créer une image ou une vidéo, la machine d'un inconnu du réseau public la crée : elle lit ta description et voit ce qu'elle crée, sans savoir qui tu es. Jamais une image jointe ; « Sur mes machines seulement » garde une conversation chez toi."
 }

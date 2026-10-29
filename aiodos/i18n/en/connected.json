@@ -83,6 +83,8 @@
   "models_list": "Models: {list}",
   "images_list": "Image models lent to strangers: {list}",
   "images_line": "pictures: {list}",
+  "videos_list": "Video models lent to strangers: {list}",
+  "videos_line": "videos: {list}",
   "address": "address {address}",
   "also_public": "also in the public network directory (key {key}…)",
   "local_hint": "An AIODOS machine on your local network, not paired yet. Pair it so your machines compute for each other; you'll say whether it's one of yours or a friend's.",

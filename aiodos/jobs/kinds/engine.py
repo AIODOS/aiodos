@@ -13,6 +13,8 @@ de ce PC, puis par celui de mes machines (livraison suivante).
   jamais (appli, travail, chemins des entrées) ;
 - compute : engines/comfyui.run ; assimilate : les fichiers rangés pour l'appli
   (gateway/file_store.py).
+Les créations d'AIODOS lui-même avec ComfyUI (jobs/kinds/comfy_create.py) donnent les mêmes
+unités, aux paramètres de la même forme : seul leur rangement diffère (OWNERS).
 """
 import base64
 import hashlib
@@ -56,6 +58,15 @@ HERE_TTL = 10.0
 _params = {}                      # travail -> paramètres (cache de jobs.params)
 _params_lock = threading.Lock()
 _here = {"at": 0.0, "found": None}
+# Les autres genres de travaux dont les unités sont des engine_unit, aux paramètres de la même
+# forme (normalize) : les créations d'AIODOS lui-même (jobs/kinds/comfy_create.py). Leurs
+# unités partent chez mes machines comme celles des applis ; seul leur rangement diffère :
+# genre -> assimilate(ordre, sortie), à la place de celui des applis
+OWNERS = {}
+
+
+def register_owner(kind: str, assimilate_fn):
+    OWNERS[kind] = assimilate_fn
 
 
 class Invalid(Exception):
@@ -516,8 +527,9 @@ def runnable_here(model) -> bool:
 
 def _needs(model) -> list | None:
     """Les modèles d'une clé comfyui:<…>, d'après les travaux en cours qui la citent."""
-    for row in db.query("SELECT id, params FROM jobs WHERE kind=? AND status IN "
-                        "('queued', 'running', 'paused')", (KIND,)):
+    kinds = (KIND, *OWNERS)
+    for row in db.query(f"SELECT id, params FROM jobs WHERE kind IN ({','.join('?' * len(kinds))}) "
+                        "AND status IN ('queued', 'running', 'paused')", kinds):
         params = params_of(row["id"])
         for index, key in params["model_keys"].items():
             if key == model:
@@ -675,7 +687,10 @@ def assimilate(order, output) -> dict:
     from aiodos.engines import media
     from aiodos.gateway import file_store
     local = order.get("local") or {}
-    job = db.query_one("SELECT public_id FROM jobs WHERE id=?", (local["job_id"],))
+    job = db.query_one("SELECT kind, public_id FROM jobs WHERE id=?", (local["job_id"],))
+    owner = OWNERS.get(job["kind"]) if job is not None else None
+    if owner is not None:                     # une création d'AIODOS : dans la galerie
+        return owner(order, output)
     folder = paths.engine_runs_dir() / order["run_uuid"]
     place = "here"
     ids = []

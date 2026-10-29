@@ -3,3 +3,14 @@ Copyright 2026 22eme Arkane and the AIODOS contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 Ce logiciel est distribué sous la licence Apache, version 2.0 (voir LICENSE).
+
+The ComfyUI recipes (aiodos/engines/recipe_catalogue/) are derived from the official
+ComfyUI workflow templates, package comfyui-workflow-templates
+(https://github.com/Comfy-Org/workflow_templates), Copyright (c) 2023-present Comfy Org,
+licensed under the MIT License (full text in
+aiodos/engines/recipe_catalogue/LICENSE-comfyui-workflow-templates.txt). The models they use are not distributed with AIODOS; each keeps its own license,
+shown before any download.
+Les recettes de ComfyUI (aiodos/engines/recipe_catalogue/) sont tirées des gabarits officiels
+de ComfyUI, paquet comfyui-workflow-templates, sous licence MIT. Les modèles qu'elles
+emploient ne sont pas livrés avec AIODOS ; chacun garde sa licence, montrée avant tout
+téléchargement.

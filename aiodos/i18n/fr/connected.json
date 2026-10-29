@@ -83,6 +83,8 @@
   "models_list": "Modèles : {list}",
   "images_list": "Modèles d'images prêtés aux inconnus : {list}",
   "images_line": "images : {list}",
+  "videos_list": "Modèles de vidéos prêtés aux inconnus : {list}",
+  "videos_line": "vidéos : {list}",
   "address": "adresse {address}",
   "also_public": "aussi dans l'annuaire du réseau public (clé {key}…)",
   "local_hint": "Une machine AIODOS de ton réseau local, pas encore appairée. Appaire-la pour que vos machines calculent l'une pour l'autre ; tu diras si c'est une des tiennes ou celle d'un ami.",

@@ -1,0 +1,11 @@
+{
+  "count": "Nombre : de 1 à {max}.",
+  "recipe_or_workflow": "Une recette ou un workflow, l'un des deux.",
+  "no_media": "ComfyUI n'a rendu ni image ni vidéo.",
+  "nowhere": "Ni ce PC ni tes machines n'ont ComfyUI avec les modèles qu'il faut : télécharge-les, ou ouvre ComfyUI.",
+  "not_granted": "AIODOS ne se sert pas encore du ComfyUI de ce PC : permets-le dans la section ComfyUI de la vue Images et vidéos.",
+  "job_title": {
+    "one": "{name} : « {prompt} »",
+    "other": "{name} : « {prompt} » ×{n}"
+  }
+}

@@ -98,20 +98,31 @@ def _nodes() -> list:
     return placement._with_room(placement._lending())
 
 
-def offered_models() -> list:
+def offered_models(offers=None) -> list:
     """Les modèles d'images qu'une machine du réseau public peut créer pour moi en ce moment,
-    dans l'ordre du catalogue ; aucun sans compagnon prêt ni réseau public rejoint."""
-    seen = {model for node in _nodes() for model in offered_by(node)}
+    dans l'ordre du catalogue ; aucun sans compagnon prêt ni réseau public rejoint. offers :
+    ce qu'un nœud prête (offered_by ; celui des vidéos : network/public_video_ask.py)."""
+    offers = offers or offered_by
+    seen = {model for node in _nodes() for model in offers(node)}
     return [model for model in catalog.MODELS if model in seen]
 
 
-def lenders(model: str, offer: bool = True) -> list:
+def lent(model: str, offers=None) -> bool:
+    """Une machine du réseau public prête-t-elle ce modèle, même sans place en ce moment
+    (occupée par une autre de mes créations ou par un inconnu, ou dans la pause de sa
+    puissance prêtée) ? L'unité attend alors son tour (jobs/kinds/public_images.create)."""
+    offers = offers or offered_by
+    return any(model in offers(node) for node in placement._lending())
+
+
+def lenders(model: str, offer: bool = True, offers=None) -> list:
     """[(clé, modèle)] : les machines du réseau public à essayer pour une image de ce modèle,
     la mieux placée d'abord (cf. le début du module), PUBLIC_TRIES au plus. offer : notées
-    comme proposées (public_refusals.offered)."""
+    comme proposées (public_refusals.offered) ; offers : comme pour offered_models."""
+    offers = offers or offered_by
     found = []
     for node in _nodes():
-        if model in offered_by(node):
+        if model in offers(node):
             key = node["key"]
             found.append((not placement._served_well(key), -(node.get("tps") or 0),
                           int(node.get("seen_s") or 0), key))

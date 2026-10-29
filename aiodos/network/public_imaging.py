@@ -17,8 +17,9 @@ avec sa réponse, avant tout calcul (admit) :
   2. la demande lue et bornée, sans rien prendre (ni la place, ni le seau de tout le public) :
      {"v": 1, "model", "prompt", "negative", "width", "height", "steps", "seed"}. Un modèle
      d'images du catalogue (imaging/catalog.py) qu'on prête (lendable : une image, pas une
-     vidéo, sans licence restrictive), complet ici avec stable-diffusion.cpp : sinon 404
-     {"error": "no_model"}. Une description de MAX_PROMPT caractères au plus, des côtés au
+     vidéo, qui a sa route, network/public_video.py ; sans licence restrictive), complet ici
+     avec stable-diffusion.cpp : sinon 404 {"error": "no_model"}. Une description de
+     MAX_PROMPT caractères au plus, des côtés au
      multiple et dans les bornes du modèle, MAX_PIXELS pixels au plus, de 1 à max_steps pas, et
      rien d'autre (ni image de départ, ni force de retouche dans cette version) : sinon 413
      {"error": "too_big"} ; mal formée : 400 {"error": "bad_request"} ;
@@ -30,9 +31,9 @@ avec sa réponse, avant tout calcul (admit) :
      interdite : 403 {"error": "refused_content"}, sans rien prendre ni garder ; le journal
      dit seulement « Image refusée par le filtre (<code>) » ;
   4. la place du public (public_lending._take_place : une seule pour tout le public,
-     conversation, lecture ou image ; personne d'autre ne veut la machine, l'utilisateur, mes
-     machines ou mes amis ; la pause de la puissance prêtée ; la mémoire vive ; le seau de tout
-     le public) : sinon 503 {"error": "busy"}.
+     conversation, lecture, image ou vidéo ; personne d'autre ne veut la machine,
+     l'utilisateur, mes machines ou mes amis ; la pause de la puissance prêtée ; la mémoire
+     vive ; le seau de tout le public) : sinon 503 {"error": "busy"}.
 
 La réponse, en NDJSON (public_lending._Stream) : {"type": "meta", "model", "version"} ; tant
 que l'image n'est pas prête, toutes les public_lending.WAIT_S secondes, {"type": "wait",
@@ -60,8 +61,10 @@ sd-server garde sa tâche finie (description et image) en mémoire jusqu'à son 
 
 Le profil public (network/public.py) annonce les modèles prêtés (offered) dans « models »,
 marqués MARKER (« image:z-image-turbo ») : le profil signé du compagnon n'a pas d'autre champ
-(compagnon/src/public_profile.rs), et un champ inconnu ne passerait pas. Ce nœud-ci ne les
-prend jamais pour des modèles de conversation (placement.RESERVED) ; un nœud d'avant le
+(compagnon/src/public_profile.rs), et un champ inconnu ne passerait pas. Les modèles de vidéos
+prêtés portent la même marque (network/public_video.py dit pourquoi) : le catalogue les
+distingue. Ce nœud-ci ne les prend jamais pour des modèles de conversation
+(placement.RESERVED) ; un nœud d'avant le
 29/10/2026 pourrait en choisir un en « Automatique · réseau public », s'il n'en voit pas d'autre
 chez cette machine, et recevrait « no_model ». Seulement si lend_images_public est permis : un
 modèle annoncé puis refusé (« not_lending ») compterait chez le demandeur comme un refus suspect
@@ -110,8 +113,8 @@ def lending_images(manager) -> bool:
 
 
 def lendable(model_id) -> bool:
-    """Un modèle du catalogue qu'on prête aux inconnus, et qu'on leur demande : une image (pas
-    une vidéo, hors de cette version), sans licence restrictive (qui demande un accord lu)."""
+    """Un modèle du catalogue qu'on prête aux inconnus, et qu'on leur demande : une image (une
+    vidéo : network/public_video.py), sans licence restrictive (qui demande un accord lu)."""
     spec = catalog.MODELS.get(str(model_id or ""))
     return bool(spec) and spec.get("kind", "image") == "image" and not spec.get("notice")
 
@@ -178,14 +181,16 @@ def _request(raw: bytes) -> dict:
             "height": height, "steps": steps, "seed": seed, "cfg": spec["cfg"]}
 
 
-def _filtered(manager, params: dict):
+# i18n: tel quel (journal)
+def _filtered(manager, params: dict, said: str = "Image refusée par le filtre (%s)"):
     """Le filtre des descriptions (cf. le début du module, 3) : Refused 403 « refused_content »
-    pour une description interdite. Rien n'est gardé : le journal ne dit que le code."""
+    pour une description interdite. Rien n'est gardé : le journal ne dit que le code (said :
+    sa phrase, celle d'une vidéo pour network/public_video.py)."""
     model = prompt_filter.warm_model() if public_lending._room(manager) else None
     code = prompt_filter.check(params["prompt"], params["negative"], model)
     if code is not None:
-        # i18n: tel quel (journal) ; ni la description, ni la clé
-        log.info("Image refusée par le filtre (%s)", code)
+        # Ni la description, ni la clé
+        log.info(said, code)
         raise Refused(403, REFUSED)
 
 

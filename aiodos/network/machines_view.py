@@ -31,6 +31,7 @@ ce qu'elle fait, modèles, chemins, charge d'un téléphone) et ce que ses actio
 """
 import math
 
+from aiodos.imaging import catalog
 from aiodos.network import placement, public_chat
 
 KINDS = ("public", "mine", "friend", "local")    # ordre des filtres et du tri
@@ -38,8 +39,10 @@ SHORT = 8                     # caractères d'une clé publique montrés, au plu
 MAX_MODELS = 24               # noms de modèles gardés par machine (la ligne en montre deux)
 MODEL_TEXT = 64               # longueur d'un nom de modèle, au plus
 NAME_TEXT = 60                # comme profile.NAME
-# Un modèle d'images prêté aux inconnus, dans le profil public d'un nœud (« image:<nom> »,
-# network/public_imaging.MARKER, placement.RESERVED) : montré à part, sans la marque
+# Un modèle d'images ou de vidéos prêté aux inconnus, dans le profil public d'un nœud
+# (« image:<nom> », network/public_imaging.MARKER, network/public_video.MARKER,
+# placement.RESERVED) : montré à part, sans la marque ; une vidéo du catalogue avec les
+# vidéos, tout autre nom avec les images
 IMAGE_MARKER = "image:"
 
 # Ce qu'une machine fait avec celle-ci, dans l'ordre de la ligne (« doing ») : elle calcule
@@ -216,8 +219,9 @@ def _public(node: dict, asking: dict) -> dict:
     facts = _public_facts(node)
     announced = [n for n in node.get("models") or [] if isinstance(n, str)]
     models, models_n = _models(n for n in announced if not n.startswith(IMAGE_MARKER))
-    facts["images"] = _models(n[len(IMAGE_MARKER):] for n in announced
-                              if n.startswith(IMAGE_MARKER))[0]
+    lent = [n[len(IMAGE_MARKER):] for n in announced if n.startswith(IMAGE_MARKER)]
+    facts["images"] = _models(n for n in lent if not catalog.is_video(n))[0]
+    facts["videos"] = _models(n for n in lent if catalog.is_video(n))[0]
     doing = _public_doing(asking.get(node["key"]))
     # Libre : elle prête et a une place ; occupée : elle répond à ma conversation, ou prête
     # sans place libre ; en ligne : elle ne prête pas aux inconnus (l'annuaire seulement)

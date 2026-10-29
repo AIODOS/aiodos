@@ -1,0 +1,10 @@
+{
+  "too_big": "Workflow too large ({mb} MB at most).",
+  "not_json": "This file is not readable JSON.",
+  "reads_files": "This workflow reads an input file ({node} node): not possible yet for your creations.",
+  "has_tokens": "This workflow carries AIODOS tokens (@model:, @in:): export it from ComfyUI as is.",
+  "default_name": "My workflow",
+  "unknown": "Unknown workflow.",
+  "full": "{n} workflows at most: delete one first.",
+  "name_empty": "It needs a name."
+}

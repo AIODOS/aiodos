@@ -32,8 +32,10 @@ MAX_WEBM = 512 * 1024 ** 2
 SEED_SPACE = 2 ** 31              # tailles, durées : règles de chaque modèle (catalog.py)
 STRENGTH = 0.75                   # retouche : part de l'image de départ redessinée (sd.cpp)
 # Une image créée par une machine du réseau public (jobs/kinds/public_images.py) : une unité
-# de cette machine seulement, qui n'occupe pas sa carte graphique (« net »)
+# de cette machine seulement, qui n'occupe pas sa carte graphique (« net ») ; une vidéo, de
+# même (jobs/kinds/public_videos.py)
 PUBLIC_TASK = "generate_image_public"
+PUBLIC_VIDEO_TASK = "generate_video_public"
 
 
 def normalize(params: dict) -> dict:
@@ -116,9 +118,9 @@ def _short(text: str, n: int = 50) -> str:
 
 def split_generate(params):
     """Une unité par image. Une création que le réseau public calcule (« public », posé par
-    chat/creations.py après l'accord, jamais par l'API des images) : des unités PUBLIC_TASK,
-    sans image de départ, avec la conversation (son « Sur mes machines seulement » est relu
-    avant chaque envoi)."""
+    chat/creations.py après l'accord, jamais par l'API des images) : des unités PUBLIC_TASK
+    (PUBLIC_VIDEO_TASK pour une vidéo), sans image de départ, avec la conversation (son « Sur
+    mes machines seulement » est relu avant chaque envoi)."""
     public = params.get("public") is True
     keys = ("model", "prompt", "negative", "width", "height", "steps", "cfg", "batch", "frames")
     if not public:
@@ -126,7 +128,9 @@ def split_generate(params):
     common = {k: params[k] for k in keys if k in params}
     if public:
         common.update(public=True, conversation_id=params.get("conversation_id"))
-    task, resource = (PUBLIC_TASK, "net") if public else ("generate_image", "gpu")
+    video = catalog.is_video(params["model"])
+    task, resource = ((PUBLIC_VIDEO_TASK if video else PUBLIC_TASK), "net") if public \
+        else ("generate_image", "gpu")
     units = [UnitSpec(task, resource,
                       {**common, "seed": (params["seed"] + i) % SEED_SPACE, "index": i})
              for i in range(params["count"])]

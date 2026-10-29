@@ -125,7 +125,7 @@ def test_a_public_node_is_never_named_and_shows_eight_characters_of_its_key_at_m
     assert node["short"] == LENDER[:8] and node["id"] == f"public:{LENDER[:8]}"
     assert LENDER[:machines_view.SHORT + 1] not in json.dumps(node)
     assert node["public"] == {"short": LENDER[:8], "lends": True, "free": 1, "tps": None,
-                              "images": []}
+                              "images": [], "videos": []}
     assert node["models"][0] == "qwen3.5:9b" and node["models_n"] == 41      # sans doublon
     assert len(node["models"]) == machines_view.MAX_MODELS
     assert node["state"] == "free" and node["actions"] == []
@@ -133,6 +133,11 @@ def test_a_public_node_is_never_named_and_shows_eight_characters_of_its_key_at_m
     [painter] = machines_view.build(_snap(public={"nodes": [
         _node(LENDER, models=["qwen3.5:9b", "image:z-image-turbo"])]}))
     assert painter["models"] == ["qwen3.5:9b"] and painter["public"]["images"] == ["z-image-turbo"]
+    # Ses modèles de vidéos, sous la même marque : à part aussi, d'après le catalogue
+    [filmmaker] = machines_view.build(_snap(public={"nodes": [
+        _node(LENDER, models=["image:z-image-turbo", "image:wan2.1-t2v-1.3b", "image:inconnu"])]}))
+    assert filmmaker["models"] == [] and filmmaker["public"]["videos"] == ["wan2.1-t2v-1.3b"]
+    assert filmmaker["public"]["images"] == ["z-image-turbo", "inconnu"]
     # Deux clés au même début : une ligne chacune
     twins = machines_view.build(_snap(public={"nodes": [_node(LENDER), _node(LENDER[:8] + "Q" * 44)]}))
     assert len({m["id"] for m in twins}) == 2
@@ -257,7 +262,8 @@ def test_the_list_escapes_what_comes_from_other_machines(tmp_path):
                            "address": HOSTILE, "local_ok": False}],
                  introductions=[{"intro": HOSTILE, "machine": HOSTILE, "presenter": HOSTILE,
                                  "created": 1}],
-                 public={"nodes": [_node(LENDER, models=[HOSTILE, f"image:{HOSTILE}"])]})
+                 public={"nodes": [_node(LENDER, models=[HOSTILE, f"image:{HOSTILE}",
+                                                         "image:wan2.1-t2v-1.3b"])]})
     machines = machines_view.build(snap, asking={LENDER: {HOSTILE: 1}})
     # Ce que dirait un nœud trompé : une « abréviation » longue et piégée, un état inconnu
     stranger = next(m for m in machines if m["kind"] == "public")
@@ -274,6 +280,8 @@ def test_the_list_escapes_what_comes_from_other_machines(tmp_path):
     assert "à moi" in html and "réseau public" in html and "réseau local" in html
     assert "en charge · batterie 84 %" in html and "qwen3.5:9b, gemma3:4b +1" in html
     assert "images : &lt;img" in html and "Modèles d&#39;images prêtés aux inconnus : &lt;img" in html
+    assert "vidéos : wan2.1-t2v-1.3b" in html
+    assert "Modèles de vidéos prêtés aux inconnus : wan2.1-t2v-1.3b" in html
     assert "Appairer" not in html                 # la machine détectée est en cours d'appairage
     assert 'data-act="check_code"' in html and 'data-act="answer_intro"' in html
     assert 'data-act="unpair"' in html and 'data-act="options"' in html

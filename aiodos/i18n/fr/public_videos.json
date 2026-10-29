@@ -1,0 +1,15 @@
+{
+  "ask": "La description de ta vidéo part chez la machine d'un inconnu, qui voit aussi la vidéo créée, sans savoir qui tu es. Créer tes images et tes vidéos par le réseau public ?",
+  "closed_off": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer si tes créations pouvaient partir chez des inconnus (« Faire calculer mes conversations par des inconnus », dans Réglages, Cette machine, Partage de puissance) ; ou installe un modèle dans « Images et vidéos ».",
+  "closed_mine_only": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, mais cette conversation reste sur tes machines (« Sur mes machines seulement », dans les Autorisations sous la zone de saisie).",
+  "closed_attachments": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, mais une image jointe ne part jamais chez un inconnu (et une vidéo ne part pas encore d'une image) : demande-la sans image jointe.",
+  "closed_refused": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici ni chez tes machines en ligne. Une machine du réseau public pourrait la créer, avec ton accord (« Créer mes images et vidéos par le réseau public », dans Réglages, Cette machine, Partage de puissance) ; ou installe un modèle dans « Images et vidéos ».",
+  "nobody": "Aucun modèle de vidéos ne peut calculer en ce moment, ni ici, ni chez tes machines en ligne, ni sur le réseau public : installe-en un dans « Images et vidéos », ou réessaie dans un moment.",
+  "too_big": "Cette vidéo est trop grande pour une machine du réseau public (832 × 480 pixels et 5 secondes au plus) : choisis un format ou une durée plus petits.",
+  "withdrawn": "tes vidéos ne partent plus par le réseau public (Réglages, ou « Sur mes machines seulement »)",
+  "nobody_now": "aucune machine du réseau public ne peut créer cette vidéo en ce moment",
+  "failed": "aucune machine du réseau public n'a pu la créer ({error})",
+  "refused_content": "Cette vidéo ne part pas sur le réseau public : son filtre refuse la description (un mineur, une personne réelle ou des violences, dans un contexte sexuel ou dénudé). Ni le réseau public ni AIODOS ne créent ce genre de vidéo, et rien n'est parti chez un inconnu. Si ta demande n'avait rien de tel, reformule-la : le filtre se fie à certains mots.",
+  "refused_filter": "le filtre du réseau public refuse cette description : rien n'est parti chez un inconnu",
+  "refused_remote": "la machine du réseau public refuse cette description : son filtre la juge interdite"
+}

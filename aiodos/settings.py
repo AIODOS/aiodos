@@ -99,9 +99,9 @@ DEFAULTS = {
     "public_bigger_model": None,
     "public_documents": None,
     "public_warned": False,           # la note « ta conversation part chez un inconnu » vue
-    # Mes images créées par une machine du réseau public quand ni cette machine ni mes machines
-    # ne le peuvent (chat/public_creations.py, 29/10/2026) : accord demandé une fois, comme
-    # ceux du dessus (None : pas encore demandé)
+    # Mes images et mes vidéos créées par une machine du réseau public quand ni cette machine ni
+    # mes machines ne le peuvent (chat/public_creations.py, 29/10/2026) : accord demandé une
+    # fois, le même pour les deux, comme ceux du dessus (None : pas encore demandé)
     "public_images": None,
     # Seulement quand le PC n'est pas utilisé, comme l'économiseur d'écran de SETI@home.
     # Désactivé (par défaut depuis le 17/10/2026) : le prêt continue pendant l'utilisation,
@@ -139,8 +139,9 @@ DEFAULTS = {
     "images_other_dirs": "",          # autres dossiers de modèles sur ce PC (imaging/local_copies.py)
     "images_out_dir": "",             # dossier des images créées ; vide : Images\AIODOS (installé)
     "lend_images_friends": True,      # calculer les images de mes amis (jobs/kinds/images.py)
-    # « Prêter ma carte graphique aux images d'inconnus » (network/public_imaging.py,
-    # 29/10/2026) : en plus de lend_public, mêmes conditions ; activé par défaut
+    # « Prêter ma carte graphique aux images et vidéos d'inconnus » (network/public_imaging.py,
+    # network/public_video.py, 29/10/2026) : en plus de lend_public, mêmes conditions ;
+    # activé par défaut ; un seul réglage, comme lend_images_friends
     "lend_images_public": True,
     "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)

@@ -2,8 +2,9 @@
 // (chat/creations.py). Le bouton à côté du message ouvre le mode « Créer » : modèle, format,
 // durée, nombre ; sans lui, une demande écrite (« Crée une image d'un phare… ») est reconnue
 // avant l'envoi. La réponse de l'assistant montre les images à mesure qu'elles arrivent,
-// calculées ici ou par tes machines qui ont le modèle ; sinon, une image peut être créée par
-// une machine du réseau public, avec l'accord demandé une fois (chat/public_creations.py).
+// calculées ici ou par tes machines qui ont le modèle ; sinon, une image ou une vidéo peut être
+// créée par une machine du réseau public, avec l'accord demandé une fois, le même pour les deux
+// (chat/public_creations.py).
 import { get, post, put } from '../api.js';
 import { h, esc, duration } from '../dom.js';
 import { t } from '../i18n.js';

@@ -23,7 +23,8 @@ export const desktop = () => !!window.pywebview?.api?.save_image;
  *  onConversation(img) : « Voir la conversation » où elle a été demandée. */
 export function openMedia(img, { onReuse, onDeleted, onConversation } = {}) {
   if (!img) return;
-  const ext = isVideo(img) ? 'webm' : 'png';
+  // L'extension du fichier gardé : une création de ComfyUI peut être un MP4, un WebP…
+  const ext = /\.([a-z0-9]{2,5})$/i.exec(img.file || '')?.[1] || (isVideo(img) ? 'webm' : 'png');
   const media = isVideo(img)
     ? `<video src="${fileOf(img)}" controls autoplay loop playsinline></video>`
     : `<img src="${fileOf(img)}" alt="${esc(img.prompt)}">`;

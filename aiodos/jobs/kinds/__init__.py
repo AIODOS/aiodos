@@ -1,2 +1,3 @@
 """Types de travaux disponibles. Les importer suffit à les enregistrer."""
-from aiodos.jobs.kinds import engine, images, index, public_images, reindex  # noqa: F401
+from aiodos.jobs.kinds import (comfy_create, engine, images, index,  # noqa: F401
+                               public_images, public_videos, reindex)

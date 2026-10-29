@@ -54,8 +54,9 @@ et l'heure du début, pour « Machines connectées » (serving, activity.public_
 La lecture de textes pour le contrôle d'un demandeur (POST /public/v1/read,
 network/lend_reading.py) passe par la même admission (admit) et la même tenue de compte du
 calcul (begin, watching, end : en cours, veille, pause, place, profil). Une image pour un
-inconnu (POST /public/v1/image, network/public_imaging.py, 29/10/2026) prend la même place
-(une seule pour tout le public : conversation, lecture ou image), avec ses propres bornes.
+inconnu (POST /public/v1/image, network/public_imaging.py, 29/10/2026), ou une vidéo (POST
+/public/v1/video, network/public_video.py), prend la même place (une seule pour tout le
+public : conversation, lecture, image ou vidéo), avec ses propres bornes.
 
 Le profil public (« free ») est redit au compagnon, en fond, au début et à la fin de chaque
 conversation publique, et à la fin de la pause qui suit (_announce, Public.push) : les
@@ -102,8 +103,8 @@ WAIT_S = 5                     # s entre deux signes de vie, avant le premier mo
 STAGE_TIMEOUT = 2              # s pour savoir si le modèle est chargé (sinon : « loading »)
 LOADING = "loading"            # étape d'un signe de vie : le moteur charge le modèle
 # Le premier morceau de la réponse : plus de signe de vie ensuite (un mot ; l'en-tête d'une
-# image, network/public_imaging.py)
-CONTENT = {"delta", "image"}
+# image, network/public_imaging.py, ou d'une vidéo, network/public_video.py)
+CONTENT = {"delta", "image", "video"}
 _ASCII_TEXT = re.compile(r"[A-Za-z \t\r\n]+")
 
 _lock = threading.Lock()
