@@ -10,5 +10,6 @@
   "image_format_unread": "image format not read ({format}): convert it to JPEG or PNG",
   "image_too_big": "image too large to be read",
   "image_damaged": "damaged or incomplete image: unreadable",
-  "image_refused": "the vision model cannot read this image"
+  "image_refused": "the vision model cannot read this image",
+  "whisper_not_installed": "transcription (Whisper) is not installed on this machine: this audio or video file is not read"
 }

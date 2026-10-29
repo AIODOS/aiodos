@@ -283,9 +283,10 @@ def _compute_index_file(payload, file, options, stop):
             pace=pace)
     try:
         text = extract.extract_text(path, vision=vision, transcribe=transcribe, pace=pace)
-    except vision_image.Unreadable as exc:
+    except (vision_image.Unreadable, media.WhisperNotInstalled) as exc:
         # Image que ni AIODOS ni le modèle de vision ne savent lire (HEIC sans son greffon,
-        # fichier abîmé) : sautée avec sa raison, pas un échec obscur
+        # fichier abîmé), ou audio et vidéo sans Whisper installé sur cette machine : sautés
+        # avec leur raison, pas un échec obscur compté deux fois
         return {"skipped": True, "ext": path.suffix.lower() or t("index.no_extension"),
                 "reason": str(exc)}
     if stop is not None and stop.is_set():

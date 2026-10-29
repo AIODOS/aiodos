@@ -66,6 +66,21 @@ class WhisperMissing(TranscriptionError):
     moment (WHISPER_RETRY)."""
 
 
+class WhisperNotInstalled(WhisperMissing):
+    """faster-whisper n'est pas installé dans ce Python : l'installeur Windows ne le livre pas
+    encore (640 Mo, tools/build_installer.py). Chaque fichier audio ou vidéo échouait deux fois
+    (PC de l'auteur, 29/10/2026 : « No module named 'faster_whisper' ») ; il est désormais
+    sauté avec sa raison (jobs/kinds/index.py), et une machine qui calcule pour une autre rend
+    l'unité, comme pour un modèle absent (WhisperMissing)."""
+
+
+def whisper_installed() -> bool:
+    """faster-whisper est-il installé ? (le programme de transcription tourne avec ce même
+    Python, services/whisper_child.py)"""
+    import importlib.util
+    return importlib.util.find_spec("faster_whisper") is not None
+
+
 def whisper_model(name) -> str:
     """Le nom s'il désigne un modèle de faster-whisper ; TranscriptionError sinon (chemin,
     dépôt « compte/modèle », nom inconnu)."""
@@ -243,6 +258,8 @@ def transcribe(path, model_name: str = "small", stop=None, threads=None, pace=No
               (downloads), sinon seulement s'il est celui du réglage de cette machine
               (_may_download). WhisperMissing s'il manque et ne se télécharge pas."""
     model_name = whisper_model(model_name)
+    if not whisper_installed():
+        raise WhisperNotInstalled(t("media.whisper_not_installed"))
     if download is None:
         download = _download.get()
     if download is None:

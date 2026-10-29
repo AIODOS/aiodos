@@ -154,3 +154,22 @@ def test_a_closed_program_is_restarted_once(whisper):
     began = time.monotonic()
     assert media.transcribe(Path("note.wav"), "small").endswith("trois")
     assert time.monotonic() - began < 30
+
+
+def test_without_whisper_installed_an_audio_file_is_skipped_with_its_reason(tmp_path,
+                                                                          monkeypatch):
+    """L'installeur Windows ne livre pas encore faster-whisper : un fichier audio ou vidéo est
+    sauté avec sa raison, sans programme lancé ni échec compté (PC de l'auteur, 29/10/2026)."""
+    from aiodos.jobs.kinds import index
+    from aiodos.i18n import t
+    monkeypatch.setattr(media, "whisper_installed", lambda: False)
+    monkeypatch.setattr(media._child, "start", lambda: (_ for _ in ()).throw(
+        AssertionError("aucun programme de transcription")))
+    song = tmp_path / "chanson.mp3"
+    song.write_bytes(b"ID3" + b"\x00" * 64)
+    with pytest.raises(media.WhisperNotInstalled):
+        media.transcribe(song, "small")
+    assert issubclass(media.WhisperNotInstalled, media.WhisperMissing)   # une autre machine : rendue
+    done = index._compute_index_file({"source": "chanson.mp3"}, str(song),
+                                     {"whisper": "small"}, None)
+    assert done == {"skipped": True, "ext": ".mp3", "reason": t("media.whisper_not_installed")}
