@@ -726,27 +726,72 @@ details.chantier[open] > summary .fold-chev { transform: rotate(90deg); }
   border: 1px solid var(--line-2); font: 600 36px/1 var(--mono); letter-spacing: .18em; color: #ddf7ee; }
 
 /* -------------------------------------------- machines connectées (en direct) */
-/* Le titre, et sur sa ligne le résumé (en ligne, qui prête, qui travaille) */
-.live-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 10px; }
-.live-head h2 { margin: 0; }
-.live-head .live-summary { margin: 0; }
-.card .live-off { margin: 0; }
-.live-summary { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 12px; }
-.live-nudge { margin: 4px 0 12px; }
-.live { width: 100%; border-collapse: collapse; font-size: 13px; }
-.live th { text-align: left; color: var(--faint); font-weight: 500; font-size: 12px; padding: 6px 8px;
-  border-bottom: 1px solid var(--line); }
-.live td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.live tr:last-child td { border-bottom: 0; }
-.live tr.off { opacity: .55; }
-.live-name { white-space: nowrap; }
-.live-name .dot { display: inline-block; margin-right: 8px; vertical-align: middle; }
-.live-name .pill { margin-left: 6px; }
+/* Un seul bloc dépliant (views/connected.js) : « Machines connectées · N » et, sur sa ligne, ce
+   qui se passe ; dedans, les filtres, puis une ligne courte par machine (views/machine-row.js)
+   qui se déplie sur son détail et ses actions */
+.net-machines { margin-top: 16px; }
+details.fold.machines > summary .fold-sub .pill { height: 20px; margin-right: 4px; vertical-align: 1px; }
+.live-off { margin: 0; }
+.live-nudge { margin: 0 0 12px; }
+.mx-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.mx-filter { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--bg-2); color: var(--muted); font: inherit; font-size: 12.5px;
+  white-space: nowrap; cursor: pointer; }
+.mx-filter:hover { color: var(--text); border-color: var(--line-2); }
+.mx-filter.on { background: rgba(52, 209, 166, .14); border-color: rgba(52, 209, 166, .45); color: var(--text); }
+.mx-filter.none:not(.on) { opacity: .55; }
+.mx-n { color: var(--faint); font-variant-numeric: tabular-nums; }
+.mx-filter.on .mx-n { color: var(--cyan); }
+.mx-filter-hint { margin: 0 0 10px; font-size: 12.5px; }
+.mx-list { display: flex; flex-direction: column; gap: 6px; }
+details.mx { min-width: 0; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; }
+details.mx.attn { border-color: rgba(245, 182, 75, .55); }
+details.mx > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px;
+  cursor: pointer; user-select: none; border-radius: 10px; }
+details.mx > summary::-webkit-details-marker { display: none; }
+details.mx > summary:hover { background: var(--panel-2); }
+details.mx.off > summary { opacity: .6; }
+details.mx[open] > summary { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.mx-name { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-kind { flex: none; color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+.mx-facts { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted); font-size: 12.5px; }
+.mx-facts .ok { color: var(--ok); }
+.mx-facts .run { color: var(--cyan); }
+.mx-facts .warn { color: var(--warn); }
+.mx-facts .pill { height: 18px; font-size: 11.5px; vertical-align: 1px; }
+.mx-sep { color: var(--faint); }
+.mx-chev { flex: none; display: inline-flex; margin-left: auto; color: var(--faint); transition: transform .15s; }
+.mx-chev .icon { width: 15px; height: 15px; }
+details.mx[open] .mx-chev { transform: rotate(90deg); }
+.mx-body { min-width: 0; padding: 10px 12px 12px; font-size: 13px; overflow-wrap: anywhere; }
+.mx-hint { margin: 0 0 6px; font-size: 12.5px; }
+.mx-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.mx-row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.mx-row > .mx-label { flex: none; width: 110px; color: var(--faint); font-size: 12px; }
+.mx-row > span:last-child { flex: 1; min-width: 0; }
+.mx-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mx-more { align-self: flex-start; margin-top: 2px; }
+.dot.busy { background: var(--cyan); box-shadow: 0 0 8px rgba(52, 209, 166, .6); }
+.dot.warn { background: var(--warn); }
 .live-now > span { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
 .live-now .icon { width: 15px; height: 15px; }
 .live-in { color: var(--cyan); }
-.live-trouble { color: var(--err); }
 .live-out { color: var(--violet); }
+/* Au téléphone : le résumé du bloc passe sous son titre ; dans une ligne, le nom, la sorte et
+   le chevron d'abord, l'état et ce qui compte dessous, en entier ; les filtres passent à la
+   ligne dans leur bande, jamais plus larges que l'écran */
+@media (max-width: 760px) {
+  details.fold.machines > summary { flex-wrap: wrap; row-gap: 4px; }
+  details.fold.machines > summary .fold-sub { order: 1; flex: 1 1 100%; padding-left: 28px; white-space: normal; }
+  details.fold.machines > summary .fold-sub:empty { display: none; }
+  details.mx > summary { flex-wrap: wrap; row-gap: 3px; padding: 9px 12px; }
+  .mx-name { max-width: none; }
+  .mx-facts { order: 1; flex: 1 1 100%; padding-left: 17px; white-space: normal; overflow-wrap: anywhere; }
+  .mx-row { flex-direction: column; gap: 2px; }
+  .mx-row > .mx-label { width: auto; }
+  .mx-acts > .btn { flex: 1 1 auto; justify-content: center; }
+}
 /* Sous la liste : ce que cette machine fait avec le réseau public (le modèle, la durée) */
 .live-public { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 10px;
   border-top: 1px solid var(--line); font-size: 13px; }
@@ -989,16 +1034,6 @@ details.chantier[open] > summary .fold-chev { transform: rotate(90deg); }
   .models tr:last-child { border-bottom: 0; }
   .models td { display: block; padding: 0; border: 0; }
   .models td:first-child { flex: 1 1 100%; overflow-wrap: anywhere; }
-  /* Machines connectées : une fiche par machine */
-  .live thead { display: none; }
-  .live, .live tbody { display: block; }
-  .live tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 0;
-    border-bottom: 1px solid var(--line); }
-  .live tr:last-child { border-bottom: 0; }
-  .live td { display: block; padding: 0; border: 0; }
-  .live td.live-name { flex: 1 1 auto; }
-  .live td:nth-child(n+3) { flex: 1 1 100%; }
-  .live tr.off td:nth-child(3), .live tr.off td:nth-child(4) { display: none; }   /* hors ligne : rien en direct */
   .copy-row { flex-wrap: wrap; gap: 4px 10px; }
   .copy-row .copy-label { width: 100%; }
   #consult-q { min-width: 0; flex-basis: 100%; }

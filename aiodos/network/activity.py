@@ -13,6 +13,12 @@ qu'une machine calcule pour moi (jobs/endgame.py), ses places et combien sont pr
 (network/places_seen.py), et ce que cette machine fait avec le réseau public (public_live) :
 les conversations qu'elle lui sert, celles qu'elle lui fait calculer, par leur modèle et
 leur durée seulement, jamais leur texte ni une clé.
+
+À mes machines seulement, les nouvelles disent aussi la clé de cette machine sur le réseau
+public (« public_key », quand elle l'a rejoint) : la liste unique des machines
+(machines_view.py) y reconnaît une de mes machines vue aussi dans l'annuaire, et ne la
+montre qu'une fois. Jamais à un ami : sa clé publique ne relie pas un inconnu à une machine
+appairée (docs/conception/reseau-public-calcul.md). Gardée en mémoire, jamais en base.
 """
 import threading
 import time
@@ -21,7 +27,7 @@ from contextlib import contextmanager
 
 from aiodos import db, settings
 from aiodos.jobs.models import RUNNING
-from aiodos.network import peers, places_seen, public_lending, route, sharing
+from aiodos.network import peers, places_seen, profile, public_lending, route, sharing
 
 _lock = threading.Lock()
 _heard = {}                  # machine -> {"sharing": …, "rtt_ms": …, "at": …}
@@ -42,19 +48,38 @@ def field(manager, sender) -> dict:
              "detail": str(state.get("detail") or "")}
     if isinstance(state.get("detail_t"), list):
         found["detail_t"] = state["detail_t"]
-    return {"sharing": found}
+    out = {"sharing": found}
+    from aiodos.network import public          # à la demande : il importe public_lending
+    key = profile.public_key(public.seen()[0])  # réseau public rejoint : sa clé (cf. le début)
+    if key:
+        out["public_key"] = key
+    return out
 
 
 def note(node_id: str, reply: dict, rtt_ms: float | None = None):
     """Nouvelles reçues d'une machine appairée : l'état de son partage s'il y est (une
-    version précédente n'en dit rien), et le temps de réponse d'un ping."""
+    version précédente n'en dit rien), le temps de réponse d'un ping, et sa clé du réseau
+    public (une de mes machines qui l'a rejoint ; absente : oubliée)."""
     with _lock:
         heard = _heard.setdefault(node_id, {})
         if isinstance(reply.get("sharing"), dict):
             heard["sharing"] = reply["sharing"]
+        key = profile.public_key(reply.get("public_key"))
+        if key:
+            heard["public_key"] = key
+        else:
+            heard.pop("public_key", None)
         if rtt_ms is not None:
             heard["rtt_ms"] = round(rtt_ms, 1)
         heard["at"] = time.time()
+
+
+def public_keys() -> dict:
+    """{machine appairée : sa clé du réseau public}, telle qu'elle l'a dite (note), pour la
+    liste unique des machines (machines_view.py). Mes machines seulement (field)."""
+    with _lock:
+        return {node_id: heard["public_key"] for node_id, heard in _heard.items()
+                if heard.get("public_key")}
 
 
 def forget(node_id: str):

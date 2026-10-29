@@ -139,15 +139,16 @@ ce groupe » ; les autres reçoivent une demande.
 
 - **Une présentation reçue** ouvre une question, quelle que soit la vue : accepter, refuser,
   avec la case « Accepter d'office les prochaines machines de ce groupe ». La fermer sans
-  répondre (Échap, clic à côté) ne refuse rien : elle attend dans « Machines appairées »
-  (« attend ta réponse », bouton « Répondre ») jusqu'à son expiration.
-- **Machines appairées** : une machine présentée porte « présentée par … » ; le menu ⋯ de
-  la machine d'un ami propose « Présenter mes autres machines » (le résultat dit qui a été
-  appairée, qui connaissait déjà, qui est injoignable, qui a refusé).
+  répondre (Échap, clic à côté) ne refuse rien : elle attend dans « Machines connectées »,
+  en tête, quel que soit le filtre (« attend ta réponse », bouton « Répondre ») jusqu'à
+  son expiration.
+- **Machines connectées** (depuis le 29/10/2026, un seul bloc pour toutes les machines) :
+  une machine présentée y apparaît comme les autres, son détail dit « présentée par … » ;
+  les « Options » de la machine d'un ami proposent « Présenter mes autres machines » (le
+  résultat dit qui a été appairée, qui connaissait déjà, qui est injoignable, qui a
+  refusé).
 - **Retirer la machine d'un ami** : retirée de toutes mes machines, sauf si la case
   « Seulement de cette machine » est cochée.
-- **Machines connectées** : une machine présentée y apparaît comme les autres, avec
-  « présentée par … » en info-bulle.
 
 ## 7. Données
 

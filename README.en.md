@@ -85,11 +85,15 @@ The documents in `docs/` are written in French.
    default), like a screensaver: as soon as the user comes back, the units in progress
    are handed back.
 4. **See who is there** (Network view, “Connected machines”; number of machines online at
-   the right of the bottom bar): like the peer list of a BitTorrent client, each paired
-   machine with its path (local network, Internet directly or through a relay) and its
-   response time, what it lends (its power, paused or not, its models, its graphics
-   card), what it computes for you and you for it right now, and the computing time
-   exchanged. A friend only sees whether your sharing is on, not your activity.
+   the right of the bottom bar): like the peer list of a BitTorrent client, a single
+   collapsible block for every machine, each one once, with filters (public network, my
+   machines, friends, local network). One short line per machine (a stranger on the
+   public network is only shown by the first 8 characters of its key), which unfolds: its
+   path (local network, Internet directly or through a relay) and its response time, what
+   it lends (its power, paused or not, its models, its graphics card), what it computes
+   for you and you for it right now, the computing time exchanged, and its actions (pair,
+   check a code, unpair…). A friend only sees whether your sharing is on, not your
+   activity.
 
 How the work flows:
 

@@ -92,6 +92,20 @@ def _node_id(value):
     return value if isinstance(value, str) and _ID.fullmatch(value) else _DROP
 
 
+# La clé d'une de mes machines sur le réseau public (activity.field) : de la forme des clés
+# du compagnon (comme public_chat._KEY)
+_PUBLIC_KEY = re.compile(r"[0-9A-Za-z]{16,128}")
+
+
+def public_key(value) -> str | None:
+    """Une clé du réseau public bien formée, sinon None."""
+    return value if isinstance(value, str) and _PUBLIC_KEY.fullmatch(value) else None
+
+
+def _public_key(value):
+    return public_key(value) or _DROP
+
+
 def _lazy(prefix: str):
     """Un texte à traduire chez qui le lit, [clé, {paramètres}] (i18n.lazy) : une clé de la
     forme de celles des catalogues, qui commence par `prefix` (seuls les textes que l'autre
@@ -197,6 +211,9 @@ SCHEMA = _object({
     # detail_t, le même à traduire ici (i18n.lazy ; une version d'avant n'en dit rien)
     "sharing": _object({"enabled": _flag, "active": _flag, "detail": _text(300),
                         "detail_t": _lazy("worker.")}),
+    # Sa clé du réseau public, dite à mes machines seulement (activity.field) : la liste
+    # unique des machines la reconnaît dans l'annuaire (machines_view.py)
+    "public_key": _public_key,
     # Le ComfyUI accordé d'une de mes machines (engines/lending.summary)
     "engines": _object({"comfyui": _object({
         "version": _optional(_text(40)), "vram_mib": _optional(_integer(0, 1 << 30)),

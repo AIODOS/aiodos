@@ -1,135 +1,106 @@
-// Machines connectées, en direct, à la façon de la liste des pairs d'un client BitTorrent :
-// qui est en ligne et par quel chemin, qui prête sa puissance, ce que chacune fait pour
-// l'autre en ce moment (doublons de fin de partie compris), et ce qui a été échangé
-// (network/activity.py) ; sous la liste, ce que cette machine fait avec le réseau public (les
-// conversations qu'elle sert à des inconnus, celles qu'ils calculent pour elle : le modèle et
-// la durée, jamais le texte ni une clé). En tête de la vue Réseau ; et dans la barre du bas,
-// le nombre de machines en ligne. Les textes (t, tt) sont du texte brut : échappés (esc) en
-// entier, paramètres compris, avant d'entrer dans le HTML.
-import { $, esc, ago, duration, finite } from '../dom.js';
-import { t, tt, locale } from '../i18n.js';
+// « Machines connectées » (demandé par l'auteur le 29/10/2026) : toutes les machines que cette
+// machine voit, réseau public, mes machines, amis, réseau local, chacune une seule fois
+// (network/machines_view.py), dans un seul bloc dépliant en tête de la vue Réseau, à la place
+// des listes d'avant (machines connectées, détectées, appairées, nœuds du réseau public). Son
+// titre dit combien sont en ligne et, à côté, ce qui se passe (ce qui attend ta réponse, qui
+// travaille pour toi, ce que tu fais avec le réseau public) ; dedans, des filtres (Toutes,
+// Réseau public, Mes machines, Amis, Réseau local, avec leur nombre), une ligne courte par
+// machine qui se déplie sur son détail et ses actions (machine-row.js), PAGE lignes puis
+// « Voir les N autres ». Le filtre et l'état du bloc sont retenus (prefs : localStorage, sous
+// try/catch) ; ce qui attend une réponse (un code à vérifier, une présentation, une machine
+// mise de côté) est montré quel que soit le filtre, sa ligne dépliée, et ouvre le bloc une
+// fois. Sous la liste, ce que cette machine fait avec le réseau public (le modèle et la durée,
+// jamais le texte ni une clé). Dans la barre du bas, le nombre de machines en ligne. Les
+// textes (t) sont du texte brut : échappés (esc) en entier, paramètres compris.
+import { $, esc, duration, finite } from '../dom.js';
+import { t } from '../i18n.js';
 import { icon } from '../icons.js';
-import { state, on, emit } from '../state.js';
+import { state, on, emit, prefs } from '../state.js';
+import { fold, keepFolds } from '../fold.js';
+import { helpsMe, pauseDetail } from './machine-live.js';
+import { machineHtml, machineAction, machineName } from './machine-row.js';
 
-const ROUTES = { lan: 'connected.route_lan', direct: 'connected.route_direct',
-  relay: 'connected.route_relay', internet: 'connected.route_internet' };
+export { link } from './machine-live.js';      // les machines au travail (jobs-workers.js)
 
-const sum = items => (items || []).reduce((n, item) => n + (item.units || 0), 0);
-// Prête sa puissance en ce moment ; d'un ami, on sait seulement si c'est activé
-const lendsNow = sharing => !!sharing && ('active' in sharing ? sharing.active : sharing.enabled);
-// Pourquoi une machine ne prête pas en ce moment (« En pause : ce PC est sur batterie. »),
-// écrit chez elle : dans la langue de l'interface s'il est venu traduisible (detail_t), sinon
-// tel qu'elle l'a écrit (une version précédente, ou un texte inconnu ici)
-const pauseDetail = sharing => tt(sharing.detail_t, sharing.detail || '');
+export const FILTERS = ['all', 'public', 'mine', 'friend', 'local'];
+export const PAGE = 10;                          // lignes montrées avant « Voir les N autres »
+const FOLD = 'net-machines';
+const FILTER_KEYS = { all: 'connected.filter_all', public: 'connected.filter_public',
+  mine: 'connected.filter_mine', friend: 'connected.filter_friend', local: 'connected.filter_local' };
+const RAIL_NAMES = 12;                           // noms dans l'info-bulle de la barre du bas
 
-function busy(peer) {
-  const live = peer.live || {};
-  return sum(live.for_me) + sum(live.copies_for_me) + (live.for_it || []).length + (live.chats_for_me || 0)
-    + (live.chats_for_it || 0);
+let filter = FILTERS.includes(prefs.get('machines.filter', 'all')) ? prefs.get('machines.filter', 'all') : 'all';
+let showAll = false;                             // « Voir les N autres » : jusqu'au prochain filtre
+let current = [];                                // les lignes montrées, pour leurs actions
+let noticed = '';                                // ce qui a ouvert le bloc d'office la dernière fois
+const opened = new Set();                        // lignes dépliées
+const closed = new Set();                        // lignes qui attendaient une réponse, repliées
+
+// ------------------------------------------------------------- liste (sans DOM)
+/** Les machines de l'état du réseau (des objets seulement). */
+export const machinesOf = net => (Array.isArray(net?.machines)
+  ? net.machines.filter(m => m && typeof m === 'object' && typeof m.id === 'string') : []);
+
+/** Le nombre de machines de chaque filtre. */
+export function filterCounts(machines) {
+  const counts = Object.fromEntries(FILTERS.map(f => [f, 0]));
+  counts.all = machines.length;
+  for (const m of machines) if (m.kind !== 'all' && Object.hasOwn(counts, m.kind)) counts[m.kind] += 1;
+  return counts;
 }
 
-// Elle travaille pour moi en ce moment : unités, doublons de fin de partie, conversations
-const helpsMe = peer => !!(sum(peer.live?.for_me) || sum(peer.live?.copies_for_me) || peer.live?.chats_for_me);
-
-export function link(peer) {           // aussi pour les machines au travail (jobs-workers.js)
-  if (!peer.online) {
-    return esc(peer.last_seen ? t('connected.offline_seen', { ago: ago(peer.last_seen) }) : t('connected.never_seen'));
-  }
-  const live = peer.live || {};
-  const rtt = live.rtt_ms ?? live.internet_rtt_ms;
-  return `${esc(t(ROUTES[live.route] || 'connected.online'))}${rtt != null ? ` · ${Math.round(rtt)} ms` : ''}`;
+/** Les lignes montrées : ce qui attend une réponse quel que soit le filtre, puis les machines
+ *  du filtre, dans l'ordre donné par le nœud ; PAGE au plus, sauf « Voir les N autres ». */
+export function pick(machines, chosen, all = false) {
+  const picked = machines.filter(m => m.attention || chosen === 'all' || m.kind === chosen);
+  return { rows: all ? picked : picked.slice(0, PAGE), hidden: all ? 0 : Math.max(0, picked.length - PAGE),
+    total: picked.length };
 }
 
-// Ce qu'elle prête : sa puissance (l'état du moment pour mes machines), ses modèles, sa carte
-function lends(peer) {
-  const p = peer.profile || {};
-  const sharing = peer.live?.sharing;
-  const pills = [];
-  if (sharing ? sharing.enabled : p.images?.shares) {
-    if (sharing && 'active' in sharing) {
-      pills.push(sharing.active
-        ? `<span class="pill ok">${esc(t('connected.lends_power'))}</span>`
-        : `<span class="pill warn" title="${esc(pauseDetail(sharing))}">${esc(t('connected.power_paused'))}</span>`);
-    } else {
-      pills.push(`<span class="pill">${esc(t('connected.lends_power'))}</span>`);
-    }
-  }
-  if (p.lends_models) pills.push(`<span class="pill">${esc(t('connected.lends_models'))}</span>`);
-  if (p.cluster?.lends) pills.push(`<span class="pill">${esc(t('connected.lends_gpu'))}</span>`);
-  return pills.length ? pills.join('') : `<span class="faint">${esc(t('connected.lends_nothing'))}</span>`;
+const isOpen = m => opened.has(m.id) || (!!m.attention && !closed.has(m.id));
+
+function filtersHtml(counts) {
+  return FILTERS.map(f => `<button type="button" class="mx-filter${f === filter ? ' on' : ''}${counts[f] ? '' : ' none'}"
+    data-filter="${f}" aria-pressed="${f === filter}">${esc(t(FILTER_KEYS[f]))}<span class="mx-n">${counts[f]}</span></button>`)
+    .join('');
 }
 
-// En ce moment, dans les deux sens
-function now(peer) {
-  const live = peer.live || {};
-  const items = [];
-  const forMe = sum(live.for_me);
-  if (forMe) {
-    // Le titre d'un de mes travaux : traduit s'il est venu traduisible (title_t, cf. jobs.js)
-    const what = live.for_me.map(j => t('connected.job_units', { title: tt(j.title_t, j.title), n: j.units }))
-      .join(', ');
-    items.push(`<span class="live-in" title="${esc(what)}">${icon('bolt')}${esc(t('connected.computing_for_you',
-      { n: forMe }))}</span>`);
+/** L'explication du filtre choisi (texte brut), ou rien. */
+function filterHint(net) {
+  if (filter === 'public') return t('connected.hint_public');
+  if (filter === 'mine' || filter === 'friend') {
+    return t('network.peers_hint', { offload: t(net.offload ? 'network.offload_on' : 'network.offload_off') });
   }
-  const doubling = sum(live.copies_for_me);
-  if (doubling) {
-    const what = live.copies_for_me.map(j => t('connected.job_units', { title: tt(j.title_t, j.title), n: j.units }))
-      .join(', ');
-    items.push(`<span class="live-in" title="${esc(`${t('connected.doubling_title')} ${what}`)}">${icon('copy')}${
-      esc(t('connected.doubling_for_you', { n: doubling }))}</span>`);
-  }
-  if (live.chats_for_me) {
-    items.push(`<span class="live-in">${icon('chat')}${esc(t('connected.answering_your_chat'))}</span>`);
-  }
-  const forIt = live.for_it || [];
-  if (forIt.length) {
-    items.push(`<span class="live-out" title="${esc(forIt.join(', '))}">${icon('cpu')}${esc(t('connected.you_compute',
-      { n: forIt.length }))}</span>`);
-  }
-  if (live.chats_for_it) {
-    items.push(`<span class="live-out">${icon('chat')}${esc(t('connected.you_answer_its_chat'))}</span>`);
-  }
-  return items.length ? items.join('')
-    : `<span class="faint">${peer.online ? esc(t('connected.nothing_now')) : '—'}</span>`;
+  if (filter === 'local') return t(net.running && net.local ? 'network.visible_hint' : 'network.visible_off');
+  return '';
 }
 
-// Échangé depuis l'appairage, dans chaque sens : le temps de calcul des tâches, puis les
-// conversations auxquelles un modèle prêté a répondu
-function exchanged(peer) {
-  const compute = [];
-  if (peer.received_s) {
-    compute.push(`<span title="${esc(t('connected.received_units', { n: peer.received_units }))}">${
-      esc(t('connected.received', { time: duration(peer.received_s) }))}</span>`);
-  }
-  if (peer.given_s) {
-    compute.push(`<span title="${esc(t('connected.given_units', { n: peer.given_units }))}">${
-      esc(t('connected.given', { time: duration(peer.given_s) }))}</span>`);
-  }
-  const chats = [];
-  if (peer.received_chats) chats.push(t('connected.chats_for_you', { n: peer.received_chats }));
-  if (peer.given_chats) chats.push(t('connected.chats_for_it', { n: peer.given_chats }));
-  const lines = [];
-  if (compute.length) lines.push(compute.join(' · '));
-  // Fiabilité : ses résultats refusés (faux ou illisibles), les unités qu'elle n'a pas pu calculer
-  const trouble = [];
-  if (peer.refused_units) trouble.push(t('connected.refused_results', { n: peer.refused_units }));
-  if (peer.failed_units) trouble.push(t('connected.failures', { n: peer.failed_units }));
-  if (trouble.length) {
-    lines.push(`<span class="live-trouble" title="${esc(t('connected.trouble_title'))}">${esc(trouble.join(' · '))}</span>`);
-  }
-  if (chats.length) {
-    lines.push(`<span title="${esc(t('connected.chats_title'))}">${esc(t('connected.chats',
-      { n: (peer.received_chats || 0) + (peer.given_chats || 0), list: chats.join(' · ') }))}</span>`);
-  }
-  return lines.length ? lines.join('<br>') : `<span class="faint">${esc(t('connected.nothing_yet'))}</span>`;
+/** Rien à montrer dans ce filtre (texte brut). */
+function emptyText(net) {
+  if (filter === 'public') return t(net.public?.wanted ? 'network.public_none' : 'connected.public_off');
+  if (filter === 'mine' || filter === 'friend') return t('network.no_peers');
+  if (filter === 'local') return t(net.running && net.local ? 'network.no_visible' : 'network.visible_off');
+  return t('connected.empty');
 }
 
-// Ce que cette machine fait avec le réseau public en ce moment (activity.public_live) : les
-// conversations qu'elle sert à des inconnus, celles qu'elle leur fait calculer. Le modèle et la
-// durée seulement : le nœud n'envoie ni le texte ni aucune clé
+/** Le contenu de la liste (HTML) : les lignes, puis « Voir les N autres » ou « Voir moins ». */
+export function listHtml(net, chosen = filter, all = showAll) {
+  const { rows, hidden, total } = pick(machinesOf(net), chosen, all);
+  current = rows;
+  if (!rows.length) return `<div class="empty net-empty">${esc(emptyText(net))}</div>`;
+  const more = hidden ? `<button type="button" class="btn sm ghost mx-more" data-more="1">${
+    esc(t('connected.show_more', { n: hidden }))}</button>`
+    : all && total > PAGE ? `<button type="button" class="btn sm ghost mx-more" data-more="0">${
+      esc(t('connected.show_less'))}</button>` : '';
+  return `${rows.map(m => machineHtml(m, net, isOpen(m))).join('')}${more}`;
+}
+
+// --------------------------------------------------- ce qui se passe, réseau public
 const publicServing = net => (Array.isArray(net.public_live?.serving) ? net.public_live.serving : []);
 const publicAsking = net => (Array.isArray(net.public_live?.asking) ? net.public_live.asking : []);
 
+// Ce que cette machine fait avec le réseau public en ce moment (activity.public_live) : les
+// conversations qu'elle sert à des inconnus, celles qu'elle leur fait calculer
 function publicLive(net) {
   const serving = publicServing(net);
   const asking = publicAsking(net);
@@ -149,20 +120,20 @@ function publicLive(net) {
     esc(t('connected.public_title'))}</h3>${items.join('')}</div>`;
 }
 
-function summary(net) {
-  const peers = net.peers;
-  const online = peers.filter(p => p.online);
-  const helping = online.filter(helpsMe).length;
-  const helped = online.filter(p => (p.live?.for_it || []).length || p.live?.chats_for_it).length;
-  const lending = online.filter(p => lendsNow(p.live?.sharing)).length;
-  const me = net.sharing;
-  const chips = [`<span class="pill ${online.length ? 'ok' : 'idle'}">${esc(t('connected.online_of',
-    { online: online.length, total: peers.length }))}</span>`];
-  if (lending) chips.push(`<span class="pill ok">${esc(t('connected.lending', { n: lending }))}</span>`);
+/** À côté du titre (HTML) : ce qui attend ta réponse, qui travaille pour toi, pour qui tu
+ *  travailles, le réseau public, et si cette machine prête la sienne. */
+function summary(net, machines) {
+  const chips = [];
+  const waiting = machines.filter(m => m.attention).length;
+  if (waiting) chips.push(`<span class="pill warn">${esc(t('connected.waiting_you', { n: waiting }))}</span>`);
+  const helping = machines.filter(helpsMe).length;
   if (helping) chips.push(`<span class="pill run">${esc(t('connected.helping', { n: helping }))}</span>`);
+  const helped = machines.filter(m => (Array.isArray(m.doing) ? m.doing : [])
+    .some(d => d?.what === 'for_it' || d?.what === 'chat_for_it')).length;
   if (helped) chips.push(`<span class="pill run">${esc(t('connected.helped', { n: helped }))}</span>`);
   if (publicServing(net).length) chips.push(`<span class="pill run">${esc(t('connected.public_serving_chip'))}</span>`);
   if (publicAsking(net).length) chips.push(`<span class="pill run">${esc(t('connected.public_asking_chip'))}</span>`);
+  const me = net.sharing;
   if (me) {
     chips.push(me.active ? `<span class="pill">${esc(t('connected.me_lending'))}</span>`
       : `<span class="pill idle" title="${esc(pauseDetail(me))}">${esc(t('connected.me_not_lending'))}</span>`);
@@ -172,7 +143,8 @@ function summary(net) {
 
 // Réciprocité souple : une machine qui reçoit sans rien prêter en est avertie (sans blocage)
 function nudge(net) {
-  const total = (keys) => net.peers.reduce((n, p) => n + keys.reduce((m, k) => m + (p[k] || 0), 0), 0);
+  const peers = Array.isArray(net.peers) ? net.peers : [];
+  const total = keys => peers.reduce((n, p) => n + keys.reduce((m, k) => m + (finite(p[k]) || 0), 0), 0);
   const received = total(['received_units', 'received_chats']);
   const given = total(['given_units', 'given_chats']);
   const s = state.settings || {};
@@ -183,64 +155,132 @@ function nudge(net) {
     <button class="btn sm" data-go-node>${esc(t('nav.node'))}</button></div>`;
 }
 
-/** Info-bulle d'une machine appairée par une présentation (appairage par groupe). */
-function introduced(peer, net) {
-  if (!peer.introduced_by) return '';
-  const by = net.peers.find(p => p.node_id === peer.introduced_by);
-  return ` title="${esc(by ? t('connected.introduced_by', { name: by.name }) : t('connected.introduced_by_removed'))}"`;
+// ------------------------------------------------------------------------- bloc
+const block = box => box.querySelector(`details.fold[data-fold="${FOLD}"]`);
+
+/** Le bloc, une fois : ses parties, et les gestes (filtres, lignes, actions). */
+function mount(box) {
+  box.innerHTML = fold({ id: FOLD, title: t('connected.title'), iconName: 'bolt', open: true, cls: 'machines',
+    body: `<div class="mx-nudge"></div>
+      <div class="mx-filters" role="group" aria-label="${esc(t('connected.filters'))}"></div>
+      <p class="hint mx-filter-hint" hidden></p>
+      <div class="mx-list"></div>
+      <div class="mx-public"></div>` });
+  const d = block(box);
+  $('summary', d).title = t('connected.hint');
+  // Ouvert d'office (une réponse attendue) : pas retenu pour la suite, seuls les gestes le sont
+  d.addEventListener('toggle', e => {
+    if (d.dataset.auto) { delete d.dataset.auto; e.stopImmediatePropagation(); }
+  });
+  keepFolds(box);
+  $('.mx-filters', d).addEventListener('click', e => {
+    const chosen = e.target.closest('[data-filter]')?.dataset.filter;
+    if (!chosen || !FILTERS.includes(chosen)) return;
+    filter = chosen;
+    showAll = false;
+    prefs.set('machines.filter', chosen);
+    draw(box, state.network);
+  });
+  const list = $('.mx-list', d);
+  list.addEventListener('click', e => {
+    const more = e.target.closest('[data-more]');
+    if (more) { showAll = more.dataset.more === '1'; draw(box, state.network); return; }
+    const button = e.target.closest('[data-act]');
+    const id = button?.closest('[data-row]')?.dataset.row;
+    const m = id && current.find(item => item.id === id);
+    if (m) machineAction(button.dataset.act, m, state.network, button);
+  });
+  // Le dépli de chaque ligne est retenu d'une nouvelle à l'autre (la liste est redessinée)
+  list.addEventListener('toggle', e => {
+    const row = e.target;
+    if (!row.matches?.('details.mx')) return;
+    const id = row.dataset.row;
+    if (row.open) { opened.add(id); closed.delete(id); } else {
+      opened.delete(id);
+      if (row.dataset.attn) closed.add(id);
+    }
+  }, true);
+  $('.mx-nudge', d).addEventListener('click', e => {
+    if (e.target.closest('[data-go-node]')) emit('view:show', 'node');
+  });
 }
 
-/** La carte « Machines connectées », en tête de la vue Réseau, toujours ouverte (même réseau
- *  coupé) : le titre et, sur sa ligne, le résumé ; l'explication passe en info-bulle du titre. */
-export function renderConnected(box, net) {
-  box.hidden = false;
-  const head = summaryHtml => `<div class="live-head"><h2 title="${esc(t('connected.hint'))}">${icon('bolt')}${
-    esc(t('connected.title'))}</h2>${summaryHtml ? `<div class="live-summary">${summaryHtml}</div>` : ''}</div>`;
+function draw(box, net) {
+  const d = block(box);
+  if (!d || !net) return;
+  const machines = net.enabled ? machinesOf(net) : [];
+  const online = machines.filter(m => m.online).length;
+  $('.fold-title', d).textContent = t('connected.title_count', { n: online });
+  $('.fold-sub', d).innerHTML = net.enabled ? summary(net, machines) : '';
+  const filters = $('.mx-filters', d);
+  const hint = $('.mx-filter-hint', d);
+  filters.hidden = !net.enabled;
   if (!net.enabled) {
-    box.innerHTML = `${head('')}<p class="hint live-off">${esc(t('connected.network_off'))}</p>`;
+    hint.hidden = true;
+    $('.mx-nudge', d).innerHTML = $('.mx-public', d).innerHTML = '';
+    $('.mx-list', d).innerHTML = `<p class="hint live-off">${esc(t('connected.network_off'))}</p>`;
+    current = [];
     return;
   }
-  const order = [...net.peers].sort((a, b) => (b.online - a.online) || (busy(b) - busy(a))
-    || a.name.localeCompare(b.name, locale()));
-  const rows = order.map(peer => `
-    <tr class="${peer.online ? '' : 'off'}">
-      <td class="live-name"><span class="dot ${peer.online ? 'on' : ''}"></span><b${introduced(peer, net)}>${esc(peer.name)}</b>
-        ${peer.trust === 'friend' ? `<span class="pill">${esc(t('connected.friend'))}</span>` : ''}</td>
-      <td class="faint">${link(peer)}</td>
-      <td><div class="caps">${lends(peer)}</div></td>
-      <td class="live-now">${now(peer)}</td>
-      <td class="faint">${exchanged(peer)}</td>
-    </tr>`).join('');
-  const columns = ['connected.col_machine', 'connected.col_link', 'connected.col_lends', 'connected.col_now',
-    'connected.col_exchanged'].map(key => `<th>${esc(t(key))}</th>`).join('');
-  box.innerHTML = `
-    ${head(net.peers.length ? summary(net) : '')}
-    ${net.peers.length ? `${nudge(net)}
-      <table class="live"><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table>`
-      : `<p class="hint live-off">${esc(t('connected.empty'))}</p>`}
-    ${publicLive(net)}`;
-  box.querySelector('[data-go-node]')?.addEventListener('click', () => emit('view:show', 'node'));
+  filters.innerHTML = filtersHtml(filterCounts(machines));
+  const help = filterHint(net);
+  hint.hidden = !help;
+  hint.textContent = help;
+  $('.mx-nudge', d).innerHTML = nudge(net);
+  $('.mx-list', d).innerHTML = listHtml(net);
+  $('.mx-public', d).innerHTML = publicLive(net);
+  // Une nouvelle réponse attendue ouvre le bloc, une fois : refermé, il le reste
+  const attention = machines.filter(m => m.attention).map(m => m.id).join('|');
+  if (attention && attention !== noticed && !d.open) { d.dataset.auto = '1'; d.open = true; }
+  noticed = attention;
 }
 
-/** Dans la barre du bas : machines en ligne (et qui travaille pour toi), un clic ouvre Réseau. */
+/** Le bloc « Machines connectées », en tête de la vue Réseau, toujours là (même réseau
+ *  coupé) : créé la première fois, puis mis à jour à chaque nouvelle de l'état du réseau. */
+export function renderConnected(box, net) {
+  box.hidden = false;
+  if (!block(box)) mount(box);
+  draw(box, net);
+}
+
+/** Montre le bloc (ouvert), sur un filtre si on le dit (« local » : une machine ajoutée par
+ *  son adresse y apparaît, prête à appairer). */
+function show(kind) {
+  const box = $('#net-live');
+  const d = box && block(box);
+  if (!d) return;
+  if (FILTERS.includes(kind) && kind !== filter) {
+    filter = kind;
+    showAll = false;
+    prefs.set('machines.filter', kind);
+    draw(box, state.network);
+  }
+  d.open = true;
+  d.scrollIntoView({ block: 'start' });
+}
+
+/** Dans la barre du bas : machines en ligne (et qui travaille pour toi), un clic ouvre le bloc. */
 export function mountRailStatus() {
   const status = $('#rail-status');
   const dot = $('#net-dot');
+  on('machines:show', show);
   status.onclick = () => {
     emit('view:show', 'network');
-    $('#net-live')?.scrollIntoView({ block: 'start' });
+    show();
   };
   on('network:loaded', () => {
     const net = state.network;
-    const peers = net?.enabled ? net.peers : null;
-    status.hidden = !peers;
-    const online = (peers || []).filter(p => p.online);
+    const machines = net?.enabled ? machinesOf(net) : null;
+    status.hidden = !machines;
+    const online = (machines || []).filter(m => m.online);
     dot.hidden = !online.length;
-    if (!peers) return;
+    if (!machines) return;
     const helping = online.filter(helpsMe).length;
-    status.innerHTML = !peers.length ? esc(t('connected.rail_no_peers'))
-      : `<span class="dot ${online.length ? 'on' : ''}"></span>${esc(t('connected.rail_online', { n: online.length }))}`
+    status.innerHTML = !online.length ? esc(t('connected.rail_none_online'))
+      : `<span class="dot on"></span>${esc(t('connected.rail_online', { n: online.length }))}`
         + (helping ? ` <span class="work">${icon('bolt')}${esc(t('connected.helping', { n: helping }))}</span>` : '');
-    status.title = online.map(p => p.name).join(', ') || t('connected.rail_none_online');
+    const names = online.slice(0, RAIL_NAMES).map(machineName);
+    if (online.length > RAIL_NAMES) names.push('…');
+    status.title = names.join(', ') || t('connected.rail_none_online');
   });
 }

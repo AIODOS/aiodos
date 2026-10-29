@@ -1,19 +1,20 @@
-// Réseau : en tête, toujours ouvertes, les machines connectées (connected.js) ; dessous, des
-// sections repliables d'une ligne (fold.js), chacune avec le résumé de son état : machines
-// appairées, réseau local, machines détectées, Internet et invitations, réseau public. Fermées
-// d'office, sauf quand quelque chose y demande l'attention (une erreur, un appairage en attente,
-// une demande à confirmer). Les textes (t) sont du texte brut : échappés (esc) avant le HTML.
+// Réseau : en tête, le bloc « Machines connectées » (connected.js), toutes les machines en une
+// liste (réseau public, mes machines, amis, réseau local), chacune une fois ; dessous, les
+// réglages, en sections repliables d'une ligne (fold.js), chacune avec le résumé de son état :
+// réseau public, Internet et invitations, réseau local (et l'ajout d'une machine par son
+// adresse). Leurs machines sont toutes dans le bloc, plus dans les sections (demandé par
+// l'auteur le 29/10/2026). Une section est fermée d'office, sauf quand quelque chose y demande
+// l'attention (une erreur, une invitation en cours). Les textes (t) sont du texte brut :
+// échappés (esc) avant le HTML.
 import { get, post } from '../api.js';
-import { $, h, esc, ago, finite } from '../dom.js';
+import { $, h, esc, finite } from '../dom.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, on, emit } from '../state.js';
 import { toast, errorToast } from '../ui.js';
-import { fold, keepFolds, openFold } from '../fold.js';
+import { fold, keepFolds } from '../fold.js';
 import { renderConnected } from './connected.js';
-import { peersSummary, peersAttention, renderPeers } from './network-peers.js';
 import { internetSummary, internetAttention, renderInternet, toggleInternet } from './network-internet.js';
-import { startPairing, answerPairRequest } from './network-pairing.js';
 
 export { peerFacts } from './network-peers.js';
 export { answerPairRequest, answerIntroduction } from './network-pairing.js';
@@ -22,16 +23,14 @@ export { answerPairRequest, answerIntroduction } from './network-pairing.js';
 const onWindows = () => (state.node?.os ? state.node.os.startsWith('Windows')
   : navigator.userAgent.includes('Windows'));
 
-// Les sections, dans l'ordre : le réseau public et Internet d'abord (AIODOS relie par Internet
-// les machines d'inconnus, demandé par l'auteur le 27/10/2026), puis les machines appairées,
-// le réseau local en dernier. toggle : le texte (pour les lecteurs d'écran) de l'interrupteur
-// posé sur la ligne de titre ; open : dépliée tant qu'on ne l'a pas repliée
+// Les sections de réglage, dans l'ordre : le réseau public et Internet d'abord (AIODOS relie
+// par Internet les machines d'inconnus, demandé par l'auteur le 27/10/2026), le réseau local en
+// dernier. toggle : le texte (pour les lecteurs d'écran) de l'interrupteur posé sur la ligne de
+// titre ; open : dépliée tant qu'on ne l'a pas repliée
 const SECTIONS = [
   { id: 'net-public', title: 'network.public_fold', iconName: 'globe', toggle: 'network.public_title',
     open: true },
   { id: 'net-internet', title: 'network.internet_fold', iconName: 'link', toggle: 'network.internet_title' },
-  { id: 'net-peers', title: 'network.peers_title', iconName: 'network' },
-  { id: 'net-visible', title: 'network.visible_title', iconName: 'search', open: true },
   { id: 'net-local', title: 'network.local_title', iconName: 'plug', toggle: 'network.local_title' },
 ];
 
@@ -53,7 +52,7 @@ export function mountNetwork(container) {
     <div class="page"><div class="page-inner">
       <div class="page-head"><div><h1>${esc(t('network.title'))}</h1>
         <div class="sub">${esc(t('network.intro'))}</div></div></div>
-      <div class="card" id="net-live" hidden></div>
+      <div class="net-machines" id="net-live" hidden></div>
       <div class="net-folds">${SECTIONS.map(s => fold({ id: s.id, title: t(s.title), iconName: s.iconName,
         open: s.open, body: `<div class="card"><div class="net-part"></div>${s.id === 'net-local' ? add : ''}</div>` }))
         .join('')}</div>
@@ -104,14 +103,9 @@ function render() {
   if (!root || !net) return;
   renderConnected($('#net-live', root), net);
   const local = net.local ?? net.enabled;      // réseau local coupé, Internet peut tourner
-  update('net-peers', { sub: peersSummary(net), attention: peersAttention(net),
-    draw: box => renderPeers(box, net) });
   update('net-local', { sub: localSummary(net, local), attention: net.error || '', checked: local,
     draw: box => renderLocal(box, net, local) });
   $('.net-add', root).hidden = !(net.running && local);
-  update('net-visible', { sub: visibleSummary(net, local),
-    attention: (net.pairing || []).map(p => p.ref || p.node_id).join('|'),
-    draw: box => renderVisible(box, net, local) });
   update('net-internet', { sub: internetSummary(net), attention: internetAttention(net),
     checked: net.internet?.enabled, draw: box => renderInternet(box, net) });
   const pub = net.public;
@@ -123,7 +117,7 @@ function render() {
 }
 
 /** Une section : son résumé, son interrupteur, son contenu ; ouverte d'office quand `attention`
- *  change (une erreur, un appairage en attente…), une fois : refermée, elle le reste. */
+ *  change (une erreur, une invitation en cours…), une fois : refermée, elle le reste. */
 function update(id, { sub, attention = '', checked, disabled = false, draw }) {
   const d = section(id);
   $('.fold-sub', d).innerHTML = sub;
@@ -170,61 +164,9 @@ async function addByAddress() {
     const info = await post('/network/add', { address });
     toast(t('network.found', { name: info.name }), 'ok');
     input.value = '';
-    openFold(root, 'net-visible');        // elle y apparaît, prête à appairer
+    emit('machines:show', 'local');       // dans « Machines connectées », prête à appairer
     reloadNetwork();
   } catch (e) { errorToast(e); }
-}
-
-// ----------------------------------------------------------- machines détectées
-function visibleSummary(net, local) {
-  const pairing = net.pairing || [];
-  const here = pairing.filter(p => !p.local_ok).length;     // à confirmer sur cette machine
-  const pending = new Set(pairing.map(p => p.node_id));
-  const visible = net.visible.filter(v => !pending.has(v.node_id)).length;
-  const parts = [esc(!net.running || !local ? t('network.visible_sub_off')
-    : visible ? t('network.visible_sub', { n: visible }) : t('network.visible_sub_none'))];
-  if (pairing.length) {
-    parts.push(`<span class="pill ${here ? 'warn' : 'run'}">${esc(here
-      ? t('network.pairing_to_confirm', { n: here }) : t('network.pairing_pending', { n: pairing.length }))}</span>`);
-  }
-  return parts.join(' · ');
-}
-
-// Les appairages en cours (réseau local ou invitation), puis les machines qui s'annoncent
-function renderVisible(box, net, local) {
-  const on = net.running && local;
-  box.innerHTML = `<p class="hint">${esc(t(on ? 'network.visible_hint' : 'network.visible_off'))}</p>
-    <div class="peer-list"></div>`;
-  const list = $('.peer-list', box);
-  for (const p of net.pairing) {
-    const facts = [t('network.pairing_code', { code: p.code })];
-    if (p.internet) facts.push(t('network.via_internet'));
-    else if (p.address) facts.push(p.address);
-    facts.push(t(p.local_ok ? 'network.pairing_waiting' : 'network.pairing_confirm_here'));
-    const row = h(`<div class="peer"><div class="peer-head">${icon('shield')}<b>${esc(p.name)}</b>
-      <span class="faint">${esc(facts.join(' · '))}</span></div></div>`);
-    if (!p.local_ok) {
-      const btn = h(`<button class="btn sm">${esc(t('network.check_code'))}</button>`);
-      btn.onclick = () => answerPairRequest(p);       // avec sa « ref » : la réponse vise cette demande
-      row.querySelector('.peer-head').append(btn);
-    }
-    list.append(row);
-  }
-  if (!on) return;
-  const pendingIds = new Set(net.pairing.map(p => p.node_id));
-  for (const v of net.visible.filter(v => !pendingIds.has(v.node_id))) {
-    const row = h(`
-      <div class="peer"><div class="peer-head">
-        <span class="dot on"></span><b>${esc(v.name)}</b>
-        <span class="faint">${esc(v.address)}:${esc(v.port)}</span><span class="net-grow"></span>
-        <button class="btn sm primary">${icon('shield')}${esc(t('network.pair'))}</button>
-      </div></div>`);
-    row.querySelector('button').onclick = () => startPairing(v);
-    list.append(row);
-  }
-  if (!list.children.length) {
-    list.append(h(`<div class="empty net-empty">${esc(t('network.no_visible'))}</div>`));
-  }
 }
 
 // --------------------------------------------------------- réseau public (essai)
@@ -239,17 +181,6 @@ function publicSummary(pub) {
   return `<span class="pill">${esc(t('network.public_trial'))}</span> ${status}`;
 }
 
-// Ce que disent les nœuds du réseau public vient d'inconnus : typé avant d'entrer dans le HTML
-function publicNode(n) {
-  const models = Array.isArray(n.models) ? n.models.map(String) : [];
-  const key = typeof n.key === 'string' ? n.key : '';
-  const seen = ago(Date.now() / 1000 - (finite(n.seen_s) ?? 0));
-  return `<div class="peer"><div class="peer-head"><span class="dot on"></span>
-      <code title="${esc(key)}">${esc(shortKey(key))}</code>
-      <span class="faint">AIODOS ${esc(n.version || '?')} · ${esc(t('network.public_seen', { ago: seen }))}</span></div>
-    <div class="peer-facts">${esc(models.length ? models.join(', ') : t('network.public_no_models'))}</div></div>`;
-}
-
 /** « 3 autres nœuds publics en ligne · 2 voisins directs », en texte brut. */
 function publicCounts(pub) {
   const facts = [t('network.public_count', { n: finite(pub.count) ?? 0 }),
@@ -258,17 +189,18 @@ function publicCounts(pub) {
   return facts.join(' · ');
 }
 
+// Les nœuds vus sont dans « Machines connectées » (filtre Réseau public), où le bouton les montre
 function renderPublic(box, pub) {
-  const nodes = Array.isArray(pub.nodes) ? pub.nodes : [];
   const detail = !pub.wanted ? ''
     : !pub.internet ? `<div class="hint">${esc(t('network.public_needs_internet'))}</div>`
       : pub.error ? `<div class="banner warn net-banner">${icon('warn')}<div>${esc(pub.error)}</div></div>`
         : !pub.joined ? `<div class="faint">${esc(t('network.public_connecting'))}</div>`
           : `<div class="peer-facts net-key">${esc(t('network.public_key'))}
               <code title="${esc(pub.key)}">${esc(shortKey(String(pub.key || '')))}</code> · ${esc(publicCounts(pub))}</div>
-            <div class="peer-list">${nodes.length ? nodes.map(publicNode).join('')
-              : `<div class="empty net-empty">${esc(t('network.public_none'))}</div>`}</div>`;
+            ${finite(pub.count) ? `<button type="button" class="btn sm" data-show-public>${icon('globe')}${
+              esc(t('network.public_show'))}</button>` : ''}`;
   box.innerHTML = `<p class="hint">${esc(t('network.public_help'))}</p>${detail}`;
+  box.querySelector('[data-show-public]')?.addEventListener('click', () => emit('machines:show', 'public'));
 }
 
 async function togglePublic(e) {

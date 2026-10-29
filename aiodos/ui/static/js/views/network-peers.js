@@ -1,13 +1,14 @@
-// Réseau → Machines appairées : les présentations qui attendent une réponse, puis une ligne par
-// machine (en ligne ou non, ses actions) qui s'ouvre sur le détail (son profil, ce qui a été
-// échangé). Une section repliable de la vue Réseau (network.js) : son résumé, son contenu.
+// Une machine appairée (une des miennes, ou celle d'un ami), dans la liste « Machines
+// connectées » (connected.js, machine-row.js) : le détail de sa ligne dépliée (son profil, ce
+// qui a été échangé, sa fiabilité, ce qui lui a été confié) et ses actions (actualiser,
+// changer sa confiance, présenter mes autres machines, voir ce qui lui a été confié ou ses
+// recherches, rétablir une machine mise de côté, retirer l'appairage).
 import { get, post, del } from '../api.js';
-import { h, esc, ago, bytes, duration, powerText, finite, count } from '../dom.js';
+import { esc, ago, bytes, duration, powerText, finite, count } from '../dom.js';
 import { t, tt, locale } from '../i18n.js';
 import { icon } from '../icons.js';
 import { state, emit } from '../state.js';
 import { modal, menu, toast, errorToast, confirmDanger } from '../ui.js';
-import { answerIntroduction } from './network-pairing.js';
 
 const reload = () => emit('network:reload');
 
@@ -55,25 +56,6 @@ export function peerFacts(peer) {
   return facts.join(' · ');
 }
 
-/** Le résumé de la ligne de titre (HTML) : « 3 machines, 2 en ligne », et ce qui attend. */
-export function peersSummary(net) {
-  const peers = net.peers || [];
-  const intros = (net.introductions || []).length;
-  const aside = peers.filter(p => p.set_aside_at).length;
-  const parts = [esc(peers.length
-    ? t('network.peers_sub', { n: peers.length, online: peers.filter(p => p.online).length })
-    : t('network.peers_sub_none'))];
-  if (intros) parts.push(`<span class="pill warn">${esc(t('network.intros_pending', { n: intros }))}</span>`);
-  if (aside) parts.push(`<span class="pill err">${esc(t('network.set_aside_count', { n: aside }))}</span>`);
-  return parts.join(' · ');
-}
-
-/** Ce qui ouvre la section d'office : une présentation à accepter, une machine mise de côté. */
-export function peersAttention(net) {
-  return [...(net.introductions || []).map(o => o.intro),
-    ...(net.peers || []).filter(p => p.set_aside_at).map(p => p.node_id)].join('|');
-}
-
 /** « présentée par … » : la machine qui en a présenté une autre (appairage par groupe), par son nom. */
 function presentedBy(peer, net) {
   if (!peer.introduced_by) return '';
@@ -102,106 +84,62 @@ function consultedText(consulted) {
   return t('network.consulted', { facts: facts.join(', '), ago: ago(consulted.last) });
 }
 
-// Les machines dont le détail est ouvert : la liste est redessinée à chaque nouvelle
-const opened = new Set();
-
-/** Le contenu de la section : les présentations en attente, puis les machines appairées. */
-export function renderPeers(box, net) {
-  const intros = net.introductions || [];
-  const offload = t(net.offload ? 'network.offload_on' : 'network.offload_off');
-  box.innerHTML = `
-    <p class="hint">${esc(t('network.peers_hint', { offload }))}</p>
-    ${intros.length ? '<div class="peer-list intro-list"></div>' : ''}
-    <div class="peer-list"></div>`;
-  for (const o of intros) {                  // présentations qui attendent ma réponse
-    const row = h(`
-      <div class="peer intro"><div class="peer-head">${icon('network')}<b>${esc(o.machine)}</b>
-        <span class="faint">${esc(t('network.intro_waiting', { presenter: o.presenter, ago: ago(o.created) }))}</span>
-        <span class="net-grow"></span><button class="btn sm primary">${esc(t('network.answer'))}</button></div></div>`);
-    row.querySelector('button').onclick = () => answerIntroduction(o);
-    box.querySelector('.intro-list').append(row);
-  }
-  const list = box.querySelector('.peer-list:not(.intro-list)');
-  if (!net.peers.length) {
-    list.append(h(`<div class="empty net-empty">${esc(t('network.no_peers'))}</div>`));
-    return;
-  }
-  for (const peer of net.peers) list.append(peerRow(peer, net));
-}
-
-function peerRow(peer, net) {
-  const friend = peer.trust === 'friend';
+/** Le détail d'une machine appairée, dans sa ligne dépliée (HTML) : son profil, par qui elle
+ *  a été présentée, quoi vérifier hors ligne, ce qui a été échangé, sa fiabilité, ce qui lui a
+ *  été confié, ses recherches ; mise de côté, pourquoi (Rétablir : peerButtons). */
+export function peerDetails(peer, net) {
   const shared = peer.shared;
   const consulted = peer.consulted;          // ses recherches dans mes bibliothèques ouvertes
   const presented = presentedBy(peer, net);
   // Raison gardée en base : un texte, ou [clé, paramètres] à traduire ici (tt)
   const reason = tt(peer.set_aside_reason) || t('network.check_failed');
-  // Une ligne (en ligne ou non, ses actions), le détail à l'ouverture ; mise de côté, elle
-  // le dit sans qu'il faille l'ouvrir
-  const row = h(`
-    <div class="peer">
-      <details class="peer-more"${opened.has(peer.node_id) ? ' open' : ''}>
-        <summary class="peer-head">
-          <span class="dot ${peer.online ? 'on' : ''}" title="${esc(t(peer.online ? 'network.online_title' : 'network.offline_title'))}"></span>
-          <b>${esc(peer.name)}</b>
-          ${friend ? `<span class="pill" title="${esc(t('network.friend_title'))}">${esc(t('network.friend'))}</span>` : ''}
-          ${peer.set_aside_at ? `<span class="pill err">${esc(t('network.set_aside'))}</span>` : ''}
-          <span class="faint">${peer.address ? `${esc(peer.address)}:${esc(peer.port || '?')}`
-            : esc(t(peer.net_id ? 'network.via_internet' : 'network.unknown_address'))}</span>
-          <span class="faint">${esc(peer.online ? t('network.online')
-            : peer.last_seen ? t('network.seen', { ago: ago(peer.last_seen) }) : t('network.never_seen'))}</span>
-          <span class="peer-acts">
-            <button class="icon-btn" data-act="refresh" title="${esc(t('network.refresh'))}">${icon('retry')}</button>
-            <button class="icon-btn" data-act="more" title="${esc(t('network.options'))}">${icon('more')}</button>
-            <button class="icon-btn danger" data-act="unpair" title="${esc(t('network.unpair'))}">${icon('x')}</button>
-            <span class="peer-chev">${icon('chev-right')}</span>
-          </span>
-        </summary>
-        <div class="peer-facts">${peerFacts(peer)}${netFact(peer)}</div>
-        ${presented ? `<div class="peer-ledger faint" title="${esc(t('network.introduced_title'))}">${esc(presented)}</div>` : ''}
-        ${offlineHint(peer, net)}
-        ${peer.working_for_me ? `<div class="peer-work">${icon('bolt')}${esc(t('network.working_for_me',
-          { n: peer.working_for_me }))}</div>` : ''}
-        <div class="peer-ledger faint">${esc(t('network.ledger_received', { time: duration(peer.received_s), n: peer.received_units }))}
-          · ${esc(t('network.ledger_given', { time: duration(peer.given_s), n: peer.given_units }))}</div>
-        ${peer.received_chats || peer.given_chats ? `<div class="peer-ledger faint">${esc(t('network.ledger_chats',
-          { received: peer.received_chats || 0, given: peer.given_chats || 0 }))}</div>` : ''}
-        ${peer.checked_units || peer.refused_units || peer.failed_units
-          ? `<div class="peer-ledger faint">${esc(reliability(peer))}</div>` : ''}
-        ${shared ? `<div class="peer-ledger faint">${esc(sharedText(shared))}</div>` : ''}
-        ${consulted ? `<div class="peer-ledger faint">${esc(consultedText(consulted))}</div>` : ''}
-      </details>
-      ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>${esc(t('network.set_aside_text',
-        { ago: ago(peer.set_aside_at), reason }))}</div>
-        <button class="btn sm" data-act="restore">${esc(t('network.restore'))}</button></div>` : ''}
-    </div>`);
-  const details = row.querySelector('details');
-  details.addEventListener('toggle', () => {
-    if (details.open) opened.add(peer.node_id); else opened.delete(peer.node_id);
-  });
-  row.querySelector('[data-act="more"]').onclick = e => {
-    e.stopPropagation();
-    menu(e.currentTarget, [
-      friend
-        ? { label: t('network.set_mine'), icon: 'network', action: () => setTrust(peer, 'mine') }
-        : { label: t('network.set_friend'), icon: 'shield', action: () => setTrust(peer, 'friend') },
-      ...(friend && !peer.set_aside_at ? [{ label: t('network.present'), icon: 'network',
-        action: () => presentMachines(peer) }] : []),
-      ...(shared ? [{ label: t('network.show_shared'), icon: 'file', action: () => showShared(peer) }] : []),
-      ...(consulted ? [{ label: t('network.show_consulted'), icon: 'search',
-        action: () => showConsulted(peer) }] : []),
-    ]);
-  };
-  row.querySelector('[data-act="restore"]')?.addEventListener('click', async () => {
-    try { state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/restore`); reload(); }
-    catch (e) { errorToast(e); }
-  });
-  row.querySelector('[data-act="refresh"]').onclick = async () => {
-    try { state.network = await post(`/network/peers/${encodeURIComponent(peer.node_id)}/refresh`); reload(); }
-    catch (e) { errorToast(e); }
-  };
-  row.querySelector('[data-act="unpair"]').onclick = () => unpair(peer, net);
-  return row;
+  return `
+    <div class="peer-facts">${peerFacts(peer)}${netFact(peer)}</div>
+    ${presented ? `<div class="peer-ledger faint" title="${esc(t('network.introduced_title'))}">${esc(presented)}</div>` : ''}
+    ${offlineHint(peer, net)}
+    <div class="peer-ledger faint">${esc(t('network.ledger_received', { time: duration(peer.received_s), n: peer.received_units }))}
+      · ${esc(t('network.ledger_given', { time: duration(peer.given_s), n: peer.given_units }))}</div>
+    ${peer.received_chats || peer.given_chats ? `<div class="peer-ledger faint">${esc(t('network.ledger_chats',
+      { received: peer.received_chats || 0, given: peer.given_chats || 0 }))}</div>` : ''}
+    ${peer.checked_units || peer.refused_units || peer.failed_units
+      ? `<div class="peer-ledger faint">${esc(reliability(peer))}</div>` : ''}
+    ${shared ? `<div class="peer-ledger faint">${esc(sharedText(shared))}</div>` : ''}
+    ${consulted ? `<div class="peer-ledger faint">${esc(consultedText(consulted))}</div>` : ''}
+    ${peer.set_aside_at ? `<div class="peer-aside">${icon('warn')}<div>${esc(t('network.set_aside_text',
+      { ago: ago(peer.set_aside_at), reason }))}</div></div>` : ''}`;
+}
+
+/** Les boutons d'une machine appairée (HTML), dans sa ligne dépliée : data-act, que
+ *  peerAction exécute. */
+export function peerButtons(peer) {
+  return `${peer.set_aside_at ? `<button class="btn sm primary" data-act="restore">${esc(t('network.restore'))}</button>` : ''}
+    <button class="btn sm" data-act="refresh">${icon('retry')}${esc(t('network.refresh'))}</button>
+    <button class="btn sm" data-act="options">${icon('more')}${esc(t('network.options'))}</button>
+    <button class="btn sm danger" data-act="unpair">${icon('x')}${esc(t('network.unpair'))}</button>`;
+}
+
+/** Une action d'une machine appairée (peerButtons) ; anchor : le bouton, pour le menu. */
+export async function peerAction(act, peer, net, anchor) {
+  const id = encodeURIComponent(peer.node_id);
+  if (act === 'options') { peerMenu(anchor, peer); return; }
+  if (act === 'unpair') { await unpair(peer, net); return; }
+  if (act !== 'refresh' && act !== 'restore') return;
+  try { state.network = await post(`/network/peers/${id}/${act}`); reload(); }
+  catch (e) { errorToast(e); }
+}
+
+function peerMenu(anchor, peer) {
+  const friend = peer.trust === 'friend';
+  menu(anchor, [
+    friend
+      ? { label: t('network.set_mine'), icon: 'network', action: () => setTrust(peer, 'mine') }
+      : { label: t('network.set_friend'), icon: 'shield', action: () => setTrust(peer, 'friend') },
+    ...(friend && !peer.set_aside_at ? [{ label: t('network.present'), icon: 'network',
+      action: () => presentMachines(peer) }] : []),
+    ...(peer.shared ? [{ label: t('network.show_shared'), icon: 'file', action: () => showShared(peer) }] : []),
+    ...(peer.consulted ? [{ label: t('network.show_consulted'), icon: 'search',
+      action: () => showConsulted(peer) }] : []),
+  ]);
 }
 
 async function unpair(peer, net) {

@@ -58,6 +58,7 @@
   "public_connecting": "Connexion au réseau public…",
   "public_key": "Clé publique de cette machine :",
   "public_none": "Aucun autre nœud public en ligne pour l'instant.",
+  "public_show": "Les voir dans « Machines connectées »",
   "public_title": "Rejoindre le réseau public",
   "public_fold": "Réseau public",
   "public_sub_needs_internet": "Internet à activer d'abord",
@@ -73,7 +74,7 @@
   "sub_off": "coupé",
   "sub_starting": "démarrage…",
   "sub_connecting": "connexion…",
-  "add_hint": "Une machine de ton réseau n'apparaît pas dans « Machines détectées » ? Ajoute-la par son adresse IP.",
+  "add_hint": "Une machine de ton réseau n'apparaît pas dans « Machines connectées » (Réseau local) ? Ajoute-la par son adresse IP.",
   "firewall_html": "À l'activation, Windows demandera sans doute l'autorisation du pare-feu pour Python : accepte pour les <b>réseaux privés</b> seulement.",
   "profile_pending": "Profil pas encore reçu.",
   "friend_profile": "profil réduit (cette machine te compte parmi ses amis)",
@@ -127,45 +128,22 @@
   "consulted": "A cherché dans tes bibliothèques : {facts}, la dernière {ago}",
   "offload_on": "Tes tâches peuvent leur être confiées.",
   "offload_off": "Tu ne leur confies pas tes tâches.",
-  "peers_title": "Machines appairées",
-  "peers_sub": {
-    "one": "{n} machine, {online} en ligne",
-    "other": "{n} machines, {online} en ligne"
-  },
-  "peers_sub_none": "aucune pour l'instant",
-  "intros_pending": {
-    "one": "{n} présentation à confirmer",
-    "other": "{n} présentations à confirmer"
-  },
-  "set_aside_count": {
-    "one": "{n} mise de côté",
-    "other": "{n} mises de côté"
-  },
   "peers_hint": "Tes machines et celles de tes amis. Les échanges sont chiffrés, et chaque machine applique ses propres règles de partage (réglables dans « Cette machine »). Un ami ne reçoit que les bibliothèques partagées avec tes amis. {offload} Une machine d'ami rencontre aussi tes autres machines, et les siennes les tiennes, avec votre accord.",
   "intro_waiting": "présentée par « {presenter} » {ago} · attend ta réponse",
   "answer": "Répondre",
   "no_peers": "Aucune machine appairée pour l'instant.",
   "check_failed": "contrôle échoué",
-  "online_title": "En ligne",
-  "offline_title": "Hors ligne",
   "friend_title": "Machine d'un ami : droits plus étroits",
-  "friend": "ami",
   "set_aside": "mise de côté",
   "introduced_title": "Appairée par une présentation : pas de code à comparer, la confiance vient de la machine qui l'a présentée",
   "via_internet": "par Internet",
   "unknown_address": "adresse inconnue",
-  "online": "en ligne",
   "seen": "vue {ago}",
-  "never_seen": "jamais vue",
   "refresh": "Actualiser",
   "options": "Options",
   "unpair": "Retirer l'appairage",
   "set_aside_text": "Mise de côté {ago} : {reason}. Plus rien ne lui est confié.",
   "restore": "Rétablir",
-  "working_for_me": {
-    "one": "Calcule pour toi en ce moment : {n} unité",
-    "other": "Calcule pour toi en ce moment : {n} unités"
-  },
   "ledger_received": {
     "one": "A calculé pour toi : {time} ({n} unité)",
     "other": "A calculé pour toi : {time} ({n} unités)"
@@ -195,7 +173,7 @@
   },
   "offline_hint": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local).",
   "offline_hint_peer_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; par Internet, il faut aussi activer « Internet » sur elle.",
-  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus haut, pour la joindre même hors du réseau local.",
+  "offline_hint_internet": "Hors ligne : vérifie qu'elle est allumée et qu'AIODOS y tourne, sur le même Wi-Fi que cette machine, sans VPN qui bloque le réseau local (dans NordVPN, par exemple : autoriser le réseau local) ; ou active « Internet » plus bas, pour la joindre même hors du réseau local.",
   "internet_direct": "Internet : en direct",
   "internet_relay": "Internet : par un relais",
   "quoted": "« {name} »",
@@ -227,22 +205,7 @@
   },
   "consulted_title": "Recherches de « {name} »",
   "consulted_text": "Ses recherches dans les bibliothèques que tu lui ouvres, de la plus récente à la plus ancienne, avec les documents d'où viennent les passages qu'elle a reçus. Ses questions ne sont pas gardées.",
-  "visible_title": "Machines détectées",
-  "visible_sub": {
-    "one": "{n} machine à appairer",
-    "other": "{n} machines à appairer"
-  },
-  "visible_sub_none": "aucune pour l'instant",
-  "visible_sub_off": "réseau local coupé",
-  "pairing_pending": {
-    "one": "{n} appairage en cours",
-    "other": "{n} appairages en cours"
-  },
-  "pairing_to_confirm": {
-    "one": "{n} appairage à confirmer ici",
-    "other": "{n} appairages à confirmer ici"
-  },
-  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus haut).",
+  "visible_off": "Active le réseau local pour voir les autres machines AIODOS de ton réseau (par Internet : « Inviter un ami » ou une de tes machines, plus bas).",
   "visible_hint": "Les nœuds AIODOS qui s'annoncent sur ton réseau. Si une machine n'apparaît pas, ajoute-la par son adresse IP dans « Réseau local ».",
   "address_placeholder": "Adresse : 192.168.1.20 ou 192.168.1.20:47701",
   "add": "Ajouter",

@@ -87,11 +87,14 @@ Langue.
    que l'utilisateur revient, les unités en cours sont rendues.
 4. **Voir qui est là** (vue Réseau, « Machines connectées » ; nombre de machines en
    ligne à droite de la barre du bas) : comme la liste des pairs d'un client BitTorrent,
-   chaque machine appairée avec son chemin (réseau local, Internet en direct ou par un
-   relais) et son temps de réponse, ce qu'elle prête (sa puissance, en pause ou non,
-   ses modèles, sa carte graphique), ce qu'elle calcule pour toi et toi pour elle en ce
-   moment, et le temps de calcul échangé. Un ami voit seulement si ton partage est
-   activé, pas ton activité.
+   un seul bloc dépliant pour toutes les machines, chacune une fois, avec des filtres
+   (réseau public, mes machines, amis, réseau local). Une ligne courte par machine (un
+   inconnu du réseau public n'est dit que par les 8 premiers caractères de sa clé), qui
+   se déplie : son chemin (réseau local, Internet en direct ou par un relais) et son
+   temps de réponse, ce qu'elle prête (sa puissance, en pause ou non, ses modèles, sa
+   carte graphique), ce qu'elle calcule pour toi et toi pour elle en ce moment, le temps
+   de calcul échangé, et ses actions (appairer, vérifier un code, retirer…). Un ami voit
+   seulement si ton partage est activé, pas ton activité.
 
 Comment le travail circule :
 

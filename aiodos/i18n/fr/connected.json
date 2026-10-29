@@ -26,38 +26,6 @@
   },
   "you_answer_its_chat": "tu réponds à sa conversation",
   "nothing_now": "rien en ce moment",
-  "received_units": {
-    "one": "{n} unité calculée pour toi",
-    "other": "{n} unités calculées pour toi"
-  },
-  "received": "reçu {time}",
-  "given_units": {
-    "one": "{n} unité calculée pour elle",
-    "other": "{n} unités calculées pour elle"
-  },
-  "given": "donné {time}",
-  "chats_for_you": "{n} pour toi",
-  "chats_for_it": "{n} pour elle",
-  "refused_results": {
-    "one": "{n} résultat refusé",
-    "other": "{n} résultats refusés"
-  },
-  "failures": {
-    "one": "{n} échec",
-    "other": "{n} échecs"
-  },
-  "trouble_title": "Résultats qu'elle t'a rendus et qui ont été refusés (faux ou illisibles), et unités qu'elle n'a pas pu calculer pour toi",
-  "chats_title": "Réponses de ses modèles à tes conversations, et des tiens aux siennes",
-  "chats": {
-    "one": "conversation : {list}",
-    "other": "conversations : {list}"
-  },
-  "nothing_yet": "rien encore",
-  "online_of": "{online} en ligne sur {total}",
-  "lending": {
-    "one": "{n} prête sa puissance",
-    "other": "{n} prêtent leur puissance"
-  },
   "helping": {
     "one": "{n} travaille pour toi",
     "other": "{n} travaillent pour toi"
@@ -67,19 +35,58 @@
   "me_not_lending": "cette machine ne prête pas en ce moment",
   "nudge": "Tes machines et tes amis t'ont déjà rendu {n} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour participer : active « Prêter mes modèles » ou « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.",
   "nudge_no_models": "Tes machines et tes amis t'ont déjà rendu {n} services (conversations, calculs), et cette machine ne prête encore rien en retour. Pour participer : installe un modèle, puis active « Prêter mes modèles » ou « Prêter ma puissance ». Ceux qui participent passent devant quand une machine est occupée.",
-  "introduced_by": "Présentée par « {name} »",
-  "introduced_by_removed": "Présentée par une machine retirée depuis",
-  "friend": "ami",
-  "col_machine": "Machine",
   "col_link": "Liaison",
   "col_lends": "Prête",
   "col_now": "En ce moment",
-  "col_exchanged": "Échangé",
   "title": "Machines connectées",
-  "hint": "En direct : qui est en ligne, qui prête sa puissance, et ce que chaque machine fait pour l'autre. Nouvelles toutes les 15 secondes environ.",
-  "empty": "Aucune machine appairée : appaire tes machines plus bas.",
+  "title_count": "Machines connectées · {n}",
+  "hint": "En direct, toutes les machines que voit celle-ci : le réseau public, tes machines, tes amis, ton réseau local. Qui est en ligne, qui prête, et ce que chacune fait pour l'autre. Nouvelles toutes les 15 secondes environ.",
+  "empty": "Aucune machine pour l'instant : rejoins le réseau public, invite un ami ou appaire tes machines, plus bas.",
   "network_off": "Réseau coupé : active Internet ou le réseau local, plus bas, pour retrouver les autres machines.",
-  "rail_no_peers": "Aucune machine appairée",
+  "filters": "Filtrer les machines",
+  "filter_all": "Toutes",
+  "filter_public": "Réseau public",
+  "filter_mine": "Mes machines",
+  "filter_friend": "Amis",
+  "filter_local": "Réseau local",
+  "kind_public": "réseau public",
+  "kind_mine": "à moi",
+  "kind_friend": "ami",
+  "kind_local": "réseau local",
+  "stranger": "Inconnu {key}…",
+  "state_free": "libre",
+  "state_busy": "occupée",
+  "state_paused": "en pause",
+  "state_online": "en ligne",
+  "state_detected": "à appairer",
+  "state_pairing": "appairage en cours",
+  "state_confirm": "appairage à confirmer ici",
+  "waiting_you": {
+    "one": "{n} attend ta réponse",
+    "other": "{n} attendent ta réponse"
+  },
+  "show_more": {
+    "one": "Voir l'autre machine",
+    "other": "Voir les {n} autres"
+  },
+  "show_less": "Voir moins",
+  "hint_public": "Des inconnus, par Internet : AIODOS les relie pour mettre en commun leur puissance de calcul. Jamais nommés, ils sont dits par les 8 premiers caractères de leur clé.",
+  "public_off": "Tu n'as pas rejoint le réseau public : active « Rejoindre le réseau public », plus bas.",
+  "public_stranger": "Une machine du réseau public : un inconnu, jamais nommé. Seuls les 8 premiers caractères de sa clé sont montrés.",
+  "public_key_short": "clé {key}…",
+  "public_lends": "prête aux inconnus",
+  "public_lends_free": "prête aux inconnus · une place libre",
+  "public_lends_busy": "prête aux inconnus · pas de place libre en ce moment",
+  "public_lends_no": "ne prête pas aux inconnus : dans l'annuaire seulement",
+  "public_speed": "{n} jetons/s",
+  "public_answering": "répond à ta conversation · {model}",
+  "models_list": "Modèles : {list}",
+  "images_list": "Modèles d'images prêtés aux inconnus : {list}",
+  "images_line": "images : {list}",
+  "address": "adresse {address}",
+  "also_public": "aussi dans l'annuaire du réseau public (clé {key}…)",
+  "local_hint": "Une machine AIODOS de ton réseau local, pas encore appairée. Appaire-la pour que vos machines calculent l'une pour l'autre ; tu diras si c'est une des tiennes ou celle d'un ami.",
+  "intro_hint": "« {presenter} » te présente cette machine, une autre machine de la même personne. Réponds pour l'accepter ou la refuser.",
   "rail_online": {
     "one": "{n} machine en ligne",
     "other": "{n} machines en ligne"

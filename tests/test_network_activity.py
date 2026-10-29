@@ -31,6 +31,11 @@ def test_a_paired_machine_is_seen_live_with_its_sharing_state(two_nodes):
     assert sharing["enabled"] is True and isinstance(sharing["active"], bool) and sharing["detail"]
     assert live["for_me"] == [] and live["for_it"] == []
     assert live["chats_for_me"] == 0 and live["chats_for_it"] == 0
+    # … et dans la liste unique « Machines connectées » (machines_view.py), une seule fois
+    machines = b.api("GET", "/network")["machines"]
+    [line] = [m for m in machines if m["node_id"] == a_id]
+    assert line["kind"] == "mine" and line["online"] and "lan" in line["paths"]
+    assert line["state"] in ("free", "paused") and line["actions"] == ["refresh", "options", "unpair"]
 
     # B ne prête pas sa puissance : A le sait aussi
     peer_b = a.wait_for(lambda: next((p for p in a.api("GET", "/network")["peers"]

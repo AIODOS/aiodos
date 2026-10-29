@@ -26,38 +26,6 @@
   },
   "you_answer_its_chat": "you're answering its conversation",
   "nothing_now": "nothing right now",
-  "received_units": {
-    "one": "{n} unit computed for you",
-    "other": "{n} units computed for you"
-  },
-  "received": "received {time}",
-  "given_units": {
-    "one": "{n} unit computed for it",
-    "other": "{n} units computed for it"
-  },
-  "given": "given {time}",
-  "chats_for_you": "{n} for you",
-  "chats_for_it": "{n} for it",
-  "refused_results": {
-    "one": "{n} result refused",
-    "other": "{n} results refused"
-  },
-  "failures": {
-    "one": "{n} failure",
-    "other": "{n} failures"
-  },
-  "trouble_title": "Results it returned to you that were refused (wrong or unreadable), and units it couldn't compute for you",
-  "chats_title": "Answers from its models to your conversations, and from yours to its own",
-  "chats": {
-    "one": "conversation: {list}",
-    "other": "conversations: {list}"
-  },
-  "nothing_yet": "nothing yet",
-  "online_of": "{online} online out of {total}",
-  "lending": {
-    "one": "{n} is lending its power",
-    "other": "{n} are lending their power"
-  },
   "helping": {
     "one": "{n} is working for you",
     "other": "{n} are working for you"
@@ -67,19 +35,58 @@
   "me_not_lending": "this machine isn't lending right now",
   "nudge": "Your machines and your friends have already helped you {n} times (conversations, computations), and this machine doesn't lend anything in return yet. To take part: turn on “Lend my models” or “Lend my computing power”. Those who take part go first when a machine is busy.",
   "nudge_no_models": "Your machines and your friends have already helped you {n} times (conversations, computations), and this machine doesn't lend anything in return yet. To take part: install a model, then turn on “Lend my models” or “Lend my computing power”. Those who take part go first when a machine is busy.",
-  "introduced_by": "Introduced by “{name}”",
-  "introduced_by_removed": "Introduced by a machine since removed",
-  "friend": "friend",
-  "col_machine": "Machine",
   "col_link": "Link",
   "col_lends": "Lends",
   "col_now": "Right now",
-  "col_exchanged": "Exchanged",
   "title": "Connected machines",
-  "hint": "Live: who is online, who lends their computing power, and what each machine does for the other. Updated about every 15 seconds.",
-  "empty": "No paired machines: pair your machines below.",
+  "title_count": "Connected machines · {n}",
+  "hint": "Live, every machine this one sees: the public network, your machines, your friends, your local network. Who is online, who lends, and what each one does for the other. Updated about every 15 seconds.",
+  "empty": "No machines yet: join the public network, invite a friend or pair your machines, below.",
   "network_off": "Network off: turn on the Internet or the local network below to reach the other machines.",
-  "rail_no_peers": "No paired machines",
+  "filters": "Filter the machines",
+  "filter_all": "All",
+  "filter_public": "Public network",
+  "filter_mine": "My machines",
+  "filter_friend": "Friends",
+  "filter_local": "Local network",
+  "kind_public": "public network",
+  "kind_mine": "mine",
+  "kind_friend": "friend",
+  "kind_local": "local network",
+  "stranger": "Stranger {key}…",
+  "state_free": "free",
+  "state_busy": "busy",
+  "state_paused": "paused",
+  "state_online": "online",
+  "state_detected": "to pair",
+  "state_pairing": "pairing in progress",
+  "state_confirm": "pairing to confirm here",
+  "waiting_you": {
+    "one": "{n} waiting for your answer",
+    "other": "{n} waiting for your answer"
+  },
+  "show_more": {
+    "one": "Show the other machine",
+    "other": "Show the {n} others"
+  },
+  "show_less": "Show fewer",
+  "hint_public": "Strangers, over the Internet: AIODOS connects them to pool their computing power. Never named, they are shown by the first 8 characters of their key.",
+  "public_off": "You haven't joined the public network: turn on “Join the public network” below.",
+  "public_stranger": "A public network machine: a stranger, never named. Only the first 8 characters of its key are shown.",
+  "public_key_short": "key {key}…",
+  "public_lends": "lends to strangers",
+  "public_lends_free": "lends to strangers · a free slot",
+  "public_lends_busy": "lends to strangers · no free slot right now",
+  "public_lends_no": "doesn't lend to strangers: in the directory only",
+  "public_speed": "{n} tokens/s",
+  "public_answering": "answering your conversation · {model}",
+  "models_list": "Models: {list}",
+  "images_list": "Image models lent to strangers: {list}",
+  "images_line": "pictures: {list}",
+  "address": "address {address}",
+  "also_public": "also in the public network directory (key {key}…)",
+  "local_hint": "An AIODOS machine on your local network, not paired yet. Pair it so your machines compute for each other; you'll say whether it's one of yours or a friend's.",
+  "intro_hint": "“{presenter}” is introducing this machine, another machine belonging to the same person. Answer to accept or decline it.",
   "rail_online": {
     "one": "{n} machine online",
     "other": "{n} machines online"

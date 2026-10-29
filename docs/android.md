@@ -200,8 +200,8 @@ d'autres comptes de la machine ; chaque refus dit quoi corriger.
 
 1. **Sur le téléphone** : ouvrir l'appli AIODOS et la laisser ouverte.
 2. **Sur le PC**, vue « Réseau local » (activer le réseau si besoin) :
-   - le téléphone apparaît parfois tout seul dans « Machines détectées », sous le nom de
-     son modèle, par exemple « Google Pixel 7 » ;
+   - le téléphone apparaît parfois tout seul dans « Machines connectées » (filtre « Réseau
+     local »), sous le nom de son modèle, par exemple « Google Pixel 7 » ;
    - sinon, saisir son adresse (`192.168.1.42`) puis « Ajouter ».
 3. **Sur le PC**, « Appairer » : un code à 6 chiffres s'affiche sur les deux écrans.
    **Confirmer sur chacun**, seulement si les codes sont identiques. Le PC et l'appli
@@ -282,7 +282,7 @@ compagnon se construisait à part : voir [compagnon/README.md](../compagnon/READ
 | « En pause : batterie à 74 % (reprise à 80 %) » | charge insuffisante | attendre, ou baisser « Batterie minimale » ; préférer un chargeur secteur |
 | « En pause : batterie à 41 °C (reprise à 37 °C) » | batterie trop chaude | retirer la coque, aérer, baisser « Puissance prêtée » |
 | Le téléphone ne reçoit jamais rien | modèle d'embedding absent du téléphone ou différent de celui du PC (embeddinggemma : « Installer un modèle » ; sous Termux, colonne ID de `ollama list`), « Me faire aider » désactivé sur le PC, bibliothèque gardée sur le PC, travail fait seulement d'images, de sons ou de documents que le téléphone ne sait pas lire (paquet de lecture manquant), ou versions d'AIODOS différentes | vérifier dans cet ordre ; le journal du nœud (`data/logs/aiodos.log`) dit pourquoi une unité a été rendue |
-| Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | rouvrir l'appli (sous Termux : relancer `sh lancer-noeud.sh`) ; sur le même Wi-Fi, le téléphone s'annonce tout seul dans « Machines détectées » |
+| Le PC n'arrive pas à ajouter le téléphone | autre réseau Wi-Fi, réseau « invité », adresse du téléphone changée, nœud arrêté | rouvrir l'appli (sous Termux : relancer `sh lancer-noeud.sh`) ; sur le même Wi-Fi, le téléphone s'annonce tout seul dans « Machines connectées » (Réseau local) |
 | `[Process completed (signal 9) - press Enter]` (Termux) | phantom process killer | étape 6 de l'ancienne méthode |
 | pip : « no matching distribution » ou « has no usable wheels » (Termux) | le TUR n'a pas (encore) cette version | étape 4 de l'ancienne méthode |
 | `ImportError … _cffi_backend` (Termux) | `cffi` non compilé (clang manquait) | `pkg install clang && pkg reinstall python-cryptography` |

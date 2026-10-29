@@ -215,8 +215,10 @@ class Group:
         with self._lock:
             self._purge()
             items = list(self._offers.values())
-        return [{"intro": o.intro, "machine": o.card["name"],
-                 "presenter": _name(o.presenter), "created": o.created} for o in items]
+        # presenter_id : la machine qui présente (sa confiance sera celle de la présentée,
+        # machines_view.py range la ligne avec mes machines ou avec les amis)
+        return [{"intro": o.intro, "machine": o.card["name"], "presenter": _name(o.presenter),
+                 "presenter_id": o.presenter, "created": o.created} for o in items]
 
     # ------------------------------------------------------------ chez P
     def present(self, friend_id: str, only=None) -> dict:

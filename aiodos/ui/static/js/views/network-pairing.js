@@ -66,7 +66,7 @@ export async function confirmPairing(pending, text) {
 }
 
 /** Présentation reçue (appairage par groupe) : une autre machine de la même personne, présentée
- *  par une machine déjà appairée. Fermée sans répondre, elle attend dans « Machines appairées »
+ *  par une machine déjà appairée. Fermée sans répondre, elle attend dans « Machines connectées »
  *  (3 minutes) ; une seule question à la fois, les autres attendent là aussi. */
 let introOpen = false;
 
@@ -87,7 +87,7 @@ export async function answerIntroduction(ev) {
     // La réponse est l'état du réseau, à jour : la suivante s'y trouve, s'il en reste une
     state.network = await post('/network/introductions/answer',
       { intro: ev.intro, accept: r.ok, always: r.ok && r.checked });
-  } catch (e) { errorToast(e); reload(); return; }   // elle reste dans « Machines appairées »
+  } catch (e) { errorToast(e); reload(); return; }   // elle reste dans « Machines connectées »
   reload();
   const next = (state.network?.introductions || [])[0];
   if (next) answerIntroduction(next);

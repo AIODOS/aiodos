@@ -17,8 +17,8 @@ from aiodos import settings
 from aiodos.i18n import t
 from aiodos.jobs import queue
 from aiodos.node import android
-from aiodos.network import (activity, client, consult, invitations, peers, placement, profile,
-                            route, sharing)
+from aiodos.network import (activity, client, consult, invitations, machines_view, peers,
+                            placement, profile, route, sharing)
 from aiodos.network.beacons import BeaconChecks
 from aiodos.network.client import PeerError
 from aiodos.network.connections import GuardedH11
@@ -398,7 +398,9 @@ class NetworkManager:
         activity.note(peer["node_id"], reply, elapsed_ms)         # son partage, en direct
         if want_profile:
             self._last_profile[peer["node_id"]] = time.time()
-            await asyncio.to_thread(peers.set_profile, peer["node_id"], reply)
+            # Sa clé du réseau public reste en mémoire (activity.note), jamais en base
+            kept = {key: value for key, value in reply.items() if key != "public_key"}
+            await asyncio.to_thread(peers.set_profile, peer["node_id"], kept)
         await self.internet.exchange(full)                # clés Internet (compagnon)
         if full.get("trust") == sharing.MINE:              # retrait ou mise de côté manqués
             await asyncio.to_thread(self.group.flush, peer["node_id"])
@@ -489,7 +491,7 @@ class NetworkManager:
         self.internet.annotate(paired)
         working = self.worker.snapshot() if self.worker and self.running else None
         activity.annotate(paired, (working or {}).get("working"))   # en direct (activity.py)
-        return {
+        snap = {
             "enabled": self.enabled, "local": self.local, "running": self.running,
             "error": self.error,
             "node_id": self.node_id, "name": self.name(), "port": self.p2p_port,
@@ -506,6 +508,16 @@ class NetworkManager:
             "offload": bool(settings.get("offload_enabled")),
             "sharing": working,
         }
+        # Toutes les machines en une liste, chacune une fois (machines_view.py) : mes machines
+        # appairées vues aussi sur le réseau local (leurs balises) ou dans l'annuaire public
+        lan = {v["node_id"]: {"address": v["address"], "port": v["port"]}
+               for v in self.visible.values() if v["node_id"] in paired_ids}
+        snap["machines"] = machines_view.build(snap, lan, activity.public_keys(),
+                                               machines_view.public_asking())
+        # Les nœuds du réseau public sont dans « machines », leur clé abrégée : l'interface
+        # ne reçoit plus leur clé entière
+        snap["public"] = {k: v for k, v in snap["public"].items() if k != "nodes"}
+        return snap
 
     def publish(self, event: dict):
         self.bus.publish(event)
