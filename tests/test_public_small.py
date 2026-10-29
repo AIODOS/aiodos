@@ -16,7 +16,7 @@ import subprocess
 import pytest
 from fastapi.testclient import TestClient
 
-from aiodos import db, paths
+from aiodos import db, paths, settings
 from aiodos.api.server import create_app
 from aiodos.network import peers, placement, remote_models, reputation
 from aiodos.node import speed
@@ -24,12 +24,13 @@ from tests import i18n_js
 from tests.test_collusion import establish, seen
 from tests.test_public_chat import (AUTH, BIG, OTHER, PC, SMALL, THIRD, TOKEN, AUTO, Executor,
                                     ask, at, checkable, directory, local_models, measured, node,
-                                    routes)
+                                    notices, routes)
 from tests.test_public_chat import companion, opened  # noqa: F401 (fixtures)
 
 NODE = shutil.which("node")
 UNVERIFIED = {"type": "unverified"}
 LONG = ["mot, "] * 30                   # une réponse assez longue pour être mesurée (16 jetons)
+LIAR, HUGE, LARGE = "qwen3.5:999b", "gpt-oss:120b", "qwen2.5:72b"
 
 
 def plan(ex=None, bigger=False):
@@ -221,6 +222,91 @@ def test_the_trial_once_an_hour_and_never_on_a_claim_alone(monkeypatch, companio
     assert placement._trial["at"] is None
     db.execute("DELETE FROM peers")
     assert plan() == ([at(PC, SMALL), SMALL], {at(PC, SMALL)})
+
+
+# ------------------------------------------------- avec un modèle plus gros, accepté
+def test_the_author_s_phone_and_his_pc_with_a_bigger_model(monkeypatch, companion, opened):
+    """Le cas de l'auteur (décision du 29/10/2026 après-midi) : le S23 converse avec
+    qwen3.5:0.8b, son PC, public et non établi, ne prête que qwen3.5:9b. L'accord « modèle plus
+    gros » pas encore demandé : la carte le propose, le téléphone répond lui-même (l'amorce
+    n'est pas prise) ; refusé : le téléphone, sans carte ; donné : le PC répond avec le 9b,
+    d'abord par l'amorce, puis par sa vitesse mesurée, marqué « non vérifiable pour
+    l'instant »."""
+    phone(monkeypatch)
+    local_models(monkeypatch, SMALL)
+    directory(node(PC, BIG, tps=60))
+    companion.script[PC] = ("answer", LONG)
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        events = ask(ui, "Bonjour")                       # pas encore demandé
+        assert notices(events) == ["public_bigger"]
+        assert next(e for e in events if e["type"] == "notice")["model"] == BIG
+        assert routes(events) == [SMALL] and companion.requests == []
+        assert placement._trial["at"] is None
+        settings.set_value("public_bigger_model", False)  # « Non »
+        events = ask(ui, "Bonjour")
+        assert routes(events) == [SMALL] and notices(events) == []
+        settings.set_value("public_bigger_model", True)   # « Oui » : l'amorce, avec le 9b
+        events = ask(ui, "Bonjour")
+        assert routes(events) == [at(PC, BIG)] and route_events(events)[0]["unverified"] is True
+        assert companion.requests[-1]["body"]["model"] == BIG
+        saved = last_message(ui, events)
+        assert saved["model"] == at(PC, BIG) and saved["unverified"] is True
+        assert reputation.speed(PC) is not None            # mesuré par sa réponse
+        again = ask(ui, "Encore", conversation_id=events[0]["conversation_id"])
+        assert routes(again) == [at(PC, BIG)] and route_events(again)[0]["unverified"] is True
+    # Le 9b devenu contrôlable (une machine établie le prête) : la règle d'avant, sans marque
+    directory(node(PC, BIG), checkable(BIG))
+    assert plan(bigger=True) == ([at(PC, BIG), SMALL], set())
+
+
+def test_a_bigger_model_by_the_small_network_rule_has_bounds(monkeypatch, companion, opened):
+    """Jamais par cette règle : un nom au-delà de SMALL_MAX_PARAMS milliards (« qwen3.5:999b »,
+    « 120b », même mesurés très rapides ; une telle machine répond avec un modèle plus petit
+    qu'elle a, s'il est dans la borne), une machine en faute, une machine qu'on n'a pas
+    mesurée sur un PC, un modèle qu'une machine établie prête (même écartée quelques
+    minutes), ni sans l'accord. Avec ce modèle aussi, le plus gros accepté d'abord."""
+    local_models(monkeypatch, SMALL)
+    speed.note(100, 10)                                   # un PC, 10 jetons/s
+    bigger = lambda: plan(bigger=True)                    # noqa: E731
+    directory(node(PC, LIAR), node(OTHER, HUGE))
+    measured(PC, 500, established=False)
+    measured(OTHER, 500, established=False)
+    assert bigger() == ([SMALL], set()) and placement.bigger_public(SMALL) is None
+    directory(node(PC, LIAR, LARGE), node(OTHER, HUGE, BIG))      # 72 milliards : dans la borne
+    assert bigger() == ([at(PC, LARGE), at(OTHER, BIG), SMALL], {at(PC, LARGE), at(OTHER, BIG)})
+    assert placement.bigger_public(SMALL) == LARGE
+    assert plan() == ([SMALL], set())                     # sans l'accord : ce modèle seulement
+    # Avec ce modèle aussi : le plus gros accepté, sinon ce modèle ; marqué dans les deux cas
+    directory(node(PC, SMALL, BIG))
+    assert bigger() == ([at(PC, BIG), SMALL], {at(PC, BIG)})
+    assert plan() == ([at(PC, SMALL), SMALL], {at(PC, SMALL)})
+    # Jamais mesurée, sur un PC : rien (pas d'amorce)
+    directory(node(THIRD, BIG))
+    assert bigger() == ([SMALL], set()) and placement.bigger_public(SMALL) is None
+    # Une machine établie prête le 9b, écartée quelques minutes : pas par cette règle
+    witness = "9f" * 32
+    directory(node(PC, BIG), checkable(BIG))
+    reputation.bench(witness, "slow")
+    assert bigger() == ([SMALL], set()) and placement.bigger_public(SMALL) is None
+    # En faute (un contrôle raté, la mise de côté passée)
+    directory(node(PC, BIG))
+    assert bigger() == ([at(PC, BIG), SMALL], {at(PC, BIG)})
+    reputation.note_check(PC, False, "link")
+    db.execute("UPDATE public_reputation SET aside_until = ? WHERE key = ?", (db.now() - 1, PC))
+    assert bigger() == ([SMALL], set()) and placement.bigger_public(SMALL) is None
+
+
+def test_the_trial_with_a_bigger_model_on_a_phone(monkeypatch, companion, opened):
+    """L'amorce d'un téléphone, l'accord donné : la machine jamais mesurée qui n'a qu'un modèle
+    plus gros dans la borne est essayée avec lui ; un nom au-delà de la borne, jamais."""
+    phone(monkeypatch)
+    local_models(monkeypatch, SMALL)
+    directory(node(PC, HUGE, tps=99_999), node(OTHER, LIAR, tps=99_999))
+    assert plan(bigger=True) == ([SMALL], set()) and placement._trial["at"] is None
+    directory(node(PC, HUGE, tps=99_999), node(OTHER, BIG, tps=60))
+    assert placement.bigger_public(SMALL) == BIG
+    assert plan(bigger=True) == ([at(OTHER, BIG), SMALL], {at(OTHER, BIG)})
+    assert plan(bigger=True) == ([SMALL], set())          # une fois par heure ; rien d'autre
 
 
 # ----------------------------------------------------------------------- l'interface

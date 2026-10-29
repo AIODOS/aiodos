@@ -49,10 +49,64 @@ Décisions de l'auteur (27/10) :
    (§ 8) ; à modèle égal, les machines établies passent devant les autres. « Connue depuis
    quelques minutes » (`known_s`) ne suffit pas : une identité coûte ~2 s de calcul (§ 10),
    et quelques minutes d'attente rien ; passer devant cette machine, libre et qui a le modèle,
-   c'est recevoir toutes ses conversations de ce modèle. Coût accepté : sur un réseau encore
-   petit, sans aucune de mes machines, ce téléphone répond lui-même, plus lentement, tant que
-   la machine publique rapide n'est pas établie (elle sert toujours quand il est occupé, n'a
-   pas le modèle, ou pour un modèle plus gros accepté).
+   c'est recevoir toutes ses conversations de ce modèle.
+   **La règle des petits réseaux (décision de l'auteur, 29/10 à midi)** : la règle stricte
+   coûtait trop. Sur un réseau encore petit (son PC et son téléphone), aucune machine n'est
+   établie, et le PC ne répondait jamais aux conversations du téléphone, qui a son propre
+   petit modèle : le contraire de la raison d'être d'AIODOS. Désormais (`placement.py`) :
+   - **Tant qu'aucune machine publique établie ne prête ce modèle** (nom exact ; celles qui
+     prêtent, place libre ou non, même écartées quelques minutes après un échec : établies
+     quand même, et un menteur qui ferait échouer ou refuser une machine établie ne rouvrirait
+     pas ainsi la règle), une machine publique qui a ce modèle, **mesurée ici au moins
+     FASTER (2) fois plus rapide** que cette machine, passe devant **même non établie**. Même
+     règle de vitesse qu'avant : vitesse de cette machine inconnue, un PC ne laisse passer
+     personne, un téléphone toute machine mesurée. Jamais une machine **en faute** (un contrôle
+     raté, même passé, ou de côté pour de bon) ; de côté ou écartée, elle n'est déjà plus
+     candidate.
+   - **Avec un modèle plus gros** (décision de l'auteur, 29/10 après-midi : son PC n'a que
+     qwen3.5:9b, son téléphone converse avec qwen3.5:0.8b) : l'accord « modèle plus gros »
+     donné (`public_bigger_model`, demandé une fois par la carte du § 6, qui le propose aussi
+     sur un petit réseau), la même machine, aux mêmes conditions (non établie, sans faute,
+     mesurée 2 fois plus rapide, ou essayée par l'amorce ci-dessous), peut répondre avec un
+     modèle plus gros **pas contrôlable**, qu'aucune machine établie ne prête, et d'au plus
+     **72 milliards de paramètres** lus dans son nom (`SMALL_MAX_PARAMS` : ce qu'une machine
+     d'aujourd'hui fait tourner, ~40 Go en 4 bits, deux cartes de 24 Go ou un Mac de 64 Go ;
+     au-delà, « qwen3.5:999b » ou « 120b », seule une machine établie compte, comme avant).
+     Son plus gros tel modèle plutôt que ce modèle ; un modèle plus gros contrôlable passe
+     avant tout, sans marque (§ 6). Réponse marquée comme ci-dessous. Sans l'accord : ce
+     modèle seulement, et le téléphone répond lui-même si la machine publique ne l'a pas.
+   - Sa réponse est **marquée « non vérifiable pour l'instant »** (en plus de « Répondu par …,
+     sur une machine du réseau public »), avec une infobulle (et, d'un clic, une bulle sur un
+     écran tactile) : aucune autre machine ne peut encore contrôler cette réponse. La marque
+     est dite par l'événement « route » (`unverified`), gardée avec la réponse (une source
+     interne `{"type": "unverified"}`, `conversations.UNVERIFIED_SOURCE`), relue à
+     l'ouverture de la conversation (`unverified` de chaque message). Une machine qui prend le
+     relais sans cette règle (ce téléphone, après un refus) : pas de marque.
+   - **Dès qu'une machine établie prête ce modèle, la règle stricte reprend** : seules les
+     établies passent devant.
+   - **L'amorce de la mesure** : jamais servie ici, une machine n'est mesurée par rien, et ne
+     passerait jamais devant. Sur un **téléphone** seulement, sur un petit réseau (ci-dessus),
+     libre et premier de son plan (aucune de mes machines libre avec ce modèle), sans machine
+     déjà devant lui : **une** machine publique jamais mesurée ici, sans faute, est essayée
+     avant lui (avec ce modèle ou, l'accord donné, le modèle plus gros de la règle), **au
+     plus une fois par heure toutes machines confondues** (`TRIAL_S`, en mémoire : un
+     redémarrage la rouvre) ; sa réponse est marquée de même. La toute première
+     conversation du téléphone part ainsi vers le PC public ; mesuré par sa réponse, il passe
+     ensuite devant par sa vitesse. La vitesse annoncée n'y suffit jamais seule : c'est le
+     téléphone qui décide d'essayer, une fois par heure, quel que soit le nombre d'identités
+     d'un menteur ; l'annonce ne sert qu'à écarter une machine qui se dit elle-même trop lente
+     (moins de 2 fois ce téléphone, s'il est mesuré) et à départager, **après l'ancienneté**
+     (une identité neuve passe après une machine connue depuis longtemps). Un PC n'a pas
+     d'amorce : une machine jamais mesurée ne passe jamais devant lui.
+   - **Ce que cela coûte** : un menteur rapide (un tout petit modèle, du texte sans valeur)
+     passe devant comme un honnête tant qu'aucune machine établie n'a ce modèle, et lit les
+     conversations de ce modèle ; un menteur qui se dit rapide en obtient au plus une par heure
+     de chaque téléphone. La marque le dit à l'utilisateur. La vitesse mesurée compte le
+     chargement du modèle : une première réponse à froid peut faire paraître lente une machine
+     rapide, qui ne passe alors devant qu'après d'autres réponses (quand ce téléphone est
+     occupé, par exemple). Avec un modèle plus gros, un menteur peut annoncer un nom jusqu'à
+     72 milliards de paramètres et répondre avec un tout petit modèle : la lecture des
+     contrôles (§ 8) le prendra, mais seulement quand une autre machine aura ce modèle.
 2. **Se cacher.** Pour chaque conversation, le compagnon du demandeur crée une **clé
    jetable** et un point de terminaison Iroh **en relais seulement** : le prêteur voit la
    clé jetable et l'adresse du relais, jamais l'adresse ni la clé du demandeur. La clé
@@ -164,6 +218,14 @@ plafonds pour tout le public.
     machines apparues ensemble, de proche en proche, font un seul groupe ; trois groupes, c'est
     le prêteur et deux machines de contrôle indépendantes de lui et l'une de l'autre, quel que
     soit le prêteur), ou **une machine établie** qui l'a, ou une de mes machines.
+    **Sauf sur un petit réseau** (décision de l'auteur, 29/10 après-midi ; § 3, la règle des
+    petits réseaux) : l'accord donné, un modèle plus gros pas contrôlable, qu'aucune machine
+    établie ne prête, de **72 milliards de paramètres au plus** d'après son nom
+    (`SMALL_MAX_PARAMS`), chez une machine non établie, sans faute, mesurée ici 2 fois plus
+    rapide que cette machine (ou essayée par l'amorce d'un téléphone, une fois par heure) ;
+    réponse marquée « non vérifiable pour l'instant ». Au-delà de 72 milliards, seule une
+    machine établie compte. La carte d'accord le propose aussi dans ce cas
+    (`placement.bigger_public`).
   - **« Automatique · réseau public »** (`auto:*`, un téléphone sans modèle) : refusé, avec
     un message, si cette machine ou mes machines ont un modèle de conversation (une autre
     application pouvait l'envoyer et prendre le plus gros modèle public sans l'accord). Le
@@ -312,7 +374,9 @@ plafonds pour tout le public.
   - **Le choix des machines** (29/10 au soir, `placement.py`) : un modèle n'est
     « contrôlable » que chez trois groupes indépendants, une machine établie ou une de mes
     machines (§ 6) ; à modèle égal, les machines établies d'abord ; seule une machine établie
-    passe devant cette machine (§ 3) ; le repli « rien de contrôlable » prend une machine
+    passe devant cette machine (§ 3), sauf sur un petit réseau, quand aucune machine établie
+    ne prête ce modèle (règle des petits réseaux, 29/10 à midi : réponse marquée « non
+    vérifiable pour l'instant ») ; le repli « rien de contrôlable » prend une machine
     établie, puis une qui a bien servi, puis la plus ancienne, avant la taille (§ 6).
 
 ## 9. Ce qu'on ajoute, fichier par fichier
@@ -335,7 +399,9 @@ plafonds pour tout le public.
 - `aiodos/network/public_chat.py` (nouveau) : `chat_stream` vers une machine publique par
   le compagnon.
 - `aiodos/network/placement.py` : candidats publics (identifiant `public:<clé>`), ordre du
-  § 3.
+  § 3 ; la règle des petits réseaux et l'amorce d'un téléphone (29/10), la marque « non
+  vérifiable pour l'instant » (`routes/chat.py`, `chat/conversations.py`, `views/chat.js`,
+  `views/models.js`).
 - `aiodos/network/spot_check.py` (nouveau) et `aiodos/network/reputation.py` (nouveau,
   table SQLite) : § 8 ; `aiodos/network/public_refusals.py` (nouveau, en mémoire) : les
   refus « avant calcul » qui contredisent le profil, § 8.
@@ -356,8 +422,8 @@ forcé.
 
 ## 10. Hors de cette version
 
-Vidéos pour les inconnus (les images : § 11) ; pièces jointes ; réputation partagée ;
-paiement ou crédit (phase3-incitation.md).
+Pièces jointes ; réputation partagée ; paiement ou crédit (phase3-incitation.md). (Les images
+et les vidéos pour les inconnus : § 11.)
 
 **Fait le 29/10 : la preuve de travail sur la clé du nœud public** (compagnon,
 `public_identity.rs`, f1a0119). SHA-256(« aiodos/public/pow » ‖ clé publique) doit commencer
@@ -382,7 +448,7 @@ charge : un flot d'identités devient coûteux, pas impossible.
   ne reconnaît pas, donc répondre honnêtement presque toujours ; et seule une machine établie
   passe devant cette machine.
 
-## 11. Images (29/10/2026)
+## 11. Images et vidéos (29/10/2026)
 
 **Pourquoi.** L'auteur a installé AIODOS sur son PC (Z-Image Turbo) et sur son téléphone
 (aucun modèle d'images), sans les appairer : ils ne se voient que par le réseau public. Le
@@ -474,9 +540,109 @@ calcul, « Création par une machine du réseau public ». Le mode « Créer » 
 « · réseau public » quand une machine le prête (sauf « Sur mes machines seulement », ou
 l'accord refusé).
 
-**Hors de cette version** : les vidéos ; une image de départ (retouche, image jointe) ; le
-contrôle au hasard des images ; un modèle à licence restrictive.
+**Hors de cette version** : une image de départ (retouche, image jointe) ; le contrôle au
+hasard des images et des vidéos ; un modèle à licence restrictive.
 
 **Essais** : `tests/test_public_imaging.py` (le prêteur derrière le vrai serveur entre
 machines avec un faux moteur d'images ; le demandeur par un faux compagnon qui relaie au
 prêteur ou répond ce qu'on lui dicte ; l'accord, la création et son unité de bout en bout).
+
+### Vidéos (29/10/2026, l'après-midi)
+
+**Pourquoi.** L'auteur : « il faut que ça soit pareil pour les vidéos ». Le téléphone n'a pas
+de modèle de vidéos, le PC a Wan 2.1 ; la charte version 4 dit déjà que les vidéos suivent la
+règle des images. Même chemin, mêmes règles ; seules les bornes et les délais changent.
+
+**Deux décisions prises sans l'auteur** (révisables) :
+- **Un seul réglage de chaque côté**, ceux des images : `lend_images_public` pour prêter
+  (« Prêter ma carte graphique aux images et vidéos d'inconnus », activé par défaut) et
+  l'accord `public_images` pour demander (« Créer mes images et vidéos par le réseau
+  public »). Comme `lend_images_friends` et `images_from_friends`, qui valent déjà pour les
+  images et les vidéos de mes amis ; comme la charte (« ce prêt », un seul accord parmi les
+  trois). Les textes des réglages et de la carte disent « images et vidéos » ; un oui donné ce
+  matin pour une image vaut pour une vidéo (même lecteur, même données : la description, et
+  ce qui est créé). Un prêteur qui veut les images sans les vidéos ne peut pas le dire : un
+  réglage de plus s'il le faut.
+- **La marque `image:` aussi pour les modèles de vidéos** (`image:wan2.1-t2v-1.3b`), et non
+  `video:` : le catalogue dit qu'un modèle est une vidéo. Une marque `video:` n'est réservée
+  (`placement.RESERVED`) par aucun nœud d'aujourd'hui, et `public_chat.params` lit « 1.3b »
+  dans `video:wan2.1-t2v-1.3b` : un nœud de ce matin la prendrait pour un modèle de
+  conversation de 1,3 milliard de paramètres, plus gros qu'un `qwen3.5:0.8b` (« modèle plus
+  gros », « Automatique · réseau public »), lui enverrait des conversations refusées
+  (`no_model`) et finirait par écarter un prêteur honnête. `image:` est réservée depuis ce
+  matin, et un nœud de ce matin ignore un modèle d'images qui est une vidéo
+  (`public_imaging.lendable`). Reste un nœud d'avant le 29/10, qui ne réserve rien : il
+  pourrait de même prendre `image:wan2.1-t2v-1.3b` pour un modèle de conversation.
+
+**Côté prêteur** (`network/public_video.py`) : `POST /public/v1/video`, même admission et même
+place que les images (une seule pour tout le public : conversation, lecture, image ou vidéo),
+même filtre des descriptions avant tout calcul (`public_imaging._filtered`, journal « Vidéo
+refusée par le filtre (<code>) »). Demande : `{"v": 1, "model", "prompt", "negative", "width",
+"height", "frames", "steps", "seed"}`, rien d'autre. Bornes : un modèle de vidéos du catalogue
+sans licence restrictive (Wan 2.1, pas MiniMax H3), complet ici ; description et consigne
+négative de 2 000 caractères ; côtés au multiple et dans les bornes du modèle, **832 × 480
+pixels au plus** (ses trois formats y tiennent) ; un nombre d'images permis par le modèle
+(4k + 1 pour Wan), **81 au plus (5 s)** ; de 1 aux pas du modèle (**20**, pas le double comme
+pour une image : chaque pas d'une vidéo coûte des dizaines d'images) ; le guidage, la cadence,
+le décalage et l'échantillonneur sont ceux du modèle. Réponse : `meta`, signes de vie toutes
+les 5 s (`loading`, puis `computing` pendant tout le calcul, des minutes), puis `{"type":
+"video", "format": "webm", "bytes", "width", "height", "frames", "fps", "seconds"}`, le WebM en
+morceaux de 192 Kio, `done` ; ou `error`. **32 Mio au plus** (2 Mo mesurés pour 2 s en
+832 × 480). Le WebM part **réécrit** (`imaging/webm.py`, sans le décoder) : ses images seules.
+Un essai avec sd-cli (même code d'écriture que sd-server, le 29/10/2026) a montré que le WebM
+de sd.cpp porte une étiquette COMMENT avec **la description entière et les réglages** (noms
+des fichiers du modèle, version de sd.cpp, générateur) ; `--disable-image-metadata` l'en
+retire. `generate.video_body` demande donc aussi `embed_image_metadata: false`, comme pour une
+image (pour toutes les vidéos, celles de mes machines comprises ; non vérifié sur sd-server
+lui-même, qui lit pourtant ce champ). La pause de la puissance prêtée suit le calcul (une
+vidéo de 5 min à 60 % : 3 min 20 de pause) ; la veille arrête la vidéo dès que l'utilisateur,
+mes machines ou mes amis veulent la machine. Rien de gardé, comme pour une image. Le profil
+public annonce les modèles de vidéos prêtés après ceux d'images, sous `image:`, seulement si
+`lend_images_public` est permis.
+
+**Côté demandeur** (`network/public_video_ask.py`, `chat/public_creations.py`,
+`jobs/kinds/public_videos.py`) : le même parcours qu'une image (`public_images.create`) :
+règles de `public_consent.closed`, une machine qui prête ce modèle de vidéos avec une place,
+l'accord ; la carte dit « La description de ta vidéo part chez la machine d'un inconnu, qui
+voit aussi la vidéo créée… Créer tes images et tes vidéos par le réseau public ? ». Une unité
+`generate_video_public` par vidéo, de cette machine seulement, sur « net ». **Attendre son
+tour** (`public_images.in_turn`, pour les images aussi) : quand les machines qui prêtent ce
+modèle sont toutes occupées (par une autre création du même lot, par un inconnu, ou dans la
+pause de leur puissance prêtée), l'unité attend, un regard toutes les 3 s, le temps d'une
+création au plus (10 min pour une image, 45 pour une vidéo), au lieu d'échouer aussitôt :
+« Crée deux vidéos » avec un seul prêteur, qui n'a qu'une place, n'en rendait qu'une. Une
+demande hors des bornes du prêteur ne part pas (« Cette vidéo est trop grande pour une machine
+du réseau public (832 × 480 pixels et 5 secondes au plus) »). Le message « Aucun modèle de
+vidéos… » dit
+le réseau public quand il pourrait la créer (réglages, accord refusé, « Sur mes machines
+seulement », image jointe), ou qu'il ne le peut pas non plus (accord donné, personne n'en
+prête). **Délais** : 60 s pour le premier événement, chaque signe de vie repousse l'échéance
+de 20 s, **45 min en tout** (le chargement, 7,2 Go à lire ; le calcul, 3 min 42 pour 2 s sur
+une RTX 4070 portable, 2,5 fois plus pour 5 s, davantage sur une petite carte ; l'envoi) :
+au-delà, même avec des signes de vie, la vidéo est coupée et le prêteur écarté.
+
+**Vérifier ce qui revient** (`imaging/webm.py`, sans dépendance) : le WebM lu en entier, borné
+(64 Mio, 100 000 éléments) : en-tête et DocType `webm`, un seul segment jusqu'à la fin du
+fichier, **une seule piste vidéo** VP8, VP9 ou AV1, ni chiffrée ni compressée, de la taille
+demandée, **exactement le nombre d'images demandé** (sd.cpp en rend autant : 17 pour 17, 9
+pour 9, vérifié), sans regroupement, temps jamais décroissants, la première en image clé ;
+pour VP8, l'en-tête de chaque image clé (code de départ, taille). Puis **réécrit** : un
+en-tête, la durée (images ÷ cadence du modèle), la piste, une grappe par image retimée à la
+cadence ; rien d'autre (ni étiquettes, ni index, ni autre piste). Avec PyAV (installé avec
+faster-whisper sur un PC, absent d'un téléphone), la vidéo réécrite est **décodée en entier**
+(autant d'images, de la bonne taille) et **pas d'une seule couleur**. Vérifié sur les deux
+vidéos de sd-cli : réécrites, elles se décodent en images identiques à l'original (PyAV), sans
+la description. Un prêteur qui rend autre chose est écarté 10 min, comme pour une image. Pas
+de contrôle au hasard des vidéos dans cette version.
+
+**Dans la conversation et ailleurs** : la vidéo est gardée comme une création d'ici (WebM,
+nombre d'images, cadence du modèle), sa machine marquée « Créée par une machine du réseau
+public ». Le mode « Créer » propose « Wan 2.1 · vidéo · réseau public » quand une machine le
+prête. « Machines connectées » montre à part les modèles de vidéos qu'un nœud public prête
+(« vidéos : wan2.1-t2v-1.3b »), d'après le catalogue.
+
+**Essais** : `tests/test_public_videos.py` (la vérification et la réécriture du WebM, dont un
+WebM fait par FFmpeg avec des images non clés ; le prêteur derrière le vrai serveur entre
+machines avec un faux moteur de vidéos qui rend un WebM fait comme celui de sd-server,
+étiquette COMMENT comprise ; le demandeur par le faux compagnon ; l'accord, la création et son
+unité de bout en bout).
