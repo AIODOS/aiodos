@@ -143,7 +143,9 @@ DEFAULTS = {
     # network/public_video.py, 29/10/2026) : en plus de lend_public, mêmes conditions ;
     # activé par défaut ; un seul réglage, comme lend_images_friends
     "lend_images_public": True,
-    "images_from_friends": False,     # faire calculer mes images par mes amis qui le proposent
+    # Faire calculer mes images par mes amis qui le proposent : activé par défaut (décision de
+    # l'auteur du 29/10/2026), comme lend_images_friends
+    "images_from_friends": True,
     "images_enrich": True,            # enrichir la description avant de créer (chat/enrich.py)
     # --- Mises à jour : versions signées par l'auteur, reçues de mes machines appairées ---
     "auto_update": True,
@@ -211,7 +213,7 @@ FOR_MY_MACHINES = ("network_enabled", "internet_enabled", "share_enabled", "lend
 # le prêt aux conversations d'inconnus, et les miennes calculées par eux, depuis le 28/10/2026 ;
 # le prêt de ma carte aux images d'inconnus depuis le 29/10/2026
 OPEN_FROM_THE_START = ("public_network", "lend_images_friends", "gateway_apps", "lend_public",
-                       "use_public", "lend_images_public")
+                       "use_public", "lend_images_public", "images_from_friends")
 # Réglages à trois états : None (pas encore demandé), vrai ou faux ; toute autre valeur est
 # ignorée à l'enregistrement
 ASKED_ONCE = ("public_bigger_model", "public_documents", "public_images")

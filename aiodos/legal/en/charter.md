@@ -1,6 +1,6 @@
 # AIODOS Charter
 
-*Version 4, October 29, 2026*
+*Version 5, October 29, 2026*
 
 AIODOS is a free and open AI workshop. It connects, over the Internet, the machines of people
 who don't know each other, to pool their power: those of public network participants, of

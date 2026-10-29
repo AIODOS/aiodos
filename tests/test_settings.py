@@ -69,10 +69,10 @@ def test_my_machines_compute_together_from_the_first_launch(monkeypatch):
         assert settings.get(key) is True and settings.get_all()[key] is True
     assert set(settings.OPEN_FROM_THE_START) == {"public_network", "lend_images_friends",
                                                  "gateway_apps", "lend_public", "use_public",
-                                                 "lend_images_public"}
+                                                 "lend_images_public", "images_from_friends"}
     assert set(settings.ASKED_ONCE) == {"public_bigger_model", "public_documents",
                                         "public_images"}
-    for key in ("images_from_friends", "auto_route_friends", "public_warned"):
+    for key in ("auto_route_friends", "public_warned"):
         assert settings.get(key) is False
     for key in settings.ASKED_ONCE:
         assert settings.get(key) is None and settings.get_all()[key] is None

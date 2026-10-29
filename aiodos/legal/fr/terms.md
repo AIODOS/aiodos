@@ -1,6 +1,6 @@
 # Conditions d'utilisation d'AIODOS
 
-*Version 4, 29 octobre 2026*
+*Version 5, 29 octobre 2026*
 
 ## 1. Objet
 
@@ -51,7 +51,9 @@ ont leurs propres conditions :
   prête, ses places libres et sa vitesse, rien de personnel), tes conversations peuvent être
   calculées par des inconnus et ta machine calcule les leurs, ta carte graphique crée leurs
   images et leurs vidéos (voir ci-dessous) ainsi que les images que lui demandent les amis
-  que tu as ajoutés, et les applications de cette machine peuvent te demander l'accès à
+  que tu as ajoutés, tes propres images peuvent être créées par ceux de ces amis qui le
+  proposent quand tes machines ne le peuvent pas (leur machine lit alors ta description et
+  voit l'image), et les applications de cette machine peuvent te demander l'accès à
   AIODOS (chacune doit être acceptée par toi).
 - **Tes conversations chez un inconnu** (« Faire calculer mes conversations par des
   inconnus ») : la machine d'un inconnu du réseau public peut calculer tes conversations.

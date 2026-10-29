@@ -1,6 +1,6 @@
 # Charte d'utilisation d'AIODOS
 
-*Version 4, 29 octobre 2026*
+*Version 5, 29 octobre 2026*
 
 AIODOS est un atelier d'intelligence artificielle libre. Il relie par Internet les machines
 de personnes qui ne se connaissent pas, pour mettre leur puissance en commun : celles des

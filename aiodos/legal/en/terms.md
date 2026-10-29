@@ -1,6 +1,6 @@
 # AIODOS Terms of Use
 
-*Version 4, October 29, 2026*
+*Version 5, October 29, 2026*
 
 ## 1. Purpose
 
@@ -49,9 +49,10 @@ have their own terms:
   directory (it announces its AIODOS version, the list of its models, whether it lends, its
   free places and its speed there, nothing personal), your conversations can be computed by
   strangers and your machine computes theirs, your graphics card creates their images and
-  videos (see below) as well as the images that the friends you have added ask of it, and
-  the applications on this machine can ask you for access to AIODOS (each one has to be
-  accepted by you).
+  videos (see below) as well as the images that the friends you have added ask of it, your
+  own images can be created by those friends who offer it when your machines cannot (their
+  machine then reads your description and sees the image), and the applications on this
+  machine can ask you for access to AIODOS (each one has to be accepted by you).
 - **Your conversations on a stranger's machine** ("Have my conversations computed by
   strangers"): a stranger's machine on the public network can compute your conversations.
   It reads the conversation (your text, the system prompt), but doesn't know who is asking:
