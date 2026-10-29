@@ -14,6 +14,11 @@
 //! et sa signature porte sur le texte tel quel), et un profil d'avant se lit encore (`None`).
 //! Le profil signé tient toujours dans un message (4 Kio) : au besoin, les derniers modèles
 //! de la liste sont laissés de côté.
+//!
+//! Le 29/10/2026 (relecture de sécurité du 28/10) : la version et les noms de modèles perdent
+//! aussi les caractères invisibles et de mise en forme (`invisible` : sens d'écriture,
+//! largeur nulle, sélecteurs de variante…), à l'envoi comme à la réception. Ce qu'un profil
+//! reçu devient ensuite (preuve de travail de sa clé, rejeu, place) : public_nodes.rs.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,8 +32,9 @@ use tracing::debug;
 pub const MAX_MESSAGE: usize = 4096;
 const MAX_MODELS: usize = 24;
 const MAX_TEXT: usize = 64;
-/// Âge maximal d'un profil reçu, et avance tolérée (horloges décalées).
-const MAX_AGE: Duration = Duration::from_secs(10 * 60);
+/// Âge maximal d'un profil reçu, et avance tolérée (horloges décalées). Celui d'un auteur
+/// que l'annuaire ne connaît pas encore est borné plus court (`public_nodes::NEW_MAX_AGE`).
+pub const MAX_AGE: Duration = Duration::from_secs(10 * 60);
 const MAX_AHEAD: Duration = Duration::from_secs(2 * 60);
 
 /// Ce qu'AIODOS dit de ce nœud (cf. `PUT /net/v1/public`).
@@ -64,12 +70,46 @@ fn tokens_per_second<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Optio
     Ok(clamped(deserializer, f64::from(u16::MAX))?.map(|v| v as u16))
 }
 
+/// Caractère invisible ou de mise en forme : contrôle (Cc), mais aussi ce qui change le
+/// sens d'écriture (U+202A–U+202E, U+2066–U+2069, U+200E/F, U+061C), les largeurs nulles
+/// (U+200B–U+200D, U+2060, U+FEFF), les sélecteurs de variante, les étiquettes, et les
+/// autres caractères de format (Cf) ou de remplissage invisibles. Un nom de modèle qui en
+/// porte s'afficherait comme un autre (relecture du 28/10/2026 : « qwen3.5:9b » inversé ou
+/// doublé d'un caractère invisible passait pour le vrai chez le demandeur).
+pub fn invisible(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}'                       // trait d'union conditionnel
+            | '\u{034F}'                     // liant de graphèmes
+            | '\u{061C}'                     // marque de lettre arabe (direction)
+            | '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}' // remplissages hangûl
+            | '\u{17B4}' | '\u{17B5}'        // voyelles khmères invisibles
+            | '\u{180B}'..='\u{180F}'        // sélecteurs et séparateur mongols
+            | '\u{200B}'..='\u{200F}'        // largeur nulle, liants, marques de direction
+            | '\u{2028}'..='\u{202E}'        // séparateurs, enchâssements et forçages de direction
+            | '\u{2060}'..='\u{206F}'        // gluon, opérateurs invisibles, isolats de direction
+            | '\u{FE00}'..='\u{FE0F}'        // sélecteurs de variante
+            | '\u{FEFF}'                     // indicateur d'ordre des octets, gluon
+            | '\u{FFF9}'..='\u{FFFB}'        // annotations interlinéaires
+            | '\u{110BD}' | '\u{110CD}'      // formats kaithi
+            | '\u{13430}'..='\u{1343F}'      // formats hiéroglyphiques
+            | '\u{1BCA0}'..='\u{1BCA3}'      // formats sténographiques
+            | '\u{1D173}'..='\u{1D17A}'      // formats musicaux
+            | '\u{E0000}'..='\u{E007F}'      // étiquettes
+            | '\u{E0100}'..='\u{E01EF}'      // sélecteurs de variante, supplément
+        )
+}
+
+/// Un texte du profil : sans caractère invisible (`invisible`), `MAX_TEXT` caractères au
+/// plus, sans espace en tête ni en fin.
+fn tidy(text: &str) -> String {
+    text.chars().filter(|c| !invisible(*c)).take(MAX_TEXT).collect::<String>().trim().to_string()
+}
+
 impl Profile {
-    /// Bornes : au plus 24 modèles, des textes courts et imprimables.
+    /// Bornes : au plus 24 modèles, des textes courts, imprimables et visibles.
     pub fn clean(mut self) -> Self {
-        let tidy = |text: &str| -> String {
-            text.chars().filter(|c| !c.is_control()).take(MAX_TEXT).collect::<String>().trim().to_string()
-        };
         self.version = tidy(&self.version);
         let mut models: Vec<String> = Vec::new();
         for model in &self.models {
@@ -313,5 +353,44 @@ mod tests {
         assert!(long.models.iter().all(|m| !m.contains('\n')));
         let secret = SecretKey::generate();
         assert!(seal(&secret, &long, SystemTime::now()).unwrap().len() <= MAX_MESSAGE);
+    }
+
+    #[test]
+    fn model_names_lose_their_direction_and_invisible_characters() {
+        // Relecture du 28/10 : ces caractères passaient (seuls les contrôles étaient retirés)
+        let tricky = [
+            "\u{202E}b9:5.3newq",            // forçage de droite à gauche
+            "qwen3.5\u{200B}:9b",            // espace de largeur nulle
+            "\u{2066}qwen3.5:9b\u{2069}",    // isolat de gauche à droite
+            "qwen3.5:9b\u{200E}\u{200F}",    // marques de direction
+            "qwen\u{2060}3.5:9b\u{FEFF}",    // gluons
+            "qwen3.5:9b\u{E0041}\u{FE0F}",   // étiquette, sélecteur de variante
+            "\u{061C}qwen3.5\u{00AD}:9b",    // marque arabe, trait d'union conditionnel
+        ];
+        let got = Profile { models: tricky.iter().map(|s| s.to_string()).collect(), ..profile() }.clean();
+        for model in &got.models {
+            assert!(!model.chars().any(invisible), "{model:?}");
+        }
+        assert_eq!(got.models[1], "qwen3.5:9b", "devenu le vrai nom, et non un sosie");
+        // Doublons une fois nettoyés : un seul gardé ; un nom fait d'invisibles disparaît
+        assert_eq!(got.models.iter().filter(|m| *m == "qwen3.5:9b").count(), 1);
+        assert_eq!(got.models.len(), 2, "{:?}", got.models);
+        let blank = Profile { models: vec!["\u{200B}\u{202E}".into()], ..profile() }.clean();
+        assert!(blank.models.is_empty());
+        // Le reste passe : accents, idéogrammes
+        let kept = Profile { models: vec!["modèle-日本語:7b".into()], ..profile() }.clean();
+        assert_eq!(kept.models, vec!["modèle-日本語:7b".to_string()]);
+        // Reçu d'un autre nœud : nettoyé à l'ouverture
+        let secret = SecretKey::generate();
+        let now = SystemTime::now();
+        let text = serde_json::json!({
+            "v": 1, "key": secret.public().to_string(), "ts": seconds(now),
+            "version": "2.1.0\u{202E}", "models": ["qwen3.5\u{200D}:9b"], "lends": true,
+        })
+        .to_string();
+        let signature = hex(&secret.sign(text.as_bytes()).to_bytes());
+        let message = serde_json::to_vec(&Wire { p: text, s: signature }).unwrap();
+        let (_, _, opened) = open(&message, now).unwrap();
+        assert_eq!((opened.version.as_str(), opened.models[0].as_str()), ("2.1.0", "qwen3.5:9b"));
     }
 }

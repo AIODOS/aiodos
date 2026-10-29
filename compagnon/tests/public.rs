@@ -3,25 +3,41 @@
 //! réseau public : ils se trouvent par la DHT, sans invitation ni liste blanche, et
 //! chacun voit le profil signé de l'autre ; le troisième n'a rien demandé : il n'a pas
 //! de clé publique, n'annonce rien et ne voit personne.
+//!
+//! Et l'identité publique coûteuse (29/10/2026, src/public_identity.rs) : un nœud dont la clé
+//! ne porte pas la preuve de travail n'entre ni dans l'annuaire des autres ni dans leur
+//! groupe de discussion ; une clé longue à trouver ne retient pas `PUT`, et le nœud rejoint
+//! le réseau de lui-même dès qu'elle est trouvée.
 
 mod common;
 
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
-use aiodos_net::Config;
+use aiodos_net::{Config, config::TEST_DIFFICULTY, identity, public::KEY_FILE, public_identity};
 use common::{Node, TOKEN, call, fake_app};
 use hyper::{Method, StatusCode};
-use iroh::address_lookup::MemoryLookup;
+use iroh::{SecretKey, address_lookup::MemoryLookup};
 use serde_json::{Value, json};
 use tokio::sync::Notify;
 
 async fn node(bootstrap: &[String], lookup: &MemoryLookup) -> Node {
+    node_with(bootstrap, lookup, tempfile::tempdir().unwrap(), |_| {}).await
+}
+
+/// Un nœud sur ce dossier, aux réglages d'essai changés par `tune`.
+async fn node_with(
+    bootstrap: &[String],
+    lookup: &MemoryLookup,
+    dir: tempfile::TempDir,
+    tune: impl FnOnce(&mut Config),
+) -> Node {
     let app = fake_app(Arc::new(Notify::new())).await;
     let (bootstrap, lookup) = (bootstrap.to_vec(), lookup.clone());
-    Node::start_with(tempfile::tempdir().unwrap(), move |dir| {
+    Node::start_with(dir, move |dir: &Path| {
         let mut config = Config::local(dir.to_path_buf(), app, TOKEN);
         config.public_dht_bootstrap = Some(bootstrap);
         config.public_lookup = Some(lookup);
+        tune(&mut config);
         config
     })
     .await
@@ -141,4 +157,96 @@ async fn two_nodes_joining_at_the_same_instant_still_meet() {
     sees(&b, &ka).await;
     a.running.stop().await;
     b.running.stop().await;
+}
+
+/// Relecture du 28/10 (« annuaire noyé ») : une clé neuve ne coûtait rien. Un nœud dont la
+/// clé ne porte pas la preuve de travail des autres n'entre ni dans leur annuaire, ni dans
+/// leur groupe de discussion (ses profils ne passent donc pas par eux) ; deux nœuds qui la
+/// portent se voient.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_node_without_the_proof_of_work_is_neither_seen_nor_a_neighbor() {
+    let testnet = n0_mainline::Testnet::new(5).await.unwrap();
+    let lookup = MemoryLookup::new();
+    let a = node(&testnet.bootstrap, &lookup).await;
+    let c = node(&testnet.bootstrap, &lookup).await;
+    // B : une clé sans les bits exigés par A et C, gardée parce que B, lui, n'en exige aucun
+    // (comme un nœud d'avant le 29/10, ou un menteur qui ne paie pas la preuve)
+    let cheap = loop {
+        let key = SecretKey::generate();
+        if !public_identity::proves(&key.public(), TEST_DIFFICULTY) {
+            break key;
+        }
+    };
+    let dir = tempfile::tempdir().unwrap();
+    identity::write_file(dir.path(), KEY_FILE, &cheap).unwrap();
+    let b = node_with(&testnet.bootstrap, &lookup, dir, |config| config.public_difficulty = 0).await;
+
+    let kb = join(&b, &["qwen3.5:999b"]).await;
+    assert_eq!(kb, cheap.public().to_string(), "B garde sa clé sans preuve");
+    let ka = join(&a, &["qwen3.5:9b"]).await;
+    let kc = join(&c, &["qwen3.5:9b"]).await;
+    // Les clés de A et C, créées au démarrage, portent la preuve
+    for key in [&ka, &kc] {
+        assert!(public_identity::proves(&key.parse().unwrap(), TEST_DIFFICULTY));
+    }
+    sees(&a, &kc).await;
+    sees(&c, &ka).await;
+    // Quelques diffusions plus tard (B dit son profil à chaque nouveau voisin, et dans les
+    // 5 s quand il change), B n'est ni chez A ni chez C, et n'a aucun voisin
+    let wanted = json!({ "enabled": true, "version": "2.1.0", "models": ["qwen3.5:9b"], "lends": true, "free": 1 });
+    call(&b, Method::PUT, "/net/v1/public", wanted).await;
+    tokio::time::sleep(Duration::from_secs(8)).await;
+    for node in [&a, &c] {
+        let state = public(node).await;
+        let keys: Vec<&str> = state["nodes"].as_array().unwrap().iter().filter_map(|n| n["key"].as_str()).collect();
+        assert!(!keys.contains(&kb.as_str()), "{state}");
+    }
+    let alone = public(&b).await;
+    assert_eq!(alone["neighbors"], 0, "{alone}");
+    assert!(alone["nodes"].as_array().unwrap().is_empty(), "{alone}");
+
+    a.running.stop().await;
+    b.running.stop().await;
+    c.running.stop().await;
+}
+
+/// La clé du nœud public se cherche une fois (preuve de travail) : jusqu'à ~30 s sur un
+/// téléphone, plus qu'AIODOS n'attend une réponse (5 s). `PUT` répond sans l'attendre
+/// (`"preparing": true`), puis le nœud rejoint le réseau de lui-même ; la clé gardée porte la
+/// preuve, et sert telle quelle ensuite.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_slow_key_search_does_not_hold_put_and_the_node_joins_when_it_is_found() {
+    // 2^18 essais en moyenne : bien plus long que l'attente nulle, une seconde sur ce PC
+    const BITS: u8 = 18;
+    let testnet = n0_mainline::Testnet::new(5).await.unwrap();
+    let lookup = MemoryLookup::new();
+    let a = node_with(&testnet.bootstrap, &lookup, tempfile::tempdir().unwrap(), |config| {
+        config.public_difficulty = BITS;
+        config.public_key_wait = Duration::ZERO; // la recherche dure toujours plus que l'attente
+    })
+    .await;
+    let wanted = json!({ "enabled": true, "version": "2.1.0", "models": [], "lends": false });
+    let (status, body) = call(&a, Method::PUT, "/net/v1/public", wanted).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!((body["enabled"].clone(), body["preparing"].clone()), (json!(false), json!(true)), "{body}");
+    assert!(body["error"].is_null(), "{body}");
+    // Trouvée : le nœud rejoint le réseau sans nouveau PUT
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let key = loop {
+        let state = public(&a).await;
+        if let Some(key) = state["key"].as_str() {
+            assert_eq!((state["enabled"].clone(), state["preparing"].clone()), (json!(true), json!(false)));
+            break key.to_string();
+        }
+        assert!(tokio::time::Instant::now() < deadline, "jamais rejoint : {state}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert!(public_identity::proves(&key.parse().unwrap(), BITS));
+    let kept = identity::read_file(a.dir.path(), KEY_FILE).unwrap().unwrap();
+    assert_eq!(kept.public().to_string(), key, "gardée");
+    // Quitter puis revenir : la même clé, aussitôt (rien à chercher)
+    call(&a, Method::PUT, "/net/v1/public", json!({ "enabled": false })).await;
+    let (_, again) = call(&a, Method::PUT, "/net/v1/public", json!({ "enabled": true })).await;
+    assert_eq!((again["enabled"].clone(), again["key"].clone()), (json!(true), json!(key)), "{again}");
+    a.running.stop().await;
 }

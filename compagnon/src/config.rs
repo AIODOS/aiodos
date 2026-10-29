@@ -144,7 +144,22 @@ pub struct Config {
     pub public_dht_bootstrap: Option<Vec<String>>,
     /// Essais du réseau public : annuaire en mémoire partagé par les compagnons du test.
     pub public_lookup: Option<MemoryLookup>,
+    /// Bits de preuve de travail exigés d'une clé du réseau public, la sienne comprise
+    /// (`public_identity::DIFFICULTY` ; plus bas pour les essais).
+    pub public_difficulty: u8,
+    /// `PUT /net/v1/public` attend la clé du nœud public au plus ce temps (`PUBLIC_KEY_WAIT`) ;
+    /// au-delà, il répond `"preparing": true` et le nœud rejoint le réseau dès la clé trouvée.
+    /// Zéro (essais) : seulement une clé déjà trouvée.
+    pub public_key_wait: Duration,
 }
+
+/// Attente de la clé du nœud public par `PUT /net/v1/public` : sous les 5 s qu'AIODOS
+/// attend une réponse du compagnon (network/companion.py `API_TIMEOUT`).
+pub const PUBLIC_KEY_WAIT: Duration = Duration::from_secs(3);
+
+/// Difficulté de la preuve de travail des essais (`Config::local`) : 8 bits, 256 clés en
+/// moyenne, quelques millisecondes.
+pub const TEST_DIFFICULTY: u8 = 8;
 
 impl Config {
     /// Réglages d'essai : tout en local, sans relais ni annuaire ni box (tests).
@@ -166,6 +181,8 @@ impl Config {
             idle_timeout: Duration::from_secs(60),
             public_dht_bootstrap: None,
             public_lookup: None,
+            public_difficulty: TEST_DIFFICULTY,
+            public_key_wait: PUBLIC_KEY_WAIT,
         }
     }
 }
@@ -222,6 +239,12 @@ pub struct Args {
     /// ni couleurs (AIODOS ajoute les siennes)
     #[arg(long)]
     pub supervised: bool,
+
+    /// Essais : bits de preuve de travail exigés des clés du réseau public, la sienne
+    /// comprise (une clé gardée qui ne les a pas est remplacée). Un nœud réglé plus bas que
+    /// les autres n'entre pas dans leur annuaire
+    #[arg(long, default_value_t = crate::public_identity::DIFFICULTY, value_name = "BITS")]
+    pub public_difficulty: u8,
 }
 
 impl Args {
@@ -231,6 +254,12 @@ impl Args {
         }
         if self.dial_timeout == 0 {
             bail!("--dial-timeout doit être supérieur à 0");
+        }
+        if self.public_difficulty > crate::public_identity::MAX_DIFFICULTY {
+            bail!(
+                "--public-difficulty : {} bits au plus (la recherche de la clé ne finirait pas)",
+                crate::public_identity::MAX_DIFFICULTY
+            );
         }
         let relays = Relays::parse(&self.relays)?;
         if self.relay_only {
@@ -259,6 +288,8 @@ impl Args {
             idle_timeout: Duration::from_secs(60),
             public_dht_bootstrap: None,
             public_lookup: None,
+            public_difficulty: self.public_difficulty,
+            public_key_wait: PUBLIC_KEY_WAIT,
         })
     }
 }
@@ -307,6 +338,17 @@ mod tests {
         assert_eq!(config.directory, Directory { n0_dns: true, dht: true });
         assert!(config.portmap);
         assert!(!config.relay_only);
+        assert_eq!(config.public_difficulty, crate::public_identity::DIFFICULTY);
+    }
+
+    #[test]
+    fn the_public_difficulty_can_be_lowered_for_tests_but_stays_bounded() {
+        let config = |bits: &str| {
+            Args::parse_from(["aiodos-net", "--data-dir", "d", "--public-difficulty", bits]).into_config("t".into())
+        };
+        assert_eq!(config("8").unwrap().public_difficulty, 8);
+        assert!(config("33").is_err(), "la recherche ne finirait pas");
+        assert_eq!(Config::local("d".into(), "127.0.0.1:9".parse().unwrap(), "t").public_difficulty, TEST_DIFFICULTY);
     }
 
     #[test]

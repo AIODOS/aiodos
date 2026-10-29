@@ -27,11 +27,24 @@
 //! « aiodos/public/1 » du groupe de discussion, et y diffuse son profil signé chaque
 //! minute (public_profile.rs), et dans les 5 s quand il change (`CHANGE_GAP` : places
 //! libres, prêt) ; il garde en mémoire les profils reçus depuis moins de
-//! 5 minutes. Les conversations ne sont relayées à AIODOS que tant que le nœud tourne
-//! (réglage « Rejoindre le réseau public ») et que son profil dit qu'il prête (`lends`).
+//! 5 minutes (public_nodes.rs). Les conversations ne sont relayées à AIODOS que tant que le
+//! nœud tourne (réglage « Rejoindre le réseau public ») et que son profil dit qu'il prête
+//! (`lends`).
+//!
+//! Depuis le 29/10/2026 (relecture de sécurité du 28/10, « annuaire noyé ») : la clé du nœud
+//! public porte une **preuve de travail** (public_identity.rs), cherchée une fois sur tous
+//! les cœurs, en arrière-plan (quelques secondes, jusqu'à ~30 s sur un téléphone) : `PUT`
+//! n'en attend que 3 s (`Config::public_key_wait`), l'état dit alors `"preparing": true`,
+//! et le nœud rejoint le réseau dès la clé trouvée, si AIODOS le veut toujours (l'arrêt du
+//! compagnon arrête la recherche). Une clé sans cette preuve n'est ni gardée dans
+//! l'annuaire, ni voisine dans le groupe de discussion (`PublicGate`, et les clés lues dans
+//! la DHT) : ses profils ne passent pas par ce nœud. Ceux qu'un autre nœud relaie quand
+//! même (iroh-gossip relaie avant de livrer, sans crochet pour trier) sont ignorés ici. Les
+//! conversations (`PUBLIC_ALPN`) restent ouvertes à toute clé : le demandeur a une clé
+//! jetable, sans preuve ; leur rythme est borné (public_serve.rs).
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::BTreeSet,
     net::SocketAddr,
     path::PathBuf,
     sync::{
@@ -61,13 +74,16 @@ use n0_mainline::Dht;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use crate::{
     PUBLIC_ALPN, close,
     config::{Config, Directory, Relays},
-    dns, identity,
+    dns,
+    public_identity::{self, Origin},
+    public_nodes::{Nodes, Offer},
     public_profile::{self, MAX_MESSAGE, Profile},
     public_serve::{self, Limits},
     rendezvous,
@@ -91,10 +107,6 @@ const ALONE_RETRY: Duration = Duration::from_secs(20);
 /// garde sans limite les adresses que ses voisins lui donnent (relecture du 20/10), et un
 /// inconnu pourrait le gonfler ; AIODOS la relance aussitôt (même clé).
 const RENEW_EVERY: Duration = Duration::from_secs(6 * 3600);
-/// Un nœud dont aucun profil n'est arrivé depuis ce délai sort de l'annuaire.
-const FORGET_AFTER: Duration = Duration::from_secs(5 * 60);
-/// Au plus autant de nœuds dans l'annuaire (les plus anciens sortent).
-const MAX_NODES: usize = 1000;
 /// Flux à sens unique qu'un autre nœud peut ouvrir en même temps sur une connexion : le
 /// groupe de discussion en ouvre un par sujet ; sur une conversation, personne ne les lit.
 pub const MAX_UNI_STREAMS: u32 = 4;
@@ -122,18 +134,12 @@ pub struct Wanted {
     pub profile: Profile,
 }
 
-struct Seen {
-    ts: u64,
-    profile: Profile,
-    at: Instant,
-}
-
 #[derive(Default)]
 struct State {
     profile: Profile,
     key: Option<EndpointId>,
     neighbors: BTreeSet<EndpointId>,
-    nodes: HashMap<EndpointId, Seen>,
+    nodes: Nodes,
     announced_at: Option<u64>,
     found: usize,
     rendezvous_error: Option<String>,
@@ -145,6 +151,9 @@ struct Session {
     cancel: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
+
+/// La clé du nœud public quand sa recherche a abouti (ou pourquoi elle a échoué).
+type Found = Option<Result<(SecretKey, Origin), String>>;
 
 /// Le réseau public du compagnon : arrêté tant qu'AIODOS ne le demande pas.
 pub struct Public {
@@ -167,6 +176,16 @@ pub struct Public {
     session: tokio::sync::Mutex<Option<Session>>,
     /// Le profil a changé : la session en cours le diffuse bientôt (`CHANGE_GAP`).
     changed: Arc<tokio::sync::Notify>,
+    /// Bits de preuve de travail exigés des clés du réseau public, la sienne comprise.
+    difficulty: u8,
+    /// La clé du nœud public : cherchée une fois, en arrière-plan (`identity`).
+    key: Mutex<Option<watch::Receiver<Found>>>,
+    /// AIODOS veut le réseau public (dernier `PUT`) : le nœud le rejoint dès sa clé trouvée.
+    wanted: AtomicBool,
+    /// `PUT` attend la clé au plus ce temps (`Config::public_key_wait`).
+    key_wait: Duration,
+    /// Arrêt du compagnon : la recherche de la clé s'arrête.
+    stopping: Arc<AtomicBool>,
 }
 
 impl Public {
@@ -185,13 +204,19 @@ impl Public {
             state: Arc::new(Mutex::new(State::default())),
             session: tokio::sync::Mutex::new(None),
             changed: Arc::new(tokio::sync::Notify::new()),
+            difficulty: config.public_difficulty,
+            key: Mutex::new(None),
+            wanted: AtomicBool::new(false),
+            key_wait: config.public_key_wait,
+            stopping: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// Démarre, arrête, ou met à jour le profil. → l'état (cf. `snapshot`).
-    pub async fn configure(&self, wanted: Wanted) -> Value {
+    pub async fn configure(self: &Arc<Self>, wanted: Wanted) -> Value {
         let profile = wanted.profile.clean();
         self.lends.store(profile.lends, Ordering::SeqCst);
+        self.wanted.store(wanted.enabled, Ordering::SeqCst);
         let changed = {
             let mut state = self.state.lock().expect("état du réseau public");
             let changed = state.profile != profile;
@@ -206,16 +231,7 @@ impl Public {
             }
         }
         match (wanted.enabled, session.is_some()) {
-            (true, false) => match self.start().await {
-                Ok(started) => {
-                    *session = Some(started);
-                    self.state.lock().expect("état").error = None;
-                }
-                Err(err) => {
-                    warn!("Réseau public : démarrage impossible ({err:#})");
-                    self.state.lock().expect("état").error = Some(format!("{err:#}"));
-                }
-            },
+            (true, false) => self.begin(&mut session).await,
             (false, true) => {
                 if let Some(running) = session.take() {
                     stop(running).await;
@@ -235,17 +251,97 @@ impl Public {
         self.snapshot()
     }
 
+    /// Rejoint le réseau public, sa clé trouvée (`key_wait` au plus) ; sinon, l'état le dit
+    /// (`preparing`) et le nœud le rejoindra de lui-même (cf. `identity`).
+    async fn begin(self: &Arc<Self>, session: &mut Option<Session>) {
+        let mut found = self.identity();
+        // Une attente nulle ne prend que la clé déjà trouvée (le minuteur, lui, laisse passer
+        // une milliseconde au moins)
+        let ready = if self.key_wait.is_zero() {
+            found.borrow().clone()
+        } else {
+            match tokio::time::timeout(self.key_wait, found.wait_for(Option::is_some)).await {
+                Ok(Ok(found)) => found.clone(),
+                _ => None,
+            }
+        };
+        let started = match ready {
+            None => {
+                debug!("Réseau public : clé en préparation (preuve de travail)");
+                return;
+            }
+            Some(Ok((secret, origin))) => self.start(secret, origin).await,
+            Some(Err(err)) => Err(anyhow::anyhow!(err)),
+        };
+        match started {
+            Ok(started) => {
+                *session = Some(started);
+                self.state.lock().expect("état").error = None;
+            }
+            Err(err) => {
+                warn!("Réseau public : démarrage impossible ({err:#})");
+                self.state.lock().expect("état").error = Some(format!("{err:#}"));
+            }
+        }
+    }
+
+    /// La clé du nœud public, ou sa recherche en cours : lancée une fois (et de nouveau
+    /// après un échec), sur tous les cœurs, hors de la boucle asynchrone ; un `PUT` qui
+    /// n'attend pas sa fin (AIODOS n'attend que 5 s) ne l'arrête pas. Trouvée, le nœud
+    /// rejoint le réseau public si AIODOS le veut toujours.
+    fn identity(self: &Arc<Self>) -> watch::Receiver<Found> {
+        let mut slot = self.key.lock().expect("clé du réseau public");
+        if let Some(found) = slot.as_ref()
+            && !matches!(&*found.borrow(), Some(Err(_)))
+        {
+            return found.clone();
+        }
+        let (tx, rx) = watch::channel(None);
+        *slot = Some(rx.clone());
+        let (dir, difficulty, stopping) = (self.data_dir.clone(), self.difficulty, self.stopping.clone());
+        let public = Arc::downgrade(self);
+        tokio::spawn(async move {
+            let search = tokio::task::spawn_blocking(move || {
+                public_identity::load_or_create(&dir, KEY_FILE, difficulty, &stopping).map_err(|err| format!("{err:#}"))
+            });
+            let found = search.await.unwrap_or_else(|err| Err(format!("recherche de la clé interrompue ({err})")));
+            let ready = found.is_ok();
+            tx.send_replace(Some(found));
+            if let (true, Some(public)) = (ready, public.upgrade()) {
+                public.join_when_ready().await;
+            }
+        });
+        rx
+    }
+
+    /// La clé vient d'être trouvée : le nœud rejoint le réseau public, si AIODOS le veut
+    /// toujours et qu'il n'y est pas déjà.
+    async fn join_when_ready(self: &Arc<Self>) {
+        let mut session = self.session.lock().await;
+        if self.wanted.load(Ordering::SeqCst) && session.is_none() {
+            self.begin(&mut session).await;
+        }
+    }
+
+    /// La clé est-elle en cours de recherche ?
+    fn preparing(&self) -> bool {
+        self.key.lock().expect("clé du réseau public").as_ref().is_some_and(|found| found.borrow().is_none())
+    }
+
     /// État pour AIODOS : la clé publique du nœud, ses voisins, les nœuds vus (avec leurs
-    /// places libres et leur vitesse, `null` si leur profil ne les dit pas), et les
-    /// conversations servies aux inconnus.
+    /// places libres et leur vitesse, `null` si leur profil ne les dit pas, et depuis quand
+    /// ils sont dans l'annuaire, `known_s`), et les conversations servies aux inconnus ;
+    /// `preparing` : la clé du nœud est en cours de recherche (preuve de travail).
     pub fn snapshot(&self) -> Value {
+        let preparing = self.preparing();
         let state = self.state.lock().expect("état du réseau public");
-        let mut nodes: Vec<(&EndpointId, &Seen)> =
-            state.nodes.iter().filter(|(_, seen)| seen.at.elapsed() < FORGET_AFTER).collect();
-        nodes.sort_by_key(|(_, seen)| seen.at.elapsed());
+        let now = Instant::now();
+        let mut nodes: Vec<_> = state.nodes.fresh(now).collect();
+        nodes.sort_by_key(|(_, seen)| now.saturating_duration_since(seen.at));
         json!({
             "enabled": state.key.is_some(),
             "key": state.key.map(|k| k.to_string()),
+            "preparing": preparing && state.key.is_none(),
             "neighbors": state.neighbors.len(),
             "nodes": nodes.iter().map(|(id, seen)| json!({
                 "key": id.to_string(),
@@ -254,7 +350,8 @@ impl Public {
                 "lends": seen.profile.lends,
                 "free": seen.profile.free,
                 "tps": seen.profile.tps,
-                "seen_s": seen.at.elapsed().as_secs(),
+                "seen_s": now.saturating_duration_since(seen.at).as_secs(),
+                "known_s": now.saturating_duration_since(seen.first).as_secs(),
             })).collect::<Vec<_>>(),
             "served": self.limits.snapshot(),
             "rendezvous": {
@@ -266,18 +363,20 @@ impl Public {
         })
     }
 
-    /// Arrêt du compagnon : le réseau public est quitté proprement.
+    /// Arrêt du compagnon : le réseau public est quitté proprement (et n'est pas rejoint
+    /// après, même si la recherche de sa clé aboutit).
     pub async fn shutdown(&self) {
+        self.wanted.store(false, Ordering::SeqCst);
+        self.stopping.store(true, Ordering::SeqCst);
         if let Some(running) = self.session.lock().await.take() {
             stop(running).await;
         }
     }
 
-    async fn start(&self) -> Result<Session> {
+    async fn start(&self, secret: SecretKey, origin: Origin) -> Result<Session> {
         if self.relays == Relays::Disabled && self.lookup.is_none() {
             bail!("le réseau public passe par les relais, et aucun relais n'est choisi");
         }
-        let (secret, created) = identity::load_or_create_file(&self.data_dir, KEY_FILE)?;
         let endpoint = self.bind_endpoint(secret.clone()).await?;
         let id = endpoint.id();
         if let Some(lookup) = &self.lookup {
@@ -304,7 +403,9 @@ impl Public {
             self.lends.clone(),
             self.limits.clone(),
         );
+        // Les nouvelles connexions d'inconnus sont bornées avant la poignée de main
         let router = Router::builder(endpoint)
+            .incoming_filter(serve.incoming_filter())
             .accept(GOSSIP_ALPN, gossip.clone())
             .accept(PUBLIC_ALPN, serve)
             .spawn();
@@ -322,11 +423,15 @@ impl Public {
         info!(
             "Réseau public rejoint : clé {} ({}){}",
             id.fmt_short(),
-            if created { "nouvelle" } else { "existante" },
+            match origin {
+                Origin::Kept => "existante",
+                Origin::Created => "nouvelle",
+                Origin::Replaced => "nouvelle, l'ancienne n'avait pas la preuve de travail",
+            },
             if self.relays == Relays::Disabled { ", en direct (essais)" } else { ", par les relais seulement" },
         );
         let task = tokio::spawn(run(
-            Node { id, secret, dht, sender, state: self.state.clone() },
+            Node { id, secret, dht, sender, state: self.state.clone(), difficulty: self.difficulty },
             receiver,
             self.changed.clone(),
             cancel.clone(),
@@ -359,7 +464,7 @@ impl Public {
             .relay_mode(relay_mode)
             .transport_config(transport)
             .portmapper_config(PortmapperConfig::Disabled)
-            .hooks(PublicGate);
+            .hooks(PublicGate { difficulty: self.difficulty });
         if self.directory.n0_dns {
             builder = builder
                 .address_lookup(PkarrPublisher::n0_dns())
@@ -393,24 +498,28 @@ async fn stop(session: Session) {
 }
 
 /// Le point de terminaison public n'accepte que le groupe de discussion public, dans les
-/// deux sens, et les conversations des inconnus (`PUBLIC_ALPN`), de toute clé, en entrée
-/// seulement : ce nœud ne demande jamais rien lui-même (le demandeur a sa clé jetable, cf.
-/// public_ask.rs), sa clé publique n'est jamais celle qui demande.
+/// deux sens, avec des clés qui portent la preuve de travail (public_identity.rs), et les
+/// conversations des inconnus (`PUBLIC_ALPN`), de toute clé, en entrée seulement : ce nœud
+/// ne demande jamais rien lui-même (le demandeur a sa clé jetable, cf. public_ask.rs), sa
+/// clé publique n'est jamais celle qui demande.
 #[derive(Debug)]
-struct PublicGate;
+struct PublicGate {
+    difficulty: u8,
+}
 
-/// Ce que la porte du nœud public laisse passer : ALPN, et sens de la connexion.
-fn gate_allows(alpn: &[u8], side: Side) -> bool {
-    alpn == GOSSIP_ALPN || (alpn == PUBLIC_ALPN && side == Side::Server)
+/// Ce que la porte du nœud public laisse passer : ALPN, sens de la connexion, et clé de
+/// l'autre (avec `difficulty` bits de preuve pour le groupe de discussion).
+fn gate_allows(alpn: &[u8], side: Side, remote: &EndpointId, difficulty: u8) -> bool {
+    (alpn == GOSSIP_ALPN && public_identity::proves(remote, difficulty)) || (alpn == PUBLIC_ALPN && side == Side::Server)
 }
 
 impl EndpointHooks for PublicGate {
     async fn before_connect<'a>(
         &'a self,
-        _remote_addr: &'a iroh::EndpointAddr,
+        remote_addr: &'a iroh::EndpointAddr,
         alpn: &'a [u8],
     ) -> BeforeConnectOutcome {
-        if gate_allows(alpn, Side::Client) {
+        if gate_allows(alpn, Side::Client, &remote_addr.id, self.difficulty) {
             BeforeConnectOutcome::Accept
         } else {
             BeforeConnectOutcome::Reject
@@ -418,7 +527,7 @@ impl EndpointHooks for PublicGate {
     }
 
     async fn after_handshake<'a>(&'a self, conn: &'a Connection) -> AfterHandshakeOutcome {
-        if gate_allows(conn.alpn(), conn.side()) {
+        if gate_allows(conn.alpn(), conn.side(), &conn.remote_id(), self.difficulty) {
             AfterHandshakeOutcome::Accept
         } else {
             AfterHandshakeOutcome::Reject { error_code: close::REFUSED.into(), reason: b"refused".to_vec() }
@@ -432,6 +541,8 @@ struct Node {
     dht: Dht,
     sender: GossipSender,
     state: Arc<Mutex<State>>,
+    /// Bits de preuve de travail exigés des autres clés (cf. public_identity.rs).
+    difficulty: u8,
 }
 
 impl Node {
@@ -477,6 +588,10 @@ impl Node {
         if let Err(err) = &announced {
             debug!("Réseau public : {err:#}");
         }
+        // Une clé sans preuve de travail ne sera pas voisine (cf. `PublicGate`) : inutile
+        // d'essayer de la joindre
+        let found: Vec<EndpointId> =
+            found.into_iter().filter(|id| public_identity::proves(id, self.difficulty)).collect();
         if !found.is_empty() {
             let wanted: Vec<EndpointId> = found.into_iter().take(JOIN_AT_MOST).collect();
             if let Err(err) = self.sender.join_peers(wanted).await {
@@ -485,25 +600,13 @@ impl Node {
         }
     }
 
+    /// Un message du groupe de discussion : offert à l'annuaire (cf. public_nodes.rs), qui
+    /// le garde ou l'ignore (illisible, clé sans preuve, rejoué, annuaire plein…).
     fn received(&self, content: &[u8]) {
-        let (author, ts, profile) = match public_profile::open(content, SystemTime::now()) {
-            Ok(opened) => opened,
-            Err(err) => return debug!("Réseau public : message écarté ({err:#})"),
-        };
-        if author == self.id {
-            return;
-        }
         let mut state = self.state.lock().expect("état");
-        if state.nodes.get(&author).is_some_and(|seen| seen.ts >= ts) {
-            return; // pas plus récent que celui qu'on a
-        }
-        state.nodes.insert(author, Seen { ts, profile, at: Instant::now() });
-        state.nodes.retain(|_, seen| seen.at.elapsed() < FORGET_AFTER);
-        if state.nodes.len() > MAX_NODES {
-            let oldest = state.nodes.iter().max_by_key(|(_, seen)| seen.at.elapsed()).map(|(id, _)| *id);
-            if let Some(oldest) = oldest {
-                state.nodes.remove(&oldest);
-            }
+        let offer = state.nodes.receive(content, self.id, self.difficulty, SystemTime::now(), Instant::now());
+        if !matches!(offer, Offer::Admitted | Offer::Updated | Offer::Mine) {
+            debug!("Réseau public : profil écarté ({offer:?})");
         }
     }
 }
@@ -595,5 +698,31 @@ async fn run(node: Node, mut receiver: GossipReceiver, changed: Arc<tokio::sync:
         if renewed {
             info!("Réseau public : session renouvelée");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_gossip_gate_wants_the_proof_but_a_conversation_takes_any_key() {
+        const BITS: u8 = 8;
+        let proven = public_identity::proven(BITS).public();
+        let cheap = loop {
+            let key = SecretKey::generate().public();
+            if !public_identity::proves(&key, BITS) {
+                break key;
+            }
+        };
+        // Groupe de discussion : une clé qui porte la preuve, dans les deux sens
+        assert!(gate_allows(GOSSIP_ALPN, Side::Client, &proven, BITS));
+        assert!(gate_allows(GOSSIP_ALPN, Side::Server, &proven, BITS));
+        assert!(!gate_allows(GOSSIP_ALPN, Side::Client, &cheap, BITS), "jamais jointe");
+        assert!(!gate_allows(GOSSIP_ALPN, Side::Server, &cheap, BITS), "jamais voisine");
+        // Conversation : toute clé (la clé jetable du demandeur n'a pas de preuve), en entrée
+        assert!(gate_allows(PUBLIC_ALPN, Side::Server, &cheap, BITS));
+        assert!(!gate_allows(PUBLIC_ALPN, Side::Client, &proven, BITS), "le nœud public ne demande rien");
+        assert!(!gate_allows(crate::ALPN, Side::Server, &proven, BITS));
     }
 }

@@ -10,6 +10,13 @@
 //! reçoit 503 `busy`, comme s'il n'avait pas eu de place. Une requête d'AIODOS (public_ask.rs)
 //! arrive d'un coup et n'est presque jamais évincée ; un corps qui file à `KEEP_RATE` ou plus
 //! ne l'est jamais, et tenir les huit places à ce débit coûte à l'inconnu 512 Kio/s.
+//!
+//! Relecture du 28/10 (bilan, « rythme non borné ») : un flot de nouveaux flux pouvait ainsi
+//! couper l'envoi lent d'une conversation déjà en cours. Le corps d'une connexion déjà
+//! servie (public_serve.rs) est donc **gardé** : seule une requête d'une connexion servie
+//! peut lui prendre sa place, jamais celle d'un nouveau venu. Les corps gardés tiennent la
+//! moitié des places au plus (`PROTECTED_SHARE`) : au-delà, un corps de connexion servie est
+//! lu comme un autre, et les nouveaux venus trouvent toujours des places à prendre.
 
 use std::{
     error::Error,
@@ -33,6 +40,8 @@ pub const PREEMPT_AFTER: Duration = Duration::from_secs(1);
 /// Un corps qui arrive au moins à ce débit moyen garde sa place (quatre fois le débit
 /// minimal `public_serve::BODY_PACE`).
 pub const KEEP_RATE: u64 = 64 * 1024;
+/// Part des places que les corps gardés (connexions déjà servies) tiennent au plus.
+pub const PROTECTED_SHARE: usize = 2;
 
 /// Les places de lecture, partagées par toutes les connexions d'inconnus.
 #[derive(Debug)]
@@ -50,6 +59,9 @@ struct Table {
 #[derive(Debug)]
 struct Entry {
     id: u64,
+    /// Corps d'une connexion déjà servie : seule une requête d'une connexion servie peut
+    /// prendre sa place.
+    protected: bool,
     started: Instant,
     received: Arc<AtomicU64>,
     cut: CancellationToken,
@@ -84,22 +96,28 @@ impl Readers {
     }
 
     /// Une place de lecture, prise au besoin au corps le plus lent (cf. `victim`) ; `None`
-    /// si toutes avancent (503 `busy`).
-    pub fn enter(self: &Arc<Self>, now: Instant) -> Option<Reading> {
+    /// si toutes avancent (503 `busy`). `served` : la requête vient d'une connexion déjà
+    /// servie ; son corps est alors gardé (s'il reste de la part gardée), et elle peut prendre
+    /// la place d'un corps gardé. Sinon, elle ne prend que celle d'un corps qui ne l'est pas.
+    pub fn enter(self: &Arc<Self>, now: Instant, served: bool) -> Option<Reading> {
         let mut table = self.table.lock().expect("places de lecture");
         if table.entries.len() >= self.places {
-            let paces: Vec<Pace> = table
+            // Les corps qu'elle peut évincer, et leur rang dans la table
+            let (ranks, paces): (Vec<usize>, Vec<Pace>) = table
                 .entries
                 .iter()
-                .map(|e| Pace { started: e.started, received: e.received.load(Ordering::Relaxed) })
-                .collect();
-            let index = victim(paces, now)?;
+                .enumerate()
+                .filter(|(_, e)| served || !e.protected)
+                .map(|(rank, e)| (rank, Pace { started: e.started, received: e.received.load(Ordering::Relaxed) }))
+                .unzip();
+            let index = ranks[victim(paces, now)?];
             table.entries.swap_remove(index).cut.cancel();
         }
+        let protected = served && table.entries.iter().filter(|e| e.protected).count() < self.places / PROTECTED_SHARE;
         let id = table.next;
         table.next += 1;
         let (received, cut) = (Arc::new(AtomicU64::new(0)), CancellationToken::new());
-        table.entries.push(Entry { id, started: now, received: received.clone(), cut: cut.clone() });
+        table.entries.push(Entry { id, protected, started: now, received: received.clone(), cut: cut.clone() });
         Some(Reading { readers: self.clone(), id, received, cut })
     }
 
@@ -204,11 +222,11 @@ mod tests {
     async fn a_new_request_takes_the_place_of_a_body_that_does_not_move_forward() {
         let readers = Readers::new(2);
         let start = Instant::now();
-        let first = readers.enter(start).expect("place libre");
-        let second = readers.enter(start).expect("place libre");
-        assert!(readers.enter(start).is_none(), "toutes prises, et trop récentes");
+        let first = readers.enter(start, false).expect("place libre");
+        let second = readers.enter(start, false).expect("place libre");
+        assert!(readers.enter(start, false).is_none(), "toutes prises, et trop récentes");
         let later = start + PREEMPT_AFTER;
-        let third = readers.enter(later).expect("prise à un corps qui n'avance pas");
+        let third = readers.enter(later, false).expect("prise à un corps qui n'avance pas");
         assert_eq!(readers.taken(), 2);
         // Le corps évincé l'apprend en route (ici : un corps qui n'arrive jamais)
         let evicted = if first.cut.is_cancelled() { &first } else { &second };
@@ -218,6 +236,44 @@ mod tests {
         assert_eq!(&third.collect(body).await.unwrap()[..], b"bonjour");
         drop((first, second, third));
         assert_eq!(readers.taken(), 0);
+    }
+
+    #[test]
+    fn the_body_of_a_served_connection_keeps_its_place_against_newcomers() {
+        // Relecture du 28/10 : un flot de nouveaux flux coupait l'envoi lent d'une
+        // conversation en cours (le plus lent des corps cédait sa place au nouveau venu)
+        let readers = Readers::new(4);
+        let start = Instant::now();
+        let at = |s: u64| start + Duration::from_secs(s);
+        // Les nouveaux venus du flot filent (jamais évincés entre eux) : seuls comptent ici
+        // les corps lents
+        let flood = |now: Instant| {
+            let reading = readers.enter(now, false);
+            if let Some(reading) = &reading {
+                reading.received.store(1 << 30, Ordering::Relaxed);
+            }
+            reading
+        };
+        // Deux corps de connexions servies (la part gardée : la moitié des places), un
+        // troisième (lu comme un autre, la part est prise) et celui d'un nouveau venu ; lents
+        let served: Vec<Reading> = (0..3).map(|_| readers.enter(start, true).unwrap()).collect();
+        let stranger = readers.enter(start, false).unwrap();
+        served[0].received.store(10 << 10, Ordering::Relaxed); // 5 Kio/s à 2 s
+        served[1].received.store(10 << 10, Ordering::Relaxed);
+        stranger.received.store(60 << 10, Ordering::Relaxed); // 30 Kio/s à 2 s
+        // Le flot prend la place du troisième (non gardé), puis de l'inconnu ; jamais celle
+        // des deux gardés, pourtant plus lents que l'inconnu
+        let first = flood(at(2)).expect("place prise au corps non gardé");
+        assert!(served[2].cut.is_cancelled());
+        let _second = flood(at(3)).expect("puis à l'inconnu");
+        assert!(stranger.cut.is_cancelled());
+        assert!(!served[0].cut.is_cancelled() && !served[1].cut.is_cancelled());
+        assert!(flood(at(4)).is_none(), "plus rien à prendre : les gardés restent");
+        drop(first);
+        let _third = flood(at(4)).expect("une place rendue est reprise");
+        // Une requête d'une connexion servie, elle, peut prendre la place d'un corps gardé
+        assert!(readers.enter(at(5), true).is_some());
+        assert!(served[0].cut.is_cancelled() || served[1].cut.is_cancelled());
     }
 
     /// Un corps dont rien n'arrive jamais.

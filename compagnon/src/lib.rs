@@ -24,6 +24,7 @@
 
 pub mod admission;
 pub mod allowlist;
+pub mod cadence;
 pub mod config;
 pub mod control;
 mod dns;
@@ -37,6 +38,8 @@ pub mod owner;
 pub mod pool;
 pub mod public;
 pub mod public_ask;
+pub mod public_identity;
+pub mod public_nodes;
 pub mod public_profile;
 pub mod public_reading;
 pub mod public_serve;

@@ -8,6 +8,11 @@
 //! - Connexions tenues par des en-têtes jamais finis : elles cèdent leur place avant une
 //!   connexion servie, et une nouvelle connexion entre toujours.
 //! - Refus rapides d'AIODOS : ils n'épuisent pas les admissions des conversations servies.
+//! - Flot de nouvelles connexions et de nouveaux flux (29/10/2026) : borné, refusé aussitôt,
+//!   sans gêner une conversation en cours.
+//!
+//! Les essais qui ouvrent beaucoup de connexions ou de flux le font à la cadence permise
+//! (`NEW_CONNECTIONS`, `NEW_STREAMS`) : ils mesurent les autres bornes.
 
 mod common;
 
@@ -16,7 +21,10 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use aiodos_net::{
     PUBLIC_ALPN,
     public_reading::PREEMPT_AFTER,
-    public_serve::{BODY_PACE, BODY_TIMEOUT, GLOBAL_PER_MINUTE, MAX_CONNECTIONS, MAX_READING, PER_KEY_PER_HOUR},
+    public_serve::{
+        BODY_PACE, BODY_TIMEOUT, GLOBAL_PER_MINUTE, MAX_CONNECTIONS, MAX_READING, NEW_CONNECTIONS, NEW_STREAMS,
+        PER_KEY_PER_HOUR,
+    },
 };
 use common::{LIMIT, Node, call, lend, public_node};
 use hyper::Method;
@@ -55,7 +63,22 @@ async fn stranger(lookup: &MemoryLookup) -> Endpoint {
 }
 
 async fn connect(stranger: &Endpoint, lender: EndpointId) -> Connection {
-    timeout(LIMIT, stranger.connect(lender, PUBLIC_ALPN)).await.expect("délai").unwrap()
+    try_connect(stranger, lender).await.expect("connexion refusée")
+}
+
+/// Une connexion, ou `None` si le prêteur la refuse.
+async fn try_connect(stranger: &Endpoint, lender: EndpointId) -> Option<Connection> {
+    timeout(LIMIT, stranger.connect(lender, PUBLIC_ALPN)).await.expect("délai").ok()
+}
+
+/// Sous la cadence des nouvelles connexions (`NEW_CONNECTIONS`), avec de la marge.
+fn connection_pace() -> Duration {
+    Duration::from_secs_f64(1.2 / NEW_CONNECTIONS.per_second)
+}
+
+/// Sous la cadence des nouveaux flux (`NEW_STREAMS`), avec de la marge.
+fn stream_pace() -> Duration {
+    Duration::from_secs_f64(1.2 / NEW_STREAMS.per_second)
 }
 
 /// Une requête entière, d'un coup, sur un nouveau flux : → la réponse brute (ligne d'état,
@@ -149,7 +172,8 @@ async fn connections_that_do_not_move_forward_give_way_before_a_served_one() {
 
     // Deux fois le plafond de connexions, chacune avec un flux aux en-têtes jamais finis
     // (renouvelable toutes les 10 s) : avant la relecture du 28/10, elles comptaient comme
-    // servies, la connexion au repos était fermée, puis toute nouvelle connexion refusée
+    // servies, la connexion au repos était fermée, puis toute nouvelle connexion refusée.
+    // (À la cadence permise des nouvelles connexions : au-delà, refusées d'emblée.)
     let mut stalled = Vec::new();
     for _ in 0..2 * MAX_CONNECTIONS {
         let conn = connect(&stranger, lender_key).await;
@@ -157,7 +181,7 @@ async fn connections_that_do_not_move_forward_give_way_before_a_served_one() {
             let _ = send.write_all(b"POST /public/v1/echo HTTP/1.1\r\nhost: x\r\n").await;
             stalled.push((conn, send, recv));
         }
-        sleep(Duration::from_millis(20)).await;
+        sleep(connection_pace()).await;
     }
     sleep(Duration::from_millis(300)).await;
 
@@ -178,7 +202,8 @@ async fn connections_that_do_not_move_forward_give_way_before_a_served_one() {
 async fn quick_refusals_do_not_use_up_the_admissions_of_served_conversations() {
     let (lender, lender_key, lookup, _testnet) = lender().await;
     // Autant de requêtes qu'en admet la minute, qu'AIODOS refuse aussitôt (mal formées),
-    // chacune relayée ; une clé jetable pour `PER_KEY_PER_HOUR` d'entre elles
+    // chacune relayée ; une clé jetable pour `PER_KEY_PER_HOUR` d'entre elles (à la cadence
+    // permise des nouveaux flux)
     let mut refused = 0;
     let mut strangers = Vec::new();
     while refused < GLOBAL_PER_MINUTE {
@@ -188,6 +213,7 @@ async fn quick_refusals_do_not_use_up_the_admissions_of_served_conversations() {
             let answer = exchange(&conn, "/public/v1/refused").await;
             assert!(answer.starts_with("HTTP/1.1 400") && answer.contains("bad_request"), "{answer}");
             refused += 1;
+            sleep(stream_pace()).await;
         }
         strangers.push(stranger);
     }
@@ -204,5 +230,93 @@ async fn quick_refusals_do_not_use_up_the_admissions_of_served_conversations() {
     for stranger in strangers.into_iter().chain([stranger]) {
         stranger.close().await;
     }
+    lender.running.stop().await;
+}
+
+/// Relecture du 28/10 (« rythme non borné ») : rien ne limitait la cadence des nouvelles
+/// connexions ni des nouveaux flux ; un flot tenait les places et pouvait évincer un nouveau
+/// venu. Désormais, au-delà de la cadence, refus aussitôt ; une conversation en cours
+/// (connexion déjà servie) avance pendant le flot comme sans lui.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_flood_of_connections_and_streams_is_paced_without_hurting_a_conversation_in_progress() {
+    let (lender, lender_key, lookup, _testnet) = lender().await;
+    // Une conversation en cours : servie une fois, sa connexion gardée
+    let asker = stranger(&lookup).await;
+    let conversation = connect(&asker, lender_key).await;
+    assert!(exchange(&conversation, "/public/v1/echo").await.starts_with("HTTP/1.1 200"));
+
+    // Un flot de nouveaux flux : huit inconnus, une connexion jamais servie chacun, 25 flux
+    // l'un après l'autre, tous en même temps
+    let mut flooders = Vec::new();
+    for _ in 0..8 {
+        let flooder = stranger(&lookup).await;
+        let conn = connect(&flooder, lender_key).await;
+        flooders.push((flooder, conn));
+    }
+    let started = Instant::now();
+    let tasks: Vec<_> = flooders
+        .iter()
+        .map(|(_, conn)| {
+            let conn = conn.clone();
+            tokio::spawn(async move {
+                let mut answers = Vec::new();
+                for _ in 0..25 {
+                    answers.push(exchange(&conn, "/public/v1/refused").await);
+                }
+                answers
+            })
+        })
+        .collect();
+    // Pendant le flot, la conversation en cours avance : chaque message est servi
+    for _ in 0..3 {
+        let answer = exchange(&conversation, "/public/v1/echo").await;
+        assert!(answer.starts_with("HTTP/1.1 200"), "conversation en cours gênée par le flot : {answer}");
+    }
+    let mut answers = Vec::new();
+    for task in tasks {
+        answers.extend(task.await.unwrap());
+    }
+    let elapsed = started.elapsed().as_secs_f64();
+    // Chaque flux du flot a sa réponse : relayé (400 d'AIODOS), ou refusé aussitôt (503 busy,
+    // pour la cadence ou une autre borne)
+    for answer in &answers {
+        let busy = answer.starts_with("HTTP/1.1 503") && answer.contains("busy");
+        assert!(answer.starts_with("HTTP/1.1 400") || busy, "{answer:?}");
+    }
+    let counts = served(&lender).await;
+    let refused = counts["streams_refused"].as_u64().expect("flux refusés pour la cadence comptés");
+    let passed = answers.len() as f64 - refused as f64;
+    let allowed = NEW_STREAMS.burst + NEW_STREAMS.per_second * elapsed + 1.0;
+    assert!(refused > 0 && passed <= allowed, "{passed} flux passés en {elapsed:.2} s (au plus {allowed:.0}) : {counts}");
+
+    // Un flot de nouvelles connexions : au-delà de la rafale, refusées avant la poignée de main
+    let flooder = stranger(&lookup).await;
+    let started = Instant::now();
+    let (mut opened, mut turned_away) = (Vec::new(), 0u64);
+    for _ in 0..60 {
+        match try_connect(&flooder, lender_key).await {
+            Some(conn) => opened.push(conn),
+            None => turned_away += 1,
+        }
+    }
+    let elapsed = started.elapsed().as_secs_f64();
+    let allowed = NEW_CONNECTIONS.burst + NEW_CONNECTIONS.per_second * elapsed + 1.0;
+    assert!(
+        turned_away > 0 && opened.len() as f64 <= allowed,
+        "{} connexions ouvertes en {elapsed:.2} s (au plus {allowed:.0})",
+        opened.len()
+    );
+    let counts = served(&lender).await;
+    assert!(counts["connections_refused"].as_u64().unwrap() >= turned_away, "{counts}");
+    // La conversation en cours n'a pas cédé sa place, et avance toujours
+    let answer = exchange(&conversation, "/public/v1/echo").await;
+    assert!(answer.starts_with("HTTP/1.1 200"), "conversation en cours gênée par le flot : {answer}");
+
+    drop(opened);
+    for (flooder, _) in flooders {
+        flooder.close().await;
+    }
+    flooder.close().await;
+    asker.close().await;
     lender.running.stop().await;
 }

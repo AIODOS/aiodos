@@ -28,6 +28,19 @@ pub fn load_or_create(data_dir: &Path) -> Result<(SecretKey, bool)> {
 /// Une clé gardée dans ce fichier du dossier de données (celle de la machine, ou celle du
 /// nœud public, cf. public.rs), et si elle vient d'être créée.
 pub fn load_or_create_file(data_dir: &Path, file: &str) -> Result<(SecretKey, bool)> {
+    match read_file(data_dir, file)? {
+        Some(key) => Ok((key, false)),
+        None => {
+            let key = SecretKey::generate();
+            write_file(data_dir, file, &key)?;
+            Ok((key, true))
+        }
+    }
+}
+
+/// La clé gardée dans ce fichier du dossier de données, `None` s'il n'existe pas ; une clé
+/// illisible est une erreur (jamais remplacée en silence).
+pub fn read_file(data_dir: &Path, file: &str) -> Result<Option<SecretKey>> {
     let path = data_dir.join(file);
     match fs::read_to_string(&path) {
         Ok(text) => {
@@ -39,15 +52,17 @@ pub fn load_or_create_file(data_dir: &Path, file: &str) -> Result<(SecretKey, bo
                     path.display()
                 )
             })?;
-            Ok((key, false))
+            Ok(Some(key))
         }
-        Err(err) if err.kind() == ErrorKind::NotFound => {
-            let key = SecretKey::generate();
-            save(&path, &key)?;
-            Ok((key, true))
-        }
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err).with_context(|| format!("lecture de {}", path.display())),
     }
+}
+
+/// Garde cette clé dans ce fichier du dossier de données (cf. `save`), à la place de
+/// l'ancienne s'il y en avait une.
+pub fn write_file(data_dir: &Path, file: &str, key: &SecretKey) -> Result<()> {
+    save(&data_dir.join(file), key)
 }
 
 fn parse(text: &str) -> Result<SecretKey> {

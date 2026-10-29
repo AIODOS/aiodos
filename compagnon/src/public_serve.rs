@@ -59,6 +59,21 @@
 //!
 //! La mémoire que les conversations d'inconnus tiennent reste ainsi de quelques dizaines de
 //! mégaoctets au plus, même sur un téléphone.
+//!
+//! Et le **rythme** (relecture du 28/10, bilan « rythme non borné » : un flot de flux tenait
+//! les places de lecture et coupait un envoi lent légitime ; plus de 31 connexions ouvertes
+//! pendant l'aller-retour d'un nouveau venu l'évinçaient) :
+//! - nouvelles connexions qui demandent `PUBLIC_ALPN` : `NEW_CONNECTIONS` pour tous, refusées
+//!   au-delà **avant la poignée de main** (filtre du `Router`, `Serve::incoming_filter`) ;
+//! - nouveaux flux des connexions jamais servies : `NEW_STREAMS` pour tous ; au-delà, 503
+//!   `busy` aussitôt, réponse toute faite, sans rien lire (`refuse_stream`) ;
+//! - une connexion **déjà servie** (une conversation en cours) n'est jamais pénalisée par le
+//!   flot des autres : ses flux ont leur propre cadence (`SERVED_STREAMS`, par connexion),
+//!   le corps qu'elle envoie garde sa place de lecture face aux nouveaux venus (cf.
+//!   public_reading.rs), une des places en cours et une part des relais de la minute lui
+//!   restent (`UNSERVED_IN_FLIGHT`, `UNSERVED_RELAYED_PER_MINUTE` pour les autres), et elle
+//!   ne cède sa place de connexion qu'après toutes celles qui n'ont jamais été servies
+//!   (`victim`).
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -66,7 +81,7 @@ use std::{
     fmt,
     net::SocketAddr,
     sync::{
-        Arc, Mutex,
+        Arc, LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
@@ -83,15 +98,18 @@ use hyper::{
 use hyper_util::rt::{TokioIo, TokioTimer};
 use iroh::{
     EndpointId,
-    endpoint::Connection,
-    protocol::{AcceptError, ProtocolHandler},
+    endpoint::{self, Connection, RecvStream, SendStream},
+    protocol::{AcceptError, IncomingFilter, IncomingFilterOutcome, ProtocolHandler},
 };
+use iroh_gossip::ALPN as GOSSIP_ALPN;
 use serde_json::{Value, json};
 use tokio::task::JoinSet;
 use tracing::debug;
 
 use crate::{
-    PUBLIC_HEADER, close, inbound,
+    PUBLIC_ALPN, PUBLIC_HEADER,
+    cadence::{Bucket, Cadence},
+    close, inbound,
     public_reading::{Readers, Unread},
     relay_body::{self, Pace, Progress},
     reply::{self, Body},
@@ -110,6 +128,10 @@ pub const PER_KEY_PER_HOUR: usize = 30;
 /// conversation ne donne pas plus de places à qui en tire beaucoup. AIODOS borne aussi de
 /// son côté (places de la machine, cf. node/places.py).
 pub const GLOBAL_IN_FLIGHT: usize = 2;
+/// Requêtes en cours des connexions jamais servies, toutes confondues : l'autre place de
+/// `GLOBAL_IN_FLIGHT` reste aux conversations en cours, qu'un flot de requêtes vite refusées
+/// ne tient pas.
+pub const UNSERVED_IN_FLIGHT: usize = GLOBAL_IN_FLIGHT - 1;
 /// Requêtes du public servies sur une minute glissante, toutes clés confondues : acceptées
 /// par AIODOS (réponse 200), ou relayées et pas encore répondues.
 pub const GLOBAL_PER_MINUTE: usize = 120;
@@ -117,6 +139,25 @@ pub const GLOBAL_PER_MINUTE: usize = 120;
 /// qu'il les serve ou les refuse : une borne sur le total, plus large, pour que des refus
 /// rapides n'épuisent pas `GLOBAL_PER_MINUTE` sans que le compagnon relaie sans fin.
 pub const GLOBAL_RELAYED_PER_MINUTE: usize = 5 * GLOBAL_PER_MINUTE;
+/// Part de `GLOBAL_RELAYED_PER_MINUTE` que prennent au plus les requêtes des connexions
+/// jamais servies : le reste (`GLOBAL_PER_MINUTE`) va aux conversations en cours, qu'un flot
+/// de requêtes vite refusées ne prive pas de la minute.
+pub const UNSERVED_RELAYED_PER_MINUTE: usize = GLOBAL_RELAYED_PER_MINUTE - GLOBAL_PER_MINUTE;
+/// Nouvelles connexions d'inconnus (`PUBLIC_ALPN`), toutes clés confondues : 20 d'un coup,
+/// puis 10 par seconde ; au-delà, refusées avant la poignée de main
+/// (`Serve::incoming_filter`). Un nouveau venu ne cède donc sa place de connexion (cf.
+/// `victim`) qu'après 31 connexions arrivées après lui, soit au moins 1 à 3 s : le temps de
+/// son aller-retour par un relais.
+pub const NEW_CONNECTIONS: Cadence = Cadence { per_second: 10.0, burst: 20.0 };
+/// Nouveaux flux des connexions jamais servies, toutes confondues : 40 d'un coup, puis 20
+/// par seconde ; au-delà, 503 `busy` aussitôt (`refuse_stream`).
+pub const NEW_STREAMS: Cadence = Cadence { per_second: 20.0, burst: 40.0 };
+/// Nouveaux flux d'une connexion déjà servie (une conversation en cours), à elle seule :
+/// jamais pris sur `NEW_STREAMS`. Un message de loin en loin, quelques-uns de suite au plus
+/// (un refus, puis un autre essai) : 10 d'un coup, puis 2 par seconde.
+pub const SERVED_STREAMS: Cadence = Cadence { per_second: 2.0, burst: 10.0 };
+/// Écriture de la réponse toute faite d'un flux refusé, au plus.
+const REFUSAL_WRITE: Duration = Duration::from_secs(2);
 /// Une clé sans requête depuis ce délai est oubliée (ses compteurs avec elle). Les clés
 /// gardées sont donc au plus `GLOBAL_RELAYED_PER_MINUTE` × 10 (6 000), une centaine
 /// d'octets chacune pour une clé jetable (une requête) : pas besoin d'autre borne.
@@ -160,9 +201,27 @@ const STREAM_REFUSED: u32 = 503;
 
 // ------------------------------------------------------------ bornes
 
-/// Compteurs des requêtes du public, par clé et pour tous, en mémoire seulement.
-#[derive(Debug, Clone, Default)]
-pub struct Limits(Arc<Mutex<Counters>>);
+/// Compteurs des requêtes du public, par clé et pour tous, et cadences des nouvelles
+/// connexions et des nouveaux flux ; en mémoire seulement.
+#[derive(Debug, Clone)]
+pub struct Limits {
+    counters: Arc<Mutex<Counters>>,
+    cadences: Arc<Mutex<Cadences>>,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Limits::with_cadences(NEW_CONNECTIONS, NEW_STREAMS)
+    }
+}
+
+/// Seaux des nouvelles connexions et des nouveaux flux des connexions jamais servies, pour
+/// tout le public.
+#[derive(Debug)]
+struct Cadences {
+    connections: Bucket,
+    streams: Bucket,
+}
 
 #[derive(Debug, Default)]
 struct Counters {
@@ -175,9 +234,16 @@ struct Counters {
     undecided: usize,
     /// Requêtes relayées de la dernière minute, servies ou refusées par AIODOS.
     recent: VecDeque<Instant>,
+    /// Parmi elles et parmi celles en cours : celles des connexions jamais servies.
+    unserved_recent: VecDeque<Instant>,
+    unserved_in_flight: usize,
     relayed: u64,
     accepted: u64,
     refused: u64,
+    /// Connexions et flux refusés pour la cadence (`NEW_CONNECTIONS`, `NEW_STREAMS`,
+    /// `SERVED_STREAMS`), depuis le démarrage.
+    connections_refused: u64,
+    streams_refused: u64,
 }
 
 #[derive(Debug)]
@@ -192,7 +258,7 @@ struct KeyUse {
 impl Counters {
     /// Oublie les admissions sorties des fenêtres, et les clés inactives.
     fn tidy(&mut self, now: Instant) {
-        for window in [&mut self.served, &mut self.recent] {
+        for window in [&mut self.served, &mut self.recent, &mut self.unserved_recent] {
             while window.front().is_some_and(|at| now.saturating_duration_since(*at) >= MINUTE) {
                 window.pop_front();
             }
@@ -205,10 +271,20 @@ impl Counters {
         });
     }
 
-    fn allows(&self, key: &EndpointId) -> bool {
+    /// `served` : la requête vient d'une connexion déjà servie. Celles des connexions jamais
+    /// servies, toutes ensemble, n'ont en plus que `UNSERVED_IN_FLIGHT` places en cours et
+    /// `UNSERVED_RELAYED_PER_MINUTE` relais par minute : le reste des bornes de tout le public
+    /// est aux conversations en cours.
+    fn allows(&self, key: &EndpointId, served: bool) -> bool {
         if self.in_flight >= GLOBAL_IN_FLIGHT
             || self.served.len() + self.undecided >= GLOBAL_PER_MINUTE
             || self.recent.len() >= GLOBAL_RELAYED_PER_MINUTE
+        {
+            return false;
+        }
+        if !served
+            && (self.unserved_in_flight >= UNSERVED_IN_FLIGHT
+                || self.unserved_recent.len() >= UNSERVED_RELAYED_PER_MINUTE)
         {
             return false;
         }
@@ -219,16 +295,52 @@ impl Counters {
 }
 
 impl Limits {
+    /// Bornes neuves, avec ces cadences des nouvelles connexions et des nouveaux flux (les
+    /// essais les changent ; `Limits::default` : `NEW_CONNECTIONS`, `NEW_STREAMS`).
+    pub fn with_cadences(connections: Cadence, streams: Cadence) -> Self {
+        let now = Instant::now();
+        Limits {
+            counters: Arc::default(),
+            cadences: Arc::new(Mutex::new(Cadences {
+                connections: Bucket::new(connections, now),
+                streams: Bucket::new(streams, now),
+            })),
+        }
+    }
+
     fn counters(&self) -> std::sync::MutexGuard<'_, Counters> {
-        self.0.lock().expect("bornes du réseau public")
+        self.counters.lock().expect("bornes du réseau public")
+    }
+
+    fn cadences(&self) -> std::sync::MutexGuard<'_, Cadences> {
+        self.cadences.lock().expect("cadences du réseau public")
+    }
+
+    /// Une nouvelle connexion d'inconnu, dans la cadence `NEW_CONNECTIONS` ? (Un jeton pris.)
+    pub fn connection_allowed(&self, now: Instant) -> bool {
+        let allowed = self.cadences().connections.take(now);
+        if !allowed {
+            self.counters().connections_refused += 1;
+        }
+        allowed
+    }
+
+    /// Un nouveau flux d'une connexion jamais servie, dans la cadence `NEW_STREAMS` ?
+    fn stream_allowed(&self, now: Instant) -> bool {
+        self.cadences().streams.take(now)
+    }
+
+    fn stream_refused(&self) {
+        self.counters().streams_refused += 1;
     }
 
     /// Une requête de cette clé serait-elle admise maintenant ? Rien n'est compté : sert à
-    /// refuser avant de lire le corps.
-    pub fn would_admit(&self, key: &EndpointId, now: Instant) -> bool {
+    /// refuser avant de lire le corps. `served` : sa connexion a déjà été servie (cf.
+    /// `Counters::allows`).
+    pub fn would_admit(&self, key: &EndpointId, served: bool, now: Instant) -> bool {
         let mut counters = self.counters();
         counters.tidy(now);
-        let allowed = counters.allows(key);
+        let allowed = counters.allows(key, served);
         if !allowed {
             counters.refused += 1;
         }
@@ -238,10 +350,10 @@ impl Limits {
     /// Admet une requête de cette clé, ou `None` (503 `busy`). La place est rendue quand
     /// l'`Admitted` est lâché (fin de la réponse, ou flux abandonné) ; la requête ne compte
     /// parmi les servies que si AIODOS l'accepte (`Admitted::served`).
-    pub fn admit(&self, key: EndpointId, now: Instant) -> Option<Admitted> {
+    pub fn admit(&self, key: EndpointId, served: bool, now: Instant) -> Option<Admitted> {
         let mut counters = self.counters();
         counters.tidy(now);
-        if !counters.allows(&key) {
+        if !counters.allows(&key, served) {
             counters.refused += 1;
             return None;
         }
@@ -249,6 +361,10 @@ impl Limits {
         counters.undecided += 1;
         counters.relayed += 1;
         counters.recent.push_back(now);
+        if !served {
+            counters.unserved_in_flight += 1;
+            counters.unserved_recent.push_back(now);
+        }
         let used = counters
             .keys
             .entry(key)
@@ -256,12 +372,12 @@ impl Limits {
         used.in_flight += 1;
         used.recent.push_back(now);
         used.last = now;
-        Some(Admitted { limits: self.clone(), key, undecided: true })
+        Some(Admitted { limits: self.clone(), key, undecided: true, unserved: !served })
     }
 
     /// Pour l'état (`GET /net/v1/public`, `"served"`) : requêtes en cours ; relayées,
-    /// acceptées par AIODOS (200) et refusées par le compagnon depuis son démarrage. Jamais
-    /// les clés.
+    /// acceptées par AIODOS (200) et refusées par le compagnon depuis son démarrage ;
+    /// connexions et flux refusés pour la cadence. Jamais les clés.
     pub fn snapshot(&self) -> Value {
         let counters = self.counters();
         json!({
@@ -269,6 +385,8 @@ impl Limits {
             "relayed": counters.relayed,
             "accepted": counters.accepted,
             "refused": counters.refused,
+            "connections_refused": counters.connections_refused,
+            "streams_refused": counters.streams_refused,
         })
     }
 }
@@ -280,6 +398,8 @@ pub struct Admitted {
     key: EndpointId,
     /// AIODOS n'a pas encore dit s'il la sert.
     undecided: bool,
+    /// Elle vient d'une connexion jamais servie (cf. `Counters::allows`).
+    unserved: bool,
 }
 
 impl Admitted {
@@ -302,6 +422,9 @@ impl Drop for Admitted {
             counters.undecided = counters.undecided.saturating_sub(1);
         }
         counters.in_flight = counters.in_flight.saturating_sub(1);
+        if self.unserved {
+            counters.unserved_in_flight = counters.unserved_in_flight.saturating_sub(1);
+        }
         if let Some(used) = counters.keys.get_mut(&self.key) {
             used.in_flight = used.in_flight.saturating_sub(1);
             used.last = Instant::now();
@@ -326,6 +449,9 @@ struct Table {
 struct Held {
     conn: Connection,
     standing: Standing,
+    /// Cadence de ses nouveaux flux une fois servie (`SERVED_STREAMS`) ; avant, ceux-ci sont
+    /// pris sur `NEW_STREAMS`, pour tous.
+    streams: Bucket,
 }
 
 /// Ce qu'une connexion a obtenu, pour choisir celle qui cède sa place (cf. `victim`).
@@ -367,8 +493,10 @@ impl Conns {
         }
         let id = table.next;
         table.next += 1;
-        let standing = Standing { opened: Instant::now(), advancing: 0, served: None };
-        table.held.insert(id, Held { conn: conn.clone(), standing });
+        let now = Instant::now();
+        let standing = Standing { opened: now, advancing: 0, served: None };
+        let streams = Bucket::new(SERVED_STREAMS, now);
+        table.held.insert(id, Held { conn: conn.clone(), standing, streams });
         Some(Entered(Place { conns: self.clone(), id }))
     }
 }
@@ -391,6 +519,31 @@ impl Place {
     fn advancing(&self) -> Advancing {
         self.update(|s| s.advancing += 1);
         Advancing { place: self.clone(), served: false }
+    }
+
+    /// Cette connexion a-t-elle déjà été servie (une réponse 200 d'AIODOS) : une
+    /// conversation en cours ?
+    fn served(&self) -> bool {
+        let table = self.conns.0.lock().expect("connexions publiques");
+        table.held.get(&self.id).is_some_and(|held| held.standing.served.is_some())
+    }
+
+    /// Un nouveau flux sur cette connexion, dans sa cadence : la sienne si elle a déjà été
+    /// servie (`SERVED_STREAMS`, jamais pénalisée par le flot des autres), sinon celle de
+    /// tout le public (`NEW_STREAMS`). Un jeton pris ; sans jeton, le refus est compté.
+    fn stream_allowed(&self, limits: &Limits, now: Instant) -> bool {
+        let allowed = {
+            let mut table = self.conns.0.lock().expect("connexions publiques");
+            match table.held.get_mut(&self.id) {
+                Some(held) if held.standing.served.is_some() => held.streams.take(now),
+                Some(_) => limits.stream_allowed(now),
+                None => false,
+            }
+        };
+        if !allowed {
+            limits.stream_refused();
+        }
+        allowed
     }
 }
 
@@ -467,6 +620,41 @@ impl Serve {
     }
 }
 
+impl Serve {
+    /// Filtre du `Router` du nœud public (cf. public.rs), avant toute poignée de main : une
+    /// nouvelle connexion qui demande `PUBLIC_ALPN` prend un jeton de `NEW_CONNECTIONS`, et
+    /// sans jeton elle est refusée aussitôt (un paquet de refus de QUIC, ni chiffrement ni
+    /// signature ; le demandeur lit « injoignable » et passe à une autre machine). Le protocole
+    /// demandé est lu dans le premier paquet (`counted`) ; les connexions du groupe de
+    /// discussion ne comptent pas.
+    pub fn incoming_filter(&self) -> IncomingFilter {
+        let limits = self.0.limits.clone();
+        Arc::new(move |incoming: &endpoint::Incoming| {
+            let alpns: Option<Vec<Vec<u8>>> = incoming
+                .decrypt()
+                .and_then(|initial| initial.alpns())
+                .and_then(|alpns| alpns.map(|alpn| alpn.map(|a| a.to_vec())).collect::<Result<_, _>>().ok());
+            if !counted(alpns.as_deref()) || limits.connection_allowed(Instant::now()) {
+                IncomingFilterOutcome::Accept
+            } else {
+                debug!("Réseau public : trop de nouvelles connexions d'inconnus, une refusée");
+                IncomingFilterOutcome::Reject
+            }
+        })
+    }
+}
+
+/// Une nouvelle connexion compte-t-elle dans `NEW_CONNECTIONS`, d'après les protocoles
+/// qu'elle propose (`None` : illisibles) ? Pas celle qui propose le groupe de discussion
+/// (choisi d'abord, cf. public.rs : elle ne mène jamais à une conversation), ni celle qui ne
+/// propose pas `PUBLIC_ALPN` (la poignée de main échouera). Une proposition illisible
+/// (salutation TLS sur plusieurs paquets) compte : elle mène peut-être à une conversation.
+pub fn counted(alpns: Option<&[Vec<u8>]>) -> bool {
+    alpns.is_none_or(|alpns| {
+        !alpns.iter().any(|alpn| alpn == GOSSIP_ALPN) && alpns.iter().any(|alpn| alpn == PUBLIC_ALPN)
+    })
+}
+
 impl ProtocolHandler for Serve {
     async fn accept(&self, conn: Connection) -> Result<(), AcceptError> {
         serve_connection(self.0.clone(), conn).await;
@@ -498,6 +686,12 @@ async fn serve_connection(shared: Arc<Shared>, conn: Connection) {
                         let _ = recv.stop(STREAM_REFUSED.into());
                         continue;
                     }
+                    // Au-delà de la cadence des nouveaux flux : 503 `busy`, sans rien lire
+                    // (le flux refusé compte parmi ceux de la connexion le temps d'écrire)
+                    if !entered.0.stream_allowed(&shared.limits, Instant::now()) {
+                        streams.spawn(refuse_stream(send, recv));
+                        continue;
+                    }
                     let place = entered.0.clone();
                     streams.spawn(serve_stream(shared.clone(), caller, place, QuicIo::bare(send, recv)));
                 }
@@ -510,6 +704,32 @@ async fn serve_connection(shared: Arc<Shared>, conn: Connection) {
             }
         }
     }
+}
+
+/// Réponse toute faite d'un flux refusé pour la cadence : la même que `busy`, sans hyper.
+static BUSY_RESPONSE: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    let body = json!({ "error": "busy", "detail": BUSY_DETAIL }).to_string();
+    format!(
+        "HTTP/1.1 503 Service Unavailable\r\ncontent-type: application/json\r\nconnection: close\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+});
+
+/// Un flux de trop pour la cadence (`NEW_STREAMS`, ou `SERVED_STREAMS` de sa connexion) :
+/// 503 `busy` aussitôt, comme toute borne atteinte (le demandeur passe à une autre machine),
+/// sans lire la requête ni la donner à hyper ; ce que l'appelant envoie n'est pas lu (QUIC
+/// le borne, cf. public.rs `STREAM_WINDOW`).
+async fn refuse_stream(mut send: SendStream, mut recv: RecvStream) {
+    if tokio::time::timeout(REFUSAL_WRITE, send.write_all(&BUSY_RESPONSE)).await.is_ok_and(|w| w.is_ok()) {
+        let _ = send.finish();
+        // Le refus est reçu avant qu'on cesse de lire : l'appelant ne voit pas d'erreur
+        // d'envoi avant la réponse
+        let _ = tokio::time::timeout(REFUSAL_WRITE, send.stopped()).await;
+    } else {
+        let _ = send.reset(STREAM_REFUSED.into());
+    }
+    let _ = recv.stop(STREAM_REFUSED.into());
 }
 
 /// Un flux = un échange HTTP/1.1, relayé vers AIODOS. Si l'appelant ne lit plus la réponse
@@ -563,15 +783,18 @@ async fn forward(
             "Cette machine ne prête pas aux inconnus en ce moment.",
         );
     }
+    // Une conversation en cours (connexion déjà servie) n'est pas pénalisée par le flot des
+    // autres : part réservée des relais, place de lecture gardée (cf. en tête)
+    let served = place.served();
     // Déjà joué : refus aussitôt, sans lire le corps
-    if !shared.limits.would_admit(&caller, Instant::now()) {
+    if !shared.limits.would_admit(&caller, served, Instant::now()) {
         return busy();
     }
     if relay_body::announced_too_large(req.headers(), MAX_BODY) {
         return too_large();
     }
     // Une place de lecture, prise au besoin au corps le plus lent (cf. public_reading.rs)
-    let Some(reading) = shared.reading.enter(Instant::now()) else {
+    let Some(reading) = shared.reading.enter(Instant::now(), served) else {
         return busy();
     };
     let mut advancing = place.advancing();
@@ -589,7 +812,7 @@ async fn forward(
         Err(_) => return too_slow(),
     };
     drop(reading);
-    let Some(mut admitted) = shared.limits.admit(caller, Instant::now()) else {
+    let Some(mut admitted) = shared.limits.admit(caller, served, Instant::now()) else {
         return busy();
     };
     let target = parts.uri.path_and_query().map_or(PATH_PREFIX, |pq| pq.as_str()).to_owned();
@@ -672,12 +895,10 @@ pub fn refusal(status: StatusCode, code: &str, detail: impl Into<String>) -> Res
 
 /// Une borne est atteinte : le demandeur passe à une autre machine.
 fn busy() -> Response<Body> {
-    refusal(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "busy",
-        "Machine occupée pour le réseau public : demande à une autre.",
-    )
+    refusal(StatusCode::SERVICE_UNAVAILABLE, "busy", BUSY_DETAIL)
 }
+
+const BUSY_DETAIL: &str = "Machine occupée pour le réseau public : demande à une autre.";
 
 /// Corps trop lent : muet `BODY_IDLE`, sous `BODY_PACE`, ou pas fini en `BODY_TIMEOUT`.
 fn too_slow() -> Response<Body> {
@@ -787,16 +1008,19 @@ mod tests {
         let limits = Limits::default();
         let now = Instant::now();
         let (a, b, c) = (key(), key(), key());
-        let first = limits.admit(a, now).expect("première");
-        assert!(!limits.would_admit(&a, now), "une à la fois par clé");
-        assert!(limits.admit(a, now).is_none());
-        let second = limits.admit(b, now).expect("une autre clé");
-        assert!(limits.admit(c, now).is_none(), "deux à la fois pour tout le public");
+        let first = limits.admit(a, false, now).expect("première");
+        assert!(!limits.would_admit(&a, false, now), "une à la fois par clé");
+        assert!(limits.admit(a, true, now).is_none());
+        // Une connexion jamais servie n'a qu'une place ; la seconde est aux conversations en
+        // cours (relecture du 28/10 : un flot de requêtes vite refusées les tenait toutes)
+        assert!(limits.admit(b, false, now).is_none(), "nouveaux venus : une à la fois");
+        let second = limits.admit(b, true, now).expect("une conversation en cours");
+        assert!(limits.admit(c, true, now).is_none(), "deux à la fois pour tout le public");
         drop(first);
-        let third = limits.admit(c, now).expect("une place rendue");
-        assert!(limits.admit(a, now).is_none(), "toujours deux à la fois");
+        let third = limits.admit(c, false, now).expect("la place des nouveaux venus rendue");
+        assert!(limits.admit(a, true, now).is_none(), "toujours deux à la fois");
         drop((second, third));
-        assert!(limits.admit(a, now).is_some(), "toutes les places rendues");
+        assert!(limits.admit(a, false, now).is_some(), "toutes les places rendues");
         let served = limits.snapshot();
         assert_eq!(served["in_flight"], 0);
         assert_eq!(served["relayed"], 4);
@@ -810,14 +1034,14 @@ mod tests {
         let a = key();
         for i in 0..PER_KEY_PER_HOUR {
             let at = start + Duration::from_secs(i as u64);
-            drop(limits.admit(a, at).unwrap_or_else(|| panic!("requête {i}")));
+            drop(limits.admit(a, false, at).unwrap_or_else(|| panic!("requête {i}")));
         }
         let later = start + Duration::from_secs(60);
-        assert!(limits.admit(a, later).is_none(), "31e dans l'heure");
-        assert!(limits.admit(key(), later).is_some(), "les autres clés passent");
+        assert!(limits.admit(a, false, later).is_none(), "31e dans l'heure");
+        assert!(limits.admit(key(), false, later).is_some(), "les autres clés passent");
         // Inactive assez longtemps, la clé est oubliée, avec ses compteurs
         let idle = Instant::now() + FORGET_KEY_AFTER + Duration::from_secs(1);
-        assert!(limits.admit(a, idle).is_some());
+        assert!(limits.admit(a, false, idle).is_some());
         assert_eq!(limits.counters().keys.len(), 1, "seule la clé revenue est gardée");
     }
 
@@ -826,11 +1050,11 @@ mod tests {
         let limits = Limits::default();
         let start = Instant::now();
         for i in 0..GLOBAL_PER_MINUTE {
-            let mut admitted = limits.admit(key(), start).unwrap_or_else(|| panic!("requête {i}"));
+            let mut admitted = limits.admit(key(), false, start).unwrap_or_else(|| panic!("requête {i}"));
             admitted.served(start);
         }
-        assert!(limits.admit(key(), start + Duration::from_secs(30)).is_none(), "121e dans la minute");
-        assert!(limits.admit(key(), start + Duration::from_secs(61)).is_some(), "la minute est passée");
+        assert!(limits.admit(key(), false, start + Duration::from_secs(30)).is_none(), "121e dans la minute");
+        assert!(limits.admit(key(), false, start + Duration::from_secs(61)).is_some(), "la minute est passée");
         assert_eq!(limits.snapshot()["accepted"], GLOBAL_PER_MINUTE);
     }
 
@@ -841,24 +1065,57 @@ mod tests {
         let limits = Limits::default();
         let start = Instant::now();
         for i in 0..GLOBAL_PER_MINUTE {
-            drop(limits.admit(key(), start).unwrap_or_else(|| panic!("refus {i}")));
+            drop(limits.admit(key(), false, start).unwrap_or_else(|| panic!("refus {i}")));
         }
-        let mut served = limits.admit(key(), start).expect("une conversation servie passe encore");
+        let mut served = limits.admit(key(), false, start).expect("une conversation servie passe encore");
         served.served(start);
         drop(served);
         // Ni refusée, ni servie encore : comptée parmi les servies tant qu'AIODOS n'a rien dit
-        let first = limits.admit(key(), start).expect("en attente de la réponse");
-        let second = limits.admit(key(), start).expect("deux à la fois");
+        let first = limits.admit(key(), false, start).expect("en attente de la réponse");
+        let second = limits.admit(key(), true, start).expect("deux à la fois");
         assert_eq!(limits.counters().undecided, 2);
         drop((first, second));
         assert_eq!(limits.counters().undecided, 0, "sans 200, jamais servies");
-        // Le total reste borné : refus compris, `GLOBAL_RELAYED_PER_MINUTE` par minute
-        while limits.counters().recent.len() < GLOBAL_RELAYED_PER_MINUTE {
-            drop(limits.admit(key(), start).expect("sous la borne du total"));
+        // Le total reste borné : refus compris, `GLOBAL_RELAYED_PER_MINUTE` par minute ; les
+        // connexions jamais servies n'en prennent que `UNSERVED_RELAYED_PER_MINUTE`
+        while limits.counters().unserved_recent.len() < UNSERVED_RELAYED_PER_MINUTE {
+            drop(limits.admit(key(), false, start).expect("sous la part des nouveaux venus"));
         }
-        assert!(limits.admit(key(), start + Duration::from_secs(30)).is_none(), "total atteint");
-        assert!(limits.admit(key(), start + Duration::from_secs(61)).is_some(), "la minute est passée");
+        assert!(limits.admit(key(), false, start).is_none(), "part des nouveaux venus prise");
+        // Une conversation en cours (connexion déjà servie) a encore sa part de la minute
+        while limits.counters().recent.len() < GLOBAL_RELAYED_PER_MINUTE {
+            drop(limits.admit(key(), true, start).expect("part des conversations en cours"));
+        }
+        assert!(limits.admit(key(), true, start + Duration::from_secs(30)).is_none(), "total atteint");
+        assert!(limits.admit(key(), false, start + Duration::from_secs(61)).is_some(), "la minute est passée");
         assert_eq!(limits.snapshot()["accepted"], 1);
+    }
+
+    #[test]
+    fn new_connections_and_streams_are_paced_for_everyone() {
+        let limits = Limits::default();
+        let start = Instant::now();
+        let connections = (0..100).filter(|_| limits.connection_allowed(start)).count();
+        assert_eq!(connections, NEW_CONNECTIONS.burst as usize);
+        assert!(limits.connection_allowed(start + Duration::from_millis(100)), "dix par seconde");
+        let streams = (0..100).filter(|_| limits.stream_allowed(start)).count();
+        assert_eq!(streams, NEW_STREAMS.burst as usize);
+        assert_eq!(limits.snapshot()["connections_refused"], 100 - NEW_CONNECTIONS.burst as u64);
+    }
+
+    #[test]
+    fn only_a_connection_that_asks_for_a_conversation_is_paced() {
+        let public = PUBLIC_ALPN.to_vec();
+        let gossip = GOSSIP_ALPN.to_vec();
+        assert!(counted(Some(std::slice::from_ref(&public))));
+        assert!(counted(Some(&[b"autre".to_vec(), public.clone()])));
+        assert!(counted(None), "illisible : peut-être une conversation");
+        // Le groupe de discussion est choisi d'abord : il ne mène jamais à une conversation
+        assert!(!counted(Some(std::slice::from_ref(&gossip))));
+        assert!(!counted(Some(&[public, gossip])));
+        // Aucun de nos protocoles : la poignée de main échouera
+        assert!(!counted(Some(&[crate::ALPN.to_vec()])));
+        assert!(!counted(Some(&[])));
     }
 
     #[test]
