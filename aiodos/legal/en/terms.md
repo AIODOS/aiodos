@@ -1,6 +1,6 @@
 # AIODOS Terms of Use
 
-*Version 3, October 28, 2026*
+*Version 4, October 29, 2026*
 
 ## 1. Purpose
 
@@ -48,9 +48,10 @@ have their own terms:
 - From the first launch, and until you turn it off: your machine joins the public network's
   directory (it announces its AIODOS version, the list of its models, whether it lends, its
   free places and its speed there, nothing personal), your conversations can be computed by
-  strangers and your machine computes theirs (see below), your graphics card creates the
-  images that the friends you have added ask of it, and the applications on this machine can
-  ask you for access to AIODOS (each one has to be accepted by you).
+  strangers and your machine computes theirs, your graphics card creates their images and
+  videos (see below) as well as the images that the friends you have added ask of it, and
+  the applications on this machine can ask you for access to AIODOS (each one has to be
+  accepted by you).
 - **Your conversations on a stranger's machine** ("Have my conversations computed by
   strangers"): a stranger's machine on the public network can compute your conversations.
   It reads the conversation (your text, the system prompt), but doesn't know who is asking:
@@ -60,7 +61,16 @@ have their own terms:
   turn on "On my machines only" in that conversation. Having a larger model on a public
   network machine answer, or sending a stranger the passages of your documents (your
   libraries, the memory of your conversations), waits for your consent, asked once and
-  changeable in Settings. Your attachments, images and files never go to a stranger.
+  changeable in Settings. Your attachments, your files and your images and videos already
+  created never go to a stranger.
+- **Your images and videos on a stranger's machine**: when neither your machine nor your
+  other machines can create them, a stranger's machine on the public network can do it,
+  with your consent, asked once and changeable in Settings. It reads your description (never
+  an attached image, nor the rest of the conversation) and sees the image or video created,
+  but doesn't know who is asking: each creation has its own throwaway key, and the request
+  goes through a relay. AIODOS keeps nothing there. Your description itself can still reveal
+  who you are. "On my machines only" also applies to the images and videos of a
+  conversation.
 - **Strangers' conversations on your machine** ("Lend my computing power to strangers'
   conversations"): your machine computes them within the limit of the "Power lent" (60% by
   default), never on battery, a phone only while charging and on Wi-Fi, and after your own
@@ -69,6 +79,18 @@ have their own terms:
   computes. A stranger could therefore ask it for an illegal text: your machine would only
   run a public model on it, without keeping any of it. Everyone remains responsible for
   what they ask (part 6). If this doesn't suit you, turn this lending off in Settings.
+- **Strangers' images and videos on your graphics card**: this lending is on by default.
+  Your graphics card creates them within the same limits as their conversations (the
+  "Power lent", never on battery, a phone only while charging and on Wi-Fi, after your own
+  work, your machines and your friends); a video takes much more time and space than an
+  image.
+  Before any computation, a filter refuses the descriptions forbidden by the charter
+  (part 2), in particular any sexual image or video involving a minor, real or fictional,
+  and intimate or sexual images or videos of a real person without their consent. A filter
+  is not infallible: a forbidden description can slip past it. Your machine keeps neither the
+  description nor what it created, and does not show them to you. The person who asks
+  remains responsible for what they ask (part 6). You can turn this lending off at any time
+  in Settings.
 - Lending your power uses your processor, graphics card, memory, battery and connection:
   electricity, data, heat, wear. AIODOS keeps this lending gentle (low priority, not on
   battery, phone only while charging) and you can stop it at any time in Settings.
@@ -83,8 +105,11 @@ have their own terms:
   machine cheats. It is marked "public network" in the conversation; random checks compare
   it with that of another machine, and a machine that cheats is set aside. These checks only
   cover some of the answers.
+- An image or a video created by a stranger's machine is marked as such, but it is not
+  checked this way for now: it may not match your description.
 - You alone are responsible for what you ask, including of other people's machines, what you
-  create and what you do with it, including sharing it.
+  create and what you do with it, including sharing it. A machine accepting your request,
+  after its filter, does not make it allowed.
 - The publisher claims no rights to what you create with AIODOS. The rights to a creation
   depend on the applicable law and on the license of the model used.
 

@@ -1,6 +1,6 @@
 # Conditions d'utilisation d'AIODOS
 
-*Version 3, 28 octobre 2026*
+*Version 4, 29 octobre 2026*
 
 ## 1. Objet
 
@@ -49,10 +49,10 @@ ont leurs propres conditions :
 - Dès la première ouverture, et jusqu'à ce que tu le coupes : ta machine rejoint l'annuaire
   du réseau public (elle y annonce sa version d'AIODOS, la liste de ses modèles, si elle
   prête, ses places libres et sa vitesse, rien de personnel), tes conversations peuvent être
-  calculées par des inconnus et ta machine calcule les leurs (voir ci-dessous), ta carte
-  graphique crée les images que lui demandent les amis que tu as ajoutés, et les
-  applications de cette machine peuvent te demander l'accès à AIODOS (chacune doit être
-  acceptée par toi).
+  calculées par des inconnus et ta machine calcule les leurs, ta carte graphique crée leurs
+  images et leurs vidéos (voir ci-dessous) ainsi que les images que lui demandent les amis
+  que tu as ajoutés, et les applications de cette machine peuvent te demander l'accès à
+  AIODOS (chacune doit être acceptée par toi).
 - **Tes conversations chez un inconnu** (« Faire calculer mes conversations par des
   inconnus ») : la machine d'un inconnu du réseau public peut calculer tes conversations.
   Elle lit la conversation (ton texte, le prompt système), mais ne sait pas qui la demande :
@@ -62,8 +62,16 @@ ont leurs propres conditions :
   machines seulement » dans cette conversation. Faire répondre un modèle plus gros d'une
   machine du réseau public, ou envoyer à un inconnu les passages de tes documents (tes
   bibliothèques, la mémoire de tes conversations), attend ton accord, demandé une fois et
-  modifiable dans les Réglages. Tes pièces jointes, tes images et tes fichiers ne partent
-  jamais chez un inconnu.
+  modifiable dans les Réglages. Tes pièces jointes, tes fichiers et tes images et vidéos
+  déjà créées ne partent jamais chez un inconnu.
+- **Tes images et tes vidéos chez un inconnu** : quand ni ta machine ni tes autres machines
+  ne peuvent les créer, la machine d'un inconnu du réseau public peut le faire, avec ton
+  accord, demandé une fois et modifiable dans les Réglages. Elle lit ta description (jamais
+  une image jointe, ni le reste de la conversation) et voit l'image ou la vidéo créée, mais
+  ne sait pas qui la demande : chaque création a sa clé jetable, et la demande passe par un
+  relais. AIODOS n'y garde rien. Ta description elle-même peut pourtant révéler qui tu es.
+  « Sur mes machines seulement » vaut aussi pour les images et les vidéos d'une
+  conversation.
 - **Les conversations d'inconnus sur ta machine** (« Prêter ma puissance aux conversations
   d'inconnus ») : ta machine les calcule dans la limite de la « Puissance prêtée » (60 % par
   défaut), jamais sur batterie, un téléphone seulement en charge et en Wi-Fi, et après tes
@@ -73,6 +81,17 @@ ont leurs propres conditions :
   que faire tourner un modèle public dessus, sans rien en garder. Chacun reste responsable
   de ce qu'il demande (partie 6). Si cela ne te convient pas, coupe ce prêt dans les
   Réglages.
+- **Les images et les vidéos d'inconnus sur ta carte graphique** : ce prêt est activé par
+  défaut. Ta carte graphique les crée dans les mêmes limites que leurs conversations (la
+  « Puissance prêtée », jamais sur batterie, un téléphone seulement en charge et en Wi-Fi,
+  après tes propres travaux, tes machines et tes amis) ; une vidéo prend bien plus de temps
+  et de place qu'une image. Avant tout calcul, un filtre refuse les descriptions interdites par la
+  charte (partie 2), notamment toute image ou vidéo sexuelle impliquant un mineur, réel ou
+  fictif, et les images ou vidéos intimes ou sexuelles d'une personne réelle sans son
+  accord. Un filtre n'est pas infaillible : une description interdite peut lui échapper. Ta
+  machine ne garde ni la description ni ce qu'elle a créé, et ne te les montre pas. Celui
+  qui demande reste responsable de ce qu'il demande (partie 6). Tu peux couper ce prêt à
+  tout moment dans les Réglages.
 - Prêter ta puissance utilise ton processeur, ta carte graphique, ta mémoire, ta batterie et
   ta connexion : de l'électricité, des données, de la chaleur, de l'usure. AIODOS ménage ce
   prêt (priorité basse, pas sur batterie, téléphone seulement en charge) et tu peux l'arrêter
@@ -89,8 +108,12 @@ ont leurs propres conditions :
   cette machine triche. Elle est marquée « réseau public » dans la conversation ; des
   contrôles au hasard la comparent à celle d'une autre machine, et une machine qui triche
   est mise de côté. Ces contrôles ne portent que sur une partie des réponses.
+- Une image ou une vidéo créée par la machine d'un inconnu est marquée comme telle, mais
+  elle n'est pas contrôlée ainsi pour l'instant : elle peut ne pas correspondre à ta
+  description.
 - Tu es seul responsable de ce que tu demandes, y compris aux machines des autres, de ce que
-  tu crées et de ce que tu en fais, notamment de sa diffusion.
+  tu crées et de ce que tu en fais, notamment de sa diffusion. Qu'une machine accepte ta
+  demande, après son filtre, ne la rend pas permise.
 - L'éditeur ne revendique aucun droit sur ce que tu crées avec AIODOS. Les droits sur une
   création dépendent de la loi qui s'applique et de la licence du modèle utilisé.
 
