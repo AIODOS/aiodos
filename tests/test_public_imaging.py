@@ -816,7 +816,7 @@ def test_the_description_is_enriched_here_never_by_a_stranger(ui, companion, mon
     directory(node(PC, "image:z-image-turbo"))
     lend_images()
     settings.set_value("public_images", True)
-    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": "qwen3.5:0.8b"}])
+    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": "qwen3.5:9b"}])
     monkeypatch.setattr(ollama, "capabilities_many",
                         lambda names: {n: ["completion"] for n in names})
     asked = []
@@ -830,7 +830,7 @@ def test_the_description_is_enriched_here_never_by_a_stranger(ui, companion, mon
     made = create(ui).json()
     wait_for(lambda: queue.job_summary(made["job_id"])["status"] == "done")
     # Le modèle de cette machine : il enrichit, puis le filtre lui pose sa question
-    assert asked == [("qwen3.5:0.8b", "enrich"), ("qwen3.5:0.8b", "filter")]
+    assert asked == [("qwen3.5:9b", "enrich"), ("qwen3.5:9b", "filter")]
     assert [r["tail"] for r in companion.requests] == ["public/v1/image"]
     assert companion.requests[0]["body"]["prompt"].startswith("A detailed watercolor")
 
@@ -976,7 +976,7 @@ def test_the_conversation_says_it_and_sends_nothing(ui, companion, monkeypatch):
         assert reply.json()["detail"] == t("public_images.refused_content")
         assert "ni AIODOS" in reply.json()["detail"]
     # Le modèle de conversation de cette machine juge la description qui partirait (enrichie)
-    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": "qwen3.5:0.8b"}])
+    monkeypatch.setattr(ollama, "list_models", lambda max_age=10: [{"name": "qwen3.5:9b"}])
     monkeypatch.setattr(ollama, "capabilities_many",
                         lambda names: {n: ["completion"] for n in names})
     verdict = ["YES"]

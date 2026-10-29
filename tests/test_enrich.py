@@ -82,3 +82,24 @@ def test_without_a_chat_model_in_time_the_request_goes_as_it_is(monkeypatch):
     assert enrich.enrich("un chat roux sur un toit") == "un chat roux sur un toit"
     _chat_model(monkeypatch, answer=DETAILED)
     assert enrich.enrich("un chat roux", "video").startswith("A ginger cat")
+
+
+def test_a_tiny_conversation_model_never_rewrites(monkeypatch):
+    """Un modèle de moins de 3 milliards de paramètres trahit la demande (S23 de l'auteur,
+    qwen3.5:0.8b : « un samouraï chat » devenu un samouraï poulet) : elle part telle quelle,
+    et une retouche s'ajoute à la description."""
+    monkeypatch.setattr(retouches.ollama, "list_models",
+                        lambda *a, **k: [{"name": "qwen3.5:0.8b"}, {"name": "gemma3:270m"}])
+    monkeypatch.setattr(retouches.ollama, "capabilities_many",
+                        lambda names: {n: ["completion"] for n in names})
+
+    def never(*args, **kwargs):
+        raise AssertionError("un tout petit modèle ne réécrit pas")
+    monkeypatch.setattr(retouches.ollama, "chat_stream", never)
+    assert retouches._rewriter("qwen3.5:0.8b") is None
+    assert enrich.enrich("un samouraï chat", "image", "auto:qwen3.5:0.8b") == "un samouraï chat"
+    assert retouches.rewrite("un samouraï chat", "Fais-la de nuit", "qwen3.5:0.8b") == \
+        "un samouraï chat, de nuit"
+    monkeypatch.setattr(retouches.ollama, "list_models",
+                        lambda *a, **k: [{"name": "qwen3.5:0.8b"}, {"name": "qwen3.5:9b"}])
+    assert retouches._rewriter("qwen3.5:0.8b") == "qwen3.5:9b"      # le plus grand, s'il est là

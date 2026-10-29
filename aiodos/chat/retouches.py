@@ -135,13 +135,28 @@ def variation_count(text: str, last_count: int) -> int:
     return 1 if _ONE.match(text or "") else max(1, int(last_count or 1))
 
 
+# Un modèle plus petit (en milliards de paramètres, lus dans son nom) ne réécrit pas : il
+# trahit la demande (S23 de l'auteur, qwen3.5:0.8b, 29/10/2026 : « un samouraï chat » devenu
+# un samouraï poulet), et juge au hasard pour le filtre (imaging/prompt_filter.judges)
+REWRITER_MIN_PARAMS = 3.0
+
+
+def _big_enough(name: str) -> bool:
+    from aiodos.network import public_chat
+    size = public_chat.params(name)
+    return size is None or size >= REWRITER_MIN_PARAMS
+
+
 def _rewriter(conversation_model: str | None) -> str | None:
     """Un modèle de conversation installé ici pour réécrire : celui de la conversation,
-    sinon celui par défaut, sinon le premier qui sait converser."""
+    sinon celui par défaut, sinon le premier qui sait converser ; jamais un modèle de moins
+    de REWRITER_MIN_PARAMS milliards de paramètres (la demande part alors telle quelle, une
+    retouche s'ajoute à la description : _appended)."""
     try:
         installed = [m["name"] for m in ollama.list_models()]
     except Exception:
         return None
+    installed = [name for name in installed if _big_enough(name)]
     wanted = str(conversation_model or "")
     if wanted.startswith("auto:"):
         wanted = wanted[len("auto:"):]
