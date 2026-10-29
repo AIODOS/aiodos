@@ -21,8 +21,9 @@ from aiodos import db, settings
 from aiodos.api.server import create_app
 from aiodos.knowledge import store
 from aiodos.network import (peers, placement, public_chat, public_controls, public_lending,
-                            remote_models, reputation, spot_check)
+                            remote_models, reputation, sightings, spot_check)
 from aiodos.node import speed
+from tests.test_collusion import never, seen
 from tests.test_public_chat import (AUTH, BIG, OTHER, PC, SMALL, THIRD, TOKEN, Executor,
                                     _library, ask, at, checkable, directory, local_models, node,
                                     routes)
@@ -199,8 +200,9 @@ def test_with_my_documents_only_my_machines_check(monkeypatch, companion, opened
 
 def test_the_control_machines(monkeypatch, companion, opened):
     """Mes machines d'abord (pas celles de mes amis, pas un autre modèle), puis les machines
-    publiques qui ont ce modèle et une place, la plus rapide d'abord (mesurée ici, sinon
-    annoncée) ; ni le prêteur, ni une machine mise de côté ; quatre au plus."""
+    publiques qui ont ce modèle et une place, à rang égal (toutes vues ensemble, aucune
+    établie) la plus rapide d'abord (mesurée ici, sinon annoncée) ; ni le prêteur, ni une
+    machine mise de côté ; spot_check.MAX_CANDIDATES au plus."""
     directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20), node(THIRD, BIG, tps=50),
               node(FOURTH, BIG, tps=70), node(FIFTH, BIG, tps=80), node(SIXTH, SMALL, tps=99),
               node(SEVENTH, BIG, free=0))
@@ -215,6 +217,50 @@ def test_the_control_machines(monkeypatch, companion, opened):
     assert public_controls.controls(BIG, PC) == [(fixe, None)]     # dans le doute : les miennes
     db.execute("DELETE FROM peers")
     assert public_controls.controls(BIG, PC) == []
+
+
+# ------------------------------------------------------------- la collusion
+def test_an_established_control_machine_is_preferred(monkeypatch, companion, opened):
+    """Contre la collusion (29/10/2026) : parmi les machines publiques, celle qui a un passé
+    établi ici d'abord, même lente ; puis celles vues depuis le plus de jours ; celle apparue
+    en même temps que le prêteur en dernier, même la plus rapide."""
+    directory(node(PC, BIG), node(OTHER, BIG, tps=99), node(THIRD, BIG, tps=10),
+              node(FOURTH, BIG, tps=60), node(FIFTH, BIG, tps=80))
+    seen(PC, 0)                                             # le prêteur, neuf
+    seen(THIRD, 72)
+    reputation.note_check(THIRD, True)                      # établie
+    seen(FOURTH, 30)                                        # sans passé, ni apparue avec lui
+    seen(FIFTH, 100)                                        # vue depuis plus longtemps
+    assert reputation.established(THIRD) and sightings.first_seen(OTHER) is None
+    assert public_controls.controls(BIG, PC, documents=False) == [
+        (at(THIRD, BIG), THIRD), (at(FIFTH, BIG), FIFTH), (at(FOURTH, BIG), FOURTH),
+        (at(OTHER, BIG), OTHER)]
+    # OTHER, jamais vue avant ce choix, l'est maintenant : avec le prêteur
+    assert sightings.together(OTHER, PC) and not sightings.together(FOURTH, PC)
+
+
+def test_two_fresh_nodes_of_one_liar_do_not_vouch_for_each_other(
+        monkeypatch, companion, opened, checks):
+    """Contre la collusion (29/10/2026) : deux nœuds neufs d'un même menteur (une clé ne coûte
+    rien) annoncent le même modèle, qui devient « contrôlable » (deux machines publiques).
+    L'un répond, l'autre, seule machine de contrôle, lui donne raison : autrefois le contrôle
+    était réussi ; désormais sans conclusion, rien n'est compté, et la réponse suivante du
+    prêteur est encore « la première »."""
+    bigger_here(monkeypatch)
+    directory(node(PC, BIG, tps=90), node(OTHER, BIG, tps=20))
+    companion.script = {PC: ("answer", [HONEST_A]), OTHER: ("answer", [HONEST_A])}
+    with TestClient(create_app(TOKEN, {"testserver"})) as ui:
+        events = ask(ui, QUESTION)
+        assert routes(events) == [at(PC, BIG)] and events[-1]["error"] is None
+        (thread,) = checks
+        thread.join(10)
+    asked = [r["key"] for r in companion.requests if not r["tail"].endswith("read")]
+    assert asked == [PC, OTHER]                             # la demande, puis le contrôle
+    row = reputation.get(PC)
+    assert row["checks_ok"] == row["checks_sure"] == row["checks_failed"] == 0
+    assert row["checks_open"] == 1 and not reputation.established(PC)
+    assert sightings.alike(PC, OTHER)                       # vus ensemble, mêmes modèles
+    assert spot_check.should_check(PC, never())
 
 
 def test_a_cut_or_stopped_answer_is_neither_noted_nor_checked(monkeypatch, companion, opened,

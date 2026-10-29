@@ -13,7 +13,7 @@ from contextlib import contextmanager
 
 from aiodos import paths
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 # Évolutions du schéma, appliquées dans l'ordre aux bases existantes.
 MIGRATIONS = {
@@ -443,6 +443,24 @@ MIGRATIONS = {
         last_seen     REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_public_reputation_seen ON public_reputation(last_seen);
+    """,
+    # Contre la collusion (network/sightings.py, network/reputation.py, network/spot_check.py,
+    # 29/10/2026) : la première vue de chaque clé de l'annuaire public et l'empreinte de sa
+    # liste de modèles ; par prêteur, les contrôles réussis comptés par les règles d'aujourd'hui
+    # (une de mes machines, ou deux machines de contrôle indépendantes) et ceux sans conclusion.
+    # Les clés déjà notées gardent leur première vue.
+    29: """
+    ALTER TABLE public_reputation ADD COLUMN checks_sure INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE public_reputation ADD COLUMN checks_open INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS public_sightings (
+        key        TEXT PRIMARY KEY,
+        first_seen REAL NOT NULL,
+        last_seen  REAL NOT NULL,
+        models     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS ix_public_sightings_seen ON public_sightings(last_seen);
+    INSERT OR IGNORE INTO public_sightings(key, first_seen, last_seen)
+        SELECT key, first_seen, last_seen FROM public_reputation;
     """,
 }
 

@@ -24,6 +24,7 @@ from aiodos.network import (lend_queue, lend_reading, p2p_app, public_chat, publ
                             public_lending, remote_models, reputation, sharing, spot_check)
 from aiodos.network.client import PeerError
 from aiodos.services import ollama
+from tests.test_collusion import seen as seen_since
 from tests.test_public_chat import companion  # noqa: F401 (fixture)
 from tests.test_public_lending import HEADERS, MODEL, SECRET, FakeManager, lend
 from tests.test_public_lending import engine, node  # noqa: F401 (fixtures)
@@ -268,30 +269,43 @@ def test_a_control_machine_that_cannot_read_leaves_the_texts_alone():
     assert not reputation.is_set_aside(LENDER)
 
 
-def test_a_second_control_machine_reads_the_first_answer_too():
-    """Deux machines publiques en désaccord : la seconde lit A, sa réponse et celle de la
-    première ; une première qui ment est prise, le prêteur reste."""
+def test_control_machines_in_disagreement_a_third_reads_every_answer():
+    """Deux machines publiques en désaccord (la première ment : A lui paraît d'un autre
+    modèle) : sans troisième, sans conclusion, personne n'est accusé (contre la collusion,
+    29/10/2026 : la seconde, qui tranchait seule, pouvait être un autre nœud du prêteur). Une
+    troisième lit A, sa réponse et celles des deux premières ; la menteuse, seule contre deux,
+    est prise, le prêteur blanchi."""
     question, a, b = _question(), _bench("autre_carte"), _bench("ref")
     liar = _bench("qwen25")
-    first, second = "public:" + CONTROL + ":" + MODEL, "public:" + "d" * 52 + ":" + MODEL
-    answers = {first: liar, second: b}
+    second_key, third_key = "d" * 52, "e" * 52
+    first, second, third = (f"public:{key}:{MODEL}" for key in (CONTROL, second_key, third_key))
+    for key, hours in ((CONTROL, 72), (second_key, 100), (third_key, 130)):  # indépendantes
+        seen_since(key, hours)
+    answers = {first: liar, second: b, third: b}
     readings = {a: READ_HONEST_A, b: READ_B, liar: READ_OTHER_MODEL}
-    seen = {}
+    read_by = {}
 
     def read(machine, sent, texts):
-        seen[machine] = list(texts)
+        read_by[machine] = list(texts)
         if machine == first:                       # elle ment : A très improbable, et la sienne
             return [READ_OTHER_MODEL if text == a else READ_B for text in texts]  # probable
         return [readings[text] for text in texts]
 
     request = {"model": MODEL, "messages": [{"role": "user", "content": question}],
                "options": {"num_predict": LIMIT}, "conversation": "c" * 32}
-    done = []
-    spot_check.run_check(LENDER, request, a, lambda machine, sent: answers[machine],
-                         [(first, CONTROL), (second, "d" * 52)], embed=None, read=read,
-                         on_done=done.append).join(10)
-    assert done[0].ok and not reputation.is_set_aside(LENDER)
-    assert sorted(seen[second]) == sorted([a, b, liar])
+
+    def check(controls):
+        done = []
+        spot_check.run_check(LENDER, request, a, lambda machine, sent: answers[machine],
+                             controls, embed=None, read=read, on_done=done.append).join(10)
+        return done[0]
+    assert check([(first, CONTROL), (second, second_key)]) is None
+    assert not reputation.is_set_aside(CONTROL) and not reputation.is_set_aside(LENDER)
+    assert sorted(read_by[second]) == sorted([a, b])      # pas encore de désaccord avant elle
+    spot_check.forget()
+    verdict = check([(first, CONTROL), (second, second_key), (third, third_key)])
+    assert verdict.ok and not reputation.is_set_aside(LENDER)
+    assert sorted(read_by[third]) == sorted([a, b, liar, b])
     assert reputation.is_set_aside(CONTROL)
 
 

@@ -23,6 +23,18 @@ pourrait remplir pour écarter des machines honnêtes. Rien du contenu des conve
 entre. Les machines jamais prises en défaut et plus vues depuis KEEP_DAYS jours sont
 oubliées, et la table garde au plus MAX_ROWS lignes (les plus anciennes, jamais prises en
 défaut, partent d'abord) ; une machine prise en défaut reste notée.
+
+Contre la collusion (29/10/2026, migration 29) : une clé de nœud ne coûte rien, et deux nœuds
+d'un même menteur pouvaient se contrôler l'un l'autre. Un contrôle réussi ne se compte donc
+plus que s'il a été mené par une de mes machines, ou par deux machines de contrôle publiques
+indépendantes (spot_check) : checks_sure les compte (checks_ok compte aussi ceux d'avant cette
+règle, quand une seule machine publique suffisait). Un contrôle mené jusqu'au bout sans
+conclusion (une seule machine publique d'accord, des machines en désaccord) est compté à part
+(checks_open : ni réussi, ni raté). Une machine « établie » (established) a un passé ici : vue
+depuis ESTABLISHED_S au moins (sa première vue, network/sightings.py), au moins un contrôle
+réussi compté ainsi, aucun raté. Elle est préférée comme machine de contrôle, et seule elle
+peut, sans seconde machine, faire compter une faute flagrante ou peser contre des machines
+sans passé (spot_check).
 """
 import logging
 import re
@@ -30,6 +42,7 @@ import threading
 import time
 
 from aiodos import db
+from aiodos.network import sightings
 
 log = logging.getLogger("aiodos.net")
 
@@ -49,10 +62,14 @@ MAX_TPS = 1000
 SHORT = 8                      # caractères de la clé dits au journal, au plus
 BENCH_S = 600                  # un échec (public_chat.FAULTS) : écartée 10 minutes
 MAX_BENCHED = 10_000           # machines écartées gardées en mémoire, au plus
+# Établie : vue depuis un jour au moins. Un menteur doit attendre, et passer un contrôle qu'il
+# ne peut pas reconnaître (5 % des réponses, tirées au hasard), mené par une de mes machines
+# ou par deux machines indépendantes : il lui faut répondre honnêtement presque toujours
+ESTABLISHED_S = 86400
 _KEY = re.compile(r"[0-9A-Za-z]{16,128}")      # comme network/public_chat.py
 
 _COLUMNS = ("key", "served", "tps", "checks_ok", "checks_failed", "aside_until", "forever",
-            "first_seen", "last_seen")
+            "first_seen", "last_seen", "checks_sure", "checks_open")
 
 _lock = threading.Lock()
 _benched = {}                  # clé -> fin de l'écart (time.monotonic), en mémoire seulement
@@ -85,6 +102,7 @@ def _ensure(conn, key, now: float) -> dict:
         return found
     conn.execute("INSERT INTO public_reputation(key, first_seen, last_seen) VALUES(?, ?, ?)",
                  (key, now, now))
+    sightings.note(conn, key, now)              # vue au plus tard maintenant
     _prune(conn, now, key)
     return _row(conn, key)
 
@@ -105,8 +123,9 @@ def _prune(conn, now: float, new_key: str):
 
 def get(key) -> dict | None:
     """Ce qu'on sait de cette machine : served, tps (None : pas mesurée), checks_ok,
-    checks_failed, aside_until (None : jamais écartée), forever, first_seen, last_seen ;
-    None si elle n'a jamais servi ni été contrôlée d'ici."""
+    checks_failed, aside_until (None : jamais écartée), forever, first_seen, last_seen,
+    checks_sure, checks_open (cf. le début du module) ; None si elle n'a jamais servi ni été
+    contrôlée d'ici."""
     if not valid_key(key):
         return None
     row = db.query_one(f"SELECT {', '.join(_COLUMNS)} FROM public_reputation WHERE key=?",
@@ -185,9 +204,11 @@ def benched(key) -> bool:
 
 
 def forget():
-    """Plus aucune machine écartée (essais) ; la table, elle, reste."""
+    """Plus aucune machine écartée, plus rien de retenu des premières vues (essais) ; les
+    tables, elles, restent."""
     with _lock:
         _benched.clear()
+    sightings.forget()
 
 
 def is_set_aside(key) -> bool:
@@ -205,26 +226,74 @@ def is_set_aside(key) -> bool:
 
 
 def note_check(key, ok: bool, reason=None) -> dict:
-    """Le résultat d'un contrôle de cette machine (spot_check.run_check). Raté : de côté
-    ASIDE_DAYS jours ; raté FOREVER_AFTER fois : pour de bon ; reason (le verdict : link,
-    unrelated…) va au journal. → la ligne à jour."""
+    """Le résultat d'un contrôle de cette machine (spot_check.run_check). Réussi : compté
+    aussi dans checks_sure (spot_check ne conclut plus qu'avec une de mes machines ou deux
+    machines indépendantes). Raté : de côté ASIDE_DAYS jours ; raté FOREVER_AFTER fois : pour
+    de bon ; reason (le verdict : link, unrelated…) va au journal. → la ligne à jour."""
     _check(key)
     now = db.now()
     with db.transaction() as conn:
         _ensure(conn, key, now)
-        column = "checks_ok" if ok else "checks_failed"
-        conn.execute(f"UPDATE public_reputation SET {column} = {column} + 1, last_seen = ? "
-                     f"WHERE key = ?", (now, key))
+        counted = "checks_ok = checks_ok + 1, checks_sure = checks_sure + 1" if ok \
+            else "checks_failed = checks_failed + 1"
+        conn.execute(f"UPDATE public_reputation SET {counted}, last_seen = ? WHERE key = ?",
+                     (now, key))
         if not ok:
             _aside(conn, key, now, _row(conn, key)["checks_failed"] >= FOREVER_AFTER,
                    reason or "?")
     return get(key)
 
 
+def note_open(key) -> dict:
+    """Un contrôle de cette machine mené jusqu'au bout, sans conclusion (spot_check : une
+    seule machine publique d'accord, ou des machines en désaccord) : ni réussi, ni raté.
+    → la ligne à jour."""
+    _check(key)
+    now = db.now()
+    with db.transaction() as conn:
+        _ensure(conn, key, now)
+        conn.execute("UPDATE public_reputation SET checks_open = checks_open + 1, "
+                     "last_seen = ? WHERE key = ?", (now, key))
+    return get(key)
+
+
 def checked(key) -> int:
-    """Contrôles menés jusqu'au bout sur cette machine, réussis ou ratés."""
+    """Contrôles menés jusqu'au bout sur cette machine et conclus, réussis ou ratés."""
     row = get(key)
     return row["checks_ok"] + row["checks_failed"] if row else 0
+
+
+def inconclusive(key) -> int:
+    """Contrôles menés jusqu'au bout sur cette machine, sans conclusion (note_open)."""
+    row = get(key)
+    return row["checks_open"] if row else 0
+
+
+def first_seen(key) -> float | None:
+    """La première vue de cette machine : dans l'annuaire (network/sightings.py) ou, plus tôt,
+    sa première ligne ici ; None : jamais vue."""
+    row = get(key)
+    seen = [t for t in (row["first_seen"] if row else None, sightings.first_seen(key))
+            if t is not None]
+    return min(seen) if seen else None
+
+
+def established(key) -> bool:
+    """Cette machine publique est-elle établie ici : vue depuis ESTABLISHED_S au moins
+    (first_seen), au moins un contrôle réussi par une de mes machines ou par deux machines de
+    contrôle indépendantes (checks_sure), aucun contrôle raté, pas de côté ? (Un écart de
+    quelques minutes après un échec, bench, n'y change rien : il dit l'instant, pas le passé.)
+
+    Pour network/placement.py, plus tard : préférer, parmi les machines publiques, celles qui
+    sont établies (cf. la conception, § 8)."""
+    row = get(key)
+    if row is None or row["checks_sure"] < 1 or row["checks_failed"] or row["forever"]:
+        return False
+    now = db.now()
+    if (row["aside_until"] or 0) > now:
+        return False
+    first = first_seen(key)
+    return first is not None and first <= now - ESTABLISHED_S
 
 
 def speed(key) -> float | None:

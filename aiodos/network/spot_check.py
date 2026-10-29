@@ -4,21 +4,47 @@ tout de suite, marquée « réseau public » ; de temps en temps, la même deman
 arrière-plan chez une autre machine, et les deux réponses sont comparées. Une machine qui
 triche est mise de côté (network/reputation.py) : 7 jours, puis pour de bon.
 
-Quand (should_check) : toujours tant que la machine n'a jamais été contrôlée d'ici (la
-première fois qu'elle sert cette machine, vue d'ici : on ne retient pas qui d'autre elle
-sert), puis RATE des réponses, tirées par random.SystemRandom : le prêteur ne peut pas
-deviner lesquelles. Au plus MAX_RUNNING contrôles à la fois, un seul par prêteur.
+Quand (should_check) : toujours tant que la machine n'a jamais été contrôlée d'ici avec une
+conclusion (la première fois qu'elle sert cette machine, vue d'ici : on ne retient pas qui
+d'autre elle sert), FIRST_TRIES fois au plus sans conclusion, puis RATE des réponses, tirées
+par random.SystemRandom : le prêteur ne peut pas deviner lesquelles. Au plus MAX_RUNNING
+contrôles à la fois, un seul par prêteur.
 
 Comment (run_check) : après la réponse affichée, dans un fil à part, sans jamais la
 retarder. La même demande (modèle, messages, options : température, longueur, graine) part
-chez une machine de contrôle, dans l'ordre donné par l'appelant (une des miennes d'abord,
-crue ; sinon une autre machine du réseau public, ni le prêteur, ni une machine de côté),
-sous un **autre identifiant de conversation**, tiré ici (donc une autre clé jetable) : le
-prêteur ne peut pas relier le contrôle à la conversation contrôlée, et la machine de
-contrôle ne sait pas qu'elle contrôle. Le désaccord d'une machine du réseau public ne suffit
-pas (elle peut mentir elle aussi) : une seconde machine de contrôle tranche. Si elle donne
-tort au prêteur, il est pris en défaut ; si elle lui donne raison et tort à la première,
-c'est la première qui l'est.
+chez une machine de contrôle, dans l'ordre donné par l'appelant (les miennes d'abord, puis
+les machines du réseau public établies, network/public_controls.controls ; ni le prêteur, ni
+une machine de côté ; une machine qui ressemble à une autre qui a déjà répondu passe après
+les autres, _diverse), sous un **autre identifiant de conversation**, tiré ici (donc une
+autre clé jetable) : le prêteur ne peut pas relier le contrôle à la conversation contrôlée,
+et la machine de contrôle ne sait pas qu'elle contrôle.
+
+Qui conclut (contre la collusion, 29/10/2026) : une de mes machines est crue seule. Une
+machine du réseau public peut mentir, dans un sens comme dans l'autre, et une clé de nœud ne
+coûte rien : deux nœuds d'un même menteur annonçant le même modèle se contrôlaient l'un
+l'autre, et le contrôle passait toujours. Les machines publiques votent donc (_decide), au
+plus MAX_CONTROLS demandées :
+- réussi : deux machines d'accord avec le prêteur, indépendantes de lui (pas apparues avec
+  lui, network/sightings.together) et l'une de l'autre (elles ne se ressemblent pas,
+  sightings.alike), et plus nombreuses que celles qui le contredisent. Une seule d'accord :
+  sans conclusion ;
+- raté : deux machines qui lui donnent tort et ne se ressemblent pas, plus nombreuses que
+  celles qui lui donnent raison ; ou, faute d'autre machine, une faute flagrante (FLAGRANT :
+  sans rapport, lien ajouté, tronquée, un autre modèle à la lecture) vue par une machine
+  établie (reputation.established) et indépendante du prêteur, sans machine établie pour lui
+  donner raison. Une machine sans passé ici ne fait jamais compter seule une faute : elle
+  pourrait accuser un honnête ;
+- une machine établie n'est jamais mise en minorité par des machines sans passé : la
+  majorité doit en compter une aussi (sinon : sans conclusion) ;
+- sinon, sans conclusion : ni réussi, ni raté (reputation.note_open).
+Une machine de contrôle seule contre deux (la minorité, quand une majorité conclut) est prise
+en défaut si sa propre réponse ne ressemble à aucune des leurs (lue par la dernière machine,
+qui lit, en cas de désaccord, A, sa réponse et celles d'avant) : une machine honnête qui a
+seulement jugé A autrement n'est pas accusée.
+
+Ce que cela ne règle pas (conception, § 8) : un menteur patient qui espace la création de
+ses nœuds, ou qui les fait d'abord passer pour honnêtes, n'est pas reconnu par ces règles
+seules ; le compagnon rend les identités publiques coûteuses (preuve de travail sur la clé).
 
 Comparer (compare) : les règles et leurs seuils viennent d'une mesure du 28/10/2026
 (tools/bench_controle.py, résultats dans tools/bench_controle_results.json) : qwen3.5:9b,
@@ -46,8 +72,8 @@ sous le même modèle (llm/reading.py chez elle : une de mes machines par l'acti
 une machine publique par POST /public/v1/read), dans un ordre tiré au hasard, sous
 l'identifiant de conversation de sa réponse ; compare reçoit les deux lectures. Une machine
 qui ne sait pas lire (version d'avant : 404 ; Ollama au lieu du moteur intégré) : la
-comparaison des textes seule, comme avant. Quand une seconde machine tranche, elle lit A, sa
-réponse et celle de la première.
+comparaison des textes seule, comme avant. Quand des machines de contrôle sont en désaccord,
+la suivante lit A, sa réponse et celles des machines d'avant.
 
 Le journal ne dit que la clé du prêteur (abrégée), le verdict et ses mesures (des nombres) :
 jamais le contenu des conversations, ni l'identifiant de conversation du contrôle (il mène à
@@ -63,13 +89,20 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from aiodos.llm import reading as _reading
-from aiodos.network import reputation
+from aiodos.network import reputation, sightings
 
 log = logging.getLogger("aiodos.net")
 
 RATE = 0.05                    # part des réponses publiques contrôlées (décision du 27/10)
 MAX_RUNNING = 2                # contrôles en cours à la fois, au plus
 MAX_CONTROLS = 4               # machines de contrôle essayées par contrôle, au plus
+MAX_CANDIDATES = 8             # machines de contrôle proposées (public_controls), au plus
+# « La première fois » dure jusqu'à un contrôle conclu, FIRST_TRIES contrôles sans conclusion
+# au plus : sans machine qui puisse conclure (aucune des miennes n'a le modèle, une seule
+# machine publique indépendante), chaque réponse serait refaite ailleurs, pour rien
+FIRST_TRIES = 3
+# Fautes flagrantes : comptées sur l'avis d'une seule machine de contrôle établie (_decide)
+FLAGRANT = frozenset({"unrelated", "link", "truncated", "unlikely"})
 
 # --- Seuils mesurés le 28/10/2026 (tools/bench_controle.py ; cf. plus haut) ---------------
 # Sans rapport : similarité cosinus des embeddings des deux réponses entières. Chaque modèle
@@ -139,12 +172,14 @@ class Verdict:
 # ------------------------------------------------------------------- quand
 def should_check(lender_key, rng=None) -> bool:
     """Contrôler cette réponse de ce prêteur ? Toujours s'il n'a jamais été contrôlé d'ici
-    (et qu'aucun contrôle de lui n'est en cours), sinon au hasard RATE des réponses."""
+    avec une conclusion, FIRST_TRIES fois au plus sans conclusion (et qu'aucun contrôle de
+    lui n'est en cours), sinon au hasard RATE des réponses."""
     if not reputation.valid_key(lender_key):
         return False
     with _lock:
         pending = lender_key in _pending
-    if not pending and reputation.checked(lender_key) == 0:
+    if not pending and reputation.checked(lender_key) == 0 \
+            and reputation.inconclusive(lender_key) < FIRST_TRIES:
         return True
     return (rng or _rng).random() < RATE
 
@@ -444,46 +479,122 @@ def _note(key, ok, verdict, role="prêteur"):        # i18n: tel quel (journal)
              "réussi" if ok else "raté", verdict.reason, verdict.measures)
 
 
+@dataclass
+class _Vote:
+    """L'avis d'une machine de contrôle publique sur la réponse du prêteur (_check)."""
+    key: str                   # la clé de son nœud
+    text: str                  # sa réponse
+    verdict: Verdict           # la réponse du prêteur comparée à la sienne
+    established: bool          # reputation.established
+    free: bool                 # pas apparue avec le prêteur (sightings.together)
+    reads: dict                # rang d'un avis (le sien compris) -> sa réponse lue par elle
+
+    @property
+    def ok(self) -> bool:
+        return self.verdict.ok
+
+
+def _alike_any(key, votes) -> bool:
+    return key is not None and any(sightings.alike(key, v.key) for v in votes)
+
+
+def _diverse(candidates: list, votes: list):
+    """Les machines de contrôle qui ressemblent à une machine qui a déjà voté
+    (sightings.alike) passent après les autres, dans le même ordre sinon (mes machines
+    restent devant)."""
+    if votes:
+        candidates.sort(key=lambda pair: _alike_any(pair[1], votes))
+
+
+def _pair(votes) -> bool:
+    """Deux de ces avis viennent-ils de machines indépendantes du prêteur (free) qui ne se
+    ressemblent pas ?"""
+    free = [v for v in votes if v.free]
+    return any(not sightings.alike(a.key, b.key)
+               for i, a in enumerate(free) for b in free[i + 1:])
+
+
+def _apart(votes) -> bool:
+    """Deux de ces avis viennent-ils de machines qui ne se ressemblent pas ?"""
+    return any(not sightings.alike(a.key, b.key)
+               for i, a in enumerate(votes) for b in votes[i + 1:])
+
+
+def _outranks(majority, minority) -> bool:
+    """Une machine établie n'est mise en minorité que par une majorité qui en compte une."""
+    return any(v.established for v in majority) or not any(v.established for v in minority)
+
+
+def _decide(votes: list, more: bool):
+    """Les avis des machines de contrôle publiques (cf. le début du module, « Qui
+    conclut ») : (« ok » ou « fail », majorité, minorité), (« open », [], []) sans conclusion,
+    ou None si d'autres machines peuvent encore être demandées (more)."""
+    oks = [v for v in votes if v.ok]
+    fails = [v for v in votes if not v.ok]
+    if len(oks) > len(fails) and _pair(oks) and _outranks(oks, fails):
+        return "ok", oks, fails
+    if len(fails) > len(oks) and _apart(fails) and _outranks(fails, oks):
+        return "fail", fails, oks
+    if more:
+        return None
+    strong = [v for v in fails if v.established and v.free and v.verdict.reason in FLAGRANT]
+    if strong and not any(v.established for v in oks):
+        return "fail", strong[:1], []
+    return "open", [], []
+
+
 def _check(lender_key, request, answer, ask, controls, embed, embed_model, read=None):
     question = _question(request)
     candidates = [(machine, key) for machine, key in controls
                   if key != lender_key and not (key is not None and
                                                 reputation.is_set_aside(key))]
-    used = []
-    first = _ask(ask, candidates, request, used)
-    if first is None:
+
+    def judge(a, b, reading=None, reading_b=None):
+        return compare(question, a, b, embed=embed, embed_model=embed_model,
+                       reading=reading, reading_b=reading_b)
+    used, votes, decided = [], [], None
+    while decided is None:
+        _diverse(candidates, votes)
+        control = _ask(ask, candidates, request, used)
+        if control is None:
+            break
+        _machine, key, text, _sent = control
+        # A et B lus par la machine de contrôle, sous le même modèle (si elle sait lire) ;
+        # en cas de désaccord, les réponses des machines d'avant aussi : de quoi les juger
+        disputed = len({v.ok for v in votes}) > 1
+        texts = [answer, text] + ([v.text for v in votes] if disputed else [])
+        found = _readings(read, control, texts)
+        verdict = judge(answer, text, found[0], found[1])
+        if key is None:                         # une de mes machines : crue seule
+            _note(lender_key, verdict.ok, verdict)
+            return verdict
+        reads = {len(votes): found[1]}
+        if disputed:
+            reads.update({i: found[2 + i] for i in range(len(votes))})
+        votes.append(_Vote(key, text, verdict, reputation.established(key),
+                           not sightings.together(key, lender_key), reads))
+        decided = _decide(votes, more=bool(candidates) and len(used) < MAX_CONTROLS)
+    if not votes:
         log.info("Contrôle du réseau public : %s, aucune machine de contrôle",  # i18n: tel quel
                  reputation.short(lender_key))
         return None
-    # A et B lus par la machine de contrôle, sous le même modèle (si elle sait lire)
-    read_a, read_b = _readings(read, first, [answer, first[2]])
-    found = compare(question, answer, first[2], embed=embed, embed_model=embed_model,
-                    reading=read_a, reading_b=read_b)
-    if found.ok or first[1] is None:            # accord, ou désaccord d'une de mes machines
-        _note(lender_key, found.ok, found)
-        return found
-    second = _ask(ask, candidates, request, used)
-    if second is None:
-        log.info("Contrôle du réseau public : %s, sans conclusion (%s, une seule machine de "
-                 "contrôle)", reputation.short(lender_key), found.reason)  # i18n: tel quel
+    outcome, majority, minority = decided or _decide(votes, more=False)
+    if outcome == "open":
+        reputation.note_open(lender_key)
+        # i18n: tel quel (journal) ; les raisons seulement
+        log.info("Contrôle du réseau public : %s, sans conclusion (%s)",
+                 reputation.short(lender_key), ", ".join(v.verdict.reason for v in votes))
         return None
-    # La seconde lit aussi la réponse de la première : de quoi la juger à son tour
-    read_a, read_2, read_1 = _readings(read, second, [answer, second[2], first[2]])
-    again = compare(question, answer, second[2], embed=embed, embed_model=embed_model,
-                    reading=read_a, reading_b=read_2)
-    if not again.ok:
-        _note(lender_key, False, again)
-        return again
-    # La seconde donne raison au prêteur : la première a-t-elle menti ?
-    other = compare(question, first[2], second[2], embed=embed, embed_model=embed_model,
-                    reading=read_1, reading_b=read_2)
-    if not other.ok:
-        _note(first[1], False, other, role="contrôleur")    # i18n: tel quel (journal)
-        _note(lender_key, True, again)
-        return again
-    log.info("Contrôle du réseau public : %s, sans conclusion (%s)",  # i18n: tel quel
-             reputation.short(lender_key), found.reason)
-    return None
+    # Seule contre deux : la dernière machine a lu toutes les réponses (désaccord avant elle)
+    reads, index = votes[-1].reads, {id(v): i for i, v in enumerate(votes)}
+    for alone in minority:
+        against = [judge(alone.text, v.text, reads.get(index[id(alone)]),
+                         reads.get(index[id(v)])) for v in majority]
+        if against and not any(found.ok for found in against):
+            _note(alone.key, False, against[0], role="contrôleur")  # i18n: tel quel (journal)
+    verdict = majority[-1].verdict
+    _note(lender_key, outcome == "ok", verdict)
+    return verdict
 
 
 def run_check(lender_key, request, answer, ask, controls, *, embed="local", embed_model=None,
@@ -498,13 +609,14 @@ def run_check(lender_key, request, answer, ask, controls, *, embed="local", embe
     cas d'échec) ; la demande porte son propre identifiant de conversation (« conversation »),
     à passer tel quel (public_chat.chat_stream(conversation=…)). controls : les machines de
     contrôle candidates, dans l'ordre de préférence, en couples (machine, clé) : clé None
-    pour une de mes machines (crue seule), la clé publique du nœud sinon. embed : textes →
+    pour une de mes machines (crue seule), la clé publique du nœud sinon (les machines
+    publiques votent : cf. le début du module, « Qui conclut »). embed : textes →
     vecteurs (« local » : le modèle d'embedding de cette machine ; None : les mots communs).
     read(machine, demande, textes) → [lecture ou None] : les textes lus par cette machine de
     contrôle sous le modèle demandé (llm/reading.py), la demande étant celle qui lui est
     partie (son identifiant de conversation compris) ; lève si elle ne sait pas lire. None :
-    aucune lecture, les textes seuls. on_done(verdict ou None) à la fin, dans le fil du
-    contrôle."""
+    aucune lecture, les textes seuls. on_done(verdict ou None : sans conclusion, ou aucune
+    machine de contrôle) à la fin, dans le fil du contrôle."""
     if not reputation.valid_key(lender_key):
         return None
     with _lock:

@@ -23,14 +23,25 @@ d'un coup paraissait très rapide), et c'est elle qui fait passer une machine pu
 celle-ci (placement.py). Le temps total vu d'ici, chargement et lecture de la demande compris,
 est prudent : un prêteur ne peut que la faire paraître plus lente.
 
-Les machines de contrôle (controls), spot_check.MAX_CONTROLS au plus : d'abord mes machines
+Les machines de contrôle (controls), spot_check.MAX_CANDIDATES au plus : d'abord mes machines
 (pas celles de mes amis) qui prêtent ce modèle, crues seules ; puis les machines du réseau
-public qui l'ont et une place (placement.public_with : sans les machines mises de côté), la
-plus rapide d'abord ; jamais le prêteur contrôlé. Une demande qui porte mes documents (des
-passages, leur sommaire, ou une réponse d'avant qui s'en servait) n'a que mes machines pour
-contrôle : un second inconnu ne les lit pas. Cette machine-ci n'en est pas : le contrôle ne
-prend pas la carte graphique à l'utilisateur, qui converse ici. Aucune machine de contrôle :
-rien n'est lancé, et la prochaine réponse de ce prêteur reste « la première » (spot_check).
+public qui l'ont et une place (placement.public_with : sans les machines mises de côté) ;
+jamais le prêteur contrôlé. Une demande qui porte mes documents (des passages, leur
+sommaire, ou une réponse d'avant qui s'en servait) n'a que mes machines pour contrôle : un
+second inconnu ne les lit pas. Cette machine-ci n'en est pas : le contrôle ne prend pas la
+carte graphique à l'utilisateur, qui converse ici. Aucune machine de contrôle : rien n'est
+lancé, et la prochaine réponse de ce prêteur reste « la première » (spot_check).
+
+Contre la collusion (29/10/2026) : deux nœuds d'un même menteur (une clé ne coûte rien) qui
+annoncent le même modèle se contrôlaient l'un l'autre. Les machines publiques sont donc
+rangées (_standing) : celles qui ont un passé établi ici (reputation.established : vues depuis
+un jour, contrôlées avec succès, jamais prises en faute) d'abord ; puis les autres, celles
+qui ont réussi le plus de contrôles et sont vues depuis le plus de jours d'abord ; celles
+apparues en même temps que le prêteur (network/sightings.together) en dernier ; la plus
+rapide à égalité. Ce qui conclut (deux machines indépendantes, ou une des miennes), et la
+diversité des machines qui votent : spot_check, « Qui conclut ». Pour savoir qui est apparu
+quand, l'annuaire gardé (public.seen) est noté (sightings.sighted) après chaque réponse
+publique complète (jamais avant le premier mot) et à chaque choix des machines de contrôle.
 
 La lecture (read, depuis le 28/10/2026) : après sa réponse B, la machine de contrôle lit A et
 B sous le même modèle (llm/reading.py chez elle), et spot_check.compare reçoit les deux
@@ -48,9 +59,9 @@ import secrets
 import threading
 import time
 
-from aiodos import settings
-from aiodos.network import (peers, placement, public_chat, public_lending, remote_models,
-                            reputation, sharing, spot_check)
+from aiodos import db, settings
+from aiodos.network import (peers, placement, public, public_chat, public_lending,
+                            remote_models, reputation, sharing, sightings, spot_check)
 from aiodos.services import ollama
 
 log = logging.getLogger("aiodos.net")
@@ -133,8 +144,9 @@ def _tokens(reported, text: str) -> int:
 def answered(key, request, text, tokens, seconds, documents=True):
     """Une réponse complète du prêteur `key` (clé de son nœud) à `request` ({"model",
     "messages", "options", "conversation"}), en `seconds` secondes depuis l'envoi de la
-    demande : vitesse notée, puis le contrôle s'il est tiré et qu'une machine peut le faire.
-    → le fil du contrôle, ou None."""
+    demande : l'annuaire noté (_sight), la vitesse notée, puis le contrôle s'il est tiré et
+    qu'une machine peut le faire. → le fil du contrôle, ou None."""
+    _sight()
     reputation.note_served(key, _tokens(tokens, text), seconds)
     if not spot_check.should_check(key):
         return None
@@ -149,7 +161,7 @@ def answered(key, request, text, tokens, seconds, documents=True):
 def controls(name: str, lender_key, documents=True) -> list:
     """Les machines de contrôle candidates, dans l'ordre, en couples (identifiant concret,
     clé) : clé None pour une de mes machines (crue seule), celle du nœud pour une machine
-    publique (cf. le début du module)."""
+    publique, rangées par _standing (cf. le début du module)."""
     found = []
     for peer in peers.list_peers():
         if not placement.eligible(peer) or sharing.level(peer["node_id"]) != sharing.MINE:
@@ -160,9 +172,37 @@ def controls(name: str, lender_key, documents=True) -> list:
         if model is not None:
             found.append((remote_models.model_id(peer["node_id"], model), None))
     if not documents:
-        found += [(public_chat.model_id(key, model), key)
-                  for key, model in placement.public_with(name) if key != lender_key]
-    return found[:spot_check.MAX_CONTROLS]
+        _sight()
+        now = db.now()
+        publics = [(key, model) for key, model in placement.public_with(name)
+                   if key != lender_key]                 # la plus rapide d'abord
+        publics.sort(key=lambda pair: _standing(pair[0], lender_key, now))   # stable
+        found += [(public_chat.model_id(key, model), key) for key, model in publics]
+    return found[:spot_check.MAX_CANDIDATES]
+
+
+def _standing(key, lender_key, now: float) -> tuple:
+    """Le rang d'une machine publique comme machine de contrôle de ce prêteur (le plus petit
+    d'abord) : apparue avec lui en dernier, établie en premier ; puis les contrôles réussis
+    ici, les jours depuis sa première vue (reputation.first_seen)."""
+    if sightings.together(key, lender_key, now):
+        group = 2
+    else:
+        group = 0 if reputation.established(key) else 1
+    row = reputation.get(key)
+    first = reputation.first_seen(key)
+    days = int((now - first) // sightings.DAY_S) if first is not None else 0
+    return group, -(row["checks_sure"] if row else 0), -days
+
+
+def _sight():
+    """L'annuaire gardé (public.seen, sans le relire au compagnon) : la première vue de
+    chaque machine (sightings.sighted). Jamais d'échec : une machine non notée passe pour vue
+    à l'instant, ce qui ne lui donne rien."""
+    try:
+        sightings.sighted(public.seen()[1])
+    except Exception:  # noqa: BLE001 — base occupée… : la prochaine fois
+        log.debug("Réseau public : premières vues non notées", exc_info=True)  # i18n: tel quel
 
 
 def ask(machine, request) -> str:

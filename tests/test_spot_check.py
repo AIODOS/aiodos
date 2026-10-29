@@ -2,8 +2,9 @@
 machines (network/reputation.py) : tirage au hasard, première fois toujours contrôlée,
 comparaison de deux réponses (honnête ou tricheuse, sur des textes fixes), mise de côté 7
 jours puis pour de bon, migration 28, contrôle en arrière-plan avec une fausse machine de
-contrôle (jamais bloquant, autre identifiant de conversation, seconde machine qui tranche),
-et rien du contenu au journal. Sans réseau ni moteur."""
+contrôle (jamais bloquant, autre identifiant de conversation, machines publiques en
+désaccord), et rien du contenu au journal. Sans réseau ni moteur. La collusion (deux
+machines d'un même menteur) : test_collusion.py."""
 import logging
 import math
 import random
@@ -324,13 +325,16 @@ def test_a_public_control_alone_does_not_condemn():
     assert reputation.checked(LENDER) == 0 and reputation.checked(OTHER) == 0
 
 
-def test_a_second_control_decides_and_unmasks_a_lying_control():
-    # La première machine de contrôle ment, la seconde donne raison au prêteur
+def test_two_public_controls_that_disagree_conclude_nothing():
+    """Contre la collusion (29/10/2026) : la première machine de contrôle donne tort au
+    prêteur, la seconde raison. Autrefois la seconde tranchait, et la première était prise en
+    défaut ; mais la seconde peut être un autre nœud du prêteur. Sans troisième machine : sans
+    conclusion, personne n'est accusé (seule contre deux : test_collusion.py)."""
     ask, verdict = run(HONEST_A, {"menteur": UNRELATED, "honnete": HONEST_B},
                        [("menteur", OTHER), ("honnete", THIRD)])
-    assert verdict.ok
-    assert reputation.get(LENDER)["checks_ok"] == 1
-    assert reputation.is_set_aside(OTHER) and not reputation.is_set_aside(THIRD)
+    assert verdict is None
+    assert not reputation.is_set_aside(OTHER) and not reputation.is_set_aside(THIRD)
+    assert reputation.checked(LENDER) == 0 and reputation.inconclusive(LENDER) == 1
     first, second = (sent["conversation"] for _machine, sent in ask.asked)
     assert first != second                             # une clé jetable par demande
     # Les deux machines de contrôle donnent tort au prêteur : il est pris en défaut
