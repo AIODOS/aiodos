@@ -50,8 +50,8 @@ AIODOS speaks French and English: it follows the language of the system (browser
 Android), English when that language is neither, and it can be changed in Settings →
 Language.
 
-> **Status: in active development.** No version has been published yet: the Windows
-> installer and the Android app are built from the source (see [Installation](#installation)).
+> **Status: in active development.** First pre-release, unsigned: the Windows installer and
+> the Android app are in the [releases](https://github.com/AIODOS/aiodos/releases).
 > Choices and measurements are written down as we go in [docs/](docs/), in French.
 
 ## Where the project stands

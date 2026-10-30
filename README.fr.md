@@ -53,8 +53,8 @@ AIODOS parle français et anglais : il suit la langue du système (navigateur, W
 Android), l'anglais quand celle-ci n'est ni l'une ni l'autre, et se change dans Réglages →
 Langue.
 
-> **État : en développement actif.** Aucune version n'est encore publiée : l'installeur
-> Windows et l'appli Android se construisent depuis le code (voir [Installation](#installation)).
+> **État : en développement actif.** Première pré-version, non signée : l'installeur Windows
+> et l'appli Android sont dans les [versions publiées](https://github.com/AIODOS/aiodos/releases).
 > Les choix et les mesures sont notés au fil de l'eau dans [docs/](docs/), en français.
 
 ## Où en est le projet
