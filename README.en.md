@@ -1,8 +1,23 @@
-# AIODOS
+<p align="center">
+  <img src="assets/logo.png" alt="The AIODOS logo: five blue-green snakes around a light" width="200">
+</p>
 
-*Version française : [README.md](README.md).*
+<h1 align="center">AIODOS</h1>
 
-**The way of AI, made together.** AIODOS connects, over the Internet, the machines of people
+<p align="center"><b>The way of AI, made together.</b><br>
+AI that runs on the pooled power of its participants: your machines, your friends' machines,
+and strangers' machines around the world. No central server, no cloud.</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2bb5a0"></a>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-2bb5a0">
+  <img alt="Windows · Android" src="https://img.shields.io/badge/Windows%20%C2%B7%20Android-2bb5a0">
+  <img alt="In development" src="https://img.shields.io/badge/status-in%20development-orange">
+</p>
+
+<p align="center"><i>Version française : <a href="README.md">README.md</a>.</i></p>
+
+AIODOS connects, over the Internet, the machines of people
 who don't know each other, to run AI on their pooled power: those of public network
 participants, of your friends, and your own (PCs, phone), with no central server; the local
 network is only a shortcut. Each large job is split into small units that free machines share, like
@@ -11,8 +26,12 @@ several.
 
 - **Chat, code, search your documents** with open models (Mistral, Qwen…), served by
   llama.cpp, built into AIODOS (or by [Ollama]); the AI cites its sources.
-- **Create images and videos** in the conversation, computed by the machines that have the
-  model.
+- **Create images, videos and audio** (voice, music, sound effects) in the conversation,
+  with today's best open models (FLUX 3 Image Klein, Qwen-Image, LTX-2.5, Wan 2.2,
+  ACE-Step…), computed by the machines that have them.
+- **"Automatic", everywhere**: for text, images, videos and audio, AIODOS takes the most
+  powerful model that an available machine can run right now, wherever it is, then goes
+  down the list; you can always pick a specific model (one "Model" button, four tabs).
 - **Plug in your applications and tools** (PANDORA, ARKLIGHT PC, a code editor, an
   assistant…): they benefit from the same shared power.
 
@@ -31,6 +50,10 @@ AIODOS speaks French and English: it follows the language of the system (browser
 Android), English when that language is neither, and it can be changed in Settings →
 Language.
 
+> **Status: in active development.** No version has been published yet: the Windows
+> installer and the Android app are built from the source (see [Installation](#installation)).
+> Choices and measurements are written down as we go in [docs/](docs/), in French.
+
 ## Where the project stands
 
 | Phase | Content | Status |
@@ -38,7 +61,7 @@ Language.
 | 0 — Foundations | Local node, task queue, interface, libraries | ✅ done |
 | 1 — Local network | Machine discovery, pairing, distribution, power sharing, models lent for conversations | ✅ done |
 | 2 — Circle of trust | Friends' machines over the Internet (NAT traversal) | in progress: Internet companion [`aiodos-net`](compagnon/README.md) (2.2), remote invitation (2.4), sharing with friends (2.5), searchable libraries, automatic updates approved on a second device, large models split across my machines (prototype), distributed images and videos (created in the conversation), flexible reciprocity, keys protected on disk (2.3), group pairing: a friend paired with one of my machines meets the others, with their consent ([docs/appairage-groupe.md](docs/appairage-groupe.md), in French) |
-| 3 — Public network | Strangers compute conversations; result verification, incentives, governance | conversations done (10/28/2026, [docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)); the rest being designed: [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) (in French) |
+| 3 — Public network | Strangers compute conversations, images and videos; result verification, incentives, governance | conversations, images and videos done (10/28-29/2026): anonymous requester (a throwaway key per request, through a relay), consent asked once, random checks and reputation against cheating and collusion, public identities costly to forge, a filter for forbidden descriptions, a history without content of what your machine computes for others ([docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)); incentives and governance being designed: [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) (in French) |
 
 The documents in `docs/` are written in French.
 
@@ -222,13 +245,28 @@ up in the conversation and is kept only here (in `Pictures\AIODOS` for installed
 or the folder chosen in Settings). The Images and videos view brings together the creations
 in progress and the gallery; the models are managed in Settings → Models, with the chat
 models, from the most powerful to the least. The engine is [stable-diffusion.cpp], which comes with the updates, and
-the model Z-Image Turbo (Apache-2.0, 6.7 GB, each file checked by its hash): downloaded
+[ComfyUI] if it is installed (AIODOS recipes and your own workflows). The catalogue is ranked
+from the most powerful to the most modest (public ranking of open models, then our
+measurements): FLUX 3 Image Klein, Qwen-Image-2.1, Ming-Image, HiDream-O1, Z-Image Turbo and
+FLUX.2 klein for images; LTX-2.5 (video and sound), MiniMax H3, Wan 2.2 and Wan 2.1 for
+videos. Each file comes from a public repository, pinned and checked by its hash; downloaded
 from the Settings, or copied from one of my machines that already has it, without the
-Internet. On a laptop RTX 4070: 22 s per image at 1024 × 1024. For video, Wan 2.1
-(Apache-2.0, 7.2 GB): 2 s of 480p video in under 4 minutes; MiniMax H3 (video and sound)
-is also offered, its license shown (it notably excludes the European Union: up to
-everyone to judge). A friend only computes my images if we both accept it. Details and
-measurements: [docs/generation-repartie.md](docs/generation-repartie.md) (in French).
+Internet. A restrictive license (non-commercial, free below a revenue threshold, or excluding
+some countries, like MiniMax H3's for the European Union) is shown and accepted first: up to
+everyone to judge. "Automatic" takes the best-ranked model that an available machine has
+(this PC, my machines, my friends, the public network), and AIODOS suggests the best one your
+graphics card can run. On a laptop RTX 4070, Z-Image Turbo makes a 1024 × 1024 image in
+22 s, and Wan 2.1 2 s of 480p video in under 4 minutes. A friend only computes my images if
+we both accept it. Details and measurements:
+[docs/generation-repartie.md](docs/generation-repartie.md),
+[docs/conception/modeles-auto.md](docs/conception/modeles-auto.md) (in French).
+
+**Audio, in the conversation**: read a text aloud, in French or English, compose music,
+create a sound effect ("Make the sound of a creaking door"), with [audio.cpp]: Voxtral,
+Qwen3-TTS and PocketTTS for voice; MiniMax Music 3, ACE-Step 1.5, Stable Audio 3 and
+MiDashengLM-Gen for music and effects. On computers for now, here and on my machines; not
+yet on the phone nor through the public network. Choices and measurements:
+[docs/conception/audio.md](docs/conception/audio.md) (in French).
 
 ## Installation
 
@@ -466,3 +504,5 @@ Android), and readable again in Settings → About.
 [Ollama]: https://ollama.com
 [llama.cpp]: https://github.com/ggml-org/llama.cpp
 [stable-diffusion.cpp]: https://github.com/leejet/stable-diffusion.cpp
+[ComfyUI]: https://github.com/comfyanonymous/ComfyUI
+[audio.cpp]: https://github.com/0xShug0/audio.cpp

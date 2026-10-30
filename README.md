@@ -1,8 +1,23 @@
-# AIODOS
+<p align="center">
+  <img src="assets/logo.png" alt="Le logo d'AIODOS : cinq serpents bleu-vert autour d'une lumière" width="200">
+</p>
 
-*English version: [README.en.md](README.en.md).*
+<h1 align="center">AIODOS</h1>
 
-**La voie de l'IA, faite ensemble.** AIODOS relie par Internet les machines de personnes
+<p align="center"><b>La voie de l'IA, faite ensemble.</b><br>
+L'IA qui tourne sur la puissance mise en commun de ses participants : tes machines, celles de
+tes amis, celles d'inconnus du monde entier. Sans serveur central, sans cloud.</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="Licence Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-2bb5a0"></a>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-2bb5a0">
+  <img alt="Windows · Android" src="https://img.shields.io/badge/Windows%20%C2%B7%20Android-2bb5a0">
+  <img alt="En développement" src="https://img.shields.io/badge/statut-en%20d%C3%A9veloppement-orange">
+</p>
+
+<p align="center"><i>English version: <a href="README.en.md">README.en.md</a>.</i></p>
+
+AIODOS relie par Internet les machines de personnes
 qui ne se connaissent pas, pour faire tourner l'IA sur leur puissance mise en commun : celles
 des participants du réseau public, de tes amis, et les tiennes (PC, téléphone), sans serveur
 central ; le réseau local n'est qu'un raccourci. Chaque gros travail est découpé en petites unités
@@ -11,8 +26,13 @@ pour une seule carte graphique se répartit entre plusieurs.
 
 - **Converser, coder, chercher dans tes documents** avec des modèles ouverts (Mistral,
   Qwen…), servis par llama.cpp, intégré à AIODOS (ou par [Ollama]) ; l'IA cite ses sources.
-- **Créer des images et des vidéos** dans la conversation, calculées par les machines qui
-  ont le modèle.
+- **Créer des images, des vidéos et de l'audio** (voix, musique, effets sonores) dans la
+  conversation, avec les meilleurs modèles ouverts du moment (FLUX 3 Image Klein,
+  Qwen-Image, LTX-2.5, Wan 2.2, ACE-Step…), calculés par les machines qui les ont.
+- **« Automatique », partout** : pour le texte, les images, les vidéos et l'audio, AIODOS
+  prend le modèle le plus puissant qu'une machine disponible peut faire tourner en ce
+  moment, où qu'elle soit, puis descend dans la liste ; on peut toujours choisir un modèle
+  précis (un bouton « Modèle », quatre onglets).
 - **Brancher tes applications et tes outils** (PANDORA, ARKLIGHT PC, un éditeur de code, un
   assistant…) : ils profitent de la même puissance partagée.
 
@@ -33,6 +53,10 @@ AIODOS parle français et anglais : il suit la langue du système (navigateur, W
 Android), l'anglais quand celle-ci n'est ni l'une ni l'autre, et se change dans Réglages →
 Langue.
 
+> **État : en développement actif.** Aucune version n'est encore publiée : l'installeur
+> Windows et l'appli Android se construisent depuis le code (voir [Installation](#installation)).
+> Les choix et les mesures sont notés au fil de l'eau dans [docs/](docs/), en français.
+
 ## Où en est le projet
 
 | Phase | Contenu | État |
@@ -40,7 +64,7 @@ Langue.
 | 0 — Fondations | Nœud local, file de tâches, interface, bibliothèques | ✅ en place |
 | 1 — Réseau local | Découverte des machines, appairage, répartition, partage de puissance, modèles prêtés pour les conversations | ✅ en place |
 | 2 — Cercle de confiance | Machines d'amis via Internet (NAT traversal) | en cours : compagnon Internet [`aiodos-net`](compagnon/README.md) (2.2), invitation à distance (2.4), partage avec les amis (2.5), bibliothèques consultables, mises à jour automatiques approuvées sur un deuxième appareil, gros modèles répartis entre mes machines (prototype), images et vidéos réparties (créées dans la conversation), réciprocité souple, clés protégées sur le disque (2.3), appairage par groupe : un ami appairé avec une de mes machines rencontre les autres, avec son accord ([docs/appairage-groupe.md](docs/appairage-groupe.md)) |
-| 3 — Réseau public | Des inconnus calculent les conversations ; vérification des résultats, incitation, gouvernance | conversations faites (28/10/2026, [docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)) ; le reste en conception : [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) |
+| 3 — Réseau public | Des inconnus calculent les conversations, les images et les vidéos ; vérification des résultats, incitation, gouvernance | conversations, images et vidéos faites (28-29/10/2026) : demandeur anonyme (une clé jetable par demande, passage par un relais), accord demandé une fois, contrôles au hasard et réputation contre la triche et les ententes, identités publiques coûteuses à fabriquer, filtre des descriptions interdites, historique sans contenu de ce que ta machine calcule pour d'autres ([docs/conception/reseau-public-calcul.md](docs/conception/reseau-public-calcul.md)) ; incitation et gouvernance en conception : [docs/phase3-reseau-public.md](docs/phase3-reseau-public.md), [docs/phase3-incitation.md](docs/phase3-incitation.md) |
 
 ## Ce que fait la phase 0
 
@@ -221,15 +245,29 @@ puissance ; elle s'affiche dans la conversation et n'est gardée qu'ici (dans
 `Images\AIODOS` pour AIODOS installé, ou le dossier choisi dans les Réglages). La vue
 Images et vidéos réunit les créations en cours et la galerie ; les modèles se gèrent dans
 Réglages → Modèles, avec ceux des discussions, du plus puissant au moins puissant. Le moteur est
-[stable-diffusion.cpp], livré avec les mises à jour, et le modèle Z-Image Turbo
-(Apache-2.0, 6,7 Go, chaque fichier vérifié par son empreinte) : téléchargé depuis les Réglages,
-ou copié d'une de mes machines qui l'a déjà, sans Internet. Sur une
-RTX 4070 de portable : 22 s par image en 1024 × 1024. Pour la vidéo, Wan 2.1 (Apache-2.0,
-7,2 Go) : 2 s de vidéo en 480p en moins de 4 minutes ; MiniMax H3 (vidéo et son) est aussi
-proposé, sa licence affichée (elle exclut notamment l'Union européenne : à chacun d'en
-juger). Un ami ne calcule mes images que si nous l'acceptons tous les deux. Détails et
-mesures :
-[docs/generation-repartie.md](docs/generation-repartie.md).
+[stable-diffusion.cpp], livré avec les mises à jour, et [ComfyUI] s'il est installé (des
+recettes d'AIODOS et tes propres workflows). Le catalogue est classé du plus puissant au plus
+modeste (classement public des modèles ouverts, puis nos mesures) : FLUX 3 Image Klein,
+Qwen-Image-2.1, Ming-Image, HiDream-O1, Z-Image Turbo et FLUX.2 klein pour les images ;
+LTX-2.5 (vidéo et son), MiniMax H3, Wan 2.2 et Wan 2.1 pour les vidéos. Chaque fichier vient
+d'un dépôt public, épinglé et vérifié par son empreinte ; téléchargé depuis les Réglages, ou
+copié d'une de mes machines qui l'a déjà, sans Internet. Une licence restrictive (non
+commerciale, gratuite sous un seuil de chiffre d'affaires, ou qui exclut des pays, comme celle
+de MiniMax H3 pour l'Union européenne) est affichée et acceptée avant : à chacun d'en juger.
+« Automatique » prend le mieux classé qu'une machine disponible a (ce PC, mes machines, mes
+amis, le réseau public), et AIODOS suggère le meilleur que ta carte graphique peut faire
+tourner. Sur une RTX 4070 de portable, Z-Image Turbo fait une image en 1024 × 1024 en 22 s, et
+Wan 2.1 2 s de vidéo en 480p en moins de 4 minutes. Un ami ne calcule mes images que si nous
+l'acceptons tous les deux. Détails et mesures :
+[docs/generation-repartie.md](docs/generation-repartie.md),
+[docs/conception/modeles-auto.md](docs/conception/modeles-auto.md).
+
+**L'audio, dans la conversation** : lire un texte à voix haute, en français ou en anglais,
+composer une musique, créer un effet sonore (« Fais le bruit d'une porte qui grince »), avec
+[audio.cpp] : Voxtral, Qwen3-TTS et PocketTTS pour la voix ; MiniMax Music 3, ACE-Step 1.5,
+Stable Audio 3 et MiDashengLM-Gen pour la musique et les effets. Sur ordinateur pour
+l'instant, ici et chez mes machines ; pas encore sur le téléphone ni par le réseau public.
+Choix et mesures : [docs/conception/audio.md](docs/conception/audio.md).
 
 ## Installation
 
@@ -471,3 +509,5 @@ la première ouverture sur Android), relisibles dans Réglages → À propos.
 [Ollama]: https://ollama.com
 [llama.cpp]: https://github.com/ggml-org/llama.cpp
 [stable-diffusion.cpp]: https://github.com/leejet/stable-diffusion.cpp
+[ComfyUI]: https://github.com/comfyanonymous/ComfyUI
+[audio.cpp]: https://github.com/0xShug0/audio.cpp
