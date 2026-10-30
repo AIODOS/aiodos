@@ -2,7 +2,7 @@
 
 Étude du 17/10/2026, faite d'abord pour Arkanyx (un autre projet, classé ce jour-là) et
 reprise ici parce qu'elle répond à la ligne « Phase 3 — Réseau public : vérification des
-résultats, incitation, gouvernance » du [README](../README.md). Ce n'est pas la priorité : la
+résultats, incitation, gouvernance » du [README](../README.fr.md). Ce n'est pas la priorité : la
 direction principale d'AIODOS reste la répartition des gros modèles
 ([gros-modeles.md](gros-modeles.md)). Rien n'est décidé ici ; c'est une base pour le jour où
 la phase 3 commencera.
